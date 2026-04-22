@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Mic, Calendar, CheckCircle2, Sparkles } from "lucide-react";
 import { useAuth } from "@/lib/auth/AuthContext";
-import { Logo, LogoMark } from "@/components/brand/Logo";
+import { LogoMark } from "@/components/brand/Logo";
 
 const DEMO_STEPS = [
   {
@@ -66,8 +66,7 @@ export function Landing() {
     <div className="min-h-screen bg-ink-50 text-ink-900">
       <div className="max-w-[1240px] mx-auto px-8 min-h-screen flex flex-col">
         {/* Top bar */}
-        <header className="flex items-center justify-between py-6">
-          <Logo markSize={32} idKey="topLogo" />
+        <header className="flex items-center justify-end py-6">
           <a
             href="mailto:harosh.ccc@gmail.com"
             className="text-sm text-ink-500 hover:text-ink-900 transition-colors ease-smooth duration-150"
@@ -87,16 +86,17 @@ export function Landing() {
               initial={{ opacity: 0, scale: 0.92 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.5, ease: [0.34, 1.3, 0.64, 1] }}
-              className="hero-mark shrink-0 w-24 h-24 md:w-[128px] md:h-[128px] rounded-[28px] bg-brand-gradient animate-grad-shift [background-size:200%_200%] flex items-center justify-center relative overflow-hidden shadow-[0_24px_60px_-16px_rgba(245,158,11,0.4),0_8px_24px_-8px_rgba(236,72,153,0.3)]"
+              className="hero-mark shrink-0 w-40 h-40 md:w-56 md:h-56 rounded-[36px] md:rounded-[48px] bg-brand-gradient animate-grad-shift [background-size:200%_200%] flex items-center justify-center relative overflow-hidden shadow-[0_24px_60px_-16px_rgba(245,158,11,0.4),0_8px_24px_-8px_rgba(236,72,153,0.3)]"
             >
               <div
-                className="absolute inset-0 rounded-[28px] pointer-events-none"
+                className="absolute inset-0 rounded-[36px] md:rounded-[48px] pointer-events-none"
                 style={{
                   background:
                     "linear-gradient(135deg, rgba(255,255,255,0.3), transparent 40%)",
                 }}
               />
-              <LogoMark size={74} variant="white" idKey="heroMark" />
+              <LogoMark size={92} variant="white" idKey="heroMarkMobile" className="md:hidden" />
+              <LogoMark size={130} variant="white" idKey="heroMarkDesktop" className="hidden md:block" />
             </motion.div>
 
             {/* Hero text */}

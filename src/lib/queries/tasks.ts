@@ -51,6 +51,45 @@ export function useTasks(orgId: string | null, options: ListOptions) {
   });
 }
 
+export function useTasksInRange(
+  orgId: string | null,
+  fromIso: string,
+  toIso: string
+) {
+  return useQuery({
+    queryKey: ["tasks", orgId ?? "none", "range", fromIso, toIso] as const,
+    enabled: Boolean(orgId),
+    queryFn: async (): Promise<Task[]> => {
+      const { data, error } = await supabase
+        .from("tasks")
+        .select("*")
+        .eq("organization_id", orgId!)
+        .gte("scheduled_at", fromIso)
+        .lt("scheduled_at", toIso)
+        .neq("status", "cancelled")
+        .order("scheduled_at", { ascending: true });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+}
+
+export function useTask(id: string | null) {
+  return useQuery({
+    queryKey: ["tasks", "detail", id ?? "none"] as const,
+    enabled: Boolean(id),
+    queryFn: async (): Promise<Task | null> => {
+      const { data, error } = await supabase
+        .from("tasks")
+        .select("*")
+        .eq("id", id!)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+}
+
 interface CreateTaskInput {
   orgId: string;
   ownerId: string;
@@ -127,6 +166,31 @@ export function useDeleteTask() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: taskKeys.all });
+    },
+  });
+}
+
+interface UpdateTaskInput {
+  id: string;
+  patch: TaskUpdate;
+}
+
+export function useUpdateTask() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, patch }: UpdateTaskInput): Promise<Task> => {
+      const { data, error } = await supabase
+        .from("tasks")
+        .update(patch)
+        .eq("id", id)
+        .select("*")
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (task) => {
+      qc.invalidateQueries({ queryKey: taskKeys.all });
+      qc.invalidateQueries({ queryKey: ["tasks", "detail", task.id] });
     },
   });
 }

@@ -13,6 +13,8 @@ import {
   Trash2,
 } from "lucide-react";
 import { ScreenScaffold } from "@/components/layout/ScreenScaffold";
+import { TaskDetailDrawer } from "@/components/tasks/TaskDetailDrawer";
+import { TaskTimerButton } from "@/components/tasks/TaskTimerButton";
 import { useAuth } from "@/lib/auth/AuthContext";
 import {
   useCreateTask,
@@ -40,6 +42,7 @@ export function Tasks() {
   const deleteTask = useDeleteTask();
 
   const [draft, setDraft] = useState("");
+  const [openTask, setOpenTask] = useState<Task | null>(null);
 
   const canWrite = Boolean(user && activeOrganizationId);
 
@@ -128,9 +131,14 @@ export function Tasks() {
                   deleteTask.mutate(task.id);
                 }
               }}
+              onOpen={() => setOpenTask(task)}
             />
           ))}
         </ul>
+      )}
+
+      {openTask && (
+        <TaskDetailDrawer task={openTask} onClose={() => setOpenTask(null)} />
       )}
     </ScreenScaffold>
   );
@@ -140,9 +148,10 @@ interface TaskRowProps {
   task: Task;
   onToggle: () => void;
   onDelete: () => void;
+  onOpen: () => void;
 }
 
-function TaskRow({ task, onToggle, onDelete }: TaskRowProps) {
+function TaskRow({ task, onToggle, onDelete, onOpen }: TaskRowProps) {
   const done = task.status === "done";
   const scheduled = task.scheduled_at ? new Date(task.scheduled_at) : null;
   const overdue = scheduled && isPast(scheduled) && !done;
@@ -150,12 +159,16 @@ function TaskRow({ task, onToggle, onDelete }: TaskRowProps) {
   return (
     <li
       className={cn(
-        "card-lift p-3 flex items-center gap-3 group",
+        "card-lift p-3 flex items-center gap-3 group cursor-pointer",
         done && "opacity-60"
       )}
+      onClick={onOpen}
     >
       <button
-        onClick={onToggle}
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggle();
+        }}
         className={cn(
           "w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors",
           done
@@ -215,13 +228,16 @@ function TaskRow({ task, onToggle, onDelete }: TaskRowProps) {
         </div>
       </div>
 
-      <button
-        onClick={onDelete}
-        className="p-1.5 rounded-lg text-ink-400 hover:text-danger-600 hover:bg-danger-500/10 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-        aria-label="מחק"
-      >
-        <Trash2 className="w-4 h-4" />
-      </button>
+      <div className="flex items-center gap-0.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+        {!done && <TaskTimerButton task={task} variant="compact" />}
+        <button
+          onClick={onDelete}
+          className="p-1.5 rounded-lg text-ink-400 hover:text-danger-600 hover:bg-danger-500/10 opacity-0 group-hover:opacity-100 transition-opacity"
+          aria-label="מחק"
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
+      </div>
     </li>
   );
 }

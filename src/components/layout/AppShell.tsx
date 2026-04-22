@@ -20,6 +20,7 @@ import {
 import { useAuth } from "@/lib/auth/AuthContext";
 import { cn } from "@/lib/utils/cn";
 import { QuickCapture } from "@/components/capture/QuickCapture";
+import { ActiveTimerPill } from "@/components/tasks/ActiveTimerPill";
 import { Logo } from "@/components/brand/Logo";
 
 interface NavItem {
@@ -264,6 +265,8 @@ export function AppShell() {
         onClose={() => setCaptureOpen(false)}
         currentPath={location.pathname}
       />
+
+      <ActiveTimerPill />
     </div>
   );
 }

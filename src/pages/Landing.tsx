@@ -82,12 +82,12 @@ export function Landing() {
           className="flex-1 flex items-center border-b border-ink-300 py-14"
         >
           <div className="flex items-center gap-12 md:gap-16 w-full flex-col md:flex-row">
-            {/* Hero mark: 128x128 gradient square with white M inside */}
+            {/* Hero mark: responsive gradient square with white M inside */}
             <motion.div
               initial={{ opacity: 0, scale: 0.92 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.5, ease: [0.34, 1.3, 0.64, 1] }}
-              className="hero-mark shrink-0 w-[128px] h-[128px] rounded-[28px] bg-brand-gradient animate-grad-shift [background-size:200%_200%] flex items-center justify-center relative overflow-hidden shadow-[0_24px_60px_-16px_rgba(245,158,11,0.4),0_8px_24px_-8px_rgba(236,72,153,0.3)]"
+              className="hero-mark shrink-0 w-24 h-24 md:w-[128px] md:h-[128px] rounded-[28px] bg-brand-gradient animate-grad-shift [background-size:200%_200%] flex items-center justify-center relative overflow-hidden shadow-[0_24px_60px_-16px_rgba(245,158,11,0.4),0_8px_24px_-8px_rgba(236,72,153,0.3)]"
             >
               <div
                 className="absolute inset-0 rounded-[28px] pointer-events-none"
@@ -100,7 +100,7 @@ export function Landing() {
             </motion.div>
 
             {/* Hero text */}
-            <div className="flex-1 text-center md:text-left" dir="rtl">
+            <div className="flex-1 text-center md:text-start" dir="rtl">
               <div className="eyebrow mb-3.5">גרסת אלפא · פיתוח פעיל</div>
               <h1
                 dir="ltr"
@@ -153,13 +153,13 @@ export function Landing() {
               </span>
               <h2 className="text-3xl font-semibold text-ink-900">איך זה עובד</h2>
             </div>
-            <p className="text-xs text-ink-500 max-w-[400px] text-left hidden md:block">
+            <p className="text-xs text-ink-500 max-w-[400px] text-start hidden md:block">
               מחשבה נזרקת בהקלטה, AI מזהה מה בתוכה, ויוצר משימה שמופיעה אוטומטית
               ביומן שלך.
             </p>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
             {DEMO_STEPS.map((step, i) => {
               const Icon = step.icon;
               const isActive = i === stepIdx;
@@ -167,7 +167,7 @@ export function Landing() {
                 <button
                   key={i}
                   onClick={() => setStepIdx(i)}
-                  className={`card p-5 text-right transition-all duration-300 ease-smooth flex flex-col gap-3 ${
+                  className={`card p-5 text-start transition-all duration-300 ease-smooth flex flex-col gap-3 ${
                     isActive
                       ? "shadow-accent border-primary-500/40 -translate-y-0.5"
                       : "hover:-translate-y-0.5 hover:shadow-DEFAULT"

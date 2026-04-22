@@ -169,7 +169,7 @@ export function Onboarding() {
                   <button
                     type="button"
                     onClick={() => setShowPassword((v) => !v)}
-                    className="absolute inset-y-0 left-2 flex items-center text-ink-400 hover:text-ink-700"
+                    className="absolute inset-y-0 end-2 flex items-center text-ink-400 hover:text-ink-700"
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
@@ -232,7 +232,7 @@ export function Onboarding() {
                   <button
                     type="button"
                     onClick={() => setShowPassword((v) => !v)}
-                    className="absolute inset-y-0 left-2 flex items-center text-ink-400 hover:text-ink-700"
+                    className="absolute inset-y-0 end-2 flex items-center text-ink-400 hover:text-ink-700"
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>

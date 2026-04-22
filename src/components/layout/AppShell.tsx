@@ -1,5 +1,6 @@
 import { Outlet, NavLink, useLocation, useNavigate } from "react-router-dom";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Home,
   CheckSquare,
@@ -39,12 +40,25 @@ const NAV: NavItem[] = [
   { to: "/app/projects", label: "פרויקטים", icon: FolderKanban },
 ];
 
+const FAB_ICONS = [Mic, Plus, CheckSquare, CalendarIcon, FolderKanban];
+
 export function AppShell() {
   const { profile, signOut } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [captureOpen, setCaptureOpen] = useState(false);
+  const [fabIconIdx, setFabIconIdx] = useState(0);
+
+  useEffect(() => {
+    const timer = window.setInterval(
+      () => setFabIconIdx((i) => (i + 1) % FAB_ICONS.length),
+      2000
+    );
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const FabIcon = FAB_ICONS[fabIconIdx];
 
   const handleSignOut = async () => {
     await signOut();
@@ -253,10 +267,21 @@ export function AppShell() {
       {/* Floating quick capture button (mobile) */}
       <button
         onClick={() => setCaptureOpen(true)}
-        className="md:hidden fixed bottom-20 end-4 z-20 w-14 h-14 rounded-full bg-gradient-to-br from-primary-500 to-primary-600 shadow-lift flex items-center justify-center text-white"
-        aria-label="הקלטה מהירה"
+        className="md:hidden fixed bottom-20 end-4 z-20 w-14 h-14 rounded-full bg-brand-gradient animate-grad-shift [background-size:200%_200%] shadow-accent flex items-center justify-center text-white overflow-hidden"
+        aria-label="יצירה מהירה"
       >
-        <Mic className="w-6 h-6" />
+        <AnimatePresence mode="wait">
+          <motion.span
+            key={fabIconIdx}
+            initial={{ opacity: 0, scale: 0.6, rotate: -20 }}
+            animate={{ opacity: 1, scale: 1, rotate: 0 }}
+            exit={{ opacity: 0, scale: 0.6, rotate: 20 }}
+            transition={{ duration: 0.3, ease: [0.34, 1.3, 0.64, 1] }}
+            className="flex items-center justify-center"
+          >
+            <FabIcon className="w-6 h-6" />
+          </motion.span>
+        </AnimatePresence>
       </button>
 
       <QuickCapture

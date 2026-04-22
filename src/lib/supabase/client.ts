@@ -15,7 +15,9 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_ANON_KEY, 
   auth: {
     persistSession: true,
     autoRefreshToken: true,
-    detectSessionInUrl: true,
+    // Disabled: we do the code exchange explicitly in AuthCallback so we can
+    // observe success/error deterministically (see src/pages/AuthCallback.tsx).
+    detectSessionInUrl: false,
     flowType: "pkce",
   },
   realtime: {

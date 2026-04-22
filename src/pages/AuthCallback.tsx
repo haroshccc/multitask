@@ -40,7 +40,7 @@ export function AuthCallback() {
     }, 15000);
 
     supabase.auth
-      .exchangeCodeForSession(window.location.href)
+      .exchangeCodeForSession(code)
       .then(({ error: exchErr }) => {
         window.clearTimeout(timeoutId);
         if (exchErr) {

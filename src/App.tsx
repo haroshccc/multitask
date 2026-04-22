@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { useAuth } from "@/lib/auth/AuthContext";
 import { Landing } from "@/pages/Landing";
 import { AuthCallback } from "@/pages/AuthCallback";
@@ -31,6 +31,24 @@ function RedirectIfAuthed({ children }: { children: JSX.Element }) {
   return children;
 }
 
+// Supabase sometimes redirects OAuth back to the Site URL ("/") instead of the
+// configured redirectTo (/auth/callback) — typically when the Site URL and the
+// Redirect URL list disagree, or when the provider strips the path. If we see
+// a ?code= on the root path, forward it to /auth/callback so AuthCallback can
+// exchange it for a session.
+function RootRoute() {
+  const location = useLocation();
+  const params = new URLSearchParams(location.search);
+  if (params.has("code") || params.has("error") || params.has("error_description")) {
+    return <Navigate to={`/auth/callback${location.search}${location.hash}`} replace />;
+  }
+  return (
+    <RedirectIfAuthed>
+      <Landing />
+    </RedirectIfAuthed>
+  );
+}
+
 function LoadingShell() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-ink-50">
@@ -42,14 +60,7 @@ function LoadingShell() {
 export default function App() {
   return (
     <Routes>
-      <Route
-        path="/"
-        element={
-          <RedirectIfAuthed>
-            <Landing />
-          </RedirectIfAuthed>
-        }
-      />
+      <Route path="/" element={<RootRoute />} />
       <Route path="/auth/callback" element={<AuthCallback />} />
       <Route path="/onboarding" element={<Onboarding />} />
       <Route

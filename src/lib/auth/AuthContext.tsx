@@ -73,21 +73,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     })();
 
-    const { data: subscription } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
+    // IMPORTANT: the callback passed to onAuthStateChange must NOT be async and
+    // must NOT await anything that calls back into supabase.auth — doing so
+    // deadlocks against the internal auth-token lock that Supabase holds while
+    // invoking listeners. When the lock times out Supabase throws the opaque
+    // "Lock ... was released because another request stole it" error that the
+    // UI was surfacing on Google sign-in. Defer all async work to a new tick.
+    const { data: subscription } = supabase.auth.onAuthStateChange((_event, newSession) => {
       if (!mounted) return;
       setSession(newSession);
-      try {
+      setTimeout(() => {
+        if (!mounted) return;
         if (newSession?.user) {
-          await loadProfileAndMemberships(newSession.user.id);
+          loadProfileAndMemberships(newSession.user.id).catch((err) => {
+            console.error("Auth state change handler failed:", err);
+          });
         } else {
           setProfile(null);
           setMemberships([]);
           setActiveOrgId(null);
           localStorage.removeItem(ACTIVE_ORG_STORAGE_KEY);
         }
-      } catch (err) {
-        console.error("Auth state change handler failed:", err);
-      }
+      }, 0);
     });
 
     return () => {

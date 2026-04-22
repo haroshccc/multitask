@@ -144,7 +144,7 @@ export function AppShell() {
             onClick={() => setSidebarOpen(false)}
           >
             <aside
-              className="absolute top-14 right-0 bottom-0 w-64 bg-white border-s border-ink-200 shadow-lift p-3 overflow-y-auto"
+              className="absolute top-14 end-0 bottom-0 w-64 bg-white border-s border-ink-200 shadow-lift p-3 overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
             >
               <nav className="flex flex-col gap-1">

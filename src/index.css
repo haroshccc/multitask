@@ -40,14 +40,16 @@
   /* Fields ------------------------------------------------------------- */
   .field {
     @apply w-full rounded-md border border-ink-300 bg-white px-3 py-2.5 text-sm text-ink-900 placeholder:text-ink-400;
-    @apply transition-colors duration-150 ease-smooth;
+    @apply transition-colors duration-150 ease-smooth hover:border-ink-400;
     @apply focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20;
+    @apply disabled:bg-ink-100 disabled:text-ink-500 disabled:cursor-not-allowed disabled:hover:border-ink-300;
   }
 
   /* Buttons ----------------------------------------------------------- */
   .btn {
     @apply inline-flex items-center justify-center gap-1.5 rounded-sm px-4 py-2.5 text-sm font-medium;
     @apply transition-all duration-150 ease-smooth disabled:opacity-60 disabled:cursor-not-allowed;
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40 focus-visible:ring-offset-2 focus-visible:ring-offset-white;
   }
 
   .btn-primary {
@@ -59,6 +61,10 @@
   .btn-primary:hover {
     @apply -translate-y-0.5;
     box-shadow: 0 6px 24px rgba(245, 158, 11, 0.32);
+  }
+
+  .btn-accent {
+    @apply btn bg-primary-500 text-white shadow-accent hover:bg-primary-600 hover:-translate-y-0.5;
   }
 
   .btn-dark {

@@ -63,10 +63,8 @@ export function AppShell() {
             {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
           <div className="flex items-center gap-2 min-w-0">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center">
-              <FolderKanban className="w-4 h-4 text-white" />
-            </div>
-            <span className="font-semibold text-ink-900 hidden sm:block">Multitask</span>
+            <img src="/brand/m-symbol.png" alt="" className="h-8 w-auto" draggable={false} />
+            <span className="font-semibold text-ink-900 hidden sm:block text-md">multitask</span>
           </div>
         </div>
 

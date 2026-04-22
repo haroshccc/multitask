@@ -1,3 +1,5 @@
+@import url("https://fonts.googleapis.com/css2?family=Fredoka:wght@300;400;500;600;700&display=swap");
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -17,33 +19,50 @@
   }
 
   body {
-    @apply bg-ink-50 text-ink-900;
+    @apply bg-ink-50 text-ink-900 text-base;
     margin: 0;
     min-height: 100vh;
+    line-height: 1.55;
   }
 
   :focus-visible {
     outline: 2px solid theme("colors.primary.500");
     outline-offset: 2px;
-    border-radius: 0.5rem;
+    border-radius: theme("borderRadius.sm");
+  }
+
+  ::selection {
+    @apply bg-primary-500/25 text-ink-900;
   }
 }
 
 @layer components {
+  /* Fields ------------------------------------------------------------- */
   .field {
-    @apply w-full rounded-xl border border-ink-200 bg-white px-3 py-2.5 text-ink-900 placeholder:text-ink-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 transition-colors;
+    @apply w-full rounded-md border border-ink-300 bg-white px-3 py-2.5 text-sm text-ink-900 placeholder:text-ink-400;
+    @apply transition-colors duration-150 ease-smooth;
+    @apply focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20;
   }
 
+  /* Buttons ----------------------------------------------------------- */
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-all disabled:opacity-60 disabled:cursor-not-allowed;
+    @apply inline-flex items-center justify-center gap-1.5 rounded-sm px-4 py-2.5 text-sm font-medium;
+    @apply transition-all duration-150 ease-smooth disabled:opacity-60 disabled:cursor-not-allowed;
   }
 
   .btn-primary {
-    @apply btn bg-ink-900 text-white hover:bg-ink-800 hover:-translate-y-0.5 shadow-soft hover:shadow-lift;
+    @apply btn text-white shadow-accent;
+    background: linear-gradient(135deg, #facc15 0%, #f59e0b 45%, #ec4899 100%);
+    background-size: 200% 200%;
+    animation: gradShift 4s ease infinite;
+  }
+  .btn-primary:hover {
+    @apply -translate-y-0.5;
+    box-shadow: 0 6px 24px rgba(245, 158, 11, 0.32);
   }
 
-  .btn-accent {
-    @apply btn bg-gradient-to-br from-primary-500 to-primary-600 text-white hover:from-primary-600 hover:to-primary-700 shadow-soft;
+  .btn-dark {
+    @apply btn bg-ink-900 text-white hover:bg-ink-700 shadow-soft;
   }
 
   .btn-ghost {
@@ -51,15 +70,40 @@
   }
 
   .btn-outline {
-    @apply btn border border-ink-200 bg-white text-ink-800 hover:bg-ink-50;
+    @apply btn border border-ink-300 bg-white text-ink-900 hover:bg-ink-50;
   }
 
+  /* Cards ------------------------------------------------------------- */
   .card {
-    @apply rounded-2xl border border-ink-200 bg-white shadow-soft;
+    @apply rounded-lg border border-ink-300 bg-white shadow-soft;
   }
 
+  .card-lift {
+    @apply card transition-all duration-200 ease-smooth hover:-translate-y-0.5 hover:shadow-lift;
+  }
+
+  /* Chips & tags ------------------------------------------------------ */
   .chip {
-    @apply inline-flex items-center gap-1.5 rounded-full bg-ink-100 text-ink-700 px-2.5 py-1 text-xs;
+    @apply inline-flex items-center gap-1 rounded-xs px-2 py-0.5 text-xs font-medium;
+    @apply bg-ink-150 text-ink-700;
+  }
+
+  .chip-accent {
+    @apply chip text-primary-700;
+    background: rgba(245, 158, 11, 0.09);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+  }
+
+  /* Typography helpers ------------------------------------------------ */
+  .eyebrow {
+    @apply text-xs font-semibold uppercase tracking-[0.18em] text-ink-400;
+  }
+
+  .text-gradient {
+    background: linear-gradient(135deg, #facc15 0%, #f59e0b 45%, #ec4899 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
   }
 }
 
@@ -70,5 +114,25 @@
   .no-scrollbar {
     -ms-overflow-style: none;
     scrollbar-width: none;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    @apply bg-ink-300 rounded-full;
+  }
+}
+
+/* Global keyframes (Tailwind's @keyframes block lives in the config;
+   duplicated here so the .btn-primary animation works at the component layer) */
+@keyframes gradShift {
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
   }
 }

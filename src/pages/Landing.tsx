@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Mic, Calendar, CheckCircle2, FolderKanban, Sparkles } from "lucide-react";
+import { Mic, Calendar, CheckCircle2, Sparkles } from "lucide-react";
 import { useAuth } from "@/lib/auth/AuthContext";
 
 const DEMO_STEPS = [
@@ -64,23 +64,23 @@ export function Landing() {
   const CurrentIcon = DEMO_STEPS[stepIdx].icon;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary-50 via-white to-ink-100 overflow-hidden relative">
-      {/* Ambient gradient blobs */}
-      <div className="absolute -top-24 -right-24 w-96 h-96 bg-primary-200 rounded-full mix-blend-multiply filter blur-3xl opacity-40 animate-pulse" />
-      <div className="absolute -bottom-24 -left-24 w-96 h-96 bg-ink-200 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-pulse [animation-delay:1s]" />
+    <div className="min-h-screen bg-ink-50 overflow-hidden relative">
+      {/* Ambient brand-gradient blobs */}
+      <div className="absolute -top-32 -right-32 w-[28rem] h-[28rem] rounded-full blur-3xl opacity-30 bg-brand-gradient" />
+      <div className="absolute -bottom-40 -left-32 w-[32rem] h-[32rem] rounded-full blur-3xl opacity-20 bg-accent-purple" />
 
       <div className="relative z-10 min-h-screen flex flex-col">
         {/* Top bar */}
         <header className="flex items-center justify-between px-6 md:px-12 py-6">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center shadow-lift">
-              <FolderKanban className="w-5 h-5 text-white" />
-            </div>
-            <span className="font-bold text-xl text-ink-900">Multitask</span>
-          </div>
+          <img
+            src="/brand/logo.png"
+            alt="Multitask"
+            className="h-10 md:h-11 w-auto select-none"
+            draggable={false}
+          />
           <a
             href="mailto:harosh.ccc@gmail.com"
-            className="text-sm text-ink-600 hover:text-ink-900 transition-colors"
+            className="text-sm text-ink-500 hover:text-ink-900 transition-colors"
           >
             יצירת קשר
           </a>
@@ -93,24 +93,25 @@ export function Landing() {
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6 }}
-              className="inline-flex items-center gap-2 rounded-full bg-white/80 backdrop-blur-sm border border-ink-200 px-3 py-1.5 text-xs text-ink-600 mb-6"
+              className="chip-accent mb-6"
             >
-              <span className="w-2 h-2 rounded-full bg-success-500 animate-pulse" />
-              בבנייה — גרסה מוקדמת
+              <span className="w-1.5 h-1.5 rounded-full bg-success-500 animate-pulse" />
+              בבנייה · גרסה מוקדמת
             </motion.div>
 
-            <h1 className="text-5xl md:text-6xl font-bold tracking-tight text-ink-900 mb-4">
-              Multitask
+            <h1 className="text-6xl md:text-7xl font-semibold tracking-tightest text-ink-900 mb-5">
+              <span className="text-gradient">multi</span>
+              <span>task</span>
             </h1>
 
-            <div className="h-20 md:h-16 mb-6">
+            <div className="h-20 md:h-16 mb-7">
               <AnimatePresence mode="wait">
                 <motion.p
                   key={taglineIdx}
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -8 }}
-                  transition={{ duration: 0.4 }}
+                  transition={{ duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] }}
                   className="text-2xl md:text-3xl text-ink-700 font-light"
                 >
                   {TAGLINES[taglineIdx]}
@@ -118,40 +119,41 @@ export function Landing() {
               </AnimatePresence>
             </div>
 
-            <p className="text-lg text-ink-600 mb-8 leading-relaxed">
+            <p className="text-lg text-ink-500 mb-8 leading-relaxed max-w-lg">
               פלטפורמה שמחברת משימות, יומן, הקלטות, מחשבות ופרויקטים למקום אחד.
               הקלטה הופכת למשימה, משימה מופיעה ביומן, הכל מסונכרן — בלי הפרעות.
             </p>
 
-            <button
-              onClick={handleSignIn}
-              disabled={signing}
-              className="inline-flex items-center gap-3 bg-ink-900 hover:bg-ink-800 text-white font-medium px-6 py-3.5 rounded-2xl shadow-lift transition-all hover:-translate-y-0.5 disabled:opacity-60 disabled:hover:translate-y-0"
-            >
-              <GoogleIcon />
-              <span>{signing ? "מעבירה אליך ל-Google..." : "התחברות עם Google"}</span>
-            </button>
-
-            <p className="text-xs text-ink-500 mt-4">
-              אין חשבון? ההתחברות הראשונה יוצרת לך אחד.
-            </p>
+            <div className="flex items-center gap-3 flex-wrap justify-center md:justify-start">
+              <button
+                onClick={handleSignIn}
+                disabled={signing}
+                className="btn-dark text-md px-6 py-3.5"
+              >
+                <GoogleIcon />
+                <span>{signing ? "מעביר אליך ל־Google..." : "התחברות עם Google"}</span>
+              </button>
+              <span className="text-sm text-ink-400">
+                אין חשבון? ההתחברות יוצרת לך אחד.
+              </span>
+            </div>
           </div>
 
           {/* Interactive demo card */}
           <div className="flex-1 w-full max-w-md">
             <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
+              initial={{ opacity: 0, scale: 0.96 }}
               animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.6, delay: 0.2 }}
-              className="bg-white rounded-3xl shadow-lift border border-ink-200 p-8"
+              transition={{ duration: 0.6, delay: 0.2, ease: [0.34, 1.3, 0.64, 1] }}
+              className="card shadow-lift p-8"
             >
               <div className="flex items-center justify-between mb-6">
                 <div className="flex gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-danger-500/60" />
-                  <span className="w-2.5 h-2.5 rounded-full bg-warning-500/60" />
-                  <span className="w-2.5 h-2.5 rounded-full bg-success-500/60" />
+                  <span className="w-2.5 h-2.5 rounded-full bg-danger/60" />
+                  <span className="w-2.5 h-2.5 rounded-full bg-warning/60" />
+                  <span className="w-2.5 h-2.5 rounded-full bg-success/60" />
                 </div>
-                <span className="text-xs text-ink-400">Multitask</span>
+                <img src="/brand/m-symbol.png" alt="" className="h-5 w-auto opacity-70" />
               </div>
 
               <div className="min-h-[200px] flex items-center justify-center">
@@ -164,8 +166,8 @@ export function Landing() {
                     transition={{ duration: 0.4 }}
                     className="flex flex-col items-center gap-4 text-center"
                   >
-                    <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-100 to-primary-200 flex items-center justify-center">
-                      <CurrentIcon className="w-8 h-8 text-primary-700" />
+                    <div className="w-16 h-16 rounded-lg bg-brand-gradient-soft flex items-center justify-center ring-1 ring-primary-500/20">
+                      <CurrentIcon className="w-8 h-8 text-primary-600" />
                     </div>
                     <div>
                       <p className="text-lg font-medium text-ink-900 mb-2">
@@ -183,8 +185,10 @@ export function Landing() {
                   <button
                     key={i}
                     onClick={() => setStepIdx(i)}
-                    className={`h-1.5 rounded-full transition-all ${
-                      i === stepIdx ? "w-8 bg-primary-500" : "w-1.5 bg-ink-200"
+                    className={`h-1.5 rounded-full transition-all duration-200 ease-smooth ${
+                      i === stepIdx
+                        ? "w-8 bg-brand-gradient"
+                        : "w-1.5 bg-ink-300 hover:bg-ink-400"
                     }`}
                     aria-label={`שלב ${i + 1}`}
                   />

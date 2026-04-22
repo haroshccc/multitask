@@ -44,3 +44,4 @@ ios/DerivedData
 # Supabase local dev
 supabase/.branches
 supabase/.temp
+design-reference/

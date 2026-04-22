@@ -20,6 +20,7 @@ import {
 import { useAuth } from "@/lib/auth/AuthContext";
 import { cn } from "@/lib/utils/cn";
 import { QuickCapture } from "@/components/capture/QuickCapture";
+import { Logo } from "@/components/brand/Logo";
 
 interface NavItem {
   to: string;
@@ -62,10 +63,7 @@ export function AppShell() {
           >
             {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
-          <div className="flex items-center gap-2 min-w-0">
-            <img src="/brand/m-symbol.png" alt="" className="h-8 w-auto" draggable={false} />
-            <span className="font-semibold text-ink-900 hidden sm:block text-md">multitask</span>
-          </div>
+          <Logo markSize={28} className="min-w-0" idKey="shellLogo" />
         </div>
 
         {/* Horizontal nav (desktop) */}

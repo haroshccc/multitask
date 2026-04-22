@@ -101,9 +101,11 @@
 
   .text-gradient {
     background: linear-gradient(135deg, #facc15 0%, #f59e0b 45%, #ec4899 100%);
+    background-size: 200% 200%;
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
+    animation: gradShift 6s ease infinite;
   }
 }
 

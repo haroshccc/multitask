@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Mic, Calendar, CheckCircle2, Sparkles } from "lucide-react";
 import { useAuth } from "@/lib/auth/AuthContext";
+import { Logo, LogoMark } from "@/components/brand/Logo";
 
 const DEMO_STEPS = [
   {
@@ -72,12 +73,7 @@ export function Landing() {
       <div className="relative z-10 min-h-screen flex flex-col">
         {/* Top bar */}
         <header className="flex items-center justify-between px-6 md:px-12 py-6">
-          <img
-            src="/brand/logo.png"
-            alt="Multitask"
-            className="h-10 md:h-11 w-auto select-none"
-            draggable={false}
-          />
+          <Logo markSize={36} idKey="topLogo" />
           <a
             href="mailto:harosh.ccc@gmail.com"
             className="text-sm text-ink-500 hover:text-ink-900 transition-colors"
@@ -153,7 +149,7 @@ export function Landing() {
                   <span className="w-2.5 h-2.5 rounded-full bg-warning/60" />
                   <span className="w-2.5 h-2.5 rounded-full bg-success/60" />
                 </div>
-                <img src="/brand/m-symbol.png" alt="" className="h-5 w-auto opacity-70" />
+                <LogoMark size={18} idKey="demoMark" />
               </div>
 
               <div className="min-h-[200px] flex items-center justify-center">

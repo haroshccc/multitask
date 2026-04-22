@@ -57,27 +57,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let mounted = true;
 
     (async () => {
-      const {
-        data: { session: initialSession },
-      } = await supabase.auth.getSession();
-      if (!mounted) return;
-      setSession(initialSession);
-      if (initialSession?.user) {
-        await loadProfileAndMemberships(initialSession.user.id);
+      try {
+        const {
+          data: { session: initialSession },
+        } = await supabase.auth.getSession();
+        if (!mounted) return;
+        setSession(initialSession);
+        if (initialSession?.user) {
+          await loadProfileAndMemberships(initialSession.user.id);
+        }
+      } catch (err) {
+        console.error("Auth init failed:", err);
+      } finally {
+        if (mounted) setLoading(false);
       }
-      setLoading(false);
     })();
 
     const { data: subscription } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
       if (!mounted) return;
       setSession(newSession);
-      if (newSession?.user) {
-        await loadProfileAndMemberships(newSession.user.id);
-      } else {
-        setProfile(null);
-        setMemberships([]);
-        setActiveOrgId(null);
-        localStorage.removeItem(ACTIVE_ORG_STORAGE_KEY);
+      try {
+        if (newSession?.user) {
+          await loadProfileAndMemberships(newSession.user.id);
+        } else {
+          setProfile(null);
+          setMemberships([]);
+          setActiveOrgId(null);
+          localStorage.removeItem(ACTIVE_ORG_STORAGE_KEY);
+        }
+      } catch (err) {
+        console.error("Auth state change handler failed:", err);
       }
     });
 

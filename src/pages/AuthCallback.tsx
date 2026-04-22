@@ -29,24 +29,43 @@ export function AuthCallback() {
       return;
     }
 
+    // Hard timeout so we never leave the user staring at a spinner. If the
+    // exchange (or anything downstream) stalls, surface an actionable error
+    // instead of an infinite "משלימה התחברות...".
+    const timeoutId = window.setTimeout(() => {
+      setError(
+        "ההתחברות אורכת יותר מהצפוי. נסי לרענן את הדף או להתחבר שוב."
+      );
+      setExchanging(false);
+    }, 15000);
+
     supabase.auth
       .exchangeCodeForSession(window.location.href)
-      .then(async ({ error: exchErr }) => {
+      .then(({ error: exchErr }) => {
+        window.clearTimeout(timeoutId);
         if (exchErr) {
           console.error("exchangeCodeForSession failed:", exchErr);
           setError(exchErr.message);
           setExchanging(false);
           return;
         }
-        // Force AuthContext to re-read the now-valid session + memberships
-        await refreshProfile();
+        // Don't await refreshProfile — AuthContext's onAuthStateChange
+        // listener will load profile+memberships once the session is set.
+        // Blocking on it here meant any hanging DB query left the UI stuck
+        // on "משלימה התחברות..." forever.
+        refreshProfile().catch((err) => {
+          console.error("refreshProfile after auth failed:", err);
+        });
         setExchanging(false);
       })
       .catch((err) => {
+        window.clearTimeout(timeoutId);
         console.error("exchangeCodeForSession threw:", err);
         setError(String(err));
         setExchanging(false);
       });
+
+    return () => window.clearTimeout(timeoutId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

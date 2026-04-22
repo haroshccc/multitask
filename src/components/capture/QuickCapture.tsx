@@ -3,6 +3,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Mic, Square, Send, X, Plus, CheckSquare, Calendar, FolderKanban } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/lib/auth/AuthContext";
+import { useCreateThought } from "@/lib/queries/thoughts";
 
 interface QuickCaptureProps {
   open: boolean;
@@ -14,10 +16,13 @@ type Mode = "menu" | "thought" | "recording";
 
 export function QuickCapture({ open, onClose }: QuickCaptureProps) {
   const navigate = useNavigate();
+  const { user, activeOrganizationId } = useAuth();
+  const createThought = useCreateThought();
   const [mode, setMode] = useState<Mode>("menu");
   const [text, setText] = useState("");
   const [isRecording, setIsRecording] = useState(false);
   const [seconds, setSeconds] = useState(0);
+  const [error, setError] = useState<string | null>(null);
   const timerRef = useRef<number | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -34,6 +39,7 @@ export function QuickCapture({ open, onClose }: QuickCaptureProps) {
       setText("");
       setIsRecording(false);
       setSeconds(0);
+      setError(null);
       if (timerRef.current) window.clearInterval(timerRef.current);
     }
   }, [open]);
@@ -59,9 +65,26 @@ export function QuickCapture({ open, onClose }: QuickCaptureProps) {
     // TODO: upload audio blob + create thought row
   };
 
-  const saveThought = () => {
-    // TODO: persist to thoughts table
-    onClose();
+  const saveThought = async () => {
+    const body = text.trim();
+    if (!body) return;
+    if (!user || !activeOrganizationId) {
+      setError("חסר ארגון פעיל — נסי להתחבר מחדש");
+      return;
+    }
+    setError(null);
+    try {
+      await createThought.mutateAsync({
+        orgId: activeOrganizationId,
+        ownerId: user.id,
+        text: body,
+        source: "app_text",
+      });
+      onClose();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(msg);
+    }
   };
 
   return (
@@ -142,6 +165,7 @@ export function QuickCapture({ open, onClose }: QuickCaptureProps) {
                     placeholder="מה עולה לך ברגע זה? Enter מוסיף, Shift+Enter לשורה חדשה..."
                     value={text}
                     onChange={(e) => setText(e.target.value)}
+                    disabled={createThought.isPending}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" && !e.shiftKey) {
                         e.preventDefault();
@@ -149,20 +173,26 @@ export function QuickCapture({ open, onClose }: QuickCaptureProps) {
                       }
                     }}
                   />
+                  {error && (
+                    <div className="text-xs text-danger-600 bg-danger-500/10 border border-danger-500/20 rounded-xl px-3 py-2">
+                      {error}
+                    </div>
+                  )}
                   <div className="flex items-center justify-between">
                     <button
                       onClick={() => setMode("menu")}
                       className="btn-ghost"
+                      disabled={createThought.isPending}
                     >
                       חזרה
                     </button>
                     <button
                       onClick={saveThought}
-                      disabled={!text.trim()}
+                      disabled={!text.trim() || createThought.isPending}
                       className="btn-accent"
                     >
                       <Send className="w-4 h-4" />
-                      <span>שמרי</span>
+                      <span>{createThought.isPending ? "שומרת..." : "שמרי"}</span>
                     </button>
                   </div>
                 </div>

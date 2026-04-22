@@ -62,16 +62,19 @@ create index user_saved_filters_user_screen_idx
   on public.user_saved_filters(user_id, screen_key);
 
 -- User dashboard layouts (per user + screen + optional scope) ------------------
+-- scope_id is non-nullable with a zero-UUID sentinel so it can participate in
+-- the primary key. Zero UUID = "no specific scope" (e.g. global tasks screen);
+-- real scope ids (e.g. project_id for pricing) slot into the same row shape.
 create table public.user_dashboard_layouts (
   user_id uuid not null references auth.users(id) on delete cascade,
   screen_key dashboard_screen not null,
-  scope_id uuid,                                    -- e.g. project_id for pricing screen
+  scope_id uuid not null default '00000000-0000-0000-0000-000000000000'::uuid,
   layout_desktop jsonb not null default '[]'::jsonb,
   layout_tablet jsonb not null default '[]'::jsonb,
   layout_mobile jsonb not null default '[]'::jsonb,
   widget_state jsonb not null default '{}'::jsonb,
   updated_at timestamptz not null default now(),
-  primary key (user_id, screen_key, coalesce(scope_id, '00000000-0000-0000-0000-000000000000'::uuid))
+  primary key (user_id, screen_key, scope_id)
 );
 
 -- User list visibility (per screen) --------------------------------------------

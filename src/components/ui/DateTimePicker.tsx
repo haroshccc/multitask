@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { forwardRef, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   addMonths,
   eachDayOfInterval,
@@ -41,9 +42,28 @@ export function DateTimePicker({
   const [open, setOpen] = useState(false);
   const anchorRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
+  const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null);
 
   const current = value ? new Date(value) : null;
   const [viewMonth, setViewMonth] = useState<Date>(current ?? new Date());
+
+  // Re-compute anchor position on open and on window scroll/resize so the
+  // portaled popover tracks the trigger button.
+  useEffect(() => {
+    if (!open) return;
+    const update = () => {
+      if (anchorRef.current) {
+        setAnchorRect(anchorRef.current.getBoundingClientRect());
+      }
+    };
+    update();
+    window.addEventListener("scroll", update, true);
+    window.addEventListener("resize", update);
+    return () => {
+      window.removeEventListener("scroll", update, true);
+      window.removeEventListener("resize", update);
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -150,11 +170,12 @@ export function DateTimePicker({
         )}
       </button>
 
-      {open && (
-        <div
-          ref={popoverRef}
-          className="absolute z-50 mt-1 start-0 bg-white rounded-2xl border border-ink-200 shadow-lift overflow-hidden"
-        >
+      {open && anchorRect && typeof document !== "undefined" &&
+        createPortal(
+          <PortalPopover
+            ref={popoverRef}
+            anchorRect={anchorRect}
+          >
           <div className="flex items-stretch">
             {/* Calendar */}
             <div className="p-3 min-w-[260px]">
@@ -261,11 +282,48 @@ export function DateTimePicker({
               היום
             </button>
           </div>
-        </div>
-      )}
+          </PortalPopover>,
+          document.body
+        )}
     </div>
   );
 }
+
+const PortalPopover = forwardRef<
+  HTMLDivElement,
+  {
+    anchorRect: DOMRect;
+    children: React.ReactNode;
+  }
+>(function PortalPopover({ anchorRect, children }, ref) {
+  // Prefer below the trigger; if it wouldn't fit, render above.
+  const estimatedHeight = 340;
+  const preferBelow =
+    anchorRect.bottom + estimatedHeight <= window.innerHeight ||
+    anchorRect.top < estimatedHeight;
+  const top = preferBelow
+    ? anchorRect.bottom + 4
+    : anchorRect.top - estimatedHeight - 4;
+  // Align leading edge to trigger's leading edge (right in RTL, left in LTR).
+  const isRtl = document.documentElement.dir === "rtl";
+  const style: React.CSSProperties = {
+    position: "fixed",
+    top,
+    ...(isRtl
+      ? { right: window.innerWidth - anchorRect.right }
+      : { left: anchorRect.left }),
+    zIndex: 1000,
+  };
+  return (
+    <div
+      ref={ref}
+      style={style}
+      className="bg-white rounded-2xl border border-ink-200 shadow-lift overflow-hidden"
+    >
+      {children}
+    </div>
+  );
+});
 
 function ScrollColumn({
   values,

@@ -17,6 +17,7 @@ import {
   Link as LinkIcon,
   FileText,
   MapPin,
+  Pencil,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { useTask, useUpdateTask, useCompleteTask } from "@/lib/hooks/useTasks";
@@ -29,8 +30,14 @@ import {
   useUpdateTimeEntry,
   useDeleteTimeEntry,
 } from "@/lib/hooks/useTimer";
+import { useTimeUnit, formatSeconds, type TimeUnit } from "@/lib/hooks/useTimeUnit";
 import { useTaskLists } from "@/lib/hooks/useTaskLists";
-import { useMyTaskStatuses } from "@/lib/hooks/useUserTaskStatuses";
+import {
+  useMyTaskStatuses,
+  useCreateUserTaskStatus,
+  useUpdateUserTaskStatus,
+} from "@/lib/hooks/useUserTaskStatuses";
+import { slugifyStatusKey } from "@/lib/services/user-task-statuses";
 import type { TimeEntry, UserTaskStatus } from "@/lib/types/domain";
 import { DateTimePicker } from "@/components/ui/DateTimePicker";
 import {
@@ -484,6 +491,7 @@ function TimeEntriesTab({ task }: { task: { id: string; actual_seconds: number }
   const updateEntry = useUpdateTimeEntry();
   const deleteEntry = useDeleteTimeEntry();
   const [showManual, setShowManual] = useState(false);
+  const [timeUnit, setTimeUnit] = useTimeUnit();
   const isActive = active?.task_id === task.id;
 
   const [manualStart, setManualStart] = useState("");
@@ -510,9 +518,12 @@ function TimeEntriesTab({ task }: { task: { id: string; actual_seconds: number }
         <div className="flex items-center gap-3">
           <Clock className="w-5 h-5 text-ink-500" />
           <div>
-            <div className="text-xs text-ink-500">סה"כ עד כה</div>
+            <div className="text-xs text-ink-500 flex items-center gap-2">
+              סה"כ עד כה
+              <UnitSwitch value={timeUnit} onChange={setTimeUnit} />
+            </div>
             <div className="font-mono text-lg tabular-nums">
-              {formatDuration(task.actual_seconds)}
+              {formatSeconds(task.actual_seconds, timeUnit)}
             </div>
           </div>
         </div>
@@ -696,6 +707,40 @@ function formatDuration(seconds: number): string {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
+function UnitSwitch({
+  value,
+  onChange,
+}: {
+  value: TimeUnit;
+  onChange: (v: TimeUnit) => void;
+}) {
+  const options: { v: TimeUnit; label: string }[] = [
+    { v: "auto", label: "אוטו" },
+    { v: "minutes", label: "דקות" },
+    { v: "hours", label: "שעות" },
+    { v: "days", label: "ימים" },
+  ];
+  return (
+    <div className="inline-flex items-center rounded-lg bg-ink-100 p-0.5 text-[10px]">
+      {options.map((o) => (
+        <button
+          key={o.v}
+          type="button"
+          onClick={() => onChange(o.v)}
+          className={cn(
+            "px-1.5 py-0.5 rounded-md transition-colors",
+            o.v === value
+              ? "bg-white text-ink-900 shadow-soft"
+              : "text-ink-500 hover:text-ink-900"
+          )}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 // -----------------------------------------------------------------------------
 // Attachments tab — visual scaffolding only. Wiring lands with the recordings /
 // thoughts / files features. The empty state shows what CAN be attached.
@@ -730,6 +775,20 @@ function AttachmentsTab() {
 // Renders the current status as a coloured chip + opens a popover of all
 // statuses in the user's palette.
 
+const STATUS_COLORS = [
+  "#a8a8bc",
+  "#f59e0b",
+  "#10b981",
+  "#14b8a6",
+  "#06b6d4",
+  "#0ea5e9",
+  "#3b82f6",
+  "#6366f1",
+  "#8b5cf6",
+  "#ec4899",
+  "#ef4444",
+];
+
 function StatusPicker({
   value,
   statuses,
@@ -740,9 +799,39 @@ function StatusPicker({
   onChange: (next: string) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [draftLabel, setDraftLabel] = useState("");
+
+  const updateStatus = useUpdateUserTaskStatus();
+  const createStatus = useCreateUserTaskStatus();
+
   const current = statuses.find((s) => s.key === value);
   const label = current?.label ?? value;
   const color = current?.color ?? "#a8a8bc";
+
+  const commitNewStatus = async () => {
+    const lbl = draftLabel.trim();
+    if (!lbl) {
+      setAdding(false);
+      return;
+    }
+    const existing = new Set(statuses.map((s) => s.key));
+    let key = slugifyStatusKey(lbl);
+    let i = 1;
+    while (existing.has(key)) key = `${slugifyStatusKey(lbl)}_${i++}`;
+    const created = await createStatus.mutateAsync({
+      key,
+      label: lbl,
+      kind: "active",
+      color: "#f59e0b",
+      sort_order: (statuses.at(-1)?.sort_order ?? 0) + 100,
+      is_builtin: false,
+    });
+    setDraftLabel("");
+    setAdding(false);
+    onChange(created.key);
+  };
 
   return (
     <div className="relative">
@@ -770,36 +859,183 @@ function StatusPicker({
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute start-0 mt-1 w-full bg-white border border-ink-200 rounded-xl shadow-lift z-20 py-1 max-h-72 overflow-y-auto scrollbar-thin">
+          <div className="absolute start-0 mt-1 w-full bg-white border border-ink-200 rounded-xl shadow-lift z-20 py-1 max-h-80 overflow-y-auto scrollbar-thin">
             {statuses.length === 0 && (
               <div className="px-3 py-2 text-xs text-ink-500">
-                עוד לא הוגדרו סטטוסים. עברי להגדרות → סטטוסים.
+                עוד לא הוגדרו סטטוסים.
               </div>
             )}
             {statuses.map((s) => (
-              <button
+              <StatusPickerRow
                 key={s.id}
-                type="button"
-                onClick={() => {
+                status={s}
+                selected={s.key === value}
+                editing={editingId === s.id}
+                onSelect={() => {
                   onChange(s.key);
                   setOpen(false);
                 }}
-                className={cn(
-                  "w-full flex items-center gap-2 px-3 py-1.5 text-sm text-start hover:bg-ink-100",
-                  s.key === value && "bg-primary-50"
-                )}
-              >
-                <span
-                  className="w-2.5 h-2.5 rounded-full shrink-0"
-                  style={{ backgroundColor: s.color ?? "#a8a8bc" }}
-                />
-                <span className="text-ink-900">{s.label}</span>
-                {s.is_builtin && (
-                  <span className="ms-auto text-[10px] text-ink-400">ברירת מחדל</span>
-                )}
-              </button>
+                onStartEdit={() => setEditingId(s.id)}
+                onStopEdit={() => setEditingId(null)}
+                onRename={(label) =>
+                  updateStatus.mutate({
+                    statusId: s.id,
+                    patch: { label },
+                  })
+                }
+                onRecolor={(color) =>
+                  updateStatus.mutate({
+                    statusId: s.id,
+                    patch: { color },
+                  })
+                }
+              />
+            ))}
+            <div className="border-t border-ink-100 mt-1 pt-1">
+              {adding ? (
+                <div className="flex items-center gap-2 px-3 py-1.5">
+                  <span
+                    className="w-2.5 h-2.5 rounded-full shrink-0"
+                    style={{ backgroundColor: "#f59e0b" }}
+                  />
+                  <input
+                    autoFocus
+                    value={draftLabel}
+                    onChange={(e) => setDraftLabel(e.target.value)}
+                    onBlur={commitNewStatus}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") commitNewStatus();
+                      if (e.key === "Escape") {
+                        setDraftLabel("");
+                        setAdding(false);
+                      }
+                    }}
+                    placeholder="שם סטטוס חדש..."
+                    className="flex-1 min-w-0 bg-transparent border-b border-primary-500 outline-none text-sm text-ink-900"
+                  />
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setAdding(true)}
+                  className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-ink-600 hover:bg-ink-100 text-start"
+                >
+                  <span className="w-2.5 h-2.5 rounded-full shrink-0 border border-dashed border-ink-300" />
+                  <span>הוסף סטטוס חדש</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function StatusPickerRow({
+  status,
+  selected,
+  editing,
+  onSelect,
+  onStartEdit,
+  onStopEdit,
+  onRename,
+  onRecolor,
+}: {
+  status: UserTaskStatus;
+  selected: boolean;
+  editing: boolean;
+  onSelect: () => void;
+  onStartEdit: () => void;
+  onStopEdit: () => void;
+  onRename: (label: string) => void;
+  onRecolor: (color: string) => void;
+}) {
+  const [draft, setDraft] = useState(status.label);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+
+  useEffect(() => {
+    setDraft(status.label);
+  }, [status.label]);
+
+  const commit = () => {
+    const trimmed = draft.trim();
+    if (trimmed && trimmed !== status.label) onRename(trimmed);
+    onStopEdit();
+  };
+
+  return (
+    <div
+      className={cn(
+        "group flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-ink-100",
+        selected && "bg-primary-50"
+      )}
+    >
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          setPaletteOpen((v) => !v);
+        }}
+        className="w-2.5 h-2.5 rounded-full shrink-0 hover:ring-2 hover:ring-ink-300"
+        style={{ backgroundColor: status.color ?? "#a8a8bc" }}
+        title="שנה צבע"
+      />
+      {paletteOpen && (
+        <>
+          <div
+            className="fixed inset-0 z-10"
+            onClick={() => setPaletteOpen(false)}
+          />
+          <div className="absolute start-4 mt-8 z-20 bg-white border border-ink-200 rounded-xl shadow-lift p-2 flex gap-1 flex-wrap w-[200px]">
+            {STATUS_COLORS.map((c) => (
+              <button
+                key={c}
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRecolor(c);
+                  setPaletteOpen(false);
+                }}
+                className="w-5 h-5 rounded-full border border-ink-200 hover:scale-110 transition-transform"
+                style={{ backgroundColor: c }}
+              />
             ))}
           </div>
+        </>
+      )}
+      {editing ? (
+        <input
+          autoFocus
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") commit();
+            if (e.key === "Escape") {
+              setDraft(status.label);
+              onStopEdit();
+            }
+          }}
+          className="flex-1 min-w-0 bg-transparent border-b border-primary-500 outline-none text-sm text-ink-900"
+        />
+      ) : (
+        <>
+          <button
+            type="button"
+            onClick={onSelect}
+            className="flex-1 min-w-0 text-start text-ink-900"
+          >
+            {status.label}
+          </button>
+          <button
+            type="button"
+            onClick={onStartEdit}
+            className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-ink-400 hover:text-ink-900"
+            title="ערוך שם"
+          >
+            <Pencil className="w-3 h-3" />
+          </button>
         </>
       )}
     </div>

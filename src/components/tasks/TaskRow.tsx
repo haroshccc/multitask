@@ -23,6 +23,7 @@ import {
   useStartTimer,
   useStopTimer,
 } from "@/lib/hooks/useTimer";
+import { useTimeUnit, formatSeconds } from "@/lib/hooks/useTimeUnit";
 import type { Task } from "@/lib/types/domain";
 
 export interface TaskTreeNode {
@@ -74,8 +75,14 @@ export function TaskRow({
   const [menuOpen, setMenuOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const [timeUnit] = useTimeUnit();
+
   const isActive = activeTimer?.task_id === task.id;
   const isDone = !!task.completed_at;
+
+  // Total (including nested) + completed counts — for the compact "N/M" badge.
+  const totalInSubtree = countDescendants(children);
+  const doneInSubtree = countCompletedDescendants(children);
 
   // keep draft in sync when task title changes externally (e.g. realtime)
   useEffect(() => {
@@ -276,13 +283,23 @@ export function TaskRow({
           )}
         />
 
-        {/* Urgency stars (compact) */}
-        <InlineStars
+        {/* Urgency star (single chip with number; tap → 5-star expanded picker) */}
+        <UrgencyChip
           value={task.urgency}
           onChange={(v) =>
             updateTask.mutate({ taskId: task.id, patch: { urgency: v } })
           }
         />
+
+        {/* Subtask completion counter (hidden when no subtasks) */}
+        {totalInSubtree > 0 && (
+          <span
+            className="shrink-0 text-[10px] font-mono tabular-nums text-ink-500 px-1.5 py-0.5 rounded-md bg-ink-100"
+            title={`${doneInSubtree} מתוך ${totalInSubtree} תת-משימות הושלמו`}
+          >
+            {doneInSubtree}/{totalInSubtree}
+          </span>
+        )}
 
         {/* Inline timer */}
         <button
@@ -311,9 +328,9 @@ export function TaskRow({
             type="button"
             onClick={() => onOpenEdit(task.id)}
             className="shrink-0 text-[11px] font-mono tabular-nums text-ink-500 hover:text-primary-700 px-1 rounded-md"
-            title="עריכת סשנים"
+            title="עריכת סשנים ויחידת מידה"
           >
-            {formatElapsed(task.actual_seconds)}
+            {formatSeconds(task.actual_seconds, timeUnit)}
           </button>
         )}
 
@@ -469,51 +486,86 @@ function ChildrenBlock({
   );
 }
 
-function InlineStars({
+/** Collapsed urgency chip: single star with number inside. Click to expand. */
+function UrgencyChip({
   value,
   onChange,
 }: {
   value: number;
   onChange: (v: number) => void;
 }) {
+  const [open, setOpen] = useState(false);
+  const tinted = value > 0;
+
   return (
-    <div className="flex items-center shrink-0">
-      {[1, 2, 3, 4, 5].map((n) => (
-        <button
-          key={n}
-          onClick={() => onChange(n === value ? 0 : n)}
-          className="p-0 text-ink-300"
-          aria-label={`דחיפות ${n}`}
-          type="button"
-        >
-          <Star
-            className={cn("w-3 h-3", n <= value && "fill-current")}
-            style={
-              n <= value
-                ? { color: "var(--list-color, #f59e0b)" }
-                : undefined
-            }
-          />
-        </button>
-      ))}
+    <div className="relative shrink-0">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-label="דחיפות"
+        className="relative flex items-center justify-center w-5 h-5 rounded-md hover:bg-ink-100"
+        style={
+          tinted ? { color: "var(--list-color, #f59e0b)" } : { color: "#a8a8bc" }
+        }
+      >
+        <Star
+          className={cn("w-4 h-4", tinted && "fill-current")}
+        />
+        {tinted && (
+          <span
+            className="absolute inset-0 flex items-center justify-center text-[9px] font-bold text-white tabular-nums"
+            aria-hidden
+          >
+            {value}
+          </span>
+        )}
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute end-0 mt-1 z-20 bg-white border border-ink-200 rounded-xl shadow-lift p-1.5 flex items-center gap-0.5">
+            {[1, 2, 3, 4, 5].map((n) => (
+              <button
+                key={n}
+                type="button"
+                onClick={() => {
+                  onChange(n === value ? 0 : n);
+                  setOpen(false);
+                }}
+                className="p-0.5 text-ink-300 hover:scale-110 transition-transform"
+                style={
+                  n <= value
+                    ? { color: "var(--list-color, #f59e0b)" }
+                    : undefined
+                }
+              >
+                <Star
+                  className={cn("w-4 h-4", n <= value && "fill-current")}
+                />
+              </button>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }
 
-/**
- * Compact elapsed-time label for the task row.
- * < 1h → "Nm"; < 1d → "Hh Mm"; else "Dd Hh".
- */
-function formatElapsed(seconds: number): string {
-  if (seconds < 60) return "<1ד";
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}ד`;
-  const hours = Math.floor(minutes / 60);
-  const remMin = minutes % 60;
-  if (hours < 24) return remMin > 0 ? `${hours}ש ${remMin}ד` : `${hours}ש`;
-  const days = Math.floor(hours / 24);
-  const remH = hours % 24;
-  return remH > 0 ? `${days}י ${remH}ש` : `${days}י`;
+function countDescendants(children: TaskTreeNode[]): number {
+  let n = 0;
+  for (const c of children) {
+    n += 1 + countDescendants(c.children);
+  }
+  return n;
+}
+
+function countCompletedDescendants(children: TaskTreeNode[]): number {
+  let n = 0;
+  for (const c of children) {
+    if (c.task.completed_at) n += 1;
+    n += countCompletedDescendants(c.children);
+  }
+  return n;
 }
 
 function MenuBtn({

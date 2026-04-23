@@ -9,7 +9,6 @@ import {
   Clock,
   ListTodo,
   Paperclip,
-  Link as LinkIcon,
   History,
   Trash2,
   Plus,

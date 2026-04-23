@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase/client";
+import type { Json } from "@/lib/types/database";
 import type {
   DashboardScreen,
   FilterConfig,
@@ -46,10 +47,10 @@ export async function upsertDashboardLayout(input: {
         user_id: input.user_id,
         screen_key: input.screen_key,
         scope_id: input.scope_id ?? NO_SCOPE_UUID,
-        layout_desktop: (input.layout_desktop ?? []) as unknown as object,
-        layout_tablet: (input.layout_tablet ?? []) as unknown as object,
-        layout_mobile: (input.layout_mobile ?? []) as unknown as object,
-        widget_state: (input.widget_state ?? {}) as unknown as object,
+        layout_desktop: (input.layout_desktop ?? []) as unknown as Json,
+        layout_tablet: (input.layout_tablet ?? []) as unknown as Json,
+        layout_mobile: (input.layout_mobile ?? []) as unknown as Json,
+        widget_state: (input.widget_state ?? {}) as unknown as Json,
       },
       { onConflict: "user_id,screen_key,scope_id" }
     )
@@ -116,7 +117,7 @@ export async function createSavedFilter(input: {
     .from("user_saved_filters")
     .insert({
       ...input,
-      filter_config: input.filter_config as unknown as object,
+      filter_config: input.filter_config as unknown as Json,
     })
     .select()
     .single();
@@ -137,7 +138,7 @@ export async function updateSavedFilter(
     .update({
       ...patch,
       filter_config: patch.filter_config
-        ? (patch.filter_config as unknown as object)
+        ? (patch.filter_config as unknown as Json)
         : undefined,
     })
     .eq("id", filterId)

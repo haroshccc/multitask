@@ -39,13 +39,13 @@ export const queryKeys = {
   projectTemplates: (orgId: string) => ["project-templates", orgId] as const,
 
   // Events
-  events: (orgId: string, filters?: FilterConfig) =>
+  events: (orgId: string, filters?: Record<string, unknown>) =>
     ["events", orgId, filters ?? {}] as const,
   event: (eventId: string) => ["event", eventId] as const,
   eventParticipants: (eventId: string) => ["event", eventId, "participants"] as const,
 
   // Recordings
-  recordings: (orgId: string, filters?: FilterConfig) =>
+  recordings: (orgId: string, filters?: Record<string, unknown>) =>
     ["recordings", orgId, filters ?? {}] as const,
   recording: (recordingId: string) => ["recording", recordingId] as const,
   recordingSpeakers: (recordingId: string) =>
@@ -54,7 +54,7 @@ export const queryKeys = {
     ["recording", recordingId, "tasks"] as const,
 
   // Thoughts
-  thoughts: (orgId: string, filters?: FilterConfig) =>
+  thoughts: (orgId: string, filters?: Record<string, unknown>) =>
     ["thoughts", orgId, filters ?? {}] as const,
   thought: (thoughtId: string) => ["thought", thoughtId] as const,
   thoughtLists: (orgId: string) => ["thought-lists", orgId] as const,

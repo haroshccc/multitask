@@ -3,7 +3,6 @@ import type {
   Thought,
   ThoughtInsert,
   ThoughtUpdate,
-  ThoughtList,
   ThoughtListAssignment,
   ThoughtProcessing,
   ThoughtProcessingTarget,

@@ -167,7 +167,6 @@ export function DashboardGrid({
         draggableHandle=".widget-drag-handle"
         compactType="vertical"
         onLayoutChange={handleLayoutChange}
-        isRTL
       >
         {visibleWidgets.map((w) => {
           const Component = w.component;

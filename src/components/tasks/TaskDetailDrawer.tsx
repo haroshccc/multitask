@@ -6,6 +6,7 @@ import {
   Circle,
   Clock,
   Flame,
+  Link2,
   ListTree,
   Loader2,
   MapPin,
@@ -24,6 +25,13 @@ import {
   useUpdateTaskStatus,
 } from "@/lib/queries/tasks";
 import { useAuth } from "@/lib/auth/AuthContext";
+import {
+  useCreateDependency,
+  useDeleteDependency,
+  useTaskDependencies,
+} from "@/lib/queries/dependencies";
+import { supabase } from "@/lib/supabase/client";
+import { useQuery } from "@tanstack/react-query";
 import { TaskTimerButton } from "./TaskTimerButton";
 import { cn } from "@/lib/utils/cn";
 
@@ -254,6 +262,11 @@ export function TaskDetailDrawer({ task, onClose }: Props) {
 
             <SubtasksSection parentId={task.id} orgId={task.organization_id} />
 
+            <DependenciesSection
+              task={task}
+              orgId={task.organization_id}
+            />
+
             {error && (
               <div className="text-xs text-danger-600 bg-danger-500/10 border border-danger-500/20 rounded-xl px-3 py-2">
                 {error}
@@ -431,6 +444,132 @@ function SubtasksSection({ parentId, orgId }: { parentId: string; orgId: string 
     </div>
   );
 }
+
+function DependenciesSection({ task, orgId }: { task: Task; orgId: string }) {
+  const deps = useTaskDependencies(task.id);
+  const createDep = useCreateDependency();
+  const deleteDep = useDeleteDependency();
+
+  const [search, setSearch] = useState("");
+  const [showSearch, setShowSearch] = useState(false);
+
+  // Search candidates: tasks in same org, not self, not already a dep, not done
+  const existingDepIds = new Set((deps.data ?? []).map((d) => d.depends_on_task_id));
+  const candidates = useQuery({
+    queryKey: ["tasks", "depcandidates", orgId, search] as const,
+    enabled: showSearch && search.trim().length >= 2,
+    queryFn: async (): Promise<Task[]> => {
+      const { data, error } = await supabase
+        .from("tasks")
+        .select("*")
+        .eq("organization_id", orgId)
+        .ilike("title", `%${search.trim()}%`)
+        .neq("id", task.id)
+        .neq("status", "cancelled")
+        .limit(8);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  const filtered = (candidates.data ?? []).filter((t) => !existingDepIds.has(t.id));
+
+  return (
+    <div className="pt-3 border-t border-ink-200">
+      <div className="flex items-center gap-2 mb-2">
+        <Link2 className="w-3.5 h-3.5 text-ink-500" />
+        <div className="text-xs text-ink-500">תלוי במשימות</div>
+        {(deps.data ?? []).length > 0 && (
+          <span className="chip">{deps.data!.length}</span>
+        )}
+        <button
+          onClick={() => setShowSearch((v) => !v)}
+          className="ms-auto text-xs btn-ghost py-1 px-2"
+          aria-label="הוספת תלות"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          הוסיפי
+        </button>
+      </div>
+
+      {(deps.data ?? []).length > 0 && (
+        <ul className="space-y-1 mb-2">
+          {(deps.data ?? []).map((dep) => (
+            <li
+              key={dep.id}
+              className="flex items-center gap-2 px-2 py-1.5 rounded-lg group hover:bg-ink-50"
+            >
+              <span className="chip shrink-0">
+                {RELATION_LABEL[dep.relation]}
+              </span>
+              <span className="flex-1 min-w-0 text-sm truncate text-ink-900">
+                {dep.depends_on?.title ?? "(נמחקה)"}
+              </span>
+              {dep.lag_days > 0 && (
+                <span className="text-xs text-ink-500 shrink-0">
+                  +{dep.lag_days}י
+                </span>
+              )}
+              <button
+                onClick={() =>
+                  deleteDep.mutate({ id: dep.id, taskId: task.id })
+                }
+                className="p-1 rounded text-ink-400 hover:text-danger-600 opacity-0 group-hover:opacity-100"
+                aria-label="הסירי"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {showSearch && (
+        <div className="space-y-1">
+          <input
+            className="field text-sm"
+            placeholder="חיפוש משימה לתלות..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            autoFocus
+          />
+          {search.trim().length >= 2 && (
+            <ul className="space-y-1 max-h-48 overflow-y-auto scrollbar-thin">
+              {filtered.length === 0 ? (
+                <li className="text-xs text-ink-500 px-2 py-1">לא נמצאו תוצאות</li>
+              ) : (
+                filtered.map((cand) => (
+                  <li key={cand.id}>
+                    <button
+                      onClick={async () => {
+                        await createDep.mutateAsync({
+                          taskId: task.id,
+                          dependsOnTaskId: cand.id,
+                        });
+                        setSearch("");
+                        setShowSearch(false);
+                      }}
+                      className="w-full text-start text-sm px-2 py-1.5 rounded-lg hover:bg-primary-50 text-ink-900"
+                    >
+                      {cand.title}
+                    </button>
+                  </li>
+                ))
+              )}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const RELATION_LABEL: Record<string, string> = {
+  finish_to_start: "FS",
+  start_to_start: "SS",
+  finish_to_finish: "FF",
+  start_to_finish: "SF",
+};
 
 function formatSeconds(s: number): string {
   const h = Math.floor(s / 3600);

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase/client";
-import type { EventInsert, EventRow } from "@/lib/types/domain";
+import type { EventInsert, EventRow, EventUpdate } from "@/lib/types/domain";
 
 export const eventKeys = {
   all: ["events"] as const,
@@ -38,6 +38,48 @@ interface CreateEventInput {
   endsAt: string;
   allDay?: boolean;
   description?: string;
+}
+
+export function useEvent(id: string | null) {
+  return useQuery({
+    queryKey: ["events", "detail", id ?? "none"] as const,
+    enabled: Boolean(id),
+    queryFn: async (): Promise<EventRow | null> => {
+      const { data, error } = await supabase
+        .from("events")
+        .select("*")
+        .eq("id", id!)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+}
+
+export function useUpdateEvent() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, patch }: { id: string; patch: EventUpdate }) => {
+      const { error } = await supabase.from("events").update(patch).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: eventKeys.all });
+    },
+  });
+}
+
+export function useDeleteEvent() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("events").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: eventKeys.all });
+    },
+  });
 }
 
 export function useCreateEvent() {

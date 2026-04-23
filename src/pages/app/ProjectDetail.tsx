@@ -5,9 +5,12 @@ import {
   Archive,
   ArchiveRestore,
   CheckSquare,
+  Coins,
   Loader2,
+  Plus,
   Save,
   Trash2,
+  X,
 } from "lucide-react";
 import { ScreenScaffold } from "@/components/layout/ScreenScaffold";
 import { TaskDetailDrawer } from "@/components/tasks/TaskDetailDrawer";
@@ -19,6 +22,11 @@ import {
   useUpdateProject,
 } from "@/lib/queries/projects";
 import { useUpdateTaskStatus } from "@/lib/queries/tasks";
+import {
+  useCreateExpense,
+  useDeleteExpense,
+  useProjectExpenses,
+} from "@/lib/queries/expenses";
 import { supabase } from "@/lib/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import type { ProjectPricingMode, Task } from "@/lib/types/domain";
@@ -31,9 +39,12 @@ export function ProjectDetail() {
 
   const project = useProject(projectId ?? null);
   const tasks = useProjectTasks(projectId ?? null);
+  const expenses = useProjectExpenses(projectId ?? null);
   const updateProject = useUpdateProject();
   const deleteProject = useDeleteProject();
   const updateStatus = useUpdateTaskStatus();
+  const createExpense = useCreateExpense();
+  const deleteExpense = useDeleteExpense();
   const qc = useQueryClient();
 
   const [openTask, setOpenTask] = useState<Task | null>(null);
@@ -80,6 +91,9 @@ export function ProjectDetail() {
       : p.pricing_mode === "fixed_price" && p.total_price_cents
         ? p.total_price_cents / 100
         : 0;
+  const totalExpenses =
+    (expenses.data ?? []).reduce((sum, e) => sum + e.amount_cents, 0) / 100;
+  const profit = actualRevenue - totalExpenses;
 
   const doneCount = (tasks.data ?? []).filter((t) => t.status === "done").length;
   const totalCount = tasks.data?.length ?? 0;
@@ -136,19 +150,20 @@ export function ProjectDetail() {
               hint={`(${estimatedHours.toFixed(1)} מוערכות)`}
             />
             <Stat
-              label="הכנסה חזויה"
+              label="הכנסה"
               value={`₪${actualRevenue.toLocaleString(undefined, {
                 maximumFractionDigits: 0,
               })}`}
             />
             <Stat
-              label="סטטוס"
-              value={
-                p.status === "active"
-                  ? "פעיל"
-                  : p.status === "paused"
-                    ? "מושהה"
-                    : "הושלם"
+              label="רווח (אחרי הוצאות)"
+              value={`₪${profit.toLocaleString(undefined, {
+                maximumFractionDigits: 0,
+              })}`}
+              hint={
+                totalExpenses > 0
+                  ? `הוצאות: ₪${totalExpenses.toLocaleString()}`
+                  : undefined
               }
             />
           </div>
@@ -264,6 +279,23 @@ export function ProjectDetail() {
             saving={updateProject.isPending}
           />
 
+          <ExpensesPanel
+            expenses={expenses.data ?? []}
+            loading={expenses.isLoading}
+            currency={p.currency}
+            onCreate={(label, amountCents) =>
+              createExpense.mutateAsync({
+                projectId: p.id,
+                label,
+                amountCents,
+              })
+            }
+            onDelete={(id) =>
+              deleteExpense.mutateAsync({ id, projectId: p.id })
+            }
+            saving={createExpense.isPending}
+          />
+
           <div className="card p-4 space-y-2">
             <button
               onClick={() =>
@@ -325,6 +357,112 @@ function Stat({
       <div className="text-xs text-ink-500">{label}</div>
       <div className="text-xl font-bold text-ink-900 tabular-nums">{value}</div>
       {hint && <div className="text-[10px] text-ink-400 mt-0.5">{hint}</div>}
+    </div>
+  );
+}
+
+interface ExpensesPanelProps {
+  expenses: Array<{ id: string; label: string; amount_cents: number }>;
+  loading: boolean;
+  currency: string;
+  onCreate: (label: string, amountCents: number) => Promise<unknown>;
+  onDelete: (id: string) => Promise<unknown>;
+  saving: boolean;
+}
+
+function ExpensesPanel({
+  expenses,
+  loading,
+  currency,
+  onCreate,
+  onDelete,
+  saving,
+}: ExpensesPanelProps) {
+  const [label, setLabel] = useState("");
+  const [amount, setAmount] = useState("");
+
+  const handleAdd = async () => {
+    if (!label.trim() || !amount.trim()) return;
+    await onCreate(label.trim(), Math.round(Number(amount) * 100));
+    setLabel("");
+    setAmount("");
+  };
+
+  const total = expenses.reduce((s, e) => s + e.amount_cents, 0) / 100;
+
+  return (
+    <div className="card p-4 space-y-3">
+      <div className="flex items-center gap-2">
+        <Coins className="w-4 h-4 text-ink-500" />
+        <h3 className="text-sm font-semibold text-ink-900 flex-1">הוצאות חומרים</h3>
+        {total > 0 && (
+          <span className="chip">
+            סה״כ ₪{total.toLocaleString()}
+          </span>
+        )}
+      </div>
+
+      {loading ? (
+        <Loader2 className="w-4 h-4 animate-spin text-ink-400" />
+      ) : (
+        <ul className="space-y-1">
+          {expenses.map((e) => (
+            <li
+              key={e.id}
+              className="flex items-center gap-2 group py-1.5 border-b border-ink-200 last:border-0"
+            >
+              <span className="flex-1 min-w-0 text-sm text-ink-900 truncate">
+                {e.label}
+              </span>
+              <span className="text-sm tabular-nums text-ink-700">
+                ₪{(e.amount_cents / 100).toLocaleString()}
+              </span>
+              <button
+                onClick={() => onDelete(e.id)}
+                className="p-1 rounded text-ink-400 hover:text-danger-600 opacity-0 group-hover:opacity-100"
+                aria-label="מחק"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <div className="grid grid-cols-[1fr_auto_auto] gap-1">
+        <input
+          className="field text-sm"
+          placeholder="פריט"
+          value={label}
+          onChange={(e) => setLabel(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") handleAdd();
+          }}
+        />
+        <input
+          type="number"
+          min="0"
+          className="field text-sm w-24"
+          placeholder={currency}
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") handleAdd();
+          }}
+        />
+        <button
+          onClick={handleAdd}
+          disabled={!label.trim() || !amount.trim() || saving}
+          className="btn-accent shrink-0 py-2 px-2.5"
+          aria-label="הוסיפי"
+        >
+          {saving ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <Plus className="w-4 h-4" />
+          )}
+        </button>
+      </div>
     </div>
   );
 }

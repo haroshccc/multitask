@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils/cn";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth/AuthContext";
 import { useCreateThought } from "@/lib/queries/thoughts";
+import { useCreateTask } from "@/lib/queries/tasks";
 
 interface QuickCaptureProps {
   open: boolean;
@@ -12,12 +13,13 @@ interface QuickCaptureProps {
   currentPath: string;
 }
 
-type Mode = "menu" | "thought" | "recording";
+type Mode = "menu" | "thought" | "task" | "recording";
 
 export function QuickCapture({ open, onClose }: QuickCaptureProps) {
   const navigate = useNavigate();
   const { user, activeOrganizationId } = useAuth();
   const createThought = useCreateThought();
+  const createTask = useCreateTask();
   const [mode, setMode] = useState<Mode>("menu");
   const [text, setText] = useState("");
   const [isRecording, setIsRecording] = useState(false);
@@ -28,7 +30,7 @@ export function QuickCapture({ open, onClose }: QuickCaptureProps) {
 
   useEffect(() => {
     if (!open) return;
-    if (mode === "thought") {
+    if (mode === "thought" || mode === "task") {
       setTimeout(() => textareaRef.current?.focus(), 50);
     }
   }, [open, mode]);
@@ -87,6 +89,27 @@ export function QuickCapture({ open, onClose }: QuickCaptureProps) {
     }
   };
 
+  const saveTask = async () => {
+    const title = text.trim();
+    if (!title) return;
+    if (!user || !activeOrganizationId) {
+      setError("חסר ארגון פעיל — נסי להתחבר מחדש");
+      return;
+    }
+    setError(null);
+    try {
+      await createTask.mutateAsync({
+        orgId: activeOrganizationId,
+        ownerId: user.id,
+        title,
+      });
+      onClose();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(msg);
+    }
+  };
+
   return (
     <AnimatePresence>
       {open && (
@@ -109,6 +132,7 @@ export function QuickCapture({ open, onClose }: QuickCaptureProps) {
               <h3 className="font-semibold text-ink-900">
                 {mode === "menu" && "יצירה מהירה"}
                 {mode === "thought" && "מחשבה מהירה"}
+                {mode === "task" && "משימה מהירה"}
                 {mode === "recording" && (isRecording ? "מקליטה..." : "הקלטה")}
               </h3>
               <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-ink-100">
@@ -134,8 +158,8 @@ export function QuickCapture({ open, onClose }: QuickCaptureProps) {
                     icon={CheckSquare}
                     label="משימה חדשה"
                     onClick={() => {
-                      onClose();
-                      navigate("/app/tasks");
+                      setText("");
+                      setMode("task");
                     }}
                   />
                   <MenuAction
@@ -154,6 +178,47 @@ export function QuickCapture({ open, onClose }: QuickCaptureProps) {
                       navigate("/app/projects");
                     }}
                   />
+                </div>
+              )}
+
+              {mode === "task" && (
+                <div className="space-y-3">
+                  <textarea
+                    ref={textareaRef}
+                    className="field min-h-[80px] resize-none"
+                    placeholder="כותרת המשימה — Enter לשמירה"
+                    value={text}
+                    onChange={(e) => setText(e.target.value)}
+                    disabled={createTask.isPending}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        saveTask();
+                      }
+                    }}
+                  />
+                  {error && (
+                    <div className="text-xs text-danger-600 bg-danger-500/10 border border-danger-500/20 rounded-xl px-3 py-2">
+                      {error}
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between">
+                    <button
+                      onClick={() => setMode("menu")}
+                      className="btn-ghost"
+                      disabled={createTask.isPending}
+                    >
+                      חזרה
+                    </button>
+                    <button
+                      onClick={saveTask}
+                      disabled={!text.trim() || createTask.isPending}
+                      className="btn-accent"
+                    >
+                      <Send className="w-4 h-4" />
+                      <span>{createTask.isPending ? "שומרת..." : "צרי משימה"}</span>
+                    </button>
+                  </div>
                 </div>
               )}
 

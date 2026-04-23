@@ -23,11 +23,16 @@ import {
 } from "lucide-react";
 import { ScreenScaffold } from "@/components/layout/ScreenScaffold";
 import { TaskDetailDrawer } from "@/components/tasks/TaskDetailDrawer";
+import { EventDrawer } from "@/components/events/EventDrawer";
 import { useAuth } from "@/lib/auth/AuthContext";
 import { useTasksInRange, useCreateTask } from "@/lib/queries/tasks";
 import { useEventsInRange } from "@/lib/queries/events";
 import type { EventRow, Task } from "@/lib/types/domain";
 import { cn } from "@/lib/utils/cn";
+
+type EventDrawerMode =
+  | { kind: "create"; defaultStartsAt?: Date }
+  | { kind: "edit"; event: EventRow };
 
 const WEEK_STARTS_ON = 0 as const; // Sunday — matches Israeli convention
 
@@ -40,6 +45,7 @@ export function Calendar() {
   const [cursor, setCursor] = useState<Date>(() => new Date());
   const [selectedDay, setSelectedDay] = useState<Date>(() => new Date());
   const [openTask, setOpenTask] = useState<Task | null>(null);
+  const [eventDrawer, setEventDrawer] = useState<EventDrawerMode | null>(null);
   const [newTitle, setNewTitle] = useState("");
 
   const { from, to } = useMemo(() => {
@@ -199,6 +205,19 @@ export function Calendar() {
             <h3 className="font-semibold text-ink-900 text-sm flex-1">
               {format(selectedDay, "EEEE, d בMMMM", { locale: he })}
             </h3>
+            {user && activeOrganizationId && (
+              <button
+                onClick={() => {
+                  const start = new Date(selectedDay);
+                  start.setHours(10, 0, 0, 0);
+                  setEventDrawer({ kind: "create", defaultStartsAt: start });
+                }}
+                className="text-xs btn-ghost py-1 px-2"
+                title="אירוע חדש"
+              >
+                + אירוע
+              </button>
+            )}
           </div>
 
           {user && activeOrganizationId && (
@@ -269,7 +288,10 @@ export function Calendar() {
                       </div>
                     </button>
                   ) : (
-                    <div className="p-2 rounded-xl bg-accent-purple/5 flex items-start gap-2">
+                    <button
+                      onClick={() => setEventDrawer({ kind: "edit", event: item.event })}
+                      className="w-full text-start p-2 rounded-xl bg-accent-purple/5 hover:bg-accent-purple/10 flex items-start gap-2"
+                    >
                       <div className="w-2 h-2 rounded-full bg-accent-purple mt-1.5 shrink-0" />
                       <div className="flex-1 min-w-0">
                         <div className="text-sm text-ink-900 break-words">
@@ -286,7 +308,7 @@ export function Calendar() {
                           )}
                         </div>
                       </div>
-                    </div>
+                    </button>
                   )}
                 </li>
               ))}
@@ -297,6 +319,10 @@ export function Calendar() {
 
       {openTask && (
         <TaskDetailDrawer task={openTask} onClose={() => setOpenTask(null)} />
+      )}
+
+      {eventDrawer && (
+        <EventDrawer mode={eventDrawer} onClose={() => setEventDrawer(null)} />
       )}
     </ScreenScaffold>
   );

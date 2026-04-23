@@ -1,5 +1,5 @@
 import { Outlet, NavLink, useLocation, useNavigate } from "react-router-dom";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Home,
   CheckSquare,
@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils/cn";
 import { QuickCapture } from "@/components/capture/QuickCapture";
 import { ActiveTimerPill } from "@/components/tasks/ActiveTimerPill";
 import { NotificationsBell } from "@/components/notifications/NotificationsBell";
+import { GlobalSearch } from "@/components/search/GlobalSearch";
 import { Logo } from "@/components/brand/Logo";
 
 interface NavItem {
@@ -46,11 +47,23 @@ export function AppShell() {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [captureOpen, setCaptureOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
 
   const handleSignOut = async () => {
     await signOut();
     navigate("/", { replace: true });
   };
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setSearchOpen(true);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   return (
     <div className="min-h-screen bg-ink-50 flex flex-col">
@@ -91,7 +104,12 @@ export function AppShell() {
 
         {/* Right actions */}
         <div className="flex items-center gap-1">
-          <button className="p-2 rounded-xl hover:bg-ink-100" aria-label="חיפוש">
+          <button
+            onClick={() => setSearchOpen(true)}
+            className="p-2 rounded-xl hover:bg-ink-100"
+            aria-label="חיפוש (⌘K)"
+            title="חיפוש (⌘K)"
+          >
             <Search className="w-5 h-5 text-ink-600" />
           </button>
           <NotificationsBell />
@@ -265,6 +283,8 @@ export function AppShell() {
       />
 
       <ActiveTimerPill />
+
+      <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
     </div>
   );
 }

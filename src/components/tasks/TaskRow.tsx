@@ -343,6 +343,9 @@ export function TaskRow({
           )}
         />
 
+        {/* All inline badges + quick actions render on desktop only. On
+            mobile they collapse into the ⋯ menu below to keep the row clean. */}
+        <div className="hidden md:contents">
         {display.urgency && (
           <UrgencyChip
             value={task.urgency}
@@ -485,20 +488,162 @@ export function TaskRow({
         >
           <Pencil className="w-3.5 h-3.5" />
         </button>
+        </div>
+        {/* end desktop-only badges wrapper */}
 
         <div className="relative shrink-0">
           <button
             onClick={() => setMenuOpen((v) => !v)}
-            className="p-1 rounded-md text-ink-400 hover:text-ink-900 hover:bg-ink-100 opacity-0 group-hover:opacity-100"
+            className="p-1 rounded-md text-ink-400 hover:text-ink-900 hover:bg-ink-100 md:opacity-0 md:group-hover:opacity-100"
             aria-label="תפריט"
             type="button"
           >
-            <MoreHorizontal className="w-3.5 h-3.5" />
+            <MoreHorizontal className="w-4 h-4 md:w-3.5 md:h-3.5" />
           </button>
           {menuOpen && (
             <>
               <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-              <div className="absolute end-0 mt-1 w-56 bg-white border border-ink-200 rounded-xl shadow-lift z-20 py-1 text-sm">
+              <div className="absolute end-0 mt-1 w-64 md:w-56 bg-white border border-ink-200 rounded-xl shadow-lift z-20 py-1 text-sm">
+                {/* Mobile-only: the inline badges collapsed into the menu as
+                    interactive rows so the task row itself stays minimal. */}
+                <div className="md:hidden">
+                  <MenuBtn
+                    icon={<CornerDownLeft className="w-3.5 h-3.5" />}
+                    onClick={() => {
+                      handleAddSubtask();
+                      setMenuOpen(false);
+                    }}
+                  >
+                    הוסף תת-משימה
+                  </MenuBtn>
+                  <MenuBtn
+                    icon={<Pencil className="w-3.5 h-3.5" />}
+                    onClick={() => {
+                      onOpenEdit(task.id);
+                      setMenuOpen(false);
+                    }}
+                  >
+                    ערוך פרטים
+                  </MenuBtn>
+
+                  {display.urgency && (
+                    <div className="flex items-center gap-2 px-3 py-1.5 text-ink-700">
+                      <span className="text-xs text-ink-500 w-20">דחיפות</span>
+                      <UrgencyChip
+                        value={task.urgency}
+                        onChange={(v) => {
+                          if (task.urgency === v) return;
+                          const prev = task.urgency;
+                          updateTask.mutate({
+                            taskId: task.id,
+                            patch: { urgency: v },
+                          });
+                          pushUndo({
+                            description: "שינוי דחיפות",
+                            undo: () =>
+                              updateTask.mutate({
+                                taskId: task.id,
+                                patch: { urgency: prev },
+                              }),
+                            redo: () =>
+                              updateTask.mutate({
+                                taskId: task.id,
+                                patch: { urgency: v },
+                              }),
+                          });
+                        }}
+                      />
+                    </div>
+                  )}
+
+                  {display.status && (() => {
+                    const s = myStatuses.find((x) => x.key === task.status);
+                    const color = s?.color ?? "#a8a8bc";
+                    const label = s?.label ?? task.status;
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onOpenEdit(task.id);
+                          setMenuOpen(false);
+                        }}
+                        className="w-full flex items-center gap-2 px-3 py-1.5 text-ink-700 hover:bg-ink-100 text-start"
+                      >
+                        <span className="text-xs text-ink-500 w-20">סטטוס</span>
+                        <span
+                          className="w-2 h-2 rounded-full"
+                          style={{ backgroundColor: color }}
+                        />
+                        <span>{label}</span>
+                      </button>
+                    );
+                  })()}
+
+                  {display.subtasks && totalInSubtree > 0 && (
+                    <div className="flex items-center gap-2 px-3 py-1.5 text-ink-700">
+                      <span className="text-xs text-ink-500 w-20">תת-משימות</span>
+                      <span className="font-mono tabular-nums">
+                        {doneInSubtree}/{totalInSubtree}
+                      </span>
+                    </div>
+                  )}
+
+                  {display.dueDate && task.scheduled_at && (
+                    <div className="flex items-center gap-2 px-3 py-1.5 text-ink-700">
+                      <span className="text-xs text-ink-500 w-20">תאריך יעד</span>
+                      <span>{formatShortDate(task.scheduled_at)}</span>
+                    </div>
+                  )}
+
+                  {display.estimated && task.estimated_hours != null && (
+                    <div className="flex items-center gap-2 px-3 py-1.5 text-ink-700">
+                      <span className="text-xs text-ink-500 w-20">הוקצה</span>
+                      <span>{formatHoursShort(task.estimated_hours)}</span>
+                    </div>
+                  )}
+
+                  {display.link && task.external_url && (
+                    <a
+                      href={task.external_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="flex items-center gap-2 px-3 py-1.5 text-ink-700 hover:bg-ink-100"
+                    >
+                      <span className="text-xs text-ink-500 w-20">קישור</span>
+                      <LinkIcon className="w-3.5 h-3.5" />
+                      <span className="truncate text-xs" dir="ltr">
+                        {task.external_url}
+                      </span>
+                    </a>
+                  )}
+
+                  {display.timer && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        toggleTimer();
+                        setMenuOpen(false);
+                      }}
+                      className="w-full flex items-center gap-2 px-3 py-1.5 text-ink-700 hover:bg-ink-100 text-start"
+                    >
+                      <span className="text-xs text-ink-500 w-20">סטופר</span>
+                      {isActive ? (
+                        <Pause className="w-3.5 h-3.5" />
+                      ) : (
+                        <Play className="w-3.5 h-3.5" />
+                      )}
+                      {task.actual_seconds > 0 && (
+                        <span className="text-xs font-mono tabular-nums text-ink-500">
+                          {formatSeconds(task.actual_seconds, timeUnit)}
+                        </span>
+                      )}
+                    </button>
+                  )}
+
+                  <div className="h-px bg-ink-100 my-1" />
+                </div>
+
                 <MenuBtn
                   icon={<Copy className="w-3.5 h-3.5" />}
                   onClick={handleDuplicateSingle}

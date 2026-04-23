@@ -307,22 +307,28 @@ export function AppShell() {
         </main>
       </div>
 
-      {/* Bottom tab bar (mobile only) */}
-      <nav className="md:hidden sticky bottom-0 z-30 bg-white border-t border-ink-200 h-16 grid grid-cols-5">
-        {NAV.slice(0, 5).map((item) => (
+      {/* Bottom tab bar (mobile only). Every primary screen appears here;
+          inline-end padding reserves space for the AnimatedFab so it never
+          overlaps a tab. */}
+      <nav
+        className="md:hidden sticky bottom-0 z-30 bg-white border-t border-ink-200 h-16 flex items-stretch"
+        style={{ paddingInlineEnd: "88px" /* matches 64px FAB + 24px inset */ }}
+      >
+        {NAV.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}
             end={item.end}
+            title={item.label}
             className={({ isActive }) =>
               cn(
-                "flex flex-col items-center justify-center gap-0.5 text-[10px]",
+                "flex-1 min-w-0 flex flex-col items-center justify-center gap-0.5 text-[9px] leading-tight px-0.5",
                 isActive ? "text-primary-600" : "text-ink-500"
               )
             }
           >
-            <item.icon className="w-5 h-5" />
-            <span>{item.label}</span>
+            <item.icon className="w-5 h-5 shrink-0" />
+            <span className="truncate w-full text-center">{item.label}</span>
           </NavLink>
         ))}
       </nav>

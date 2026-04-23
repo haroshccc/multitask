@@ -14,7 +14,7 @@ import {
   startOfWeek,
 } from "date-fns";
 import { he } from "date-fns/locale";
-import { Calendar as CalendarIcon, ChevronDown, X } from "lucide-react";
+import { Calendar as CalendarIcon, ChevronDown, Clock, X } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
 interface DateTimePickerProps {
@@ -28,8 +28,6 @@ interface DateTimePickerProps {
 }
 
 const WEEKDAY_LABELS = ["א", "ב", "ג", "ד", "ה", "ו", "ש"];
-const HOURS = Array.from({ length: 24 }, (_, i) => i);
-const MINUTES = Array.from({ length: 60 }, (_, i) => i);
 
 export function DateTimePicker({
   value,
@@ -101,20 +99,6 @@ export function DateTimePicker({
     } else {
       next.setHours(9, 0, 0, 0);
     }
-    onChange(next.toISOString());
-  };
-
-  const setHour = (hour: number) => {
-    const base = current ?? new Date();
-    const next = new Date(base);
-    next.setHours(hour, next.getMinutes(), 0, 0);
-    onChange(next.toISOString());
-  };
-
-  const setMinute = (minute: number) => {
-    const base = current ?? new Date();
-    const next = new Date(base);
-    next.setMinutes(minute, 0, 0);
     onChange(next.toISOString());
   };
 
@@ -244,22 +228,32 @@ export function DateTimePicker({
               </div>
             </div>
 
-            {/* Time — stacks below the calendar on mobile, side-by-side on sm+ */}
+            {/* Time — native <input type="time"> gives the OS-level picker
+                on iOS / Android / desktop, matching the one used by the
+                Timer-entry manual fields and avoiding the tall scroll columns
+                that squeezed the popover on mobile. */}
             {!dateOnly && (
-              <div className="flex gap-1 p-3 bg-ink-50 border-t sm:border-t-0 sm:border-s border-ink-200">
-                <ScrollColumn
-                  values={HOURS}
-                  selected={current?.getHours() ?? null}
-                  onSelect={setHour}
-                  formatValue={(n) => String(n).padStart(2, "0")}
-                  ariaLabel="שעה"
-                />
-                <ScrollColumn
-                  values={MINUTES}
-                  selected={current?.getMinutes() ?? null}
-                  onSelect={setMinute}
-                  formatValue={(n) => String(n).padStart(2, "0")}
-                  ariaLabel="דקות"
+              <div className="flex items-center gap-2 p-3 bg-ink-50 border-t sm:border-t-0 sm:border-s border-ink-200">
+                <Clock className="w-4 h-4 text-ink-500 shrink-0" />
+                <input
+                  type="time"
+                  dir="ltr"
+                  value={
+                    current
+                      ? `${String(current.getHours()).padStart(2, "0")}:${String(
+                          current.getMinutes()
+                        ).padStart(2, "0")}`
+                      : ""
+                  }
+                  onChange={(e) => {
+                    const [hh, mm] = e.target.value.split(":").map(Number);
+                    if (Number.isNaN(hh) || Number.isNaN(mm)) return;
+                    const base = current ?? new Date();
+                    const next = new Date(base);
+                    next.setHours(hh, mm, 0, 0);
+                    onChange(next.toISOString());
+                  }}
+                  className="field text-sm font-mono tabular-nums text-center flex-1 min-w-0"
                 />
               </div>
             )}
@@ -341,62 +335,6 @@ const PortalPopover = forwardRef<
     </div>
   );
 });
-
-function ScrollColumn({
-  values,
-  selected,
-  onSelect,
-  formatValue,
-  ariaLabel,
-}: {
-  values: number[];
-  selected: number | null;
-  onSelect: (v: number) => void;
-  formatValue: (v: number) => string;
-  ariaLabel: string;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-
-  // Auto-scroll to selected when popover opens / selection changes
-  useEffect(() => {
-    if (selected === null || !ref.current) return;
-    const el = ref.current.querySelector<HTMLButtonElement>(
-      `[data-value="${selected}"]`
-    );
-    el?.scrollIntoView({ block: "center", behavior: "auto" });
-  }, [selected]);
-
-  return (
-    <div
-      ref={ref}
-      role="listbox"
-      aria-label={ariaLabel}
-      className="h-[200px] w-12 overflow-y-auto scrollbar-thin rounded-lg bg-white border border-ink-200"
-    >
-      {values.map((n) => {
-        const active = n === selected;
-        return (
-          <button
-            key={n}
-            type="button"
-            data-value={n}
-            role="option"
-            aria-selected={active}
-            onClick={() => onSelect(n)}
-            className={cn(
-              "block w-full text-center text-sm py-1 font-medium transition-colors",
-              active
-                ? "bg-primary-500 text-white"
-                : "text-ink-700 hover:bg-ink-100"
-            )}
-          >
-            {formatValue(n)}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
 
 // Utility exports — useful for other places that need ISO <-> display parsing.
 export function parseDateTimeLocal(display: string): Date | null {

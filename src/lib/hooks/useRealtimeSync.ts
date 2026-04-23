@@ -126,6 +126,9 @@ export function useRealtimeSync() {
             qc.invalidateQueries({ queryKey: queryFamilies.taskFamily(taskId) });
           }
           qc.invalidateQueries({ queryKey: ["timer", "active"] });
+          qc.invalidateQueries({
+            queryKey: queryFamilies.allTimeEntriesRange(organizationId),
+          });
         }
       )
       // Notifications — scoped by user

@@ -168,15 +168,19 @@ export function TaskColumn({
       ref={setNodeRef}
       className={cn(
         "shrink-0 self-start flex flex-col bg-white border border-ink-200 rounded-xl shadow-soft transition-colors",
-        pinned && "sticky start-0 z-10 bg-ink-50/95 backdrop-blur-sm",
+        // Pinned (= "Unassigned") column has its own banner on the trailing
+        // edge of the page; size it independently of the main grid.
+        pinned && "bg-ink-50/95",
         isOver && "ring-2 ring-primary-400 border-primary-300"
       )}
-      // Column width: fills 1/maxVisible of the viewport with a minimum so it
-      // doesn't squish. Past maxVisible columns, the parent's overflow-x-auto
-      // kicks in for horizontal scroll.
+      // Width: pinned columns get a fixed comfortable width.
+      // Non-pinned columns share the main scroll area equally up to maxVisible
+      // before overflowing into horizontal scroll.
       style={{
         flex: "0 0 auto",
-        width: `clamp(260px, calc((100vw - 140px) / ${maxVisible} - 12px), 460px)`,
+        width: pinned
+          ? "clamp(260px, 22vw, 320px)"
+          : `clamp(260px, calc((100vw - 460px) / ${maxVisible} - 12px), 460px)`,
         ...(listColor
           ? { ["--list-color" as string]: listColor }
           : {}),

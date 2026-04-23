@@ -31,6 +31,7 @@ import {
   useMaxVisibleColumns,
   useRowDisplayPrefs,
 } from "@/lib/hooks";
+import { pushUndo } from "@/lib/undo/store";
 import type { Task, TaskList } from "@/lib/types/domain";
 
 export function Tasks() {
@@ -151,14 +152,38 @@ export function Tasks() {
       if (activeData.listId === overData.listId && activeData.parentTaskId === null) {
         return;
       }
-      // Clear parent + move list
+      const prevListId = activeData.listId;
+      const prevParentId = activeData.parentTaskId;
+      const nextListId = overData.listId;
+      // Apply
       setParent.mutate({ taskId: activeData.taskId, parentId: null });
-      if (activeData.listId !== overData.listId) {
+      if (prevListId !== nextListId) {
         moveToList.mutate({
           taskId: activeData.taskId,
-          listId: overData.listId,
+          listId: nextListId,
         });
       }
+      pushUndo({
+        description: "העברת משימה בין רשימות",
+        undo: () => {
+          setParent.mutate({ taskId: activeData.taskId, parentId: prevParentId });
+          if (prevListId !== nextListId) {
+            moveToList.mutate({
+              taskId: activeData.taskId,
+              listId: prevListId,
+            });
+          }
+        },
+        redo: () => {
+          setParent.mutate({ taskId: activeData.taskId, parentId: null });
+          if (prevListId !== nextListId) {
+            moveToList.mutate({
+              taskId: activeData.taskId,
+              listId: nextListId,
+            });
+          }
+        },
+      });
       return;
     }
 
@@ -167,17 +192,38 @@ export function Tasks() {
       if (overData.taskId === activeData.taskId) return;
       // Don't allow dropping a task on one of its own descendants.
       if (isDescendant(tasks, overData.taskId, activeData.taskId)) return;
-      // Make active a child of over, and ensure it lives in over's list.
-      setParent.mutate({
-        taskId: activeData.taskId,
-        parentId: overData.taskId,
-      });
-      if (activeData.listId !== overData.listId) {
+      const prevListId = activeData.listId;
+      const prevParentId = activeData.parentTaskId;
+      const nextListId = overData.listId;
+      const nextParentId = overData.taskId;
+      setParent.mutate({ taskId: activeData.taskId, parentId: nextParentId });
+      if (prevListId !== nextListId) {
         moveToList.mutate({
           taskId: activeData.taskId,
-          listId: overData.listId,
+          listId: nextListId,
         });
       }
+      pushUndo({
+        description: "הפיכת משימה לתת-משימה",
+        undo: () => {
+          setParent.mutate({ taskId: activeData.taskId, parentId: prevParentId });
+          if (prevListId !== nextListId) {
+            moveToList.mutate({
+              taskId: activeData.taskId,
+              listId: prevListId,
+            });
+          }
+        },
+        redo: () => {
+          setParent.mutate({ taskId: activeData.taskId, parentId: nextParentId });
+          if (prevListId !== nextListId) {
+            moveToList.mutate({
+              taskId: activeData.taskId,
+              listId: nextListId,
+            });
+          }
+        },
+      });
       return;
     }
   };
@@ -234,32 +280,48 @@ export function Tasks() {
     >
       <div className="space-y-3">
         <ListsBanner screenKey="tasks" kind="task" />
-        <div className="flex items-start gap-3">
-          <div className="flex-1 min-w-0">
-            <FilterBar
-              screenKey="tasks"
-              filters={filters}
-              onChange={setFilters}
-              fields={fields}
-            />
-          </div>
-          <StatsPanel
-            lists={visibleLists}
-            tasks={tasks}
-            open={statsOpen}
-            onToggle={() => setStatsOpen((v) => !v)}
-          />
-        </div>
+
+        <StatsPanel
+          lists={visibleLists}
+          tasks={tasks}
+          open={statsOpen}
+          onToggle={() => setStatsOpen((v) => !v)}
+        />
+
+        <FilterBar
+          screenKey="tasks"
+          filters={filters}
+          onChange={setFilters}
+          fields={fields}
+        />
 
         <DndContext
           sensors={sensors}
           collisionDetection={pointerWithin}
           onDragEnd={handleDragEnd}
         >
-          <div className="overflow-x-auto scrollbar-thin">
-            <div className="flex items-stretch gap-3 min-h-[calc(100vh-280px)] pb-2">
-              {/* Unassigned: pinned to the leading (right in RTL) edge. Since flex
-                  in RTL lays out items right-to-left, first DOM item = rightmost. */}
+          <div className="flex items-stretch gap-3 min-h-[calc(100vh-340px)]">
+            {/* Main lists area — fills the page; scrolls horizontally when
+                columns exceed maxVisible. */}
+            <div className="flex-1 min-w-0 overflow-x-auto scrollbar-thin">
+              <div className="flex items-stretch gap-3 pb-2">
+                {visibleLists.map((list) => (
+                  <TaskColumn
+                    key={list.id}
+                    list={list}
+                    roots={listTrees.get(list.id) ?? []}
+                    totalCount={counts.get(list.id) ?? 0}
+                    maxVisible={maxVisibleColumns}
+                    display={rowDisplayPrefs}
+                    onOpenEdit={setEditingTaskId}
+                  />
+                ))}
+                {visibleLists.length === 0 && <EmptyListsHint lists={lists} />}
+              </div>
+            </div>
+
+            {/* "לא משויכות" — its own banner on the trailing (left in RTL) edge. */}
+            <div className="flex-shrink-0">
               <TaskColumn
                 list={null}
                 roots={listTrees.get("__unassigned__") ?? []}
@@ -269,24 +331,6 @@ export function Tasks() {
                 display={rowDisplayPrefs}
                 onOpenEdit={setEditingTaskId}
               />
-
-              {/* Visible custom/project lists */}
-              {visibleLists.map((list) => (
-                <TaskColumn
-                  key={list.id}
-                  list={list}
-                  roots={listTrees.get(list.id) ?? []}
-                  totalCount={counts.get(list.id) ?? 0}
-                  maxVisible={maxVisibleColumns}
-                  display={rowDisplayPrefs}
-                  onOpenEdit={setEditingTaskId}
-                />
-              ))}
-
-              {/* "+ רשימה חדשה" affordance lives in ListsBanner */}
-              {visibleLists.length === 0 && (
-                <EmptyListsHint lists={lists} />
-              )}
             </div>
           </div>
         </DndContext>

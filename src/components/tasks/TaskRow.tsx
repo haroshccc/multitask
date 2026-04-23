@@ -25,6 +25,7 @@ import {
 } from "@/lib/hooks/useTimer";
 import { useTimeUnit, formatSeconds } from "@/lib/hooks/useTimeUnit";
 import type { RowDisplayPrefs } from "@/lib/hooks/useRowDisplayPrefs";
+import { pushUndo } from "@/lib/undo/store";
 import { Link as LinkIcon, Calendar as CalendarIcon } from "lucide-react";
 import type { Task } from "@/lib/types/domain";
 
@@ -131,7 +132,13 @@ export function TaskRow({
       if (!prevSiblingId) return;
       e.preventDefault();
       commitTitle();
+      const prevParent = task.parent_task_id;
       setParent.mutate({ taskId: task.id, parentId: prevSiblingId });
+      pushUndo({
+        description: "הזחה",
+        undo: () => setParent.mutate({ taskId: task.id, parentId: prevParent }),
+        redo: () => setParent.mutate({ taskId: task.id, parentId: prevSiblingId }),
+      });
       return;
     }
     if (e.key === "Tab" && e.shiftKey) {
@@ -139,7 +146,14 @@ export function TaskRow({
       if (!parentTaskId) return;
       e.preventDefault();
       commitTitle();
+      const prevParent = task.parent_task_id;
       setParent.mutate({ taskId: task.id, parentId: grandparentTaskId });
+      pushUndo({
+        description: "הקטנת רמה",
+        undo: () => setParent.mutate({ taskId: task.id, parentId: prevParent }),
+        redo: () =>
+          setParent.mutate({ taskId: task.id, parentId: grandparentTaskId }),
+      });
       return;
     }
     if (e.key === "Escape") {
@@ -149,7 +163,13 @@ export function TaskRow({
   };
 
   const toggleComplete = () => {
-    completeTask.mutate({ taskId: task.id, completed: !isDone });
+    const next = !isDone;
+    completeTask.mutate({ taskId: task.id, completed: next });
+    pushUndo({
+      description: next ? "סימון השלמה" : "ביטול השלמה",
+      undo: () => completeTask.mutate({ taskId: task.id, completed: !next }),
+      redo: () => completeTask.mutate({ taskId: task.id, completed: next }),
+    });
   };
 
   const toggleTimer = () => {
@@ -291,9 +311,24 @@ export function TaskRow({
         {display.urgency && (
           <UrgencyChip
             value={task.urgency}
-            onChange={(v) =>
-              updateTask.mutate({ taskId: task.id, patch: { urgency: v } })
-            }
+            onChange={(v) => {
+              const prev = task.urgency;
+              if (prev === v) return;
+              updateTask.mutate({ taskId: task.id, patch: { urgency: v } });
+              pushUndo({
+                description: "שינוי דחיפות",
+                undo: () =>
+                  updateTask.mutate({
+                    taskId: task.id,
+                    patch: { urgency: prev },
+                  }),
+                redo: () =>
+                  updateTask.mutate({
+                    taskId: task.id,
+                    patch: { urgency: v },
+                  }),
+              });
+            }}
           />
         )}
 
@@ -577,7 +612,8 @@ function ChildrenBlock({
   );
 }
 
-/** Collapsed urgency chip: single star with number inside. Click to expand. */
+/** Collapsed urgency chip: single outline star with the value (1-5) inside,
+ *  rendered in plain black to match the rest of the row icons. Click to expand. */
 function UrgencyChip({
   value,
   onChange,
@@ -586,7 +622,7 @@ function UrgencyChip({
   onChange: (v: number) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const tinted = value > 0;
+  const set = value > 0;
 
   return (
     <div className="relative shrink-0">
@@ -594,17 +630,12 @@ function UrgencyChip({
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-label="דחיפות"
-        className="relative flex items-center justify-center w-5 h-5 rounded-md hover:bg-ink-100"
-        style={
-          tinted ? { color: "var(--list-color, #f59e0b)" } : { color: "#a8a8bc" }
-        }
+        className="relative flex items-center justify-center w-5 h-5 rounded-md hover:bg-ink-100 text-ink-900"
       >
-        <Star
-          className={cn("w-4 h-4", tinted && "fill-current")}
-        />
-        {tinted && (
+        <Star className="w-4 h-4" strokeWidth={1.75} />
+        {set && (
           <span
-            className="absolute inset-0 flex items-center justify-center text-[9px] font-bold text-white tabular-nums"
+            className="absolute inset-0 flex items-center justify-center text-[9px] font-bold text-ink-900 tabular-nums"
             aria-hidden
           >
             {value}
@@ -623,15 +654,11 @@ function UrgencyChip({
                   onChange(n === value ? 0 : n);
                   setOpen(false);
                 }}
-                className="p-0.5 text-ink-300 hover:scale-110 transition-transform"
-                style={
-                  n <= value
-                    ? { color: "var(--list-color, #f59e0b)" }
-                    : undefined
-                }
+                className="p-0.5 hover:scale-110 transition-transform text-ink-900"
               >
                 <Star
                   className={cn("w-4 h-4", n <= value && "fill-current")}
+                  strokeWidth={1.75}
                 />
               </button>
             ))}

@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { ChevronLeft, ChevronRight, BarChart3 } from "lucide-react";
+import { ChevronUp, ChevronDown, BarChart3 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { useTimeUnit, formatSeconds } from "@/lib/hooks/useTimeUnit";
 import type { Task, TaskList } from "@/lib/types/domain";
@@ -27,8 +27,9 @@ interface ListStats {
 const UNASSIGNED_KEY = "__unassigned__";
 
 /**
- * Side panel with per-list metrics. Lives to the trailing edge of the
- * filter bar and toggles open/closed via a small handle.
+ * Wide, short stats strip that sits above the FilterBar. Each list shows up
+ * as a slim row: name → percent → counts → time. Toggle collapses it to a
+ * single header line.
  */
 export function StatsPanel({ lists, tasks, open, onToggle }: StatsPanelProps) {
   const [timeUnit] = useTimeUnit();
@@ -51,7 +52,7 @@ export function StatsPanel({ lists, tasks, open, onToggle }: StatsPanelProps) {
       const total = arr.length;
       const pct = total > 0 ? Math.round((done / total) * 100) : 0;
       const estimatedSeconds = arr.reduce(
-        (s, t) => s + (Number(t.estimated_hours ?? 0) * 3600),
+        (s, t) => s + Number(t.estimated_hours ?? 0) * 3600,
         0
       );
       const actualSeconds = arr.reduce((s, t) => s + (t.actual_seconds ?? 0), 0);
@@ -76,36 +77,50 @@ export function StatsPanel({ lists, tasks, open, onToggle }: StatsPanelProps) {
   }, [lists, tasks]);
 
   return (
-    <aside
-      className={cn(
-        "card flex-shrink-0 transition-all overflow-hidden",
-        open ? "w-72" : "w-10"
-      )}
-    >
+    <div className="card overflow-hidden">
       <button
         type="button"
         onClick={onToggle}
-        className="w-full flex items-center justify-between px-2 py-2 border-b border-ink-200 hover:bg-ink-50"
+        className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-ink-50"
         title={open ? "סגור סטטיסטיקות" : "פתח סטטיסטיקות"}
       >
         <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-ink-700">
           <BarChart3 className="w-3.5 h-3.5" />
-          {open && <span>סטטיסטיקות</span>}
+          סטטיסטיקות
         </span>
         {open ? (
-          <ChevronRight className="w-3.5 h-3.5 text-ink-500" />
+          <ChevronUp className="w-3.5 h-3.5 text-ink-500" />
         ) : (
-          <ChevronLeft className="w-3.5 h-3.5 text-ink-500" />
+          <ChevronDown className="w-3.5 h-3.5 text-ink-500" />
         )}
       </button>
       {open && (
-        <div className="p-2 space-y-2 max-h-[calc(100vh-280px)] overflow-y-auto scrollbar-thin">
-          {stats.map((s) => (
-            <ListStatsRow key={s.listId ?? UNASSIGNED_KEY} stats={s} timeUnit={timeUnit} />
-          ))}
+        <div className="overflow-x-auto scrollbar-thin border-t border-ink-200">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-[10px] uppercase tracking-wider text-ink-400 bg-ink-50/60">
+                <th className="text-start font-medium px-3 py-1.5">רשימה</th>
+                <th className="font-medium px-2 py-1.5 w-28">התקדמות</th>
+                <th className="font-medium px-2 py-1.5 w-16">פתוחות</th>
+                <th className="font-medium px-2 py-1.5 w-16">הושלמו</th>
+                <th className="font-medium px-2 py-1.5 w-24">בפועל</th>
+                <th className="font-medium px-2 py-1.5 w-24">הוקצה</th>
+                <th className="font-medium px-2 py-1.5 w-24">פער</th>
+              </tr>
+            </thead>
+            <tbody>
+              {stats.map((s) => (
+                <ListStatsRow
+                  key={s.listId ?? UNASSIGNED_KEY}
+                  stats={s}
+                  timeUnit={timeUnit}
+                />
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
-    </aside>
+    </div>
   );
 }
 
@@ -117,87 +132,70 @@ function ListStatsRow({
   timeUnit: ReturnType<typeof useTimeUnit>[0];
 }) {
   const { list } = stats;
-  const color = list?.color ?? null;
+  const color = list?.color ?? "#a8a8bc";
   const label = list?.name ?? "לא משויכות";
   const overBudget = stats.estimatedSeconds > 0 && stats.actualSeconds > stats.estimatedSeconds;
+  const delta = stats.actualSeconds - stats.estimatedSeconds;
+
   return (
-    <div
-      className="rounded-xl border border-ink-200 bg-white p-2.5 space-y-1.5"
-      style={
-        color
-          ? { borderInlineStartWidth: 3, borderInlineStartColor: color }
-          : undefined
-      }
-    >
-      <div className="flex items-center gap-1.5">
-        {list?.emoji && <span className="text-sm">{list.emoji}</span>}
-        <span className="text-xs font-semibold text-ink-900 truncate flex-1">{label}</span>
-        <span className="text-[10px] text-ink-500 tabular-nums">{stats.pct}%</span>
-      </div>
-
-      {/* Progress bar */}
-      <div className="h-1.5 rounded-full bg-ink-100 overflow-hidden">
-        <div
-          className="h-full"
-          style={{
-            width: `${stats.pct}%`,
-            backgroundColor: color ?? "#10b981",
-          }}
-        />
-      </div>
-
-      <div className="grid grid-cols-2 gap-1.5 text-[10px]">
-        <Stat label="פתוחות" value={stats.open} />
-        <Stat label="הושלמו" value={stats.done} />
-      </div>
-
-      {(stats.estimatedSeconds > 0 || stats.actualSeconds > 0) && (
-        <div className="text-[10px] text-ink-600 space-y-0.5 pt-1 border-t border-ink-100">
-          <div className="flex items-center justify-between">
-            <span>בפועל:</span>
-            <span className="font-mono tabular-nums">
-              {formatSeconds(stats.actualSeconds, timeUnit)}
-            </span>
+    <tr className="border-t border-ink-100 hover:bg-ink-50/50">
+      <td className="px-3 py-1.5">
+        <span className="inline-flex items-center gap-1.5 text-ink-900">
+          <span
+            className="w-2 h-2 rounded-full shrink-0"
+            style={{ backgroundColor: color }}
+          />
+          {list?.emoji && <span className="text-sm leading-none">{list.emoji}</span>}
+          <span className="font-medium truncate">{label}</span>
+        </span>
+      </td>
+      <td className="px-2 py-1.5">
+        <div className="flex items-center gap-1.5">
+          <div className="flex-1 h-1.5 rounded-full bg-ink-100 overflow-hidden min-w-[40px]">
+            <div
+              className="h-full"
+              style={{ width: `${stats.pct}%`, backgroundColor: color }}
+            />
           </div>
-          {stats.estimatedSeconds > 0 && (
-            <>
-              <div className="flex items-center justify-between">
-                <span>מתוך:</span>
-                <span className="font-mono tabular-nums">
-                  {formatSeconds(stats.estimatedSeconds, timeUnit)}
-                </span>
-              </div>
-              <div
-                className={cn(
-                  "text-[10px] text-center rounded-md px-1 py-0.5",
-                  overBudget
-                    ? "bg-danger/10 text-danger-600"
-                    : "bg-success/10 text-success-600"
-                )}
-              >
-                {overBudget
-                  ? `חריגה ${formatSeconds(
-                      stats.actualSeconds - stats.estimatedSeconds,
-                      timeUnit
-                    )}`
-                  : `נותר ${formatSeconds(
-                      stats.estimatedSeconds - stats.actualSeconds,
-                      timeUnit
-                    )}`}
-              </div>
-            </>
-          )}
+          <span className="text-ink-600 font-mono tabular-nums text-[10px] w-7 text-end">
+            {stats.pct}%
+          </span>
         </div>
-      )}
-    </div>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-md bg-ink-50 px-1.5 py-1 text-center">
-      <div className="text-ink-500">{label}</div>
-      <div className="text-ink-900 font-semibold tabular-nums text-xs">{value}</div>
-    </div>
+      </td>
+      <td className="px-2 py-1.5 text-center text-ink-700 font-mono tabular-nums">
+        {stats.open}
+      </td>
+      <td className="px-2 py-1.5 text-center text-ink-700 font-mono tabular-nums">
+        {stats.done}
+      </td>
+      <td className="px-2 py-1.5 text-center text-ink-700 font-mono tabular-nums">
+        {stats.actualSeconds > 0
+          ? formatSeconds(stats.actualSeconds, timeUnit)
+          : "—"}
+      </td>
+      <td className="px-2 py-1.5 text-center text-ink-700 font-mono tabular-nums">
+        {stats.estimatedSeconds > 0
+          ? formatSeconds(stats.estimatedSeconds, timeUnit)
+          : "—"}
+      </td>
+      <td className="px-2 py-1.5 text-center">
+        {stats.estimatedSeconds === 0 ? (
+          <span className="text-ink-400">—</span>
+        ) : (
+          <span
+            className={cn(
+              "inline-block rounded-md px-1.5 py-0.5 font-mono tabular-nums text-[10px]",
+              overBudget
+                ? "bg-danger/10 text-danger-600"
+                : "bg-success/10 text-success-600"
+            )}
+          >
+            {overBudget
+              ? `+${formatSeconds(delta, timeUnit)}`
+              : formatSeconds(-delta, timeUnit)}
+          </span>
+        )}
+      </td>
+    </tr>
   );
 }

@@ -16,7 +16,10 @@ import {
   Bell,
   Menu,
   X,
+  Undo2,
+  Redo2,
 } from "lucide-react";
+import { useUndoStore, useUndoCounts } from "@/lib/undo/store";
 import { useEffect } from "react";
 import { useAuth } from "@/lib/auth/AuthContext";
 import { useRealtimeSync } from "@/lib/hooks/useRealtimeSync";
@@ -54,17 +57,41 @@ export function AppShell() {
   // Must stay mounted at AppShell level — DO NOT move into individual screens.
   useRealtimeSync();
 
-  // Global keyboard shortcuts: Cmd/Ctrl+K opens search, Cmd/Ctrl+N opens quick capture.
+  const { canUndo, canRedo } = useUndoCounts();
+
+  // Global keyboard shortcuts:
+  //   Cmd/Ctrl+K       → search
+  //   Cmd/Ctrl+N       → quick capture
+  //   Cmd/Ctrl+Z       → undo
+  //   Cmd/Ctrl+Y       → redo
+  //   Cmd/Ctrl+Shift+Z → redo (Mac convention)
   useEffect(() => {
+    const isEditableTarget = (target: EventTarget | null): boolean => {
+      if (!(target instanceof HTMLElement)) return false;
+      const tag = target.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+      if (target.isContentEditable) return true;
+      return false;
+    };
     const onKey = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey;
       if (!mod) return;
-      if (e.key === "k" || e.key === "K") {
+      const key = e.key.toLowerCase();
+      if (key === "k") {
         e.preventDefault();
         setSearchOpen(true);
-      } else if (e.key === "n" || e.key === "N") {
+      } else if (key === "n") {
         e.preventDefault();
         setCaptureOpen(true);
+      } else if (key === "z" && !e.shiftKey) {
+        // Don't hijack the browser's native undo while typing.
+        if (isEditableTarget(e.target)) return;
+        e.preventDefault();
+        useUndoStore.getState().undo();
+      } else if (key === "y" || (key === "z" && e.shiftKey)) {
+        if (isEditableTarget(e.target)) return;
+        e.preventDefault();
+        useUndoStore.getState().redo();
       }
     };
     window.addEventListener("keydown", onKey);
@@ -115,6 +142,24 @@ export function AppShell() {
 
         {/* Right actions */}
         <div className="flex items-center gap-1">
+          <button
+            onClick={() => useUndoStore.getState().undo()}
+            disabled={!canUndo}
+            className="hidden md:inline-flex p-2 rounded-xl hover:bg-ink-100 disabled:opacity-30 disabled:cursor-not-allowed"
+            aria-label="בטל"
+            title="בטל (Ctrl+Z)"
+          >
+            <Undo2 className="w-5 h-5 text-ink-600" />
+          </button>
+          <button
+            onClick={() => useUndoStore.getState().redo()}
+            disabled={!canRedo}
+            className="hidden md:inline-flex p-2 rounded-xl hover:bg-ink-100 disabled:opacity-30 disabled:cursor-not-allowed"
+            aria-label="בצע מחדש"
+            title="בצע מחדש (Ctrl+Y)"
+          >
+            <Redo2 className="w-5 h-5 text-ink-600" />
+          </button>
           <button
             onClick={() => setSearchOpen(true)}
             className="p-2 rounded-xl hover:bg-ink-100"

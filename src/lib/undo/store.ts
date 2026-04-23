@@ -69,12 +69,11 @@ export const useUndoStore = create<UndoState>((set, get) => ({
   },
 }));
 
-/** Selector helpers for components that just need to read counts. */
-export const useUndoCounts = () =>
-  useUndoStore((s) => ({
-    canUndo: s.past.length > 0,
-    canRedo: s.future.length > 0,
-  }));
+// Primitive selectors — Zustand v5 expects each selector to return a stable
+// reference. Returning an object literal here would trigger
+// "getSnapshot should be cached" and re-render loops.
+export const useCanUndo = () => useUndoStore((s) => s.past.length > 0);
+export const useCanRedo = () => useUndoStore((s) => s.future.length > 0);
 
 /** Convenience for callers that just want `push` without subscribing to state. */
 export const pushUndo = (a: UndoAction) => useUndoStore.getState().push(a);

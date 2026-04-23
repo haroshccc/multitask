@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   DndContext,
   PointerSensor,
@@ -50,11 +50,9 @@ export function Tasks() {
     if (typeof window === "undefined") return false;
     return localStorage.getItem("multitask.tasks.statsOpen") === "true";
   });
-  // Persist stats panel open state
-  useMemo(() => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem("multitask.tasks.statsOpen", String(statsOpen));
-    }
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem("multitask.tasks.statsOpen", String(statsOpen));
   }, [statsOpen]);
 
   const { data: myStatuses = [] } = useMyTaskStatuses();

@@ -19,7 +19,7 @@ import {
   Undo2,
   Redo2,
 } from "lucide-react";
-import { useUndoStore, useUndoCounts } from "@/lib/undo/store";
+import { useUndoStore, useCanUndo, useCanRedo } from "@/lib/undo/store";
 import { useEffect } from "react";
 import { useAuth } from "@/lib/auth/AuthContext";
 import { useRealtimeSync } from "@/lib/hooks/useRealtimeSync";
@@ -57,7 +57,8 @@ export function AppShell() {
   // Must stay mounted at AppShell level — DO NOT move into individual screens.
   useRealtimeSync();
 
-  const { canUndo, canRedo } = useUndoCounts();
+  const canUndo = useCanUndo();
+  const canRedo = useCanRedo();
 
   // Global keyboard shortcuts:
   //   Cmd/Ctrl+K       → search

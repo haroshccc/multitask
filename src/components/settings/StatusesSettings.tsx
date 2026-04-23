@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Plus, Trash2, GripVertical, Lock } from "lucide-react";
+import { Plus, Trash2, Lock, RotateCcw } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils/cn";
 import {
   useMyTaskStatuses,
@@ -7,38 +8,29 @@ import {
   useUpdateUserTaskStatus,
   useDeleteUserTaskStatus,
 } from "@/lib/hooks/useUserTaskStatuses";
-import { slugifyStatusKey } from "@/lib/services/user-task-statuses";
-import type { TaskStatusKind, UserTaskStatus } from "@/lib/types/domain";
-
-const KIND_OPTIONS: { value: TaskStatusKind; label: string; hint: string }[] = [
-  { value: "backlog", label: "טרם התחלה", hint: "משימות שטרם נגעת בהן" },
-  { value: "active", label: "בעבודה", hint: "פעילה עכשיו" },
-  { value: "waiting_approval", label: "ממתינה לאישור", hint: "מוגשת לאישור" },
-  { value: "done", label: "הסתיימה", hint: "משימה שהושלמה; יקבל וי" },
-  { value: "cancelled", label: "בוטלה", hint: "ננטש — לא יושלם" },
-];
+import {
+  resetUserTaskStatuses,
+  slugifyStatusKey,
+} from "@/lib/services/user-task-statuses";
+import { pushUndo } from "@/lib/undo/store";
+import type { UserTaskStatus } from "@/lib/types/domain";
 
 const COLOR_PRESETS = [
-  "#a8a8bc",
-  "#f59e0b",
-  "#10b981",
-  "#14b8a6",
-  "#06b6d4",
-  "#0ea5e9",
-  "#3b82f6",
-  "#6366f1",
-  "#8b5cf6",
-  "#ec4899",
-  "#ef4444",
+  "#a8a8bc", "#ef4444", "#f97316", "#f59e0b", "#eab308",
+  "#84cc16", "#22c55e", "#10b981", "#14b8a6", "#06b6d4",
+  "#0ea5e9", "#3b82f6", "#6366f1", "#8b5cf6", "#a855f7",
+  "#ec4899", "#f43f5e", "#db2777", "#64748b", "#6b7280",
 ];
 
 export function StatusesSettings() {
   const { data: statuses = [], isLoading } = useMyTaskStatuses();
   const createStatus = useCreateUserTaskStatus();
+  const deleteStatus = useDeleteUserTaskStatus();
+  const qc = useQueryClient();
 
   const [draftLabel, setDraftLabel] = useState("");
-  const [draftKind, setDraftKind] = useState<TaskStatusKind>("active");
-  const [draftColor, setDraftColor] = useState(COLOR_PRESETS[1]);
+  const [draftColor, setDraftColor] = useState(COLOR_PRESETS[3]);
+  const [confirmReset, setConfirmReset] = useState(false);
 
   const handleAdd = async () => {
     const label = draftLabel.trim();
@@ -49,28 +41,60 @@ export function StatusesSettings() {
     while (existingKeys.has(key)) {
       key = `${slugifyStatusKey(label)}_${i++}`;
     }
-    await createStatus.mutateAsync({
+    const created = await createStatus.mutateAsync({
       key,
       label,
-      kind: draftKind,
+      kind: "active",
       color: draftColor,
       sort_order: (statuses.at(-1)?.sort_order ?? 0) + 100,
       is_builtin: false,
     });
     setDraftLabel("");
+    pushUndo({
+      description: "הוספת סטטוס",
+      undo: () => deleteStatus.mutate(created.id),
+      redo: () =>
+        createStatus.mutate({
+          key: created.key,
+          label: created.label,
+          kind: created.kind,
+          color: created.color,
+          sort_order: created.sort_order,
+          is_builtin: false,
+        }),
+    });
+  };
+
+  const handleReset = async () => {
+    await resetUserTaskStatuses();
+    qc.invalidateQueries({ queryKey: ["user-task-statuses"] });
+    setConfirmReset(false);
+    // Reset is destructive + already guarded by the confirmation modal;
+    // we intentionally don't push it to the undo stack.
   };
 
   return (
     <div className="space-y-4">
       <div className="card p-4">
-        <h3 className="font-semibold text-ink-900 mb-1">סטטוסים של משימות</h3>
-        <p className="text-xs text-ink-500 mb-4 leading-relaxed">
-          כל סטטוס נראה לך ולשאר חברי הארגון שלך. ה-5 הראשונים הם ברירות מחדל —
-          אפשר לשנות שם/צבע/סדר, אבל לא למחוק. כל סטטוס שייך ל"סוג" שקובע איך
-          המערכת מתייחסת אליו (למשל מה מסמל "הסתיים").
-        </p>
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div>
+            <h3 className="font-semibold text-ink-900">סטטוסים של משימות</h3>
+            <p className="text-xs text-ink-500 mt-0.5 leading-relaxed">
+              הסטטוסים פרטיים לחשבון שלך — אחרים בארגון לא רואים אותם. אפשר
+              לשנות שם/צבע, להוסיף חדשים, ולמחוק (חוץ מ-5 ברירות-המחדל).
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setConfirmReset(true)}
+            className="btn-ghost text-xs shrink-0"
+            title="איפוס לברירות מחדל"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            איפוס
+          </button>
+        </div>
 
-        {/* Existing statuses */}
         {isLoading ? (
           <div className="text-sm text-ink-500 text-center py-6">טוען...</div>
         ) : (
@@ -87,25 +111,14 @@ export function StatusesSettings() {
         <h4 className="font-semibold text-ink-900 mb-3 text-sm">
           הוספת סטטוס חדש
         </h4>
-        <div className="grid grid-cols-1 md:grid-cols-[1fr,180px,auto] gap-2">
+        <div className="flex items-center gap-2">
           <input
             value={draftLabel}
             onChange={(e) => setDraftLabel(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleAdd()}
             placeholder='שם סטטוס (למשל "אצל הלקוח")'
-            className="field"
+            className="field flex-1"
           />
-          <select
-            value={draftKind}
-            onChange={(e) => setDraftKind(e.target.value as TaskStatusKind)}
-            className="field"
-          >
-            {KIND_OPTIONS.map((k) => (
-              <option key={k.value} value={k.value}>
-                {k.label}
-              </option>
-            ))}
-          </select>
           <button
             onClick={handleAdd}
             disabled={!draftLabel.trim()}
@@ -116,8 +129,8 @@ export function StatusesSettings() {
             הוסף
           </button>
         </div>
-        <div className="mt-3 flex items-center gap-2">
-          <span className="text-xs text-ink-500">צבע:</span>
+        <div className="mt-3 flex items-center gap-1.5 flex-wrap">
+          <span className="text-xs text-ink-500 ms-1">צבע:</span>
           {COLOR_PRESETS.map((c) => (
             <button
               key={c}
@@ -133,10 +146,44 @@ export function StatusesSettings() {
             />
           ))}
         </div>
-        <p className="text-xs text-ink-500 mt-3">
-          {KIND_OPTIONS.find((k) => k.value === draftKind)?.hint}
-        </p>
       </div>
+
+      {confirmReset && (
+        <div
+          className="fixed inset-0 z-[60] bg-ink-900/40 flex items-center justify-center p-4"
+          onClick={() => setConfirmReset(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-lift w-full max-w-sm p-4 space-y-3"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="font-semibold text-ink-900">
+              איפוס סטטוסים לברירת מחדל
+            </h3>
+            <p className="text-sm text-ink-600">
+              זה ימחק את כל הסטטוסים המותאמים שיצרת וישחזר את 5 ברירות-המחדל
+              המקוריות.
+            </p>
+            <div className="flex items-center justify-end gap-2">
+              <button
+                onClick={() => setConfirmReset(false)}
+                className="btn-ghost text-xs"
+                type="button"
+              >
+                בטל
+              </button>
+              <button
+                onClick={handleReset}
+                className="btn-accent text-xs"
+                type="button"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                אפס
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -144,48 +191,111 @@ export function StatusesSettings() {
 function StatusRow({ status }: { status: UserTaskStatus }) {
   const update = useUpdateUserTaskStatus();
   const del = useDeleteUserTaskStatus();
+  const create = useCreateUserTaskStatus();
 
   const [editing, setEditing] = useState(false);
   const [label, setLabel] = useState(status.label);
-  const [color, setColor] = useState(status.color ?? "#a8a8bc");
-  const [kind, setKind] = useState<TaskStatusKind>(status.kind);
+  const [paletteOpen, setPaletteOpen] = useState(false);
 
-  const commit = async () => {
+  const commitLabel = async () => {
+    const trimmed = label.trim();
+    if (!trimmed || trimmed === status.label) {
+      setLabel(status.label);
+      setEditing(false);
+      return;
+    }
+    const prev = status.label;
+    const next = trimmed;
     await update.mutateAsync({
       statusId: status.id,
-      patch: {
-        label: label.trim() || status.label,
-        color,
-        kind,
-      },
+      patch: { label: next },
     });
     setEditing(false);
+    pushUndo({
+      description: "שינוי שם סטטוס",
+      undo: () =>
+        update.mutate({ statusId: status.id, patch: { label: prev } }),
+      redo: () =>
+        update.mutate({ statusId: status.id, patch: { label: next } }),
+    });
+  };
+
+  const setColor = (c: string) => {
+    const prev = status.color;
+    update.mutate({ statusId: status.id, patch: { color: c } });
+    setPaletteOpen(false);
+    pushUndo({
+      description: "שינוי צבע סטטוס",
+      undo: () =>
+        update.mutate({ statusId: status.id, patch: { color: prev } }),
+      redo: () =>
+        update.mutate({ statusId: status.id, patch: { color: c } }),
+    });
   };
 
   const handleDelete = () => {
     if (status.is_builtin) return;
     if (!confirm(`למחוק את הסטטוס "${status.label}"?`)) return;
+    const snap = {
+      key: status.key,
+      label: status.label,
+      color: status.color,
+      kind: status.kind,
+      sort_order: status.sort_order,
+    };
     del.mutate(status.id);
+    pushUndo({
+      description: "מחיקת סטטוס",
+      undo: () => create.mutate({ ...snap, is_builtin: false }),
+      redo: () => del.mutate(status.id),
+    });
   };
 
   return (
     <li className="flex items-center gap-3 rounded-xl border border-ink-200 bg-white px-3 py-2">
-      <GripVertical className="w-4 h-4 text-ink-300" />
-      <button
-        type="button"
-        onClick={() => setEditing((v) => !v)}
-        className="w-5 h-5 rounded-full border border-ink-200 shrink-0"
-        style={{ backgroundColor: color }}
-        aria-label="צבע"
-      />
+      <div className="relative">
+        <button
+          type="button"
+          onClick={() => setPaletteOpen((v) => !v)}
+          className="w-5 h-5 rounded-full border border-ink-200 shrink-0 hover:ring-2 hover:ring-ink-300"
+          style={{ backgroundColor: status.color ?? "#a8a8bc" }}
+          aria-label="שנה צבע"
+          title="שנה צבע"
+        />
+        {paletteOpen && (
+          <>
+            <div
+              className="fixed inset-0 z-10"
+              onClick={() => setPaletteOpen(false)}
+            />
+            <div className="absolute start-0 mt-1 z-20 bg-white border border-ink-200 rounded-xl shadow-lift p-2 grid grid-cols-5 gap-1 w-[180px]">
+              {COLOR_PRESETS.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setColor(c)}
+                  className={cn(
+                    "w-6 h-6 rounded-full border",
+                    status.color === c
+                      ? "ring-2 ring-ink-900 ring-offset-1 border-white"
+                      : "border-ink-200"
+                  )}
+                  style={{ backgroundColor: c }}
+                />
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+
       {editing ? (
         <input
           autoFocus
           value={label}
           onChange={(e) => setLabel(e.target.value)}
-          onBlur={commit}
+          onBlur={commitLabel}
           onKeyDown={(e) => {
-            if (e.key === "Enter") commit();
+            if (e.key === "Enter") commitLabel();
             if (e.key === "Escape") {
               setLabel(status.label);
               setEditing(false);
@@ -202,45 +312,12 @@ function StatusRow({ status }: { status: UserTaskStatus }) {
           {status.label}
         </button>
       )}
-      <select
-        value={kind}
-        onChange={(e) => {
-          const k = e.target.value as TaskStatusKind;
-          setKind(k);
-          update.mutate({ statusId: status.id, patch: { kind: k } });
-        }}
-        className="text-xs bg-ink-100 border border-ink-200 rounded-md px-2 py-1 text-ink-700"
-      >
-        {KIND_OPTIONS.map((k) => (
-          <option key={k.value} value={k.value}>
-            {k.label}
-          </option>
-        ))}
-      </select>
-      {editing && (
-        <div className="flex gap-0.5">
-          {COLOR_PRESETS.map((c) => (
-            <button
-              key={c}
-              onClick={() => {
-                setColor(c);
-                update.mutate({
-                  statusId: status.id,
-                  patch: { color: c },
-                });
-              }}
-              type="button"
-              className={cn(
-                "w-4 h-4 rounded-full border",
-                color === c ? "ring-1 ring-ink-900 ring-offset-1" : "border-ink-200"
-              )}
-              style={{ backgroundColor: c }}
-            />
-          ))}
-        </div>
-      )}
+
       {status.is_builtin ? (
-        <span className="text-ink-400 shrink-0" title="ברירת מחדל — לא ניתן למחוק">
+        <span
+          className="text-ink-300 shrink-0"
+          title="ברירת מחדל — לא ניתן למחוק (אבל אפשר לשנות שם וצבע)"
+        >
           <Lock className="w-3.5 h-3.5" />
         </span>
       ) : (

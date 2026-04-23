@@ -1876,6 +1876,10 @@ export type Database = {
         }
         Returns: string
       }
+      reset_user_task_statuses: {
+        Args: Record<string, never>
+        Returns: undefined
+      }
       find_organizations_by_email_domain: {
         Args: { p_email: string }
         Returns: {

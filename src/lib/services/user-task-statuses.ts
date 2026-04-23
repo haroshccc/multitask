@@ -81,6 +81,12 @@ export async function reorderUserTaskStatuses(
   );
 }
 
+/** Wipes the user's palette and re-seeds the five factory defaults. */
+export async function resetUserTaskStatuses(): Promise<void> {
+  const { error } = await supabase.rpc("reset_user_task_statuses");
+  if (error) throw error;
+}
+
 /** Slugify a label into a key; callers should ensure uniqueness per user. */
 export function slugifyStatusKey(label: string): string {
   const base = label

@@ -125,7 +125,12 @@ export function Tasks() {
       label: "רשימה",
       options: lists.map((l) => ({
         value: l.id,
-        label: `${l.emoji ?? ""} ${l.name}`.trim(),
+        // emoji column may hold an "icon:<key>" slug — the <FilterBar> label is
+        // plain text, so strip those and just show the name.
+        label:
+          l.emoji && !l.emoji.startsWith("icon:")
+            ? `${l.emoji} ${l.name}`.trim()
+            : l.name,
       })),
     },
     {

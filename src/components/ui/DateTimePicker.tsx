@@ -176,9 +176,9 @@ export function DateTimePicker({
             ref={popoverRef}
             anchorRect={anchorRect}
           >
-          <div className="flex items-stretch">
+          <div className="flex flex-col sm:flex-row items-stretch">
             {/* Calendar */}
-            <div className="p-3 min-w-[260px]">
+            <div className="p-3 w-full sm:w-auto sm:min-w-[260px]">
               <div className="flex items-center justify-between mb-2">
                 <button
                   type="button"
@@ -244,9 +244,9 @@ export function DateTimePicker({
               </div>
             </div>
 
-            {/* Time */}
+            {/* Time — stacks below the calendar on mobile, side-by-side on sm+ */}
             {!dateOnly && (
-              <div className="flex gap-1 p-3 bg-ink-50 border-s border-ink-200">
+              <div className="flex gap-1 p-3 bg-ink-50 border-t sm:border-t-0 sm:border-s border-ink-200">
                 <ScrollColumn
                   values={HOURS}
                   selected={current?.getHours() ?? null}
@@ -296,24 +296,41 @@ const PortalPopover = forwardRef<
     children: React.ReactNode;
   }
 >(function PortalPopover({ anchorRect, children }, ref) {
-  // Prefer below the trigger; if it wouldn't fit, render above.
-  const estimatedHeight = 340;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const isMobile = vw < 640;
+  const isRtl = document.documentElement.dir === "rtl";
+
+  // Height guess — the stacked mobile layout is taller than the side-by-side
+  // desktop one because time columns land under the calendar.
+  const estimatedHeight = isMobile ? 540 : 340;
   const preferBelow =
-    anchorRect.bottom + estimatedHeight <= window.innerHeight ||
-    anchorRect.top < estimatedHeight;
+    anchorRect.bottom + estimatedHeight <= vh || anchorRect.top < estimatedHeight;
   const top = preferBelow
     ? anchorRect.bottom + 4
-    : anchorRect.top - estimatedHeight - 4;
-  // Align leading edge to trigger's leading edge (right in RTL, left in LTR).
-  const isRtl = document.documentElement.dir === "rtl";
+    : Math.max(8, anchorRect.top - estimatedHeight - 4);
+
   const style: React.CSSProperties = {
     position: "fixed",
     top,
-    ...(isRtl
-      ? { right: window.innerWidth - anchorRect.right }
-      : { left: anchorRect.left }),
     zIndex: 1000,
+    maxWidth: "calc(100vw - 16px)",
   };
+
+  if (isMobile) {
+    // On mobile pin to both edges with an 8px margin so it's centred and
+    // always inside the viewport.
+    style.left = 8;
+    style.right = 8;
+  } else if (isRtl) {
+    // Align leading edge (right in RTL) to the trigger's leading edge, but
+    // clamp so we never spill off the left side of the viewport either.
+    const preferredRight = vw - anchorRect.right;
+    style.right = Math.max(8, Math.min(preferredRight, vw - 16 - 260));
+  } else {
+    style.left = Math.max(8, Math.min(anchorRect.left, vw - 16 - 260));
+  }
+
   return (
     <div
       ref={ref}

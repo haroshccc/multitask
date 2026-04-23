@@ -168,7 +168,9 @@ function ListChip({
   visible: boolean;
   onToggle: () => void;
 }) {
-  const bg = list.color ?? undefined;
+  // Lists always render with a colour now; fall back to a neutral gray for
+  // legacy rows that never picked one.
+  const bg = list.color ?? "#a8a8bc";
   return (
     <button
       onClick={onToggle}
@@ -178,7 +180,7 @@ function ListChip({
           ? "border-ink-200 bg-white text-ink-900 hover:-translate-y-0.5"
           : "border-ink-200 bg-ink-50 text-ink-500 hover:bg-ink-100"
       )}
-      style={visible && bg ? { borderColor: bg, color: bg } : undefined}
+      style={visible ? { borderColor: bg, color: bg } : undefined}
       title={visible ? "הסתר רשימה" : "הצג רשימה"}
     >
       {list.emoji && (

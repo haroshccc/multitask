@@ -52,6 +52,11 @@ const COLOR_PRESETS = [
   "#ec4899", "#f43f5e", "#db2777", "#64748b", "#6b7280", "#374151",
 ];
 
+// When a list has no explicit color, we render a soft neutral gray so the
+// header-underline (and every badge that consumes --list-color) still reads
+// as deliberate instead of missing.
+const DEFAULT_LIST_COLOR = "#a8a8bc"; // matches ink-400
+
 export function TaskColumn({
   list,
   roots,
@@ -152,7 +157,7 @@ export function TaskColumn({
     setEmojiOpen(false);
   };
 
-  const setColor = (color: string | null) => {
+  const setColor = (color: string) => {
     if (!list) return;
     const prev = list.color ?? null;
     const listId = list.id;
@@ -179,7 +184,10 @@ export function TaskColumn({
     setMenuOpen(false);
   };
 
-  const listColor = list?.color ?? null;
+  // Every list always has a colour — fall back to the neutral default so the
+  // underline and tinted chrome stay consistent even for lists created before
+  // the user picked a swatch.
+  const listColor = list?.color ?? DEFAULT_LIST_COLOR;
   const displayEmoji = list?.emoji ?? null;
   const displayName = list?.name ?? "לא משויכות";
   const canEdit = !!list;
@@ -201,21 +209,14 @@ export function TaskColumn({
       style={{
         flex: "0 0 auto",
         width: `calc((100% - ${(divisor - 1) * 12}px) / ${divisor})`,
-        ...(listColor
-          ? { ["--list-color" as string]: listColor }
-          : {}),
+        ["--list-color" as string]: listColor,
       } as React.CSSProperties}
     >
-      {/* Header. When the list has a colour we thicken the bottom border and
-          paint it with that colour — acts as a title underline. */}
+      {/* Header. The 2px bottom border is painted with the list colour and
+          acts as a title underline. */}
       <div
-        className={cn(
-          "px-3 py-2 flex items-center gap-2 relative",
-          listColor ? "border-b-2" : "border-b border-ink-200"
-        )}
-        style={
-          listColor ? { borderBottomColor: listColor } : undefined
-        }
+        className="px-3 py-2 flex items-center gap-2 relative border-b-2"
+        style={{ borderBottomColor: listColor }}
       >
 
         {/* Icon slot (click to change) */}
@@ -402,14 +403,6 @@ export function TaskColumn({
                   </button>
                 ))}
               </div>
-              <button
-                type="button"
-                onClick={() => setColor(null)}
-                className="mt-2 w-full text-xs text-ink-500 hover:text-danger-500 rounded-md py-1 border-t border-ink-100"
-                title="ללא צבע"
-              >
-                ללא צבע
-              </button>
             </div>
           </>
         )}

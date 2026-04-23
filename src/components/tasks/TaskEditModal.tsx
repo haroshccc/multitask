@@ -220,7 +220,7 @@ export function TaskEditModal({ taskId, onClose }: TaskEditModalProps) {
             <div className="p-5 max-h-[calc(100vh-16rem)] overflow-y-auto">
               {tab === "overview" && (
                 <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <Field label="סטטוס">
                       <StatusPicker
                         value={status}
@@ -256,7 +256,7 @@ export function TaskEditModal({ taskId, onClose }: TaskEditModalProps) {
                     </Field>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <Field label="דחיפות">
                       <UrgencyBars
                         value={urgency}
@@ -343,7 +343,7 @@ export function TaskEditModal({ taskId, onClose }: TaskEditModalProps) {
                     />
                   </Field>
 
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <Field label="מיקום">
                       <input
                         value={location}
@@ -368,7 +368,7 @@ export function TaskEditModal({ taskId, onClose }: TaskEditModalProps) {
 
               {tab === "schedule" && (
                 <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <Field label="תאריך ושעה">
                       <DateTimePicker
                         value={scheduledAt}
@@ -673,7 +673,7 @@ function TimeEntriesTab({ task }: { task: { id: string; actual_seconds: number }
 
         {showManual && (
           <div className="card p-3 space-y-2 mb-2">
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <input
                 type="datetime-local"
                 value={manualStart}
@@ -742,7 +742,7 @@ function EntryRow({
   if (editing) {
     return (
       <li className="py-2 space-y-2">
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           <input
             type="datetime-local"
             value={start}

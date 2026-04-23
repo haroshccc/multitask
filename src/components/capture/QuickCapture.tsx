@@ -3,6 +3,9 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Mic, Square, Send, X, Plus, CheckSquare, Calendar, FolderKanban } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { useNavigate } from "react-router-dom";
+import { useCreateThought } from "@/lib/hooks/useThoughts";
+import { useCreateRecording, useUploadRecordingBlob, useTriggerRecordingProcessing } from "@/lib/hooks/useRecordings";
+import { useOrgScope } from "@/lib/hooks/useOrgScope";
 
 interface QuickCaptureProps {
   open: boolean;
@@ -14,12 +17,23 @@ type Mode = "menu" | "thought" | "recording";
 
 export function QuickCapture({ open, onClose }: QuickCaptureProps) {
   const navigate = useNavigate();
+  const scope = useOrgScope();
+  const createThought = useCreateThought();
+  const createRecording = useCreateRecording();
+  const uploadBlob = useUploadRecordingBlob();
+  const triggerProcessing = useTriggerRecordingProcessing();
+
   const [mode, setMode] = useState<Mode>("menu");
   const [text, setText] = useState("");
   const [isRecording, setIsRecording] = useState(false);
   const [seconds, setSeconds] = useState(0);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const timerRef = useRef<number | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const audioBlobRef = useRef<Blob | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -34,7 +48,14 @@ export function QuickCapture({ open, onClose }: QuickCaptureProps) {
       setText("");
       setIsRecording(false);
       setSeconds(0);
+      setSaving(false);
+      setError(null);
+      audioChunksRef.current = [];
+      audioBlobRef.current = null;
       if (timerRef.current) window.clearInterval(timerRef.current);
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+        mediaRecorderRef.current.stop();
+      }
     }
   }, [open]);
 
@@ -46,22 +67,105 @@ export function QuickCapture({ open, onClose }: QuickCaptureProps) {
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
-  const startRecording = () => {
+  const startRecording = async () => {
+    setError(null);
     setMode("recording");
-    setIsRecording(true);
     setSeconds(0);
-    timerRef.current = window.setInterval(() => setSeconds((s) => s + 1), 1000);
+    audioChunksRef.current = [];
+    audioBlobRef.current = null;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mime = MediaRecorder.isTypeSupported("audio/webm")
+        ? "audio/webm"
+        : "audio/mp4";
+      const recorder = new MediaRecorder(stream, { mimeType: mime });
+      mediaRecorderRef.current = recorder;
+      recorder.addEventListener("dataavailable", (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      });
+      recorder.addEventListener("stop", () => {
+        audioBlobRef.current = new Blob(audioChunksRef.current, { type: mime });
+        stream.getTracks().forEach((t) => t.stop());
+      });
+      recorder.start();
+      setIsRecording(true);
+      timerRef.current = window.setInterval(() => setSeconds((s) => s + 1), 1000);
+    } catch (err) {
+      console.error("Microphone access denied:", err);
+      setError("לא ניתן לגשת למיקרופון. אנא אשרי גישה ונסי שוב.");
+      setMode("menu");
+    }
   };
 
   const stopRecording = () => {
     setIsRecording(false);
     if (timerRef.current) window.clearInterval(timerRef.current);
-    // TODO: upload audio blob + create thought row
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      mediaRecorderRef.current.stop();
+    }
   };
 
-  const saveThought = () => {
-    // TODO: persist to thoughts table
-    onClose();
+  const saveThought = async () => {
+    if (!text.trim() || !scope.enabled) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await createThought.mutateAsync({
+        source: "app_text",
+        text_content: text.trim(),
+      });
+      setText("");
+      onClose();
+    } catch (err) {
+      console.error("Failed to save thought:", err);
+      setError("שמירה נכשלה. נסי שוב.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveRecording = async () => {
+    if (!audioBlobRef.current || !scope.enabled) return;
+    setSaving(true);
+    setError(null);
+    try {
+      // Build a stable storage path under the org/user.
+      const ext = audioBlobRef.current.type.includes("mp4") ? "mp4" : "webm";
+      const storagePath = `${scope.organizationId}/${scope.userId}/${Date.now()}.${ext}`;
+
+      // Create recording row first (status='uploaded').
+      const recording = await createRecording.mutateAsync({
+        source: "thought",
+        storage_path: storagePath,
+        size_bytes: audioBlobRef.current.size,
+        duration_seconds: seconds,
+        mime_type: audioBlobRef.current.type,
+        status: "uploaded",
+      });
+
+      // Upload the blob to Storage.
+      await uploadBlob.mutateAsync({
+        storagePath,
+        blob: audioBlobRef.current,
+      });
+
+      // Create a linked thought so it lands on the Thoughts screen immediately.
+      await createThought.mutateAsync({
+        source: "app_audio",
+        recording_id: recording.id,
+        text_content: null,
+      });
+
+      // Kick off processing (transcription + extraction). Currently a stub.
+      await triggerProcessing.mutateAsync(recording.id);
+
+      onClose();
+    } catch (err) {
+      console.error("Failed to save recording:", err);
+      setError("שמירת ההקלטה נכשלה. נסי שוב.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -142,6 +246,7 @@ export function QuickCapture({ open, onClose }: QuickCaptureProps) {
                     placeholder="מה עולה לך ברגע זה? Enter מוסיף, Shift+Enter לשורה חדשה..."
                     value={text}
                     onChange={(e) => setText(e.target.value)}
+                    disabled={saving}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" && !e.shiftKey) {
                         e.preventDefault();
@@ -149,20 +254,22 @@ export function QuickCapture({ open, onClose }: QuickCaptureProps) {
                       }
                     }}
                   />
+                  {error && <p className="text-xs text-danger-600">{error}</p>}
                   <div className="flex items-center justify-between">
                     <button
                       onClick={() => setMode("menu")}
                       className="btn-ghost"
+                      disabled={saving}
                     >
                       חזרה
                     </button>
                     <button
                       onClick={saveThought}
-                      disabled={!text.trim()}
+                      disabled={!text.trim() || saving}
                       className="btn-accent"
                     >
                       <Send className="w-4 h-4" />
-                      <span>שמרי</span>
+                      <span>{saving ? "שומרת..." : "שמרי"}</span>
                     </button>
                   </div>
                 </div>
@@ -190,23 +297,28 @@ export function QuickCapture({ open, onClose }: QuickCaptureProps) {
                     </button>
                   ) : (
                     <div className="flex gap-2">
-                      <button onClick={() => setMode("menu")} className="btn-ghost">
+                      <button onClick={() => setMode("menu")} className="btn-ghost" disabled={saving}>
                         בטל
                       </button>
-                      <button onClick={startRecording} className="btn-accent">
+                      <button onClick={startRecording} className="btn-accent" disabled={saving}>
                         <Mic className="w-4 h-4" />
-                        הקלטה נוספת
+                        הקלטה חדשה
                       </button>
-                      <button onClick={onClose} className="btn-primary">
+                      <button
+                        onClick={saveRecording}
+                        disabled={!audioBlobRef.current || saving}
+                        className="btn-primary"
+                      >
                         <Send className="w-4 h-4" />
-                        שמרי
+                        {saving ? "מעלה..." : "שמרי"}
                       </button>
                     </div>
                   )}
+                  {error && <p className="text-xs text-danger-600 text-center">{error}</p>}
                   {!isRecording && (
                     <p className="text-xs text-ink-500 text-center max-w-xs">
-                      האודיו יעלה ל-Supabase Storage, יתומלל ע"י Gladia, ו-AI יחלץ ממנו משימות.
-                      (האינטגרציות ייופעלו כשהחשבונות יהיו מוכנים — בינתיים UI בלבד.)
+                      האודיו יעלה ל-Supabase Storage ויישמר כמחשבה. תמלול וחילוץ משימות יופעלו
+                      כשה-AI יחובר.
                     </p>
                   )}
                 </div>

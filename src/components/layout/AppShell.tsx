@@ -17,9 +17,12 @@ import {
   Menu,
   X,
 } from "lucide-react";
+import { useEffect } from "react";
 import { useAuth } from "@/lib/auth/AuthContext";
+import { useRealtimeSync } from "@/lib/hooks/useRealtimeSync";
 import { cn } from "@/lib/utils/cn";
 import { QuickCapture } from "@/components/capture/QuickCapture";
+import { GlobalSearchPalette } from "@/components/search/GlobalSearchPalette";
 import { Logo } from "@/components/brand/Logo";
 
 interface NavItem {
@@ -45,6 +48,28 @@ export function AppShell() {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [captureOpen, setCaptureOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+
+  // Subscribe the whole session to Realtime invalidations for the active org.
+  // Must stay mounted at AppShell level — DO NOT move into individual screens.
+  useRealtimeSync();
+
+  // Global keyboard shortcuts: Cmd/Ctrl+K opens search, Cmd/Ctrl+N opens quick capture.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const mod = e.metaKey || e.ctrlKey;
+      if (!mod) return;
+      if (e.key === "k" || e.key === "K") {
+        e.preventDefault();
+        setSearchOpen(true);
+      } else if (e.key === "n" || e.key === "N") {
+        e.preventDefault();
+        setCaptureOpen(true);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   const handleSignOut = async () => {
     await signOut();
@@ -90,7 +115,12 @@ export function AppShell() {
 
         {/* Right actions */}
         <div className="flex items-center gap-1">
-          <button className="p-2 rounded-xl hover:bg-ink-100" aria-label="חיפוש">
+          <button
+            onClick={() => setSearchOpen(true)}
+            className="p-2 rounded-xl hover:bg-ink-100"
+            aria-label="חיפוש"
+            title="חיפוש (Ctrl+K)"
+          >
             <Search className="w-5 h-5 text-ink-600" />
           </button>
           <button className="p-2 rounded-xl hover:bg-ink-100" aria-label="התראות">
@@ -264,6 +294,8 @@ export function AppShell() {
         onClose={() => setCaptureOpen(false)}
         currentPath={location.pathname}
       />
+
+      <GlobalSearchPalette open={searchOpen} onClose={() => setSearchOpen(false)} />
     </div>
   );
 }

@@ -42,16 +42,14 @@ interface TaskColumnProps {
 }
 
 const COLOR_PRESETS = [
-  "#ef4444",
-  "#f59e0b",
-  "#10b981",
-  "#14b8a6",
-  "#06b6d4",
-  "#0ea5e9",
-  "#3b82f6",
-  "#6366f1",
-  "#8b5cf6",
-  "#ec4899",
+  // Warm
+  "#ef4444", "#f97316", "#f59e0b", "#eab308", "#dc2626", "#b45309",
+  // Greens & teals
+  "#84cc16", "#22c55e", "#10b981", "#14b8a6", "#06b6d4", "#0891b2",
+  // Blues & purples
+  "#0ea5e9", "#3b82f6", "#6366f1", "#8b5cf6", "#a855f7", "#c026d3",
+  // Pinks & neutrals
+  "#ec4899", "#f43f5e", "#db2777", "#64748b", "#6b7280", "#374151",
 ];
 
 export function TaskColumn({
@@ -208,16 +206,17 @@ export function TaskColumn({
           : {}),
       } as React.CSSProperties}
     >
-      {/* Header */}
-      <div className="px-3 py-2 border-b border-ink-200 flex items-center gap-2 relative">
-        {/* Short color strip on the leading edge instead of a full top border */}
-        {listColor && (
-          <span
-            aria-hidden
-            className="absolute top-0 bottom-0 start-0 w-1"
-            style={{ backgroundColor: listColor }}
-          />
+      {/* Header. When the list has a colour we thicken the bottom border and
+          paint it with that colour — acts as a title underline. */}
+      <div
+        className={cn(
+          "px-3 py-2 flex items-center gap-2 relative",
+          listColor ? "border-b-2" : "border-b border-ink-200"
         )}
+        style={
+          listColor ? { borderBottomColor: listColor } : undefined
+        }
+      >
 
         {/* Icon slot (click to change) */}
         <button
@@ -386,28 +385,30 @@ export function TaskColumn({
         {colorOpen && canEdit && (
           <>
             <div className="fixed inset-0 z-20" onClick={() => setColorOpen(false)} />
-            <div className="absolute top-full end-2 mt-1 z-30 bg-white border border-ink-200 rounded-xl shadow-lift p-2 flex gap-1.5 flex-wrap w-[220px]">
-              {COLOR_PRESETS.map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  onClick={() => setColor(c)}
-                  className="w-6 h-6 rounded-full border border-ink-200 hover:scale-110 transition-transform flex items-center justify-center"
-                  style={{ backgroundColor: c }}
-                  title={c}
-                >
-                  {list?.color === c && (
-                    <Check className="w-3.5 h-3.5 text-white" strokeWidth={3} />
-                  )}
-                </button>
-              ))}
+            <div className="absolute top-full end-2 mt-1 z-30 bg-white border border-ink-200 rounded-xl shadow-lift p-2 w-[232px]">
+              <div className="grid grid-cols-6 gap-1.5">
+                {COLOR_PRESETS.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => setColor(c)}
+                    className="w-7 h-7 rounded-full border border-ink-200 hover:scale-110 transition-transform flex items-center justify-center"
+                    style={{ backgroundColor: c }}
+                    title={c}
+                  >
+                    {list?.color === c && (
+                      <Check className="w-3.5 h-3.5 text-white" strokeWidth={3} />
+                    )}
+                  </button>
+                ))}
+              </div>
               <button
                 type="button"
                 onClick={() => setColor(null)}
-                className="w-6 h-6 rounded-full border border-dashed border-ink-300 hover:bg-ink-100 text-ink-400 text-xs"
+                className="mt-2 w-full text-xs text-ink-500 hover:text-danger-500 rounded-md py-1 border-t border-ink-100"
                 title="ללא צבע"
               >
-                ×
+                ללא צבע
               </button>
             </div>
           </>

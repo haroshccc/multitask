@@ -25,6 +25,7 @@ import { useAuth } from "@/lib/auth/AuthContext";
 import { useRealtimeSync } from "@/lib/hooks/useRealtimeSync";
 import { cn } from "@/lib/utils/cn";
 import { QuickCapture } from "@/components/capture/QuickCapture";
+import { AnimatedFab } from "@/components/capture/AnimatedFab";
 import { GlobalSearchPalette } from "@/components/search/GlobalSearchPalette";
 import { Logo } from "@/components/brand/Logo";
 
@@ -326,14 +327,12 @@ export function AppShell() {
         ))}
       </nav>
 
-      {/* Floating quick capture button (mobile) */}
-      <button
+      {/* Floating quick capture button — visible on every breakpoint, cycles
+          its icon + gradient through the five capture actions. */}
+      <AnimatedFab
         onClick={() => setCaptureOpen(true)}
-        className="md:hidden fixed bottom-20 end-4 z-20 w-14 h-14 rounded-full bg-gradient-to-br from-primary-500 to-primary-600 shadow-lift flex items-center justify-center text-white"
-        aria-label="הקלטה מהירה"
-      >
-        <Mic className="w-6 h-6" />
-      </button>
+        paused={captureOpen}
+      />
 
       <QuickCapture
         open={captureOpen}

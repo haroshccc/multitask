@@ -87,14 +87,17 @@ export function UnassignedBanner({
   }
 
   // Open: full banner with rows, collapse button on trailing edge.
+  // On mobile, span full width; on md+, clamp to a sensible side-banner size.
   return (
     <div
       ref={setNodeRef}
       className={cn(
-        "flex-shrink-0 self-start flex flex-col bg-ink-50/95 border border-ink-200 rounded-xl shadow-soft transition-colors",
+        "self-start flex flex-col bg-ink-50/95 border border-ink-200 rounded-xl shadow-soft transition-colors",
+        // Mobile: full width stacks below the main area.
+        // md+: equivalent to clamp(260px, 22vw, 320px) via min/w/max.
+        "w-full md:flex-shrink-0 md:w-[22vw] md:min-w-[260px] md:max-w-[320px]",
         isOver && "ring-2 ring-primary-400 border-primary-300"
       )}
-      style={{ width: "clamp(260px, 22vw, 320px)" }}
     >
       {/* Header */}
       <div className="px-3 py-2 border-b border-ink-200 flex items-center gap-2">

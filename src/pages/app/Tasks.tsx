@@ -370,10 +370,10 @@ export function Tasks() {
           collisionDetection={pointerWithin}
           onDragEnd={handleDragEnd}
         >
-          <div className="flex items-stretch gap-3 min-h-[calc(100vh-340px)]">
-            {/* "לא משויכות" — its own banner on the leading (right in RTL) edge.
-                Collapsible sideways: when closed, shrinks to a narrow handle
-                and frees up width for the remaining lists. */}
+          {/* On mobile: stack vertically — main area first (primary work),
+              Unassigned below. On md+: side-by-side with Unassigned on the
+              leading (right in RTL) edge. */}
+          <div className="flex flex-col-reverse md:flex-row items-stretch gap-3 min-h-[calc(100vh-340px)]">
             <UnassignedBanner
               open={unassignedOpen}
               onToggle={() => setUnassignedOpen((v) => !v)}
@@ -383,9 +383,6 @@ export function Tasks() {
               onOpenEdit={setEditingTaskId}
             />
 
-            {/* Main lists area — fills remaining width; each column takes
-                1/divisor where divisor = min(count, maxVisible). Overflows to
-                horizontal scroll when count > maxVisible. */}
             <div className="flex-1 min-w-0 overflow-x-auto scrollbar-thin">
               <div className="flex items-stretch gap-3 pb-2">
                 {visibleLists.map((list) => (

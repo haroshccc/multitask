@@ -70,6 +70,9 @@ export type UserNotificationPreference = Tables["user_notification_preferences"]
 export type UserSavedFilter = Tables["user_saved_filters"]["Row"];
 export type UserDashboardLayout = Tables["user_dashboard_layouts"]["Row"];
 export type UserListVisibility = Tables["user_list_visibility"]["Row"];
+export type UserTaskStatus = Tables["user_task_statuses"]["Row"];
+export type UserTaskStatusInsert = Tables["user_task_statuses"]["Insert"];
+export type UserTaskStatusUpdate = Tables["user_task_statuses"]["Update"];
 
 // Enums ------------------------------------------------------------------------
 
@@ -79,6 +82,7 @@ export type OrganizationMemberRole = Enums["organization_member_role"];
 export type BillingPlan = Enums["billing_plan"];
 export type SubscriptionStatus = Enums["subscription_status"];
 export type TaskStatus = Enums["task_status"];
+export type TaskStatusKind = Enums["task_status_kind"];
 export type TaskListKind = Enums["task_list_kind"];
 export type DependencyRelation = Enums["dependency_relation"];
 export type CustomFieldType = Enums["custom_field_type"];
@@ -132,7 +136,7 @@ export interface OrganizationWithMembership extends Organization {
 export interface FilterConfig {
   projects?: string[];
   lists?: string[];
-  statuses?: TaskStatus[];
+  statuses?: string[];
   urgencyMin?: number;
   urgencyMax?: number;
   tags?: string[];

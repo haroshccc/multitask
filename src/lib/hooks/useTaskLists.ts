@@ -121,3 +121,53 @@ export function useReorderTaskLists() {
     },
   });
 }
+
+export function useArchivedTaskLists() {
+  const scope = useOrgScope();
+  return useQuery<TaskList[]>({
+    queryKey: ["task-lists", scope.organizationId ?? "", "archived"],
+    queryFn: () => service.listArchivedTaskLists(scope.organizationId!),
+    enabled: scope.enabled,
+  });
+}
+
+export function useTaskListShares(listId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["task-list", listId ?? "", "shares"],
+    queryFn: () => service.listTaskListShares(listId!),
+    enabled: !!listId,
+  });
+}
+
+export function useSetTaskListShare() {
+  const qc = useQueryClient();
+  const scope = useOrgScope();
+  return useMutation({
+    mutationFn: ({
+      listId,
+      userId,
+      permission,
+    }: {
+      listId: string;
+      userId: string;
+      permission: "read" | "write";
+    }) => {
+      const { organizationId } = assertOrgScope(scope);
+      return service.setTaskListShare(organizationId, listId, userId, permission);
+    },
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["task-list", vars.listId, "shares"] });
+    },
+  });
+}
+
+export function useRemoveTaskListShare() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ listId, userId }: { listId: string; userId: string }) =>
+      service.removeTaskListShare(listId, userId),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["task-list", vars.listId, "shares"] });
+    },
+  });
+}

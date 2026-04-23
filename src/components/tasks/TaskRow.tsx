@@ -230,15 +230,23 @@ export function TaskRow({
           <span className="w-3.5 shrink-0" />
         )}
 
-        {/* Checkbox */}
+        {/* Checkbox — fill + border take the list's color if set, otherwise success */}
         <button
           onClick={toggleComplete}
           className={cn(
             "mt-0.5 w-4 h-4 rounded-sm border-2 shrink-0 flex items-center justify-center transition-all",
             isDone
-              ? "bg-success-500 border-success-500 text-white"
+              ? "text-white border-transparent"
               : "border-ink-300 hover:border-ink-500"
           )}
+          style={
+            isDone
+              ? {
+                  backgroundColor: "var(--list-color, #10b981)",
+                  borderColor: "var(--list-color, #10b981)",
+                }
+              : undefined
+          }
           aria-label={isDone ? "בטל סימון" : "סמן כהושלמה"}
           type="button"
         >
@@ -295,6 +303,19 @@ export function TaskRow({
             <Play className="w-3.5 h-3.5" />
           )}
         </button>
+
+        {/* Elapsed time — shown once the task has any tracked seconds.
+            Click opens the full history tab for editing. */}
+        {task.actual_seconds > 0 && (
+          <button
+            type="button"
+            onClick={() => onOpenEdit(task.id)}
+            className="shrink-0 text-[11px] font-mono tabular-nums text-ink-500 hover:text-primary-700 px-1 rounded-md"
+            title="עריכת סשנים"
+          >
+            {formatElapsed(task.actual_seconds)}
+          </button>
+        )}
 
         {/* + subtask — visible on row hover */}
         <button
@@ -353,23 +374,98 @@ export function TaskRow({
 
       {/* Children */}
       {!collapsed && children.length > 0 && (
-        <div>
-          {children.map((child, idx) => (
-            <TaskRow
-              key={child.task.id}
-              node={child}
-              prevSiblingId={idx > 0 ? children[idx - 1]!.task.id : null}
-              parentTaskId={task.id}
-              grandparentTaskId={parentTaskId}
-              listId={listId}
-              onRequestFocus={onRequestFocus}
-              focusTaskId={focusTaskId}
-              onOpenEdit={onOpenEdit}
-            />
-          ))}
-        </div>
+        <ChildrenBlock
+          children={children}
+          parentTaskId={task.id}
+          grandparentTaskId={parentTaskId}
+          listId={listId}
+          onRequestFocus={onRequestFocus}
+          focusTaskId={focusTaskId}
+          onOpenEdit={onOpenEdit}
+        />
       )}
     </>
+  );
+}
+
+/**
+ * Renders a list of child TaskRows with the completed ones tucked into a
+ * collapsible "הושלמו N" strip at the bottom (per SPEC §15: completed subtasks
+ * sink to bottom of their parent's children).
+ */
+function ChildrenBlock({
+  children,
+  parentTaskId,
+  grandparentTaskId,
+  listId,
+  onRequestFocus,
+  focusTaskId,
+  onOpenEdit,
+}: {
+  children: TaskTreeNode[];
+  parentTaskId: string | null;
+  grandparentTaskId: string | null;
+  listId: string | null;
+  onRequestFocus: (taskId: string) => void;
+  focusTaskId: string | null;
+  onOpenEdit: (taskId: string) => void;
+}) {
+  const [showCompleted, setShowCompleted] = useState(false);
+  const incomplete = children.filter((c) => !c.task.completed_at);
+  const completed = children.filter((c) => !!c.task.completed_at);
+
+  return (
+    <div>
+      {incomplete.map((child, idx) => (
+        <TaskRow
+          key={child.task.id}
+          node={child}
+          prevSiblingId={idx > 0 ? incomplete[idx - 1]!.task.id : null}
+          parentTaskId={parentTaskId}
+          grandparentTaskId={grandparentTaskId}
+          listId={listId}
+          onRequestFocus={onRequestFocus}
+          focusTaskId={focusTaskId}
+          onOpenEdit={onOpenEdit}
+        />
+      ))}
+      {completed.length > 0 && (
+        <div>
+          <button
+            type="button"
+            onClick={() => setShowCompleted((v) => !v)}
+            className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-ink-400 hover:text-ink-600 px-2 py-1"
+            style={{ paddingInlineStart: completed[0]!.depth * 18 + 4 }}
+          >
+            <svg
+              viewBox="0 0 20 20"
+              fill="currentColor"
+              className={cn(
+                "w-3 h-3 transition-transform",
+                showCompleted ? "rotate-90" : "rotate-0"
+              )}
+            >
+              <path d="M5 7l5 6 5-6H5z" />
+            </svg>
+            הושלמו ({completed.length})
+          </button>
+          {showCompleted &&
+            completed.map((child) => (
+              <TaskRow
+                key={child.task.id}
+                node={child}
+                prevSiblingId={null}
+                parentTaskId={parentTaskId}
+                grandparentTaskId={grandparentTaskId}
+                listId={listId}
+                onRequestFocus={onRequestFocus}
+                focusTaskId={focusTaskId}
+                onOpenEdit={onOpenEdit}
+              />
+            ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -386,20 +482,38 @@ function InlineStars({
         <button
           key={n}
           onClick={() => onChange(n === value ? 0 : n)}
-          className="p-0 text-ink-300 hover:text-primary-500"
+          className="p-0 text-ink-300"
           aria-label={`דחיפות ${n}`}
           type="button"
         >
           <Star
-            className={cn(
-              "w-3 h-3",
-              n <= value ? "text-primary-500 fill-primary-500" : ""
-            )}
+            className={cn("w-3 h-3", n <= value && "fill-current")}
+            style={
+              n <= value
+                ? { color: "var(--list-color, #f59e0b)" }
+                : undefined
+            }
           />
         </button>
       ))}
     </div>
   );
+}
+
+/**
+ * Compact elapsed-time label for the task row.
+ * < 1h → "Nm"; < 1d → "Hh Mm"; else "Dd Hh".
+ */
+function formatElapsed(seconds: number): string {
+  if (seconds < 60) return "<1ד";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}ד`;
+  const hours = Math.floor(minutes / 60);
+  const remMin = minutes % 60;
+  if (hours < 24) return remMin > 0 ? `${hours}ש ${remMin}ד` : `${hours}ש`;
+  const days = Math.floor(hours / 24);
+  const remH = hours % 24;
+  return remH > 0 ? `${days}י ${remH}ש` : `${days}י`;
 }
 
 function MenuBtn({

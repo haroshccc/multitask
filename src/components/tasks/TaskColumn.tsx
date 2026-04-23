@@ -1,6 +1,16 @@
 import { useEffect, useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
-import { Archive, Pin, Plus, MoreHorizontal, Check } from "lucide-react";
+import {
+  Archive,
+  Plus,
+  MoreHorizontal,
+  Check,
+  Pin,
+  Share2,
+  Palette,
+  Smile,
+  Type,
+} from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { useCreateTask } from "@/lib/hooks/useTasks";
 import {
@@ -9,6 +19,7 @@ import {
 } from "@/lib/hooks/useTaskLists";
 import type { TaskList } from "@/lib/types/domain";
 import { TaskRow, type TaskTreeNode } from "./TaskRow";
+import { ShareListModal } from "./ShareListModal";
 
 interface TaskColumnProps {
   /** null = the "unassigned" pinned column */
@@ -17,6 +28,7 @@ interface TaskColumnProps {
   roots: TaskTreeNode[];
   /** Total task count across all depths, for header */
   totalCount: number;
+  /** True if this column is rendered as the sticky-pinned "unassigned" column */
   pinned?: boolean;
   onOpenEdit: (taskId: string) => void;
 }
@@ -27,16 +39,16 @@ const EMOJI_PRESETS = [
 ];
 
 const COLOR_PRESETS = [
-  "#ef4444", // list-red
-  "#f59e0b", // primary
-  "#10b981", // list-green
-  "#14b8a6", // list-teal
-  "#06b6d4", // list-cyan
-  "#0ea5e9", // list-sky
-  "#3b82f6", // list-blue
-  "#6366f1", // list-indigo
-  "#8b5cf6", // list-violet
-  "#ec4899", // pink
+  "#ef4444",
+  "#f59e0b",
+  "#10b981",
+  "#14b8a6",
+  "#06b6d4",
+  "#0ea5e9",
+  "#3b82f6",
+  "#6366f1",
+  "#8b5cf6",
+  "#ec4899",
 ];
 
 export function TaskColumn({
@@ -64,6 +76,8 @@ export function TaskColumn({
   const [menuOpen, setMenuOpen] = useState(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [colorOpen, setColorOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [showCompleted, setShowCompleted] = useState(false);
 
   useEffect(() => {
     setNameDraft(list?.name ?? "");
@@ -127,63 +141,90 @@ export function TaskColumn({
     setColorOpen(false);
   };
 
-  const headerColor = list?.color ?? null;
-  const displayEmoji = list?.emoji ?? (listId === null ? "📥" : "📋");
+  const togglePin = () => {
+    if (!list) return;
+    updateList.mutate({
+      listId: list.id,
+      patch: { is_pinned: !list.is_pinned },
+    });
+    setMenuOpen(false);
+  };
+
+  const listColor = list?.color ?? null;
+  const displayEmoji = list?.emoji ?? null;
   const displayName = list?.name ?? "לא משויכות";
   const canEdit = !!list;
+  const isPinnedByFlag = !!list?.is_pinned;
 
   return (
     <div
       ref={setNodeRef}
       className={cn(
-        "shrink-0 w-[320px] max-h-full flex flex-col bg-white border border-ink-200 rounded-xl shadow-soft transition-colors",
+        "shrink-0 w-[320px] self-start flex flex-col bg-white border border-ink-200 rounded-xl shadow-soft transition-colors",
         pinned && "sticky start-0 z-10 bg-ink-50/95 backdrop-blur-sm",
         isOver && "ring-2 ring-primary-400 border-primary-300"
       )}
+      // The column "color" is available to inner buttons via CSS var so
+      // checkmarks / stars / focus rings tint to match.
+      style={
+        listColor
+          ? ({ ["--list-color" as string]: listColor } as React.CSSProperties)
+          : undefined
+      }
     >
       {/* Header */}
-      <div
-        className="px-3 py-2 border-b border-ink-200 flex items-center gap-2 relative"
-        style={
-          headerColor ? { borderTopColor: headerColor, borderTopWidth: 3 } : undefined
-        }
-      >
-        {/* Emoji button */}
+      <div className="px-3 py-2 border-b border-ink-200 flex items-center gap-2 relative">
+        {/* Short color strip on the leading edge instead of a full top border */}
+        {listColor && (
+          <span
+            aria-hidden
+            className="absolute top-0 bottom-0 start-0 w-1"
+            style={{ backgroundColor: listColor }}
+          />
+        )}
+
+        {/* Emoji slot (click to change; empty circle if none) */}
         <button
           type="button"
           onClick={() => canEdit && setEmojiOpen((v) => !v)}
           disabled={!canEdit}
           className={cn(
-            "text-base rounded-md leading-none h-6 w-6 flex items-center justify-center",
-            canEdit && "hover:bg-ink-100"
+            "text-base rounded-md leading-none h-6 w-6 flex items-center justify-center shrink-0",
+            canEdit && "hover:bg-ink-100",
+            !displayEmoji && canEdit && "text-ink-300 border border-dashed border-ink-300"
           )}
-          title={canEdit ? "שנה אימוג'י" : undefined}
+          title={canEdit ? "אימוג'י" : undefined}
         >
-          {displayEmoji}
+          {displayEmoji ?? (listId === null ? "📥" : "·")}
         </button>
 
         {emojiOpen && (
           <>
-            <div
-              className="fixed inset-0 z-20"
-              onClick={() => setEmojiOpen(false)}
-            />
-            <div className="absolute top-full start-2 mt-1 z-30 bg-white border border-ink-200 rounded-xl shadow-lift p-2 grid grid-cols-8 gap-1">
-              {EMOJI_PRESETS.map((e) => (
-                <button
-                  key={e}
-                  type="button"
-                  onClick={() => setEmoji(e)}
-                  className="w-7 h-7 rounded-md hover:bg-ink-100 flex items-center justify-center text-base"
-                >
-                  {e}
-                </button>
-              ))}
+            <div className="fixed inset-0 z-20" onClick={() => setEmojiOpen(false)} />
+            <div className="absolute top-full start-2 mt-1 z-30 bg-white border border-ink-200 rounded-xl shadow-lift p-2">
+              <div className="grid grid-cols-8 gap-1">
+                {EMOJI_PRESETS.map((e) => (
+                  <button
+                    key={e}
+                    type="button"
+                    onClick={() => setEmoji(e)}
+                    className="w-7 h-7 rounded-md hover:bg-ink-100 flex items-center justify-center text-base"
+                  >
+                    {e}
+                  </button>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={() => setEmoji(null)}
+                className="mt-1 w-full text-xs text-ink-500 hover:text-danger-500 rounded-md py-1 border-t border-ink-100"
+              >
+                הסר אייקון
+              </button>
             </div>
           </>
         )}
 
-        {/* Name — click to rename */}
         {editingName && canEdit ? (
           <input
             autoFocus
@@ -207,7 +248,6 @@ export function TaskColumn({
               "flex-1 min-w-0 text-start font-semibold text-ink-900 text-sm truncate rounded-md px-1 -mx-1",
               canEdit && "hover:bg-ink-100"
             )}
-            title={canEdit ? "לחצי לשינוי שם" : undefined}
             disabled={!canEdit}
           >
             {displayName}
@@ -216,7 +256,7 @@ export function TaskColumn({
 
         <span className="text-xs text-ink-500 shrink-0 tabular-nums">{totalCount}</span>
 
-        {pinned && (
+        {(pinned || isPinnedByFlag) && (
           <span className="text-ink-400" title="רשימה מקובעת">
             <Pin className="w-3.5 h-3.5" />
           </span>
@@ -226,51 +266,66 @@ export function TaskColumn({
           <div className="relative">
             <button
               onClick={() => setMenuOpen((v) => !v)}
-              className="p-1 rounded-md text-ink-400 hover:text-ink-900 hover:bg-ink-100"
+              className="p-1 rounded-md text-ink-500 hover:text-ink-900 hover:bg-ink-100"
               title="תפריט רשימה"
               type="button"
             >
-              <MoreHorizontal className="w-3.5 h-3.5" />
+              <MoreHorizontal className="w-4 h-4" />
             </button>
             {menuOpen && (
               <>
-                <div
-                  className="fixed inset-0 z-20"
-                  onClick={() => setMenuOpen(false)}
-                />
-                <div className="absolute end-0 mt-1 w-44 bg-white border border-ink-200 rounded-xl shadow-lift z-30 py-1 text-sm">
+                <div className="fixed inset-0 z-20" onClick={() => setMenuOpen(false)} />
+                <div className="absolute end-0 mt-1 w-52 bg-white border border-ink-200 rounded-xl shadow-lift z-30 py-1 text-sm">
                   <MenuItem
-                    onClick={() => {
-                      setEditingName(true);
-                      setMenuOpen(false);
-                    }}
-                  >
-                    שנה שם
-                  </MenuItem>
-                  <MenuItem
-                    onClick={() => {
-                      setEmojiOpen(true);
-                      setMenuOpen(false);
-                    }}
-                  >
-                    שנה אימוג'י
-                  </MenuItem>
-                  <MenuItem
+                    icon={<Palette className="w-3.5 h-3.5" />}
                     onClick={() => {
                       setColorOpen(true);
                       setMenuOpen(false);
                     }}
                   >
-                    שנה צבע
+                    שנה צבע כותרת
+                  </MenuItem>
+                  <MenuItem
+                    icon={<Pin className="w-3.5 h-3.5" />}
+                    onClick={togglePin}
+                  >
+                    {isPinnedByFlag ? "הסר נעיצה" : "נעץ רשימה"}
+                  </MenuItem>
+                  <MenuItem
+                    icon={<Type className="w-3.5 h-3.5" />}
+                    onClick={() => {
+                      setEditingName(true);
+                      setMenuOpen(false);
+                    }}
+                  >
+                    שנה שם רשימה
+                  </MenuItem>
+                  <MenuItem
+                    icon={<Smile className="w-3.5 h-3.5" />}
+                    onClick={() => {
+                      setEmojiOpen(true);
+                      setMenuOpen(false);
+                    }}
+                  >
+                    שנה אייקון
+                  </MenuItem>
+                  <MenuItem
+                    icon={<Share2 className="w-3.5 h-3.5" />}
+                    onClick={() => {
+                      setShareOpen(true);
+                      setMenuOpen(false);
+                    }}
+                  >
+                    שיתוף וסנכרון
                   </MenuItem>
                   <div className="h-px bg-ink-200 my-1" />
                   <MenuItem
                     danger
+                    icon={<Archive className="w-3.5 h-3.5" />}
                     onClick={() => {
                       setConfirmArchive(true);
                       setMenuOpen(false);
                     }}
-                    icon={<Archive className="w-3.5 h-3.5" />}
                   >
                     ארכב רשימה
                   </MenuItem>
@@ -282,11 +337,8 @@ export function TaskColumn({
 
         {colorOpen && canEdit && (
           <>
-            <div
-              className="fixed inset-0 z-20"
-              onClick={() => setColorOpen(false)}
-            />
-            <div className="absolute top-full end-2 mt-1 z-30 bg-white border border-ink-200 rounded-xl shadow-lift p-2 flex gap-1.5">
+            <div className="fixed inset-0 z-20" onClick={() => setColorOpen(false)} />
+            <div className="absolute top-full end-2 mt-1 z-30 bg-white border border-ink-200 rounded-xl shadow-lift p-2 flex gap-1.5 flex-wrap w-[220px]">
               {COLOR_PRESETS.map((c) => (
                 <button
                   key={c}
@@ -314,8 +366,8 @@ export function TaskColumn({
         )}
       </div>
 
-      {/* Body */}
-      <div className="flex-1 overflow-y-auto scrollbar-thin p-1 min-h-[120px]">
+      {/* Body — auto-sizes to content, caps at viewport height for scroll */}
+      <div className="p-1 max-h-[calc(100vh-300px)] overflow-y-auto scrollbar-thin">
         {roots.length === 0 ? (
           <button
             onClick={handleEmptyCreate}
@@ -330,7 +382,9 @@ export function TaskColumn({
               <TaskRow
                 key={node.task.id}
                 node={node}
-                prevSiblingId={idx > 0 ? incompleteRoots[idx - 1]!.task.id : null}
+                prevSiblingId={
+                  idx > 0 ? incompleteRoots[idx - 1]!.task.id : null
+                }
                 parentTaskId={null}
                 grandparentTaskId={null}
                 listId={listId}
@@ -340,49 +394,65 @@ export function TaskColumn({
               />
             ))}
 
+            {/* Inline new-task row: one line under the last existing task */}
+            <div className="flex items-start gap-1.5 rounded-md px-1.5 py-1">
+              <span className="w-3.5 shrink-0" />
+              <span className="w-3.5 shrink-0" />
+              <Plus className="w-4 h-4 mt-0.5 text-ink-400 shrink-0" />
+              <input
+                value={newTitle}
+                onChange={(e) => setNewTitle(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleCreate();
+                  }
+                  if (e.key === "Escape") setNewTitle("");
+                }}
+                onBlur={handleCreate}
+                placeholder="משימה חדשה..."
+                className="flex-1 min-w-0 bg-transparent border-0 outline-none text-sm py-0.5 placeholder:text-ink-400"
+              />
+            </div>
+
+            {/* Collapsible root-level "הושלמו" */}
             {completedRoots.length > 0 && (
-              <div className="mt-2 pt-2 border-t border-ink-150">
-                <div className="px-2 text-[10px] font-semibold uppercase tracking-wider text-ink-400 mb-1">
+              <div className="mt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowCompleted((v) => !v)}
+                  className="w-full flex items-center gap-1 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-ink-400 hover:text-ink-600"
+                >
+                  <svg
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                    className={cn(
+                      "w-3 h-3 transition-transform",
+                      showCompleted ? "rotate-90" : "rotate-0"
+                    )}
+                  >
+                    <path d="M5 7l5 6 5-6H5z" />
+                  </svg>
                   הושלמו ({completedRoots.length})
-                </div>
-                {completedRoots.map((node) => (
-                  <TaskRow
-                    key={node.task.id}
-                    node={node}
-                    prevSiblingId={null}
-                    parentTaskId={null}
-                    grandparentTaskId={null}
-                    listId={listId}
-                    onRequestFocus={setFocusTaskId}
-                    focusTaskId={focusTaskId}
-                    onOpenEdit={onOpenEdit}
-                  />
-                ))}
+                </button>
+                {showCompleted &&
+                  completedRoots.map((node) => (
+                    <TaskRow
+                      key={node.task.id}
+                      node={node}
+                      prevSiblingId={null}
+                      parentTaskId={null}
+                      grandparentTaskId={null}
+                      listId={listId}
+                      onRequestFocus={setFocusTaskId}
+                      focusTaskId={focusTaskId}
+                      onOpenEdit={onOpenEdit}
+                    />
+                  ))}
               </div>
             )}
           </>
         )}
-      </div>
-
-      {/* New task footer */}
-      <div className="p-2 border-t border-ink-200">
-        <div className="flex items-center gap-1">
-          <Plus className="w-3.5 h-3.5 text-ink-400 shrink-0" />
-          <input
-            value={newTitle}
-            onChange={(e) => setNewTitle(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                handleCreate();
-              }
-              if (e.key === "Escape") setNewTitle("");
-            }}
-            onBlur={handleCreate}
-            placeholder="משימה חדשה..."
-            className="flex-1 min-w-0 bg-transparent border-0 outline-none text-sm py-1"
-          />
-        </div>
       </div>
 
       {confirmArchive && list && (
@@ -396,8 +466,8 @@ export function TaskColumn({
           >
             <h3 className="font-semibold text-ink-900">ארכוב רשימה</h3>
             <p className="text-sm text-ink-600">
-              הרשימה "{list.name}" וכל המשימות שבה יעברו לארכיון ויוסתרו מברירת המחדל.
-              ניתן לשחזר תוך 60 יום.
+              הרשימה "{list.name}" וכל המשימות שבה יעברו לארכיון ויוסתרו מהתצוגה.
+              ניתן לשחזר תוך 60 יום מהגדרות הדף.
             </p>
             <div className="flex items-center justify-end gap-2">
               <button
@@ -409,14 +479,19 @@ export function TaskColumn({
               </button>
               <button
                 onClick={handleArchive}
-                className="btn-accent text-xs"
+                className="text-xs inline-flex items-center justify-center gap-1.5 rounded-sm px-4 py-2.5 font-medium bg-danger-500 text-white hover:bg-danger-600 transition-colors"
                 type="button"
               >
+                <Archive className="w-3.5 h-3.5" />
                 ארכב
               </button>
             </div>
           </div>
         </div>
+      )}
+
+      {shareOpen && list && (
+        <ShareListModal list={list} onClose={() => setShareOpen(false)} />
       )}
     </div>
   );

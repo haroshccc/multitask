@@ -80,6 +80,7 @@ export const queryKeys = {
     ["list-visibility", userId, screenKey] as const,
   savedFilters: (userId: string, screenKey: string) =>
     ["saved-filters", userId, screenKey] as const,
+  userTaskStatuses: (scope: string) => ["user-task-statuses", scope] as const,
 
   // Global search
   search: (orgId: string, query: string) =>

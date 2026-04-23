@@ -1137,6 +1137,7 @@ export type Database = {
           emoji: string | null
           id: string
           is_archived: boolean
+          is_pinned: boolean
           kind: Database["public"]["Enums"]["task_list_kind"]
           name: string
           organization_id: string
@@ -1153,6 +1154,7 @@ export type Database = {
           emoji?: string | null
           id?: string
           is_archived?: boolean
+          is_pinned?: boolean
           kind?: Database["public"]["Enums"]["task_list_kind"]
           name: string
           organization_id: string
@@ -1169,6 +1171,7 @@ export type Database = {
           emoji?: string | null
           id?: string
           is_archived?: boolean
+          is_pinned?: boolean
           kind?: Database["public"]["Enums"]["task_list_kind"]
           name?: string
           organization_id?: string
@@ -1228,7 +1231,7 @@ export type Database = {
           source_recording_id: string | null
           source_thought_id: string | null
           spare_hours: number | null
-          status: Database["public"]["Enums"]["task_status"]
+          status: string
           tags: string[]
           task_list_id: string | null
           title: string
@@ -1268,7 +1271,7 @@ export type Database = {
           source_recording_id?: string | null
           source_thought_id?: string | null
           spare_hours?: number | null
-          status?: Database["public"]["Enums"]["task_status"]
+          status?: string
           tags?: string[]
           task_list_id?: string | null
           title: string
@@ -1308,7 +1311,7 @@ export type Database = {
           source_recording_id?: string | null
           source_thought_id?: string | null
           spare_hours?: number | null
-          status?: Database["public"]["Enums"]["task_status"]
+          status?: string
           tags?: string[]
           task_list_id?: string | null
           title?: string
@@ -1740,6 +1743,45 @@ export type Database = {
         }
         Relationships: []
       }
+      user_task_statuses: {
+        Row: {
+          color: string | null
+          created_at: string
+          id: string
+          is_builtin: boolean
+          key: string
+          kind: Database["public"]["Enums"]["task_status_kind"]
+          label: string
+          sort_order: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string
+          id?: string
+          is_builtin?: boolean
+          key: string
+          kind: Database["public"]["Enums"]["task_status_kind"]
+          label: string
+          sort_order?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          color?: string | null
+          created_at?: string
+          id?: string
+          is_builtin?: boolean
+          key?: string
+          kind?: Database["public"]["Enums"]["task_status_kind"]
+          label?: string
+          sort_order?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       whatsapp_inbound_log: {
         Row: {
           from_phone_e164: string | null
@@ -2011,6 +2053,12 @@ export type Database = {
         | "pending_approval"
         | "done"
         | "cancelled"
+      task_status_kind:
+        | "backlog"
+        | "active"
+        | "waiting_approval"
+        | "done"
+        | "cancelled"
       thought_processing_target:
         | "task"
         | "event"
@@ -2235,6 +2283,13 @@ export const Constants = {
         "todo",
         "in_progress",
         "pending_approval",
+        "done",
+        "cancelled",
+      ],
+      task_status_kind: [
+        "backlog",
+        "active",
+        "waiting_approval",
         "done",
         "cancelled",
       ],

@@ -7,6 +7,7 @@ import {
   pointerWithin,
   type DragEndEvent,
 } from "@dnd-kit/core";
+import { Archive, Settings as SettingsIcon } from "lucide-react";
 import { ScreenScaffold } from "@/components/layout/ScreenScaffold";
 import { ListsBanner } from "@/components/lists/ListsBanner";
 import {
@@ -16,6 +17,7 @@ import {
 } from "@/components/filters/FilterBar";
 import { TaskEditModal } from "@/components/tasks/TaskEditModal";
 import { TaskColumn } from "@/components/tasks/TaskColumn";
+import { ArchiveModal } from "@/components/tasks/ArchiveModal";
 import type { TaskTreeNode } from "@/components/tasks/TaskRow";
 import {
   useTasks,
@@ -23,16 +25,9 @@ import {
   useMoveTaskToList,
   useSetTaskParent,
   useListVisibility,
+  useMyTaskStatuses,
 } from "@/lib/hooks";
-import type { Task, TaskList, TaskStatus } from "@/lib/types/domain";
-
-const STATUS_OPTIONS: { value: TaskStatus; label: string }[] = [
-  { value: "todo", label: "לעשות" },
-  { value: "in_progress", label: "בעבודה" },
-  { value: "pending_approval", label: "ממתין לאישור" },
-  { value: "done", label: "בוצע" },
-  { value: "cancelled", label: "בוטל" },
-];
+import type { Task, TaskList } from "@/lib/types/domain";
 
 export function Tasks() {
   const [filters, setFilters] = useFiltersFromUrl();
@@ -43,6 +38,10 @@ export function Tasks() {
   const setParent = useSetTaskParent();
 
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [pageMenuOpen, setPageMenuOpen] = useState(false);
+  const [archiveOpen, setArchiveOpen] = useState(false);
+
+  const { data: myStatuses = [] } = useMyTaskStatuses();
 
   const hiddenSet = useMemo(
     () => new Set(visibility?.hidden_list_ids ?? []),
@@ -55,11 +54,15 @@ export function Tasks() {
     [tasks]
   );
 
-  // Columns to render: "unassigned" always visible and pinned, then visible lists.
-  const visibleLists = useMemo(
-    () => lists.filter((l) => !hiddenSet.has(l.id)),
-    [lists, hiddenSet]
-  );
+  // Columns to render: "unassigned" always visible and pinned, then the rest.
+  // Pinned-via-menu custom lists come first (right after "unassigned").
+  const visibleLists = useMemo(() => {
+    const shown = lists.filter((l) => !hiddenSet.has(l.id));
+    return shown.sort((a, b) => {
+      if (!!a.is_pinned !== !!b.is_pinned) return a.is_pinned ? -1 : 1;
+      return a.sort_order - b.sort_order;
+    });
+  }, [lists, hiddenSet]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } })
@@ -76,7 +79,7 @@ export function Tasks() {
       key: "statuses",
       type: "multi-enum",
       label: "סטטוס",
-      options: STATUS_OPTIONS,
+      options: myStatuses.map((s) => ({ value: s.key, label: s.label })),
     },
     {
       key: "lists",
@@ -166,6 +169,40 @@ export function Tasks() {
     <ScreenScaffold
       title="משימות"
       subtitle="רשימות עמודה-עמודה, עץ היררכי מלא, סטופר, גרירה בין רשימות."
+      actions={
+        <div className="relative">
+          <button
+            onClick={() => setPageMenuOpen((v) => !v)}
+            className="btn-outline text-sm"
+            type="button"
+            title="הגדרות הדף"
+          >
+            <SettingsIcon className="w-4 h-4" />
+            <span>הגדרות הדף</span>
+          </button>
+          {pageMenuOpen && (
+            <>
+              <div
+                className="fixed inset-0 z-20"
+                onClick={() => setPageMenuOpen(false)}
+              />
+              <div className="absolute end-0 mt-1 w-56 bg-white border border-ink-200 rounded-xl shadow-lift z-30 py-1 text-sm">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setArchiveOpen(true);
+                    setPageMenuOpen(false);
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-ink-700 hover:bg-ink-100 text-start"
+                >
+                  <Archive className="w-4 h-4" />
+                  ארכיון רשימות
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      }
     >
       <div className="space-y-3">
         <ListsBanner screenKey="tasks" kind="task" />
@@ -217,6 +254,8 @@ export function Tasks() {
         taskId={editingTaskId}
         onClose={() => setEditingTaskId(null)}
       />
+
+      {archiveOpen && <ArchiveModal onClose={() => setArchiveOpen(false)} />}
     </ScreenScaffold>
   );
 }

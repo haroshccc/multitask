@@ -30,7 +30,8 @@ import {
   useDeleteTimeEntry,
 } from "@/lib/hooks/useTimer";
 import { useTaskLists } from "@/lib/hooks/useTaskLists";
-import type { TaskStatus, TimeEntry } from "@/lib/types/domain";
+import { useMyTaskStatuses } from "@/lib/hooks/useUserTaskStatuses";
+import type { TimeEntry, UserTaskStatus } from "@/lib/types/domain";
 import { DateTimePicker } from "@/components/ui/DateTimePicker";
 import {
   DurationInput,
@@ -45,18 +46,11 @@ interface TaskEditModalProps {
 
 type Tab = "overview" | "schedule" | "history" | "attachments";
 
-const STATUS_OPTIONS: { value: TaskStatus; label: string }[] = [
-  { value: "todo", label: "לעשות" },
-  { value: "in_progress", label: "בעבודה" },
-  { value: "pending_approval", label: "ממתין לאישור" },
-  { value: "done", label: "בוצע" },
-  { value: "cancelled", label: "בוטל" },
-];
-
 export function TaskEditModal({ taskId, onClose }: TaskEditModalProps) {
   const open = !!taskId;
   const { data: task } = useTask(taskId);
   const { data: lists = [] } = useTaskLists();
+  const { data: myStatuses = [] } = useMyTaskStatuses();
   const updateTask = useUpdateTask();
   const completeTask = useCompleteTask();
 
@@ -67,7 +61,7 @@ export function TaskEditModal({ taskId, onClose }: TaskEditModalProps) {
   const [description, setDescription] = useState("");
   const [notes, setNotes] = useState("");
   const [urgency, setUrgency] = useState<number>(3);
-  const [status, setStatus] = useState<TaskStatus>("todo");
+  const [status, setStatus] = useState<string>("todo");
   const [listId, setListId] = useState<string | null>(null);
   const [tags, setTags] = useState<string[]>([]);
   const [location, setLocation] = useState("");
@@ -216,18 +210,19 @@ export function TaskEditModal({ taskId, onClose }: TaskEditModalProps) {
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-3">
                     <Field label="סטטוס">
-                      <select
+                      <StatusPicker
                         value={status}
-                        onChange={(e) => setStatus(e.target.value as TaskStatus)}
-                        onBlur={handleBlurSave}
-                        className="field"
-                      >
-                        {STATUS_OPTIONS.map((o) => (
-                          <option key={o.value} value={o.value}>
-                            {o.label}
-                          </option>
-                        ))}
-                      </select>
+                        statuses={myStatuses}
+                        onChange={(next) => {
+                          setStatus(next);
+                          if (task) {
+                            updateTask.mutate({
+                              taskId: task.id,
+                              patch: { status: next },
+                            });
+                          }
+                        }}
+                      />
                     </Field>
                     <Field label="רשימה">
                       <select
@@ -730,6 +725,87 @@ function AttachmentsTab() {
   );
 }
 
+// -----------------------------------------------------------------------------
+// StatusPicker — user-customisable chip dropdown reading from useMyTaskStatuses.
+// Renders the current status as a coloured chip + opens a popover of all
+// statuses in the user's palette.
+
+function StatusPicker({
+  value,
+  statuses,
+  onChange,
+}: {
+  value: string;
+  statuses: UserTaskStatus[];
+  onChange: (next: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const current = statuses.find((s) => s.key === value);
+  const label = current?.label ?? value;
+  const color = current?.color ?? "#a8a8bc";
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={cn(
+          "w-full flex items-center justify-between gap-2 rounded-xl border bg-white px-3 py-2.5 text-sm transition-all",
+          open
+            ? "border-primary-500 ring-2 ring-primary-500/25"
+            : "border-ink-300 hover:border-ink-400"
+        )}
+      >
+        <span className="inline-flex items-center gap-2">
+          <span
+            className="w-2.5 h-2.5 rounded-full shrink-0"
+            style={{ backgroundColor: color }}
+          />
+          <span className="font-medium text-ink-900">{label}</span>
+        </span>
+        <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-ink-500">
+          <path d="M5 7l5 6 5-6H5z" />
+        </svg>
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute start-0 mt-1 w-full bg-white border border-ink-200 rounded-xl shadow-lift z-20 py-1 max-h-72 overflow-y-auto scrollbar-thin">
+            {statuses.length === 0 && (
+              <div className="px-3 py-2 text-xs text-ink-500">
+                עוד לא הוגדרו סטטוסים. עברי להגדרות → סטטוסים.
+              </div>
+            )}
+            {statuses.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => {
+                  onChange(s.key);
+                  setOpen(false);
+                }}
+                className={cn(
+                  "w-full flex items-center gap-2 px-3 py-1.5 text-sm text-start hover:bg-ink-100",
+                  s.key === value && "bg-primary-50"
+                )}
+              >
+                <span
+                  className="w-2.5 h-2.5 rounded-full shrink-0"
+                  style={{ backgroundColor: s.color ?? "#a8a8bc" }}
+                />
+                <span className="text-ink-900">{s.label}</span>
+                {s.is_builtin && (
+                  <span className="ms-auto text-[10px] text-ink-400">ברירת מחדל</span>
+                )}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function AttachmentSlot({
   icon,
   label,
@@ -744,9 +820,7 @@ function AttachmentSlot({
       className="group flex items-center gap-2 rounded-xl border border-ink-200 bg-white px-3 py-2.5 text-sm text-ink-700 cursor-not-allowed opacity-70"
       title="בקרוב"
     >
-      <span className="w-7 h-7 rounded-lg bg-primary-50 text-primary-700 flex items-center justify-center">
-        {icon}
-      </span>
+      <span className="text-ink-700">{icon}</span>
       <span className="font-medium">{label}</span>
       <Plus className="w-3.5 h-3.5 ms-auto text-ink-400" />
     </button>

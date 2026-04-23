@@ -16,6 +16,19 @@ export async function listTaskLists(
   return data ?? [];
 }
 
+export async function listArchivedTaskLists(
+  organizationId: string
+): Promise<TaskList[]> {
+  const { data, error } = await supabase
+    .from("task_lists")
+    .select("*")
+    .eq("organization_id", organizationId)
+    .eq("is_archived", true)
+    .order("archived_at", { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
 export async function getTaskList(listId: string): Promise<TaskList | null> {
   const { data, error } = await supabase
     .from("task_lists")
@@ -95,4 +108,50 @@ export async function reorderTaskLists(
       supabase.from("task_lists").update({ sort_order: u.sort_order }).eq("id", u.id)
     )
   );
+}
+
+// Shares ---------------------------------------------------------------------
+
+export async function listTaskListShares(
+  listId: string
+): Promise<{ user_id: string; permission: "read" | "write" }[]> {
+  const { data, error } = await supabase
+    .from("shares")
+    .select("user_id, permission")
+    .eq("entity_type", "task_list")
+    .eq("entity_id", listId);
+  if (error) throw error;
+  return (data ?? []) as { user_id: string; permission: "read" | "write" }[];
+}
+
+export async function setTaskListShare(
+  organizationId: string,
+  listId: string,
+  userId: string,
+  permission: "read" | "write"
+): Promise<void> {
+  const { error } = await supabase.from("shares").upsert(
+    {
+      organization_id: organizationId,
+      entity_type: "task_list",
+      entity_id: listId,
+      user_id: userId,
+      permission,
+    },
+    { onConflict: "entity_type,entity_id,user_id" }
+  );
+  if (error) throw error;
+}
+
+export async function removeTaskListShare(
+  listId: string,
+  userId: string
+): Promise<void> {
+  const { error } = await supabase
+    .from("shares")
+    .delete()
+    .eq("entity_type", "task_list")
+    .eq("entity_id", listId)
+    .eq("user_id", userId);
+  if (error) throw error;
 }

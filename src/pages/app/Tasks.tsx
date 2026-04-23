@@ -155,7 +155,6 @@ export function Tasks() {
       fromKey: "dueAfter",
       toKey: "dueBefore",
     },
-    { key: "onlyWithTimer", type: "boolean", label: "סטופר פעיל בלבד" },
   ];
 
   const handleDragEnd = (e: DragEndEvent) => {

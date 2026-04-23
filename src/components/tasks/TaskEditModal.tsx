@@ -46,6 +46,7 @@ import {
   hoursToMinutes,
   minutesToHours,
 } from "@/components/ui/DurationInput";
+import { TaskDependenciesSection } from "@/components/tasks/TaskDependenciesSection";
 
 interface TaskEditModalProps {
   taskId: string | null;
@@ -400,8 +401,13 @@ export function TaskEditModal({ taskId, onClose }: TaskEditModalProps) {
                       ariaLabel="הערכת שעות"
                     />
                   </Field>
-                  <p className="text-xs text-ink-500">
-                    חזרה, תלויות ומשימת-אם — בקרוב.
+
+                  <div className="pt-2 border-t border-ink-200">
+                    {task && <TaskDependenciesSection taskId={task.id} />}
+                  </div>
+
+                  <p className="text-xs text-ink-400">
+                    חזרה (RRULE) ומשימת-אם — בקרוב.
                   </p>
                 </div>
               )}

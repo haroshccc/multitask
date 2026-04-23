@@ -2,17 +2,28 @@ import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Calendar as CalendarIcon,
+  Check,
+  Circle,
   Clock,
   Flame,
+  ListTree,
   Loader2,
   MapPin,
+  Plus,
   Save,
   StickyNote,
   Trash2,
   X,
 } from "lucide-react";
 import type { Task, TaskUpdate } from "@/lib/types/domain";
-import { useDeleteTask, useUpdateTask } from "@/lib/queries/tasks";
+import {
+  useCreateTask,
+  useDeleteTask,
+  useSubtasks,
+  useUpdateTask,
+  useUpdateTaskStatus,
+} from "@/lib/queries/tasks";
+import { useAuth } from "@/lib/auth/AuthContext";
 import { TaskTimerButton } from "./TaskTimerButton";
 import { cn } from "@/lib/utils/cn";
 
@@ -241,6 +252,8 @@ export function TaskDetailDrawer({ task, onClose }: Props) {
               )}
             </div>
 
+            <SubtasksSection parentId={task.id} orgId={task.organization_id} />
+
             {error && (
               <div className="text-xs text-danger-600 bg-danger-500/10 border border-danger-500/20 rounded-xl px-3 py-2">
                 {error}
@@ -298,6 +311,124 @@ function Field({
       </span>
       {children}
     </label>
+  );
+}
+
+function SubtasksSection({ parentId, orgId }: { parentId: string; orgId: string }) {
+  const { user } = useAuth();
+  const subtasks = useSubtasks(parentId);
+  const createTask = useCreateTask();
+  const updateStatus = useUpdateTaskStatus();
+  const deleteTask = useDeleteTask();
+  const [draft, setDraft] = useState("");
+
+  const handleAdd = async () => {
+    const title = draft.trim();
+    if (!title || !user) return;
+    await createTask.mutateAsync({
+      orgId,
+      ownerId: user.id,
+      title,
+      parentTaskId: parentId,
+    });
+    setDraft("");
+  };
+
+  const items = subtasks.data ?? [];
+  const doneCount = items.filter((t) => t.status === "done").length;
+
+  return (
+    <div className="pt-3 border-t border-ink-200">
+      <div className="flex items-center gap-2 mb-2">
+        <ListTree className="w-3.5 h-3.5 text-ink-500" />
+        <div className="text-xs text-ink-500">תת-משימות</div>
+        {items.length > 0 && (
+          <span className="chip">
+            {doneCount}/{items.length}
+          </span>
+        )}
+      </div>
+
+      {items.length > 0 && (
+        <ul className="space-y-1 mb-2">
+          {items.map((sub) => {
+            const done = sub.status === "done";
+            return (
+              <li
+                key={sub.id}
+                className={cn(
+                  "flex items-center gap-2 px-2 py-1.5 rounded-lg group hover:bg-ink-50",
+                  done && "opacity-60"
+                )}
+              >
+                <button
+                  onClick={() =>
+                    updateStatus.mutate({
+                      id: sub.id,
+                      status: done ? "todo" : "done",
+                    })
+                  }
+                  className={cn(
+                    "w-4 h-4 rounded-full border flex items-center justify-center shrink-0",
+                    done
+                      ? "bg-success-500 border-success-500 text-white"
+                      : "border-ink-300 hover:border-primary-500"
+                  )}
+                  aria-label={done ? "בטל" : "סמן"}
+                >
+                  {done ? <Check className="w-2.5 h-2.5" /> : <Circle className="w-0 h-0" />}
+                </button>
+                <span
+                  className={cn(
+                    "flex-1 min-w-0 text-sm break-words",
+                    done && "line-through text-ink-500"
+                  )}
+                >
+                  {sub.title}
+                </span>
+                <button
+                  onClick={() => {
+                    if (confirm("למחוק תת-משימה?")) deleteTask.mutate(sub.id);
+                  }}
+                  className="p-1 rounded text-ink-400 hover:text-danger-600 hover:bg-danger-500/10 opacity-0 group-hover:opacity-100"
+                  aria-label="מחק"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      <div className="flex items-center gap-1">
+        <input
+          className="field text-sm flex-1"
+          placeholder="תת-משימה חדשה — Enter"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              handleAdd();
+            }
+          }}
+          disabled={createTask.isPending}
+        />
+        <button
+          onClick={handleAdd}
+          disabled={!draft.trim() || createTask.isPending}
+          className="btn-accent shrink-0 py-2 px-2.5"
+          aria-label="הוסיפי"
+        >
+          {createTask.isPending ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <Plus className="w-4 h-4" />
+          )}
+        </button>
+      </div>
+    </div>
   );
 }
 

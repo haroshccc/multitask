@@ -23,6 +23,7 @@ export function useTasks(orgId: string | null, options: ListOptions) {
         .from("tasks")
         .select("*")
         .eq("organization_id", orgId!)
+        .is("parent_task_id", null)
         .order("completed_at", { ascending: true, nullsFirst: true })
         .order("sort_order", { ascending: true })
         .order("created_at", { ascending: false });
@@ -74,6 +75,48 @@ export function useTasksInRange(
   });
 }
 
+export function useTasksByList(orgId: string | null, listId: string | null) {
+  return useQuery({
+    queryKey: ["tasks", orgId ?? "none", "list", listId ?? "none"] as const,
+    enabled: Boolean(orgId),
+    queryFn: async (): Promise<Task[]> => {
+      let query = supabase
+        .from("tasks")
+        .select("*")
+        .eq("organization_id", orgId!)
+        .is("parent_task_id", null)
+        .neq("status", "cancelled")
+        .order("completed_at", { ascending: true, nullsFirst: true })
+        .order("sort_order", { ascending: true });
+      if (listId) {
+        query = query.eq("task_list_id", listId);
+      } else {
+        query = query.is("task_list_id", null);
+      }
+      const { data, error } = await query;
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+}
+
+export function useSubtasks(parentId: string | null) {
+  return useQuery({
+    queryKey: ["tasks", "subtasks", parentId ?? "none"] as const,
+    enabled: Boolean(parentId),
+    queryFn: async (): Promise<Task[]> => {
+      const { data, error } = await supabase
+        .from("tasks")
+        .select("*")
+        .eq("parent_task_id", parentId!)
+        .order("completed_at", { ascending: true, nullsFirst: true })
+        .order("sort_order", { ascending: true });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+}
+
 export function useTask(id: string | null) {
   return useQuery({
     queryKey: ["tasks", "detail", id ?? "none"] as const,
@@ -98,6 +141,8 @@ interface CreateTaskInput {
   sourceThoughtId?: string;
   scheduledAt?: string | null;
   urgency?: number;
+  taskListId?: string | null;
+  parentTaskId?: string | null;
 }
 
 export function useCreateTask() {
@@ -111,6 +156,8 @@ export function useCreateTask() {
       sourceThoughtId,
       scheduledAt,
       urgency,
+      taskListId,
+      parentTaskId,
     }: CreateTaskInput): Promise<Task> => {
       const insert: TaskInsert = {
         organization_id: orgId,
@@ -121,6 +168,8 @@ export function useCreateTask() {
         scheduled_at: scheduledAt ?? null,
         urgency: urgency ?? 3,
         status: "todo",
+        task_list_id: taskListId ?? null,
+        parent_task_id: parentTaskId ?? null,
       };
       const { data, error } = await supabase
         .from("tasks")
@@ -191,6 +240,30 @@ export function useUpdateTask() {
     onSuccess: (task) => {
       qc.invalidateQueries({ queryKey: taskKeys.all });
       qc.invalidateQueries({ queryKey: ["tasks", "detail", task.id] });
+    },
+  });
+}
+
+// Reorder/move a task. Caller computes the new sort_order (typically the
+// midpoint of the neighbors' sort_orders, or first/last + 1) and optionally
+// passes a new task_list_id when dropping into a different list.
+interface ReorderTaskInput {
+  id: string;
+  sortOrder: number;
+  taskListId?: string | null;
+}
+
+export function useReorderTask() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, sortOrder, taskListId }: ReorderTaskInput) => {
+      const patch: TaskUpdate = { sort_order: sortOrder };
+      if (taskListId !== undefined) patch.task_list_id = taskListId;
+      const { error } = await supabase.from("tasks").update(patch).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: taskKeys.all });
     },
   });
 }

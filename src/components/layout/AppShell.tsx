@@ -13,7 +13,6 @@ import {
   LogOut,
   Plus,
   Search,
-  Bell,
   Menu,
   X,
 } from "lucide-react";
@@ -21,6 +20,7 @@ import { useAuth } from "@/lib/auth/AuthContext";
 import { cn } from "@/lib/utils/cn";
 import { QuickCapture } from "@/components/capture/QuickCapture";
 import { ActiveTimerPill } from "@/components/tasks/ActiveTimerPill";
+import { NotificationsBell } from "@/components/notifications/NotificationsBell";
 import { Logo } from "@/components/brand/Logo";
 
 interface NavItem {
@@ -94,9 +94,7 @@ export function AppShell() {
           <button className="p-2 rounded-xl hover:bg-ink-100" aria-label="חיפוש">
             <Search className="w-5 h-5 text-ink-600" />
           </button>
-          <button className="p-2 rounded-xl hover:bg-ink-100" aria-label="התראות">
-            <Bell className="w-5 h-5 text-ink-600" />
-          </button>
+          <NotificationsBell />
           <button
             onClick={() => setCaptureOpen(true)}
             className="p-2 rounded-xl bg-primary-500 text-white hover:bg-primary-600"

@@ -648,28 +648,37 @@ function UrgencyChip({
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
           <div className="absolute end-0 mt-1 z-20 bg-white border border-ink-200 rounded-xl shadow-lift p-2 flex items-center gap-2">
-            {[1, 2, 3].map((n) => (
+            {[0, 1, 2, 3].map((n) => (
               <button
                 key={n}
                 type="button"
                 onClick={() => {
-                  onChange(n === filled ? 0 : n);
+                  onChange(n);
                   setOpen(false);
                 }}
-                className="flex flex-col items-center gap-1.5 p-1 rounded-md hover:bg-ink-100"
-                title={`${n}/3`}
+                className={cn(
+                  "flex flex-col items-center gap-1.5 p-1 rounded-md hover:bg-ink-100",
+                  n === filled && "bg-ink-100 ring-1 ring-ink-300"
+                )}
+                title={n === 0 ? "ללא דירוג" : `${n}/3`}
               >
-                <div className="flex flex-col items-center gap-[3px]">
-                  {[3, 2, 1].map((row) => (
-                    <span
-                      key={row}
-                      className={cn(
-                        "h-[3px] w-5 rounded-sm",
-                        row <= n ? "bg-ink-900" : "bg-ink-200"
-                      )}
-                    />
-                  ))}
-                </div>
+                {n === 0 ? (
+                  <div className="flex flex-col items-center justify-center gap-[3px] h-[21px]">
+                    <span className="text-ink-400 text-xs">∅</span>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center gap-[3px]">
+                    {[3, 2, 1].map((row) => (
+                      <span
+                        key={row}
+                        className={cn(
+                          "h-[3px] w-5 rounded-sm",
+                          row <= n ? "bg-ink-900" : "bg-ink-200"
+                        )}
+                      />
+                    ))}
+                  </div>
+                )}
                 <span className="text-[10px] font-mono text-ink-500">{n}</span>
               </button>
             ))}

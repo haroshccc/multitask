@@ -14,6 +14,7 @@ import {
   Minus,
   Plus,
   Columns,
+  Tag,
 } from "lucide-react";
 import { MAX_VISIBLE_BOUNDS } from "@/lib/hooks/useMaxVisibleColumns";
 import { ScreenScaffold } from "@/components/layout/ScreenScaffold";
@@ -29,6 +30,7 @@ import { ArchiveModal } from "@/components/tasks/ArchiveModal";
 import { RowDisplaySettingsModal } from "@/components/tasks/RowDisplaySettingsModal";
 import { StatsPanel } from "@/components/tasks/StatsPanel";
 import { UnassignedBanner } from "@/components/tasks/UnassignedBanner";
+import { StatusesModal } from "@/components/tasks/StatusesModal";
 import type { TaskTreeNode } from "@/components/tasks/TaskRow";
 import {
   useTasks,
@@ -55,6 +57,7 @@ export function Tasks() {
   const [pageMenuOpen, setPageMenuOpen] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [rowDisplayOpen, setRowDisplayOpen] = useState(false);
+  const [statusesOpen, setStatusesOpen] = useState(false);
   const [statsOpen, setStatsOpen] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
     // Default: closed (user can open via the chevron on the header)
@@ -316,6 +319,17 @@ export function Tasks() {
                 <button
                   type="button"
                   onClick={() => {
+                    setStatusesOpen(true);
+                    setPageMenuOpen(false);
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-ink-700 hover:bg-ink-100 text-start"
+                >
+                  <Tag className="w-4 h-4" />
+                  עריכת סטטוסים
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
                     setArchiveOpen(true);
                     setPageMenuOpen(false);
                   }}
@@ -406,6 +420,8 @@ export function Tasks() {
           onClose={() => setRowDisplayOpen(false)}
         />
       )}
+
+      {statusesOpen && <StatusesModal onClose={() => setStatusesOpen(false)} />}
     </ScreenScaffold>
   );
 }

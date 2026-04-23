@@ -40,9 +40,16 @@ interface TaskColumnProps {
   onOpenEdit: (taskId: string) => void;
 }
 
+// 20 category icons matching the "themes" palette screenshots. Ordered by row:
+//   1. work / household / shopping / study / fitness
+//   2. appointments / ideas / leisure / personal-care / projects
+//   3. health / finance / garden / pets / travel
+//   4. cooking / holidays / communication / creation / repairs
 const EMOJI_PRESETS = [
-  "📋", "🎨", "🎯", "📦", "🚀", "💡", "💼", "📌",
-  "🔖", "✨", "🔥", "⚡", "📝", "🗂️", "🏁", "📥",
+  "📋", "🏠", "🛒", "📚", "🏃",
+  "📅", "💡", "🎬", "🪥", "📁",
+  "🩺", "💰", "🪴", "🐾", "🧳",
+  "🍳", "🎁", "📱", "🎨", "🔧",
 ];
 
 const COLOR_PRESETS = [
@@ -242,7 +249,7 @@ export function TaskColumn({
           <>
             <div className="fixed inset-0 z-20" onClick={() => setEmojiOpen(false)} />
             <div className="absolute top-full start-2 mt-1 z-30 bg-white border border-ink-200 rounded-xl shadow-lift p-2">
-              <div className="grid grid-cols-8 gap-1">
+              <div className="grid grid-cols-5 gap-1">
                 {EMOJI_PRESETS.map((e) => (
                   <button
                     key={e}

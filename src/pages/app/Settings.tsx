@@ -1,16 +1,9 @@
 import { useState } from "react";
 import { ScreenScaffold } from "@/components/layout/ScreenScaffold";
 import { cn } from "@/lib/utils/cn";
-import {
-  User,
-  Building2,
-  Bell,
-  ListTodo,
-  type LucideIcon,
-} from "lucide-react";
-import { StatusesSettings } from "@/components/settings/StatusesSettings";
+import { User, Building2, Bell, type LucideIcon } from "lucide-react";
 
-type Tab = "statuses" | "profile" | "organization" | "notifications";
+type Tab = "profile" | "organization" | "notifications";
 
 interface TabDef {
   key: Tab;
@@ -19,22 +12,20 @@ interface TabDef {
 }
 
 const TABS: TabDef[] = [
-  { key: "statuses", label: "סטטוסים", icon: ListTodo },
   { key: "profile", label: "פרופיל", icon: User },
   { key: "organization", label: "ארגון", icon: Building2 },
   { key: "notifications", label: "התראות", icon: Bell },
 ];
 
 export function Settings() {
-  const [tab, setTab] = useState<Tab>("statuses");
+  const [tab, setTab] = useState<Tab>("profile");
 
   return (
     <ScreenScaffold
       title="הגדרות"
-      subtitle="התאימי את הכלים שלך — סטטוסים, פרופיל, ארגון, והתראות."
+      subtitle="פרופיל, ארגון, והתראות. הגדרות פר-מסך (כמו סטטוסים, ארכיון, תצוגת שורה) חיות בכפתור 'הגדרות הדף' שבמסכים עצמם."
     >
       <div className="grid grid-cols-1 md:grid-cols-[220px,1fr] gap-4">
-        {/* Sidebar */}
         <nav className="card p-2 h-max">
           <ul className="space-y-0.5">
             {TABS.map((t) => {
@@ -62,7 +53,6 @@ export function Settings() {
         </nav>
 
         <div>
-          {tab === "statuses" && <StatusesSettings />}
           {tab === "profile" && <Placeholder text="פרופיל — בקרוב" />}
           {tab === "organization" && <Placeholder text="ארגון — בקרוב" />}
           {tab === "notifications" && <Placeholder text="התראות — בקרוב" />}

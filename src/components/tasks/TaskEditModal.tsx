@@ -12,6 +12,11 @@ import {
   History,
   Trash2,
   Plus,
+  Mic,
+  Lightbulb,
+  Link as LinkIcon,
+  FileText,
+  MapPin,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { useTask, useUpdateTask, useCompleteTask } from "@/lib/hooks/useTasks";
@@ -26,6 +31,12 @@ import {
 } from "@/lib/hooks/useTimer";
 import { useTaskLists } from "@/lib/hooks/useTaskLists";
 import type { TaskStatus, TimeEntry } from "@/lib/types/domain";
+import { DateTimePicker } from "@/components/ui/DateTimePicker";
+import {
+  DurationInput,
+  hoursToMinutes,
+  minutesToHours,
+} from "@/components/ui/DurationInput";
 
 interface TaskEditModalProps {
   taskId: string | null;
@@ -61,9 +72,9 @@ export function TaskEditModal({ taskId, onClose }: TaskEditModalProps) {
   const [tags, setTags] = useState<string[]>([]);
   const [location, setLocation] = useState("");
   const [externalUrl, setExternalUrl] = useState("");
-  const [estimatedHours, setEstimatedHours] = useState<string>("");
-  const [scheduledAt, setScheduledAt] = useState("");
-  const [durationMinutes, setDurationMinutes] = useState<string>("");
+  const [scheduledAt, setScheduledAt] = useState<string | null>(null); // ISO
+  const [durationMinutes, setDurationMinutes] = useState<number | null>(null);
+  const [estimatedMinutes, setEstimatedMinutes] = useState<number | null>(null);
 
   useEffect(() => {
     if (!task) return;
@@ -76,9 +87,9 @@ export function TaskEditModal({ taskId, onClose }: TaskEditModalProps) {
     setTags(task.tags ?? []);
     setLocation(task.location ?? "");
     setExternalUrl(task.external_url ?? "");
-    setEstimatedHours(task.estimated_hours?.toString() ?? "");
-    setScheduledAt(task.scheduled_at ? task.scheduled_at.slice(0, 16) : "");
-    setDurationMinutes(task.duration_minutes?.toString() ?? "");
+    setScheduledAt(task.scheduled_at ?? null);
+    setDurationMinutes(task.duration_minutes ?? null);
+    setEstimatedMinutes(hoursToMinutes(task.estimated_hours ?? null));
   }, [task?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleBlurSave = () => {
@@ -95,11 +106,19 @@ export function TaskEditModal({ taskId, onClose }: TaskEditModalProps) {
         tags,
         location: location || null,
         external_url: externalUrl || null,
-        estimated_hours: estimatedHours ? Number(estimatedHours) : null,
-        scheduled_at: scheduledAt ? new Date(scheduledAt).toISOString() : null,
-        duration_minutes: durationMinutes ? Number(durationMinutes) : null,
       },
     });
+  };
+
+  const saveSchedulePatch = (
+    patch: Partial<{
+      scheduled_at: string | null;
+      duration_minutes: number | null;
+      estimated_hours: number | null;
+    }>
+  ) => {
+    if (!task) return;
+    updateTask.mutate({ taskId: task.id, patch });
   };
 
   if (!task && !open) return null;
@@ -291,34 +310,35 @@ export function TaskEditModal({ taskId, onClose }: TaskEditModalProps) {
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-3">
                     <Field label="תאריך ושעה">
-                      <input
-                        type="datetime-local"
+                      <DateTimePicker
                         value={scheduledAt}
-                        onChange={(e) => setScheduledAt(e.target.value)}
-                        onBlur={handleBlurSave}
-                        className="field"
+                        onChange={(iso) => {
+                          setScheduledAt(iso);
+                          saveSchedulePatch({ scheduled_at: iso });
+                        }}
                       />
                     </Field>
-                    <Field label="משך (דקות)">
-                      <input
-                        type="number"
+                    <Field label="משך">
+                      <DurationInput
                         value={durationMinutes}
-                        onChange={(e) => setDurationMinutes(e.target.value)}
-                        onBlur={handleBlurSave}
-                        className="field"
-                        min={0}
+                        onChange={(m) => {
+                          setDurationMinutes(m);
+                          saveSchedulePatch({ duration_minutes: m });
+                        }}
+                        placeholder="00:00"
+                        ariaLabel="משך משימה"
                       />
                     </Field>
                   </div>
                   <Field label="הערכת שעות">
-                    <input
-                      type="number"
-                      step="0.25"
-                      value={estimatedHours}
-                      onChange={(e) => setEstimatedHours(e.target.value)}
-                      onBlur={handleBlurSave}
-                      className="field"
-                      min={0}
+                    <DurationInput
+                      value={estimatedMinutes}
+                      onChange={(m) => {
+                        setEstimatedMinutes(m);
+                        saveSchedulePatch({ estimated_hours: minutesToHours(m) });
+                      }}
+                      placeholder="00:00"
+                      ariaLabel="הערכת שעות"
                     />
                   </Field>
                   <p className="text-xs text-ink-500">
@@ -329,13 +349,7 @@ export function TaskEditModal({ taskId, onClose }: TaskEditModalProps) {
 
               {tab === "history" && task && <TimeEntriesTab task={task} />}
 
-              {tab === "attachments" && (
-                <div className="space-y-3">
-                  <p className="text-sm text-ink-500">
-                    קבצים, הקלטות, מחשבות וקישורים יופיעו כאן. הוספה בקרוב.
-                  </p>
-                </div>
-              )}
+              {tab === "attachments" && <AttachmentsTab />}
             </div>
           </motion.div>
         </motion.div>
@@ -685,4 +699,56 @@ function formatDuration(seconds: number): string {
   const s = seconds % 60;
   if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
   return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+// -----------------------------------------------------------------------------
+// Attachments tab — visual scaffolding only. Wiring lands with the recordings /
+// thoughts / files features. The empty state shows what CAN be attached.
+
+function AttachmentsTab() {
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+        <AttachmentSlot icon={<Mic className="w-4 h-4" />} label="הקלטה" />
+        <AttachmentSlot icon={<Lightbulb className="w-4 h-4" />} label="מחשבה" />
+        <AttachmentSlot icon={<FileText className="w-4 h-4" />} label="קובץ" />
+        <AttachmentSlot icon={<LinkIcon className="w-4 h-4" />} label="קישור" />
+        <AttachmentSlot icon={<MapPin className="w-4 h-4" />} label="מיקום" />
+        <AttachmentSlot icon={<CalendarIcon className="w-4 h-4" />} label="אירוע" />
+      </div>
+
+      <div className="rounded-xl border border-dashed border-ink-300 bg-ink-50/60 p-6 text-center">
+        <Paperclip className="w-5 h-5 mx-auto text-ink-400 mb-1.5" />
+        <p className="text-sm text-ink-600">
+          אין צירופים למשימה הזו עדיין.
+        </p>
+        <p className="text-xs text-ink-400 mt-0.5">
+          לחצי על אחד מהטיפוסים למעלה כדי לצרף.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function AttachmentSlot({
+  icon,
+  label,
+}: {
+  icon: React.ReactNode;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      disabled
+      className="group flex items-center gap-2 rounded-xl border border-ink-200 bg-white px-3 py-2.5 text-sm text-ink-700 cursor-not-allowed opacity-70"
+      title="בקרוב"
+    >
+      <span className="w-7 h-7 rounded-lg bg-primary-50 text-primary-700 flex items-center justify-center">
+        {icon}
+      </span>
+      <span className="font-medium">{label}</span>
+      <Plus className="w-3.5 h-3.5 ms-auto text-ink-400" />
+    </button>
+  );
 }

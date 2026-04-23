@@ -1,6 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
-import { Play, Pause, Star, MoreHorizontal, Copy, Pencil, GripVertical } from "lucide-react";
+import {
+  Play,
+  Pause,
+  Star,
+  MoreHorizontal,
+  Copy,
+  Pencil,
+  GripVertical,
+  CornerDownLeft,
+} from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import {
   useCompleteTask,
@@ -141,6 +150,18 @@ export function TaskRow({
     setMenuOpen(false);
   };
 
+  const handleAddSubtask = async () => {
+    const newTask = await createTask.mutateAsync({
+      title: "",
+      task_list_id: listId ?? null,
+      parent_task_id: task.id,
+      status: "todo",
+      urgency: 3,
+    });
+    setCollapsed(false);
+    onRequestFocus(newTask.id);
+  };
+
   // DnD — the row is both a drag source AND a drop target
   // (dropping a task onto a row makes it a child of that row).
   const {
@@ -275,6 +296,17 @@ export function TaskRow({
           )}
         </button>
 
+        {/* + subtask — visible on row hover */}
+        <button
+          onClick={handleAddSubtask}
+          className="shrink-0 p-1 rounded-md text-ink-400 hover:text-primary-700 hover:bg-primary-50 opacity-0 group-hover:opacity-100 transition-opacity"
+          aria-label="הוסף תת-משימה"
+          title="הוסף תת-משימה"
+          type="button"
+        >
+          <CornerDownLeft className="w-3.5 h-3.5" />
+        </button>
+
         {/* Menu */}
         <div className="relative shrink-0">
           <button
@@ -288,7 +320,16 @@ export function TaskRow({
           {menuOpen && (
             <>
               <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-              <div className="absolute end-0 mt-1 w-44 bg-white border border-ink-200 rounded-lg shadow-lift z-20 py-1 text-sm">
+              <div className="absolute end-0 mt-1 w-48 bg-white border border-ink-200 rounded-xl shadow-lift z-20 py-1 text-sm">
+                <MenuBtn
+                  icon={<CornerDownLeft className="w-3.5 h-3.5" />}
+                  onClick={() => {
+                    handleAddSubtask();
+                    setMenuOpen(false);
+                  }}
+                >
+                  הוסף תת-משימה
+                </MenuBtn>
                 <MenuBtn
                   icon={<Pencil className="w-3.5 h-3.5" />}
                   onClick={() => {

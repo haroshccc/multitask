@@ -176,6 +176,58 @@ export async function duplicateTaskTree(
   return data as string;
 }
 
+/**
+ * Duplicates just the task row (no subtree). Places the copy at the end of
+ * its sibling scope in the chosen list (defaults to the source's list).
+ */
+export async function duplicateTask(
+  sourceTaskId: string,
+  targetListId?: string | null
+): Promise<Task> {
+  const { data: src, error: srcErr } = await supabase
+    .from("tasks")
+    .select("*")
+    .eq("id", sourceTaskId)
+    .single();
+  if (srcErr) throw srcErr;
+
+  const listId = targetListId === undefined ? src.task_list_id : targetListId;
+
+  const payload: TaskInsert = {
+    organization_id: src.organization_id,
+    owner_id: src.owner_id,
+    task_list_id: listId,
+    parent_task_id: null,
+    title: `${src.title} (העתק)`,
+    description: src.description,
+    status: "todo",
+    urgency: src.urgency,
+    scheduled_at: src.scheduled_at,
+    duration_minutes: src.duration_minutes,
+    is_event: src.is_event,
+    estimated_hours: src.estimated_hours,
+    spare_hours: src.spare_hours,
+    assignee_user_id: src.assignee_user_id,
+    requires_approval: src.requires_approval,
+    approver_user_id: src.approver_user_id,
+    recurrence_rule: src.recurrence_rule,
+    recurrence_ends_at: src.recurrence_ends_at,
+    custom_fields: src.custom_fields,
+    location: src.location,
+    external_url: src.external_url,
+    notes: src.notes,
+    tags: src.tags,
+  };
+
+  return createTask(payload);
+}
+
+/** Hard delete. Child tasks cascade via FK. */
+export async function deleteTask(taskId: string): Promise<void> {
+  const { error } = await supabase.from("tasks").delete().eq("id", taskId);
+  if (error) throw error;
+}
+
 // Dependencies ---------------------------------------------------------------
 
 export async function listTaskDependencies(taskId: string): Promise<TaskDependency[]> {

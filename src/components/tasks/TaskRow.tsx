@@ -5,9 +5,13 @@ import {
   Pause,
   MoreHorizontal,
   Copy,
+  CopyPlus,
+  FolderInput,
   Pencil,
   GripVertical,
   CornerDownLeft,
+  Trash2,
+  ChevronLeft,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import {
@@ -16,7 +20,10 @@ import {
   useCreateTask,
   useSetTaskParent,
   useDuplicateTaskTree,
+  useDuplicateTask,
+  useDeleteTask,
 } from "@/lib/hooks/useTasks";
+import { useTaskLists } from "@/lib/hooks/useTaskLists";
 import {
   useActiveTimer,
   useStartTimer,
@@ -71,7 +78,10 @@ export function TaskRow({
   const completeTask = useCompleteTask();
   const createTask = useCreateTask();
   const setParent = useSetTaskParent();
-  const duplicate = useDuplicateTaskTree();
+  const duplicateTree = useDuplicateTaskTree();
+  const duplicateOne = useDuplicateTask();
+  const deleteTaskM = useDeleteTask();
+  const { data: taskLists = [] } = useTaskLists();
   const startTimer = useStartTimer();
   const stopTimer = useStopTimer();
   const { data: activeTimer } = useActiveTimer();
@@ -79,6 +89,8 @@ export function TaskRow({
   const [draft, setDraft] = useState(task.title);
   const [collapsed, setCollapsed] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [duplicateToListOpen, setDuplicateToListOpen] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const [timeUnit] = useTimeUnit();
@@ -178,9 +190,31 @@ export function TaskRow({
     else startTimer.mutate({ taskId: task.id });
   };
 
-  const handleDuplicate = () => {
-    duplicate.mutate({ sourceTaskId: task.id });
+  const handleDuplicateSingle = () => {
+    duplicateOne.mutate({ sourceTaskId: task.id });
     setMenuOpen(false);
+  };
+
+  const handleDuplicateTree = () => {
+    duplicateTree.mutate({ sourceTaskId: task.id });
+    setMenuOpen(false);
+  };
+
+  const handleDuplicateToList = (targetListId: string | null) => {
+    duplicateTree.mutate({
+      sourceTaskId: task.id,
+      targetListId: targetListId ?? undefined,
+    });
+    setDuplicateToListOpen(false);
+    setMenuOpen(false);
+  };
+
+  const handleDelete = () => {
+    const taskId = task.id;
+    deleteTaskM.mutate(taskId);
+    setConfirmDelete(false);
+    setMenuOpen(false);
+    // No undo for delete — the DB cascades children. We gate via confirmation.
   };
 
   const handleAddSubtask = async () => {
@@ -431,7 +465,7 @@ export function TaskRow({
           </button>
         )}
 
-        {/* + subtask — visible on row hover */}
+        {/* Outside action cluster: + subtask, edit pencil, overflow menu */}
         <button
           onClick={handleAddSubtask}
           className="shrink-0 p-1 rounded-md text-ink-400 hover:text-primary-700 hover:bg-primary-50 opacity-0 group-hover:opacity-100 transition-opacity"
@@ -442,7 +476,16 @@ export function TaskRow({
           <CornerDownLeft className="w-3.5 h-3.5" />
         </button>
 
-        {/* Menu */}
+        <button
+          onClick={() => onOpenEdit(task.id)}
+          className="shrink-0 p-1 rounded-md text-ink-400 hover:text-ink-900 hover:bg-ink-100 opacity-0 group-hover:opacity-100 transition-opacity"
+          aria-label="ערוך פרטים"
+          title="ערוך פרטים"
+          type="button"
+        >
+          <Pencil className="w-3.5 h-3.5" />
+        </button>
+
         <div className="relative shrink-0">
           <button
             onClick={() => setMenuOpen((v) => !v)}
@@ -455,36 +498,103 @@ export function TaskRow({
           {menuOpen && (
             <>
               <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-              <div className="absolute end-0 mt-1 w-48 bg-white border border-ink-200 rounded-xl shadow-lift z-20 py-1 text-sm">
-                <MenuBtn
-                  icon={<CornerDownLeft className="w-3.5 h-3.5" />}
-                  onClick={() => {
-                    handleAddSubtask();
-                    setMenuOpen(false);
-                  }}
-                >
-                  הוסף תת-משימה
-                </MenuBtn>
-                <MenuBtn
-                  icon={<Pencil className="w-3.5 h-3.5" />}
-                  onClick={() => {
-                    onOpenEdit(task.id);
-                    setMenuOpen(false);
-                  }}
-                >
-                  ערוך פרטים
-                </MenuBtn>
+              <div className="absolute end-0 mt-1 w-56 bg-white border border-ink-200 rounded-xl shadow-lift z-20 py-1 text-sm">
                 <MenuBtn
                   icon={<Copy className="w-3.5 h-3.5" />}
-                  onClick={handleDuplicate}
+                  onClick={handleDuplicateSingle}
                 >
-                  שכפל תת-עץ
+                  שכפל משימה
                 </MenuBtn>
+                <MenuBtn
+                  icon={<CopyPlus className="w-3.5 h-3.5" />}
+                  onClick={handleDuplicateTree}
+                >
+                  שכפל עץ
+                </MenuBtn>
+                <button
+                  type="button"
+                  onClick={() => setDuplicateToListOpen((v) => !v)}
+                  className="w-full flex items-center justify-between gap-2 px-3 py-1.5 text-ink-700 hover:bg-ink-100 text-start"
+                >
+                  <span className="inline-flex items-center gap-2">
+                    <FolderInput className="w-3.5 h-3.5" />
+                    שכפל לרשימה אחרת
+                  </span>
+                  <ChevronLeft className="w-3 h-3 text-ink-400" />
+                </button>
+                {duplicateToListOpen && (
+                  <div className="max-h-52 overflow-y-auto border-t border-ink-100 mt-0.5">
+                    <button
+                      type="button"
+                      onClick={() => handleDuplicateToList(null)}
+                      className="w-full flex items-center gap-2 px-5 py-1.5 text-ink-700 hover:bg-ink-100 text-start text-[13px]"
+                    >
+                      לא משויכת
+                    </button>
+                    {taskLists.map((l) => (
+                      <button
+                        key={l.id}
+                        type="button"
+                        onClick={() => handleDuplicateToList(l.id)}
+                        className="w-full flex items-center gap-2 px-5 py-1.5 text-ink-700 hover:bg-ink-100 text-start text-[13px]"
+                      >
+                        {l.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <div className="h-px bg-ink-100 my-1" />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setConfirmDelete(true);
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-1.5 text-danger-600 hover:bg-danger/10 text-start"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  מחק משימה
+                </button>
               </div>
             </>
           )}
         </div>
       </div>
+
+      {confirmDelete && (
+        <div
+          className="fixed inset-0 z-[60] bg-ink-900/40 flex items-center justify-center p-4"
+          onClick={() => setConfirmDelete(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-lift w-full max-w-sm p-4 space-y-3"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="font-semibold text-ink-900">מחיקת משימה</h3>
+            <p className="text-sm text-ink-600">
+              זה ימחק את "{task.title}" לצמיתות — וגם את כל תת-המשימות שלה אם יש.
+              הפעולה לא ניתנת לביטול.
+            </p>
+            <div className="flex items-center justify-end gap-2">
+              <button
+                onClick={() => setConfirmDelete(false)}
+                className="btn-ghost text-xs"
+                type="button"
+              >
+                בטל
+              </button>
+              <button
+                onClick={handleDelete}
+                className="text-xs inline-flex items-center justify-center gap-1.5 rounded-sm px-4 py-2.5 font-medium bg-danger-500 text-white hover:bg-danger-600 transition-colors"
+                type="button"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                מחק
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Children */}
       {!collapsed && children.length > 0 && (

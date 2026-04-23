@@ -191,6 +191,38 @@ export function useDuplicateTaskTree() {
   });
 }
 
+export function useDuplicateTask() {
+  const qc = useQueryClient();
+  const scope = useOrgScope();
+  return useMutation({
+    mutationFn: ({
+      sourceTaskId,
+      targetListId,
+    }: {
+      sourceTaskId: string;
+      targetListId?: string | null;
+    }) => tasksService.duplicateTask(sourceTaskId, targetListId),
+    onSuccess: () => {
+      if (scope.organizationId) {
+        qc.invalidateQueries({ queryKey: queryFamilies.allTasks(scope.organizationId) });
+      }
+    },
+  });
+}
+
+export function useDeleteTask() {
+  const qc = useQueryClient();
+  const scope = useOrgScope();
+  return useMutation({
+    mutationFn: (taskId: string) => tasksService.deleteTask(taskId),
+    onSuccess: () => {
+      if (scope.organizationId) {
+        qc.invalidateQueries({ queryKey: queryFamilies.allTasks(scope.organizationId) });
+      }
+    },
+  });
+}
+
 // Dependencies ---------------------------------------------------------------
 
 export function useTaskDependencies(taskId: string | null | undefined) {

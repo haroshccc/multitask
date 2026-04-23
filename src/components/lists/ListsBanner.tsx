@@ -1,11 +1,15 @@
 import { useState, useMemo } from "react";
-import { Plus, ChevronDown, ChevronUp, Eye, EyeOff } from "lucide-react";
+import { Plus, ChevronDown, ChevronUp, Eye, EyeOff, Minus } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { useListVisibility, useSetListVisibility } from "@/lib/hooks/useListVisibility";
 import { useTaskLists } from "@/lib/hooks/useTaskLists";
 import { useThoughtLists } from "@/lib/hooks/useThoughtLists";
 import { useCreateTaskList } from "@/lib/hooks/useTaskLists";
 import { useCreateThoughtList } from "@/lib/hooks/useThoughtLists";
+import {
+  useMaxVisibleColumns,
+  MAX_VISIBLE_BOUNDS,
+} from "@/lib/hooks/useMaxVisibleColumns";
 import type { DashboardScreen, TaskList, ThoughtList } from "@/lib/types/domain";
 
 export type ListKind = "task" | "thought";
@@ -36,6 +40,7 @@ export function ListsBanner({ screenKey, kind, className, extra }: ListsBannerPr
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
   const [showHidden, setShowHidden] = useState(false);
+  const [maxVisible, setMaxVisible] = useMaxVisibleColumns(screenKey);
 
   const lists: UnifiedList[] = useMemo(() => {
     if (kind === "task") {
@@ -123,7 +128,35 @@ export function ListsBanner({ screenKey, kind, className, extra }: ListsBannerPr
             <Plus className="w-4 h-4" />
           </button>
         )}
-        {extra && <div className="ms-auto flex items-center gap-2">{extra}</div>}
+
+        <div className="ms-auto flex items-center gap-2">
+          {/* Max-visible columns stepper */}
+          <div className="inline-flex items-center gap-1 rounded-lg border border-ink-200 bg-white px-1.5 py-0.5 text-xs text-ink-600">
+            <span className="text-[10px] text-ink-500">בתצוגה:</span>
+            <button
+              type="button"
+              onClick={() => setMaxVisible(maxVisible - 1)}
+              disabled={maxVisible <= MAX_VISIBLE_BOUNDS.MIN}
+              className="p-0.5 rounded hover:bg-ink-100 disabled:opacity-40"
+              aria-label="פחות עמודות"
+            >
+              <Minus className="w-3 h-3" />
+            </button>
+            <span className="font-mono tabular-nums w-3 text-center">
+              {maxVisible}
+            </span>
+            <button
+              type="button"
+              onClick={() => setMaxVisible(maxVisible + 1)}
+              disabled={maxVisible >= MAX_VISIBLE_BOUNDS.MAX}
+              className="p-0.5 rounded hover:bg-ink-100 disabled:opacity-40"
+              aria-label="עוד עמודות"
+            >
+              <Plus className="w-3 h-3" />
+            </button>
+          </div>
+          {extra && <div className="flex items-center gap-2">{extra}</div>}
+        </div>
       </div>
 
       {hiddenLists.length > 0 && (

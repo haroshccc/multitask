@@ -24,6 +24,8 @@ import {
   useStopTimer,
 } from "@/lib/hooks/useTimer";
 import { useTimeUnit, formatSeconds } from "@/lib/hooks/useTimeUnit";
+import type { RowDisplayPrefs } from "@/lib/hooks/useRowDisplayPrefs";
+import { Link as LinkIcon, Calendar as CalendarIcon } from "lucide-react";
 import type { Task } from "@/lib/types/domain";
 
 export interface TaskTreeNode {
@@ -47,6 +49,8 @@ interface TaskRowProps {
   /** Which task should auto-focus next render (set by parent after create) */
   focusTaskId: string | null;
   onOpenEdit: (taskId: string) => void;
+  /** Per-user pref of which inline badges to render */
+  display: RowDisplayPrefs;
 }
 
 export function TaskRow({
@@ -58,6 +62,7 @@ export function TaskRow({
   onRequestFocus,
   focusTaskId,
   onOpenEdit,
+  display,
 }: TaskRowProps) {
   const { task, children, depth } = node;
 
@@ -283,16 +288,16 @@ export function TaskRow({
           )}
         />
 
-        {/* Urgency star (single chip with number; tap → 5-star expanded picker) */}
-        <UrgencyChip
-          value={task.urgency}
-          onChange={(v) =>
-            updateTask.mutate({ taskId: task.id, patch: { urgency: v } })
-          }
-        />
+        {display.urgency && (
+          <UrgencyChip
+            value={task.urgency}
+            onChange={(v) =>
+              updateTask.mutate({ taskId: task.id, patch: { urgency: v } })
+            }
+          />
+        )}
 
-        {/* Subtask completion counter (hidden when no subtasks) */}
-        {totalInSubtree > 0 && (
+        {display.subtasks && totalInSubtree > 0 && (
           <span
             className="shrink-0 text-[10px] font-mono tabular-nums text-ink-500 px-1.5 py-0.5 rounded-md bg-ink-100"
             title={`${doneInSubtree} מתוך ${totalInSubtree} תת-משימות הושלמו`}
@@ -301,29 +306,67 @@ export function TaskRow({
           </span>
         )}
 
-        {/* Inline timer */}
-        <button
-          onClick={toggleTimer}
-          className={cn(
-            "shrink-0 p-1 rounded-md transition-colors",
-            isActive
-              ? "bg-primary-500 text-white hover:bg-primary-600"
-              : "text-ink-400 hover:text-ink-900 hover:bg-ink-100"
-          )}
-          aria-label={isActive ? "עצור סטופר" : "התחל סטופר"}
-          title={isActive ? "עצור סטופר" : "התחל סטופר"}
-          type="button"
-        >
-          {isActive ? (
-            <Pause className="w-3.5 h-3.5" />
-          ) : (
-            <Play className="w-3.5 h-3.5" />
-          )}
-        </button>
+        {display.dueDate && task.scheduled_at && (
+          <span
+            className="shrink-0 inline-flex items-center gap-0.5 text-[10px] text-ink-600 px-1.5 py-0.5 rounded-md bg-ink-100"
+            title="תאריך יעד"
+          >
+            <CalendarIcon className="w-3 h-3" />
+            {formatShortDate(task.scheduled_at)}
+          </span>
+        )}
 
-        {/* Elapsed time — shown once the task has any tracked seconds.
-            Click opens the full history tab for editing. */}
-        {task.actual_seconds > 0 && (
+        {display.estimated && task.estimated_hours != null && (
+          <span
+            className="shrink-0 text-[10px] text-ink-600 px-1.5 py-0.5 rounded-md bg-ink-100"
+            title="זמן שהוקצה"
+          >
+            {formatHoursShort(task.estimated_hours)}
+          </span>
+        )}
+
+        {display.estimatedVsActual && task.estimated_hours != null && (
+          <ProgressVsEstimate
+            actualSeconds={task.actual_seconds}
+            estimatedHours={task.estimated_hours}
+          />
+        )}
+
+        {display.link && task.external_url && (
+          <a
+            href={task.external_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="shrink-0 p-0.5 rounded-md text-ink-400 hover:text-primary-700 hover:bg-ink-100"
+            title={task.external_url}
+          >
+            <LinkIcon className="w-3.5 h-3.5" />
+          </a>
+        )}
+
+        {display.timer && (
+          <button
+            onClick={toggleTimer}
+            className={cn(
+              "shrink-0 p-1 rounded-md transition-colors",
+              isActive
+                ? "bg-primary-500 text-white hover:bg-primary-600"
+                : "text-ink-400 hover:text-ink-900 hover:bg-ink-100"
+            )}
+            aria-label={isActive ? "עצור סטופר" : "התחל סטופר"}
+            title={isActive ? "עצור סטופר" : "התחל סטופר"}
+            type="button"
+          >
+            {isActive ? (
+              <Pause className="w-3.5 h-3.5" />
+            ) : (
+              <Play className="w-3.5 h-3.5" />
+            )}
+          </button>
+        )}
+
+        {display.timer && task.actual_seconds > 0 && (
           <button
             type="button"
             onClick={() => onOpenEdit(task.id)}
@@ -399,9 +442,53 @@ export function TaskRow({
           onRequestFocus={onRequestFocus}
           focusTaskId={focusTaskId}
           onOpenEdit={onOpenEdit}
+          display={display}
         />
       )}
     </>
+  );
+}
+
+function formatShortDate(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getDate()}.${d.getMonth() + 1}`;
+}
+
+function formatHoursShort(hours: number): string {
+  if (hours >= 1) {
+    const h = Number.isInteger(hours) ? hours : hours.toFixed(1);
+    return `הוקצו ${h}ש`;
+  }
+  const m = Math.round(hours * 60);
+  return `הוקצו ${m}ד`;
+}
+
+function ProgressVsEstimate({
+  actualSeconds,
+  estimatedHours,
+}: {
+  actualSeconds: number;
+  estimatedHours: number;
+}) {
+  const estimatedSeconds = estimatedHours * 3600;
+  if (estimatedSeconds <= 0) return null;
+  const ratio = actualSeconds / estimatedSeconds;
+  const pct = Math.round(ratio * 100);
+  const over = ratio > 1;
+  return (
+    <span
+      className={cn(
+        "shrink-0 text-[10px] font-mono tabular-nums px-1.5 py-0.5 rounded-md",
+        over
+          ? "bg-danger/10 text-danger-600"
+          : ratio > 0.8
+          ? "bg-warning/10 text-warning-600"
+          : "bg-success/10 text-success-600"
+      )}
+      title={`בפועל ${pct}% מהזמן שהוקצה`}
+    >
+      {pct}%
+    </span>
   );
 }
 
@@ -418,6 +505,7 @@ function ChildrenBlock({
   onRequestFocus,
   focusTaskId,
   onOpenEdit,
+  display,
 }: {
   children: TaskTreeNode[];
   parentTaskId: string | null;
@@ -426,6 +514,7 @@ function ChildrenBlock({
   onRequestFocus: (taskId: string) => void;
   focusTaskId: string | null;
   onOpenEdit: (taskId: string) => void;
+  display: RowDisplayPrefs;
 }) {
   const [showCompleted, setShowCompleted] = useState(false);
   const incomplete = children.filter((c) => !c.task.completed_at);
@@ -444,6 +533,7 @@ function ChildrenBlock({
           onRequestFocus={onRequestFocus}
           focusTaskId={focusTaskId}
           onOpenEdit={onOpenEdit}
+          display={display}
         />
       ))}
       {completed.length > 0 && (
@@ -478,6 +568,7 @@ function ChildrenBlock({
                 onRequestFocus={onRequestFocus}
                 focusTaskId={focusTaskId}
                 onOpenEdit={onOpenEdit}
+                display={display}
               />
             ))}
         </div>

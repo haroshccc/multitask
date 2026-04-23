@@ -7,7 +7,7 @@ import {
   pointerWithin,
   type DragEndEvent,
 } from "@dnd-kit/core";
-import { Archive, Settings as SettingsIcon } from "lucide-react";
+import { Archive, Settings as SettingsIcon, LayoutList } from "lucide-react";
 import { ScreenScaffold } from "@/components/layout/ScreenScaffold";
 import { ListsBanner } from "@/components/lists/ListsBanner";
 import {
@@ -18,6 +18,8 @@ import {
 import { TaskEditModal } from "@/components/tasks/TaskEditModal";
 import { TaskColumn } from "@/components/tasks/TaskColumn";
 import { ArchiveModal } from "@/components/tasks/ArchiveModal";
+import { RowDisplaySettingsModal } from "@/components/tasks/RowDisplaySettingsModal";
+import { StatsPanel } from "@/components/tasks/StatsPanel";
 import type { TaskTreeNode } from "@/components/tasks/TaskRow";
 import {
   useTasks,
@@ -26,6 +28,8 @@ import {
   useSetTaskParent,
   useListVisibility,
   useMyTaskStatuses,
+  useMaxVisibleColumns,
+  useRowDisplayPrefs,
 } from "@/lib/hooks";
 import type { Task, TaskList } from "@/lib/types/domain";
 
@@ -40,8 +44,21 @@ export function Tasks() {
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [pageMenuOpen, setPageMenuOpen] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
+  const [rowDisplayOpen, setRowDisplayOpen] = useState(false);
+  const [statsOpen, setStatsOpen] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem("multitask.tasks.statsOpen") === "true";
+  });
+  // Persist stats panel open state
+  useMemo(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("multitask.tasks.statsOpen", String(statsOpen));
+    }
+  }, [statsOpen]);
 
   const { data: myStatuses = [] } = useMyTaskStatuses();
+  const [maxVisibleColumns] = useMaxVisibleColumns("tasks");
+  const [rowDisplayPrefs, updateRowDisplay, resetRowDisplay] = useRowDisplayPrefs();
 
   const hiddenSet = useMemo(
     () => new Set(visibility?.hidden_list_ids ?? []),
@@ -186,7 +203,18 @@ export function Tasks() {
                 className="fixed inset-0 z-20"
                 onClick={() => setPageMenuOpen(false)}
               />
-              <div className="absolute end-0 mt-1 w-56 bg-white border border-ink-200 rounded-xl shadow-lift z-30 py-1 text-sm">
+              <div className="absolute end-0 mt-1 w-60 bg-white border border-ink-200 rounded-xl shadow-lift z-30 py-1 text-sm">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRowDisplayOpen(true);
+                    setPageMenuOpen(false);
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-ink-700 hover:bg-ink-100 text-start"
+                >
+                  <LayoutList className="w-4 h-4" />
+                  תצוגת שורה
+                </button>
                 <button
                   type="button"
                   onClick={() => {
@@ -206,12 +234,22 @@ export function Tasks() {
     >
       <div className="space-y-3">
         <ListsBanner screenKey="tasks" kind="task" />
-        <FilterBar
-          screenKey="tasks"
-          filters={filters}
-          onChange={setFilters}
-          fields={fields}
-        />
+        <div className="flex items-start gap-3">
+          <div className="flex-1 min-w-0">
+            <FilterBar
+              screenKey="tasks"
+              filters={filters}
+              onChange={setFilters}
+              fields={fields}
+            />
+          </div>
+          <StatsPanel
+            lists={visibleLists}
+            tasks={tasks}
+            open={statsOpen}
+            onToggle={() => setStatsOpen((v) => !v)}
+          />
+        </div>
 
         <DndContext
           sensors={sensors}
@@ -227,6 +265,8 @@ export function Tasks() {
                 roots={listTrees.get("__unassigned__") ?? []}
                 totalCount={counts.get("__unassigned__") ?? 0}
                 pinned
+                maxVisible={maxVisibleColumns}
+                display={rowDisplayPrefs}
                 onOpenEdit={setEditingTaskId}
               />
 
@@ -237,6 +277,8 @@ export function Tasks() {
                   list={list}
                   roots={listTrees.get(list.id) ?? []}
                   totalCount={counts.get(list.id) ?? 0}
+                  maxVisible={maxVisibleColumns}
+                  display={rowDisplayPrefs}
                   onOpenEdit={setEditingTaskId}
                 />
               ))}
@@ -256,6 +298,15 @@ export function Tasks() {
       />
 
       {archiveOpen && <ArchiveModal onClose={() => setArchiveOpen(false)} />}
+
+      {rowDisplayOpen && (
+        <RowDisplaySettingsModal
+          prefs={rowDisplayPrefs}
+          onChange={updateRowDisplay}
+          onReset={resetRowDisplay}
+          onClose={() => setRowDisplayOpen(false)}
+        />
+      )}
     </ScreenScaffold>
   );
 }

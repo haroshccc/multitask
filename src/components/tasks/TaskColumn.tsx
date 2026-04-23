@@ -18,6 +18,7 @@ import {
   useUpdateTaskList,
 } from "@/lib/hooks/useTaskLists";
 import type { TaskList } from "@/lib/types/domain";
+import type { RowDisplayPrefs } from "@/lib/hooks/useRowDisplayPrefs";
 import { TaskRow, type TaskTreeNode } from "./TaskRow";
 import { ShareListModal } from "./ShareListModal";
 
@@ -30,6 +31,10 @@ interface TaskColumnProps {
   totalCount: number;
   /** True if this column is rendered as the sticky-pinned "unassigned" column */
   pinned?: boolean;
+  /** Max columns visible across the viewport — drives responsive width */
+  maxVisible?: number;
+  /** Per-user pref of which inline badges to render on each task row */
+  display: RowDisplayPrefs;
   onOpenEdit: (taskId: string) => void;
 }
 
@@ -56,6 +61,8 @@ export function TaskColumn({
   roots,
   totalCount,
   pinned,
+  maxVisible = 4,
+  display,
   onOpenEdit,
 }: TaskColumnProps) {
   const createTask = useCreateTask();
@@ -160,17 +167,20 @@ export function TaskColumn({
     <div
       ref={setNodeRef}
       className={cn(
-        "shrink-0 w-[320px] self-start flex flex-col bg-white border border-ink-200 rounded-xl shadow-soft transition-colors",
+        "shrink-0 self-start flex flex-col bg-white border border-ink-200 rounded-xl shadow-soft transition-colors",
         pinned && "sticky start-0 z-10 bg-ink-50/95 backdrop-blur-sm",
         isOver && "ring-2 ring-primary-400 border-primary-300"
       )}
-      // The column "color" is available to inner buttons via CSS var so
-      // checkmarks / stars / focus rings tint to match.
-      style={
-        listColor
-          ? ({ ["--list-color" as string]: listColor } as React.CSSProperties)
-          : undefined
-      }
+      // Column width: fills 1/maxVisible of the viewport with a minimum so it
+      // doesn't squish. Past maxVisible columns, the parent's overflow-x-auto
+      // kicks in for horizontal scroll.
+      style={{
+        flex: "0 0 auto",
+        width: `clamp(260px, calc((100vw - 140px) / ${maxVisible} - 12px), 460px)`,
+        ...(listColor
+          ? { ["--list-color" as string]: listColor }
+          : {}),
+      } as React.CSSProperties}
     >
       {/* Header */}
       <div className="px-3 py-2 border-b border-ink-200 flex items-center gap-2 relative">
@@ -391,6 +401,7 @@ export function TaskColumn({
                 onRequestFocus={setFocusTaskId}
                 focusTaskId={focusTaskId}
                 onOpenEdit={onOpenEdit}
+                display={display}
               />
             ))}
 
@@ -447,6 +458,7 @@ export function TaskColumn({
                       onRequestFocus={setFocusTaskId}
                       focusTaskId={focusTaskId}
                       onOpenEdit={onOpenEdit}
+                      display={display}
                     />
                   ))}
               </div>

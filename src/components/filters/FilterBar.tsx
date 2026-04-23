@@ -1,6 +1,14 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
-import { SlidersHorizontal, X, Save, Bookmark, Check } from "lucide-react";
+import {
+  SlidersHorizontal,
+  X,
+  Save,
+  Bookmark,
+  Check,
+  ChevronUp,
+  ChevronDown,
+} from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import {
   useSavedFilters,
@@ -72,6 +80,8 @@ interface FilterBarProps {
   className?: string;
 }
 
+const COLLAPSE_STORAGE_KEY = (screen: string) => `multitask.filterbar.${screen}.collapsed`;
+
 export function FilterBar({
   screenKey,
   filters,
@@ -79,20 +89,23 @@ export function FilterBar({
   fields,
   className,
 }: FilterBarProps) {
-  const [drawerOpen, setDrawerOpen] = useState(false);
   const { data: savedFilters = [] } = useSavedFilters(screenKey);
   const createSaved = useCreateSavedFilter();
   const deleteSaved = useDeleteSavedFilter();
   const [savingName, setSavingName] = useState<string | null>(null);
+  const [collapsed, setCollapsed] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem(COLLAPSE_STORAGE_KEY(screenKey)) === "true";
+  });
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem(COLLAPSE_STORAGE_KEY(screenKey), String(collapsed));
+  }, [collapsed, screenKey]);
 
   const activeCount = countActive(filters);
-
   const clearAll = () => onChange({});
-
-  const applySaved = (config: FilterConfig) => {
-    onChange(config);
-    setDrawerOpen(false);
-  };
+  const applySaved = (config: FilterConfig) => onChange(config);
 
   const saveCurrent = async () => {
     if (!savingName?.trim()) return;
@@ -106,63 +119,100 @@ export function FilterBar({
 
   return (
     <>
-      <div className={cn("card p-3 flex items-center gap-2 flex-wrap", className)}>
-        <button
-          onClick={() => setDrawerOpen(true)}
-          className={cn(
-            "btn-outline text-xs",
-            activeCount > 0 && "border-primary-500 text-primary-700"
-          )}
-        >
-          <SlidersHorizontal className="w-4 h-4" />
-          סנן
+      <div className={cn("card p-3 space-y-3", className)}>
+        {/* Header row: title + saved + minimize (top-left = end in RTL) */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <SlidersHorizontal className="w-4 h-4 text-ink-500" />
+          <span className="text-sm font-semibold text-ink-900">סינון</span>
           {activeCount > 0 && (
-            <span className="ms-1 inline-flex items-center justify-center rounded-full bg-primary-500 text-white text-[10px] w-4 h-4">
+            <span className="inline-flex items-center justify-center rounded-full bg-primary-500 text-white text-[10px] w-4 h-4">
               {activeCount}
             </span>
           )}
-        </button>
-
-        <ActiveFilterChips filters={filters} fields={fields} onChange={onChange} />
-
-        {activeCount > 0 && (
-          <button onClick={clearAll} className="btn-ghost text-xs py-1 px-2">
-            <X className="w-3 h-3" />
-            נקה
-          </button>
-        )}
-
-        <div className="ms-auto flex items-center gap-1 flex-wrap">
-          {savedFilters.map((sf) => (
-            <div key={sf.id} className="flex items-center">
-              <button
-                onClick={() => applySaved(sf.filter_config as FilterConfig)}
-                className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium border border-ink-200 bg-white hover:bg-ink-50"
-              >
-                <Bookmark className="w-3 h-3" />
-                {sf.name}
-              </button>
-              <button
-                onClick={() =>
-                  deleteSaved.mutate({ filterId: sf.id, screenKey })
-                }
-                className="p-0.5 text-ink-400 hover:text-danger-500"
-                title="מחק פילטר שמור"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            </div>
-          ))}
           {activeCount > 0 && (
             <button
-              onClick={() => setSavingName("")}
+              onClick={clearAll}
               className="btn-ghost text-xs py-1 px-2"
+              type="button"
             >
-              <Save className="w-3 h-3" />
-              שמור סינון
+              <X className="w-3 h-3" />
+              נקה הכל
             </button>
           )}
+
+          <div className="ms-auto flex items-center gap-1 flex-wrap">
+            {savedFilters.map((sf) => (
+              <div key={sf.id} className="flex items-center">
+                <button
+                  onClick={() => applySaved(sf.filter_config as FilterConfig)}
+                  className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium border border-ink-200 bg-white hover:bg-ink-50"
+                  type="button"
+                >
+                  <Bookmark className="w-3 h-3" />
+                  {sf.name}
+                </button>
+                <button
+                  onClick={() => deleteSaved.mutate({ filterId: sf.id, screenKey })}
+                  className="p-0.5 text-ink-400 hover:text-danger-500"
+                  title="מחק פילטר שמור"
+                  type="button"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
+            {activeCount > 0 && (
+              <button
+                onClick={() => setSavingName("")}
+                className="btn-ghost text-xs py-1 px-2"
+                type="button"
+              >
+                <Save className="w-3 h-3" />
+                שמור
+              </button>
+            )}
+            <button
+              onClick={() => setCollapsed((v) => !v)}
+              className="p-1 rounded-md text-ink-500 hover:text-ink-900 hover:bg-ink-100"
+              title={collapsed ? "הרחב באנר סינון" : "מזער באנר סינון"}
+              type="button"
+            >
+              {collapsed ? (
+                <ChevronDown className="w-4 h-4" />
+              ) : (
+                <ChevronUp className="w-4 h-4" />
+              )}
+            </button>
+          </div>
         </div>
+
+        {/* Collapsed: just chips + minimize */}
+        {collapsed && (
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <ActiveFilterChips
+              filters={filters}
+              fields={fields}
+              onChange={onChange}
+            />
+            {activeCount === 0 && (
+              <span className="text-xs text-ink-400">אין סינון פעיל</span>
+            )}
+          </div>
+        )}
+
+        {/* Expanded: every field laid out inline across the banner */}
+        {!collapsed && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {fields.map((field) => (
+              <FieldEditor
+                key={`${field.type}-${String(field.key)}`}
+                field={field}
+                value={filters}
+                onChange={onChange}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
       {savingName !== null && (
@@ -191,77 +241,7 @@ export function FilterBar({
           </div>
         </div>
       )}
-
-      {drawerOpen && (
-        <FilterDrawer
-          fields={fields}
-          filters={filters}
-          onChange={onChange}
-          onClose={() => setDrawerOpen(false)}
-        />
-      )}
     </>
-  );
-}
-
-function FilterDrawer({
-  fields,
-  filters,
-  onChange,
-  onClose,
-}: {
-  fields: FilterField[];
-  filters: FilterConfig;
-  onChange: (next: FilterConfig) => void;
-  onClose: () => void;
-}) {
-  const [draft, setDraft] = useState<FilterConfig>(filters);
-
-  return (
-    <div className="fixed inset-0 z-50 bg-ink-900/40" onClick={onClose}>
-      <aside
-        className="absolute top-0 end-0 bottom-0 w-full max-w-sm bg-white shadow-lift overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="sticky top-0 bg-white border-b border-ink-200 px-4 py-3 flex items-center justify-between z-10">
-          <h3 className="font-semibold text-ink-900">סינון</h3>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-ink-100">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-        <div className="p-4 space-y-5">
-          {fields.map((field) => (
-            <FieldEditor
-              key={`${field.type}-${String(field.key)}`}
-              field={field}
-              value={draft}
-              onChange={setDraft}
-            />
-          ))}
-        </div>
-        <div className="sticky bottom-0 bg-white border-t border-ink-200 p-3 flex items-center gap-2">
-          <button
-            onClick={() => {
-              setDraft({});
-              onChange({});
-              onClose();
-            }}
-            className="btn-ghost text-sm flex-1"
-          >
-            נקה הכל
-          </button>
-          <button
-            onClick={() => {
-              onChange(draft);
-              onClose();
-            }}
-            className="btn-accent text-sm flex-1"
-          >
-            החל סינון
-          </button>
-        </div>
-      </aside>
-    </div>
   );
 }
 

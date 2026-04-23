@@ -17,6 +17,10 @@ import {
   X,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth/AuthContext";
+import {
+  useRealtimeInvalidation,
+  useRealtimeUserInvalidation,
+} from "@/lib/realtime/useRealtimeInvalidation";
 import { cn } from "@/lib/utils/cn";
 import { QuickCapture } from "@/components/capture/QuickCapture";
 import { ActiveTimerPill } from "@/components/tasks/ActiveTimerPill";
@@ -42,9 +46,12 @@ const NAV: NavItem[] = [
 ];
 
 export function AppShell() {
-  const { profile, signOut } = useAuth();
+  const { profile, user, activeOrganizationId, signOut } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+
+  useRealtimeInvalidation(activeOrganizationId);
+  useRealtimeUserInvalidation(user?.id ?? null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [captureOpen, setCaptureOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);

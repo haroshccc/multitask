@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import {
+  Bell,
   Building2,
   Loader2,
   Save,
@@ -10,18 +11,29 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ScreenScaffold } from "@/components/layout/ScreenScaffold";
 import { useAuth } from "@/lib/auth/AuthContext";
 import { supabase } from "@/lib/supabase/client";
-import type { OrganizationMember, Profile } from "@/lib/types/domain";
+import type {
+  NotificationType,
+  OrganizationMember,
+  Profile,
+} from "@/lib/types/domain";
 import { cn } from "@/lib/utils/cn";
 
-type TabKey = "profile" | "organization";
+type TabKey = "profile" | "organization" | "notifications";
 
 export function Settings() {
   const [tab, setTab] = useState<TabKey>("profile");
 
   return (
-    <ScreenScaffold title="הגדרות" subtitle="פרופיל אישי · ארגון">
+    <ScreenScaffold
+      title="הגדרות"
+      subtitle="פרופיל אישי · ארגון · התראות"
+    >
       <div className="flex items-center gap-1 p-1 bg-ink-100 rounded-2xl mb-4 w-fit">
-        <TabButton active={tab === "profile"} onClick={() => setTab("profile")} icon={UserIcon}>
+        <TabButton
+          active={tab === "profile"}
+          onClick={() => setTab("profile")}
+          icon={UserIcon}
+        >
           פרופיל
         </TabButton>
         <TabButton
@@ -31,10 +43,18 @@ export function Settings() {
         >
           ארגון
         </TabButton>
+        <TabButton
+          active={tab === "notifications"}
+          onClick={() => setTab("notifications")}
+          icon={Bell}
+        >
+          התראות
+        </TabButton>
       </div>
 
       {tab === "profile" && <ProfileTab />}
       {tab === "organization" && <OrganizationTab />}
+      {tab === "notifications" && <NotificationsTab />}
     </ScreenScaffold>
   );
 }
@@ -347,6 +367,126 @@ function OrganizationTab() {
           </ul>
         )}
       </div>
+    </div>
+  );
+}
+
+const NOTIFICATION_TYPES: { type: NotificationType; label: string }[] = [
+  { type: "task_assigned", label: "משימה הוקצתה לך" },
+  { type: "task_approval_requested", label: "בקשת אישור משימה" },
+  { type: "task_approved", label: "משימה אושרה" },
+  { type: "task_due_soon", label: "משימה לפני המועד" },
+  { type: "event_invited", label: "הוזמנת לאירוע" },
+  { type: "event_starting_soon", label: "אירוע מתחיל בקרוב" },
+  { type: "thought_received", label: "מחשבה התקבלה" },
+  { type: "recording_ready", label: "תמלול מוכן" },
+  { type: "project_over_budget", label: "פרויקט חרג מתקציב" },
+  { type: "org_member_joined", label: "חבר חדש בארגון" },
+];
+
+function NotificationsTab() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+
+  const prefs = useQuery({
+    queryKey: ["notification-prefs", user?.id ?? "none"] as const,
+    enabled: Boolean(user?.id),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("user_notification_preferences")
+        .select("*")
+        .eq("user_id", user!.id);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  if (!user) return null;
+
+  const byType = new Map((prefs.data ?? []).map((p) => [p.type, p]));
+
+  const toggle = async (
+    type: NotificationType,
+    column: "in_app" | "push" | "email",
+    next: boolean
+  ) => {
+    const existing = byType.get(type);
+    if (existing) {
+      const patch =
+        column === "in_app"
+          ? { in_app: next }
+          : column === "push"
+            ? { push: next }
+            : { email: next };
+      await supabase
+        .from("user_notification_preferences")
+        .update(patch)
+        .eq("user_id", user.id)
+        .eq("type", type);
+    } else {
+      await supabase.from("user_notification_preferences").insert({
+        user_id: user.id,
+        type,
+        in_app: column === "in_app" ? next : true,
+        push: column === "push" ? next : true,
+        email: column === "email" ? next : false,
+      });
+    }
+    qc.invalidateQueries({ queryKey: ["notification-prefs"] });
+  };
+
+  return (
+    <div className="card p-5 max-w-2xl">
+      <p className="text-xs text-ink-500 mb-4">
+        סמני אילו ערוצים יקבלו כל סוג התראה. ברירת המחדל: in-app + push פעילים.
+      </p>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-xs text-ink-500 border-b border-ink-200">
+              <th className="text-start font-medium py-2">סוג</th>
+              <th className="text-center font-medium py-2 w-20">באפליקציה</th>
+              <th className="text-center font-medium py-2 w-20">Push</th>
+              <th className="text-center font-medium py-2 w-20">מייל</th>
+            </tr>
+          </thead>
+          <tbody>
+            {NOTIFICATION_TYPES.map(({ type, label }) => {
+              const p = byType.get(type);
+              return (
+                <tr key={type} className="border-b border-ink-100">
+                  <td className="py-2 text-ink-900">{label}</td>
+                  <td className="py-2 text-center">
+                    <input
+                      type="checkbox"
+                      checked={p?.in_app ?? true}
+                      onChange={(e) => toggle(type, "in_app", e.target.checked)}
+                    />
+                  </td>
+                  <td className="py-2 text-center">
+                    <input
+                      type="checkbox"
+                      checked={p?.push ?? true}
+                      onChange={(e) => toggle(type, "push", e.target.checked)}
+                    />
+                  </td>
+                  <td className="py-2 text-center">
+                    <input
+                      type="checkbox"
+                      checked={p?.email ?? false}
+                      onChange={(e) => toggle(type, "email", e.target.checked)}
+                    />
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <p className="text-xs text-ink-500 mt-4 leading-relaxed">
+        ⚠️ ערוץ Push דורש הרשמה ל-OneSignal/Web Push (יחובר כשהחשבון יוגדר).
+        ערוץ מייל דורש שירות מייל יוצא — בינתיים רק in-app פעיל.
+      </p>
     </div>
   );
 }

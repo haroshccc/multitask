@@ -296,7 +296,33 @@ export function ProjectDetail() {
             saving={createExpense.isPending}
           />
 
-          <div className="card p-4 space-y-2">
+          <div className="card p-4 space-y-3">
+            <div>
+              <div className="text-xs font-medium text-ink-700 mb-1.5">סטטוס</div>
+              <div className="grid grid-cols-3 gap-1">
+                {(["active", "paused", "completed"] as const).map((s) => (
+                  <button
+                    key={s}
+                    onClick={() =>
+                      updateProject.mutate({ id: p.id, patch: { status: s } })
+                    }
+                    disabled={updateProject.isPending || p.status === s}
+                    className={cn(
+                      "py-1.5 rounded-xl text-xs font-medium transition-colors",
+                      p.status === s
+                        ? s === "active"
+                          ? "bg-success-500 text-white"
+                          : s === "paused"
+                            ? "bg-ink-700 text-white"
+                            : "bg-accent-purple text-white"
+                        : "bg-ink-100 text-ink-700 hover:bg-ink-200"
+                    )}
+                  >
+                    {s === "active" ? "פעיל" : s === "paused" ? "מושהה" : "הושלם"}
+                  </button>
+                ))}
+              </div>
+            </div>
             <button
               onClick={() =>
                 updateProject.mutate({

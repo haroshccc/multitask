@@ -6,6 +6,7 @@ import {
   Circle,
   Clock,
   Flame,
+  Hash,
   Link2,
   ListTree,
   Loader2,
@@ -14,6 +15,7 @@ import {
   Save,
   StickyNote,
   Trash2,
+  User,
   X,
 } from "lucide-react";
 import type { Task, TaskUpdate } from "@/lib/types/domain";
@@ -67,6 +69,9 @@ export function TaskDetailDrawer({ task, onClose }: Props) {
   const [durationMinutes, setDurationMinutes] = useState<string>("");
   const [location, setLocation] = useState("");
   const [notes, setNotes] = useState("");
+  const [tags, setTags] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState("");
+  const [assigneeId, setAssigneeId] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -81,6 +86,9 @@ export function TaskDetailDrawer({ task, onClose }: Props) {
     );
     setLocation(task.location ?? "");
     setNotes(task.notes ?? "");
+    setTags(task.tags ?? []);
+    setAssigneeId(task.assignee_user_id ?? null);
+    setTagInput("");
     setDirty(false);
     setError(null);
   }, [task?.id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -102,6 +110,8 @@ export function TaskDetailDrawer({ task, onClose }: Props) {
         durationMinutes.trim() === "" ? null : Number(durationMinutes),
       location: location.trim() || null,
       notes: notes.trim() || null,
+      tags,
+      assignee_user_id: assigneeId,
     };
     try {
       await updateTask.mutateAsync({ id: task.id, patch });
@@ -249,6 +259,52 @@ export function TaskDetailDrawer({ task, onClose }: Props) {
                 }}
               />
             </Field>
+
+            <Field label="תגיות" icon={Hash}>
+              <div className="flex flex-wrap gap-1.5 mb-1.5">
+                {tags.map((tag) => (
+                  <span key={tag} className="chip-accent flex items-center gap-1">
+                    #{tag}
+                    <button
+                      onClick={() => {
+                        setTags((prev) => prev.filter((t) => t !== tag));
+                        markDirty();
+                      }}
+                      aria-label="הסירי"
+                      className="hover:text-danger-600"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+              <input
+                className="field text-sm"
+                placeholder="תגית — Enter / פסיק"
+                value={tagInput}
+                onChange={(e) => setTagInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if ((e.key === "Enter" || e.key === ",") && tagInput.trim()) {
+                    e.preventDefault();
+                    const v = tagInput.trim().replace(/^#/, "");
+                    if (v && !tags.includes(v)) {
+                      setTags((prev) => [...prev, v]);
+                      markDirty();
+                    }
+                    setTagInput("");
+                  }
+                }}
+              />
+            </Field>
+
+            <AssigneeField
+              orgId={task.organization_id}
+              value={assigneeId}
+              onChange={(id) => {
+                setAssigneeId(id);
+                markDirty();
+              }}
+            />
 
             <div className="pt-2 border-t border-ink-200">
               <div className="text-xs text-ink-500 mb-2">זמן בוצע</div>
@@ -442,6 +498,56 @@ function SubtasksSection({ parentId, orgId }: { parentId: string; orgId: string 
         </button>
       </div>
     </div>
+  );
+}
+
+function AssigneeField({
+  orgId,
+  value,
+  onChange,
+}: {
+  orgId: string;
+  value: string | null;
+  onChange: (id: string | null) => void;
+}) {
+  const members = useQuery({
+    queryKey: ["org-member-profiles", orgId] as const,
+    queryFn: async () => {
+      const { data: rows, error } = await supabase
+        .from("organization_members")
+        .select("user_id")
+        .eq("organization_id", orgId);
+      if (error) throw error;
+      const ids = (rows ?? []).map((r) => r.user_id);
+      if (ids.length === 0) return [];
+      const { data: profiles, error: pErr } = await supabase
+        .from("profiles")
+        .select("id, full_name, display_color")
+        .in("id", ids);
+      if (pErr) throw pErr;
+      return profiles ?? [];
+    },
+  });
+
+  return (
+    <label className="block">
+      <span className="flex items-center gap-1.5 text-sm font-medium text-ink-800 mb-1.5">
+        <User className="w-3.5 h-3.5 text-ink-500" />
+        מוקצה ל
+      </span>
+      <select
+        className="field"
+        value={value ?? ""}
+        onChange={(e) => onChange(e.target.value || null)}
+      >
+        <option value="">— ללא הקצאה —</option>
+        {(members.data ?? []).map((p) => (
+          <option key={p.id} value={p.id}>
+            {p.full_name ?? p.id.slice(0, 8)}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 

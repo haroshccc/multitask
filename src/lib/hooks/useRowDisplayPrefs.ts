@@ -5,14 +5,15 @@ import { useEffect, useState } from "react";
  * Persisted in localStorage. Each key maps to whether the badge is rendered.
  */
 export interface RowDisplayPrefs {
-  urgency: boolean;          // single-star chip
+  urgency: boolean;          // 3-bar rating chip
   subtasks: boolean;         // N/Total counter
+  status: boolean;           // status chip (coloured dot + label)
   timer: boolean;            // elapsed time + play button
   link: boolean;             // external_url icon
   attachments: boolean;      // attachment count
   assignee: boolean;         // assignee avatar
   alarm: boolean;            // notification/reminder bell
-  dueDate: boolean;          // due_at chip
+  dueDate: boolean;          // scheduled_at chip
   estimated: boolean;        // estimated hours chip
   estimatedVsActual: boolean; // progress vs estimate
 }
@@ -20,6 +21,7 @@ export interface RowDisplayPrefs {
 export const DEFAULT_ROW_DISPLAY: RowDisplayPrefs = {
   urgency: true,
   subtasks: true,
+  status: false,
   timer: true,
   link: false,
   attachments: false,
@@ -38,13 +40,18 @@ export const ROW_DISPLAY_FIELDS: {
 }[] = [
   {
     key: "urgency",
-    label: "כוכב דחיפות",
-    description: "כוכב יחיד עם המספר; לחיצה פותחת בחירת 1-5",
+    label: "דירוג דחיפות",
+    description: "3 קווים אופקיים מוערמים; לחיצה פותחת בחירת 0-3",
   },
   {
     key: "subtasks",
     label: "מונה תת-משימות",
     description: "כמה הושלמו מתוך הסה\"כ",
+  },
+  {
+    key: "status",
+    label: "סטטוס",
+    description: "נקודה צבעונית + שם הסטטוס של המשימה",
   },
   {
     key: "timer",

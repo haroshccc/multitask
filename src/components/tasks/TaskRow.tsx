@@ -23,6 +23,7 @@ import {
   useStopTimer,
 } from "@/lib/hooks/useTimer";
 import { useTimeUnit, formatSeconds } from "@/lib/hooks/useTimeUnit";
+import { useMyTaskStatuses } from "@/lib/hooks/useUserTaskStatuses";
 import type { RowDisplayPrefs } from "@/lib/hooks/useRowDisplayPrefs";
 import { pushUndo } from "@/lib/undo/store";
 import { Link as LinkIcon, Calendar as CalendarIcon } from "lucide-react";
@@ -81,6 +82,7 @@ export function TaskRow({
   const inputRef = useRef<HTMLInputElement>(null);
 
   const [timeUnit] = useTimeUnit();
+  const { data: myStatuses = [] } = useMyTaskStatuses();
 
   const isActive = activeTimer?.task_id === task.id;
   const isDone = !!task.completed_at;
@@ -339,6 +341,24 @@ export function TaskRow({
             {doneInSubtree}/{totalInSubtree}
           </span>
         )}
+
+        {display.status && (() => {
+          const s = myStatuses.find((x) => x.key === task.status);
+          const color = s?.color ?? "#a8a8bc";
+          const label = s?.label ?? task.status;
+          return (
+            <span
+              className="shrink-0 inline-flex items-center gap-1 text-[10px] text-ink-700 px-1.5 py-0.5 rounded-md bg-ink-100"
+              title={`סטטוס: ${label}`}
+            >
+              <span
+                className="w-2 h-2 rounded-full"
+                style={{ backgroundColor: color }}
+              />
+              {label}
+            </span>
+          );
+        })()}
 
         {display.dueDate && task.scheduled_at && (
           <span

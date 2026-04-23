@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   X,
-  Star,
   Play,
   Pause,
   Calendar as CalendarIcon,
@@ -38,6 +37,8 @@ import {
   useUpdateUserTaskStatus,
 } from "@/lib/hooks/useUserTaskStatuses";
 import { slugifyStatusKey } from "@/lib/services/user-task-statuses";
+import { useOrgMembers } from "@/lib/hooks/useOrgMembers";
+import { pushUndo } from "@/lib/undo/store";
 import type { TimeEntry, UserTaskStatus } from "@/lib/types/domain";
 import { DateTimePicker } from "@/components/ui/DateTimePicker";
 import {
@@ -58,6 +59,7 @@ export function TaskEditModal({ taskId, onClose }: TaskEditModalProps) {
   const { data: task } = useTask(taskId);
   const { data: lists = [] } = useTaskLists();
   const { data: myStatuses = [] } = useMyTaskStatuses();
+  const { data: orgMembers = [] } = useOrgMembers();
   const updateTask = useUpdateTask();
   const completeTask = useCompleteTask();
 
@@ -76,6 +78,7 @@ export function TaskEditModal({ taskId, onClose }: TaskEditModalProps) {
   const [scheduledAt, setScheduledAt] = useState<string | null>(null); // ISO
   const [durationMinutes, setDurationMinutes] = useState<number | null>(null);
   const [estimatedMinutes, setEstimatedMinutes] = useState<number | null>(null);
+  const [assigneeId, setAssigneeId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!task) return;
@@ -89,6 +92,7 @@ export function TaskEditModal({ taskId, onClose }: TaskEditModalProps) {
     setLocation(task.location ?? "");
     setExternalUrl(task.external_url ?? "");
     setScheduledAt(task.scheduled_at ?? null);
+    setAssigneeId(task.assignee_user_id ?? null);
     setDurationMinutes(task.duration_minutes ?? null);
     setEstimatedMinutes(hoursToMinutes(task.estimated_hours ?? null));
   }, [task?.id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -251,18 +255,69 @@ export function TaskEditModal({ taskId, onClose }: TaskEditModalProps) {
                     </Field>
                   </div>
 
-                  <Field label="דחיפות">
-                    <UrgencyStars
-                      value={urgency}
-                      onChange={(v) => {
-                        setUrgency(v);
-                        updateTask.mutate({
-                          taskId: task!.id,
-                          patch: { urgency: v },
-                        });
-                      }}
-                    />
-                  </Field>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label="דחיפות">
+                      <UrgencyBars
+                        value={urgency}
+                        onChange={(v) => {
+                          const prev = urgency;
+                          setUrgency(v);
+                          updateTask.mutate({
+                            taskId: task!.id,
+                            patch: { urgency: v },
+                          });
+                          pushUndo({
+                            description: "שינוי דחיפות",
+                            undo: () => {
+                              setUrgency(prev);
+                              updateTask.mutate({
+                                taskId: task!.id,
+                                patch: { urgency: prev },
+                              });
+                            },
+                            redo: () => {
+                              setUrgency(v);
+                              updateTask.mutate({
+                                taskId: task!.id,
+                                patch: { urgency: v },
+                              });
+                            },
+                          });
+                        }}
+                      />
+                    </Field>
+                    <Field label="אחראי">
+                      <AssigneePicker
+                        value={assigneeId}
+                        members={orgMembers}
+                        onChange={(userId) => {
+                          const prev = assigneeId;
+                          setAssigneeId(userId);
+                          updateTask.mutate({
+                            taskId: task!.id,
+                            patch: { assignee_user_id: userId },
+                          });
+                          pushUndo({
+                            description: "שינוי אחראי",
+                            undo: () => {
+                              setAssigneeId(prev);
+                              updateTask.mutate({
+                                taskId: task!.id,
+                                patch: { assignee_user_id: prev },
+                              });
+                            },
+                            redo: () => {
+                              setAssigneeId(userId);
+                              updateTask.mutate({
+                                taskId: task!.id,
+                                patch: { assignee_user_id: userId },
+                              });
+                            },
+                          });
+                        }}
+                      />
+                    </Field>
+                  </div>
 
                   <Field label="תיאור">
                     <textarea
@@ -401,31 +456,84 @@ function Field({
   );
 }
 
-function UrgencyStars({
+function UrgencyBars({
   value,
   onChange,
 }: {
   value: number;
   onChange: (v: number) => void;
 }) {
+  const filled = Math.min(3, Math.max(0, value));
   return (
-    <div className="flex items-center gap-1">
-      {[1, 2, 3, 4, 5].map((n) => (
+    <div className="flex items-center gap-2">
+      {[0, 1, 2, 3].map((n) => (
         <button
           key={n}
-          onClick={() => onChange(n === value ? 0 : n)}
-          className="p-0.5 text-ink-300 hover:text-primary-500"
-          aria-label={`${n} כוכבים`}
+          type="button"
+          onClick={() => onChange(n)}
+          className={cn(
+            "flex flex-col items-center gap-1 p-2 rounded-lg border transition-colors",
+            n === filled
+              ? "border-primary-500 bg-primary-50"
+              : "border-ink-200 bg-white hover:bg-ink-50"
+          )}
+          title={n === 0 ? "ללא דירוג" : `${n}/3`}
         >
-          <Star
-            className={cn(
-              "w-5 h-5",
-              n <= value ? "text-primary-500 fill-primary-500" : ""
-            )}
-          />
+          {n === 0 ? (
+            <span className="h-[16px] flex items-center justify-center text-ink-400 text-sm">
+              ∅
+            </span>
+          ) : (
+            <div className="flex flex-col items-center gap-[3px]">
+              {[3, 2, 1].map((row) => (
+                <span
+                  key={row}
+                  className={cn(
+                    "h-[3px] w-6 rounded-sm",
+                    row <= n ? "bg-ink-900" : "bg-ink-200"
+                  )}
+                />
+              ))}
+            </div>
+          )}
+          <span className="text-[10px] font-mono text-ink-500">{n}</span>
         </button>
       ))}
     </div>
+  );
+}
+
+function AssigneePicker({
+  value,
+  members,
+  onChange,
+}: {
+  value: string | null;
+  members: { membership: { user_id: string }; profile: { full_name: string | null; avatar_url: string | null } | null }[];
+  onChange: (userId: string | null) => void;
+}) {
+  const current = members.find((m) => m.membership.user_id === value);
+  return (
+    <select
+      value={value ?? ""}
+      onChange={(e) => onChange(e.target.value || null)}
+      className="field"
+    >
+      <option value="">ללא הקצאה</option>
+      {members.map((m) => {
+        const name = m.profile?.full_name ?? m.membership.user_id;
+        return (
+          <option key={m.membership.user_id} value={m.membership.user_id}>
+            {name}
+          </option>
+        );
+      })}
+      {/* If the current assignee isn't in the members list (edge case), keep
+          them in the select so we don't silently drop the value. */}
+      {value && !current && (
+        <option value={value}>{value}</option>
+      )}
+    </select>
   );
 }
 

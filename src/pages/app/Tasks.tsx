@@ -7,7 +7,15 @@ import {
   pointerWithin,
   type DragEndEvent,
 } from "@dnd-kit/core";
-import { Archive, Settings as SettingsIcon, LayoutList } from "lucide-react";
+import {
+  Archive,
+  Settings as SettingsIcon,
+  LayoutList,
+  Minus,
+  Plus,
+  Columns,
+} from "lucide-react";
+import { MAX_VISIBLE_BOUNDS } from "@/lib/hooks/useMaxVisibleColumns";
 import { ScreenScaffold } from "@/components/layout/ScreenScaffold";
 import { ListsBanner } from "@/components/lists/ListsBanner";
 import {
@@ -20,6 +28,7 @@ import { TaskColumn } from "@/components/tasks/TaskColumn";
 import { ArchiveModal } from "@/components/tasks/ArchiveModal";
 import { RowDisplaySettingsModal } from "@/components/tasks/RowDisplaySettingsModal";
 import { StatsPanel } from "@/components/tasks/StatsPanel";
+import { UnassignedBanner } from "@/components/tasks/UnassignedBanner";
 import type { TaskTreeNode } from "@/components/tasks/TaskRow";
 import {
   useTasks,
@@ -48,6 +57,7 @@ export function Tasks() {
   const [rowDisplayOpen, setRowDisplayOpen] = useState(false);
   const [statsOpen, setStatsOpen] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
+    // Default: closed (user can open via the chevron on the header)
     return localStorage.getItem("multitask.tasks.statsOpen") === "true";
   });
   useEffect(() => {
@@ -56,8 +66,17 @@ export function Tasks() {
   }, [statsOpen]);
 
   const { data: myStatuses = [] } = useMyTaskStatuses();
-  const [maxVisibleColumns] = useMaxVisibleColumns("tasks");
+  const [maxVisibleColumns, setMaxVisibleColumns] = useMaxVisibleColumns("tasks");
   const [rowDisplayPrefs, updateRowDisplay, resetRowDisplay] = useRowDisplayPrefs();
+  const [unassignedOpen, setUnassignedOpen] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true;
+    const raw = localStorage.getItem("multitask.tasks.unassignedOpen");
+    return raw === null ? true : raw === "true";
+  });
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem("multitask.tasks.unassignedOpen", String(unassignedOpen));
+  }, [unassignedOpen]);
 
   const hiddenSet = useMemo(
     () => new Set(visibility?.hidden_list_ids ?? []),
@@ -247,7 +266,42 @@ export function Tasks() {
                 className="fixed inset-0 z-20"
                 onClick={() => setPageMenuOpen(false)}
               />
-              <div className="absolute end-0 mt-1 w-60 bg-white border border-ink-200 rounded-xl shadow-lift z-30 py-1 text-sm">
+              <div className="absolute end-0 mt-1 w-64 bg-white border border-ink-200 rounded-xl shadow-lift z-30 py-1 text-sm">
+                {/* Max-visible columns stepper (lives here, unified with other page settings) */}
+                <div className="flex items-center gap-2 px-3 py-2 text-ink-700">
+                  <Columns className="w-4 h-4 shrink-0" />
+                  <span className="flex-1">עמודות בתצוגה</span>
+                  <div className="inline-flex items-center gap-1 rounded-lg border border-ink-200 bg-white px-1 py-0.5">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setMaxVisibleColumns(maxVisibleColumns - 1);
+                      }}
+                      disabled={maxVisibleColumns <= MAX_VISIBLE_BOUNDS.MIN}
+                      className="p-0.5 rounded hover:bg-ink-100 disabled:opacity-40"
+                      aria-label="פחות"
+                    >
+                      <Minus className="w-3 h-3" />
+                    </button>
+                    <span className="font-mono tabular-nums w-3 text-center text-xs">
+                      {maxVisibleColumns}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setMaxVisibleColumns(maxVisibleColumns + 1);
+                      }}
+                      disabled={maxVisibleColumns >= MAX_VISIBLE_BOUNDS.MAX}
+                      className="p-0.5 rounded hover:bg-ink-100 disabled:opacity-40"
+                      aria-label="עוד"
+                    >
+                      <Plus className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+                <div className="h-px bg-ink-100 mx-2" />
                 <button
                   type="button"
                   onClick={() => {
@@ -299,8 +353,21 @@ export function Tasks() {
           onDragEnd={handleDragEnd}
         >
           <div className="flex items-stretch gap-3 min-h-[calc(100vh-340px)]">
-            {/* Main lists area — fills the page; scrolls horizontally when
-                columns exceed maxVisible. */}
+            {/* "לא משויכות" — its own banner on the leading (right in RTL) edge.
+                Collapsible sideways: when closed, shrinks to a narrow handle
+                and frees up width for the remaining lists. */}
+            <UnassignedBanner
+              open={unassignedOpen}
+              onToggle={() => setUnassignedOpen((v) => !v)}
+              roots={listTrees.get("__unassigned__") ?? []}
+              totalCount={counts.get("__unassigned__") ?? 0}
+              display={rowDisplayPrefs}
+              onOpenEdit={setEditingTaskId}
+            />
+
+            {/* Main lists area — fills remaining width; each column takes
+                1/divisor where divisor = min(count, maxVisible). Overflows to
+                horizontal scroll when count > maxVisible. */}
             <div className="flex-1 min-w-0 overflow-x-auto scrollbar-thin">
               <div className="flex items-stretch gap-3 pb-2">
                 {visibleLists.map((list) => (
@@ -309,26 +376,16 @@ export function Tasks() {
                     list={list}
                     roots={listTrees.get(list.id) ?? []}
                     totalCount={counts.get(list.id) ?? 0}
-                    maxVisible={maxVisibleColumns}
+                    divisor={Math.min(
+                      Math.max(visibleLists.length, 1),
+                      maxVisibleColumns
+                    )}
                     display={rowDisplayPrefs}
                     onOpenEdit={setEditingTaskId}
                   />
                 ))}
                 {visibleLists.length === 0 && <EmptyListsHint lists={lists} />}
               </div>
-            </div>
-
-            {/* "לא משויכות" — its own banner on the trailing (left in RTL) edge. */}
-            <div className="flex-shrink-0">
-              <TaskColumn
-                list={null}
-                roots={listTrees.get("__unassigned__") ?? []}
-                totalCount={counts.get("__unassigned__") ?? 0}
-                pinned
-                maxVisible={maxVisibleColumns}
-                display={rowDisplayPrefs}
-                onOpenEdit={setEditingTaskId}
-              />
             </div>
           </div>
         </DndContext>

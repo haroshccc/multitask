@@ -94,8 +94,9 @@ export function FilterBar({
   const deleteSaved = useDeleteSavedFilter();
   const [savingName, setSavingName] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false;
-    return localStorage.getItem(COLLAPSE_STORAGE_KEY(screenKey)) === "true";
+    if (typeof window === "undefined") return true;
+    const raw = localStorage.getItem(COLLAPSE_STORAGE_KEY(screenKey));
+    return raw === null ? true : raw === "true";
   });
 
   useEffect(() => {
@@ -119,16 +120,36 @@ export function FilterBar({
 
   return (
     <>
-      <div className={cn("card p-3 space-y-3", className)}>
-        {/* Header row: title + saved + minimize (top-left = end in RTL) */}
+      <div className={cn("card space-y-2", !collapsed && "p-3", collapsed && "px-3 py-1.5", className)}>
+        {/* Header row: title + state + minimize */}
         <div className="flex items-center gap-2 flex-wrap">
-          <SlidersHorizontal className="w-4 h-4 text-ink-500" />
-          <span className="text-sm font-semibold text-ink-900">סינון</span>
-          {activeCount > 0 && (
-            <span className="inline-flex items-center justify-center rounded-full bg-primary-500 text-white text-[10px] w-4 h-4">
-              {activeCount}
-            </span>
-          )}
+          <button
+            onClick={() => setCollapsed((v) => !v)}
+            className="inline-flex items-center gap-1.5 rounded-md px-1 py-0.5 hover:bg-ink-100"
+            title={collapsed ? "הרחב באנר סינון" : "מזער באנר סינון"}
+            type="button"
+          >
+            <SlidersHorizontal className="w-4 h-4 text-ink-500" />
+            <span className="text-sm font-semibold text-ink-900">סינון</span>
+            {activeCount > 0 && (
+              <span className="inline-flex items-center justify-center rounded-full bg-primary-500 text-white text-[10px] w-4 h-4">
+                {activeCount}
+              </span>
+            )}
+            {collapsed ? (
+              <ChevronDown className="w-3.5 h-3.5 text-ink-500" />
+            ) : (
+              <ChevronUp className="w-3.5 h-3.5 text-ink-500" />
+            )}
+          </button>
+
+          {/* Middle: active chips (visible in both states) */}
+          <ActiveFilterChips
+            filters={filters}
+            fields={fields}
+            onChange={onChange}
+          />
+
           {activeCount > 0 && (
             <button
               onClick={clearAll}
@@ -140,7 +161,8 @@ export function FilterBar({
             </button>
           )}
 
-          <div className="ms-auto flex items-center gap-1 flex-wrap">
+          {/* Saved filters */}
+          <div className="flex items-center gap-1 flex-wrap">
             {savedFilters.map((sf) => (
               <div key={sf.id} className="flex items-center">
                 <button
@@ -171,34 +193,13 @@ export function FilterBar({
                 שמור
               </button>
             )}
-            <button
-              onClick={() => setCollapsed((v) => !v)}
-              className="p-1 rounded-md text-ink-500 hover:text-ink-900 hover:bg-ink-100"
-              title={collapsed ? "הרחב באנר סינון" : "מזער באנר סינון"}
-              type="button"
-            >
-              {collapsed ? (
-                <ChevronDown className="w-4 h-4" />
-              ) : (
-                <ChevronUp className="w-4 h-4" />
-              )}
-            </button>
           </div>
-        </div>
 
-        {/* Collapsed: just chips + minimize */}
-        {collapsed && (
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <ActiveFilterChips
-              filters={filters}
-              fields={fields}
-              onChange={onChange}
-            />
-            {activeCount === 0 && (
-              <span className="text-xs text-ink-400">אין סינון פעיל</span>
-            )}
-          </div>
-        )}
+          {/* "no filter" note on the far trailing (left in RTL) edge */}
+          {activeCount === 0 && (
+            <span className="ms-auto text-xs text-ink-400">אין סינון פעיל</span>
+          )}
+        </div>
 
         {/* Expanded: every field laid out inline across the banner */}
         {!collapsed && (

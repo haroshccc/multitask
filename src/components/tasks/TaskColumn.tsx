@@ -19,6 +19,7 @@ import {
 } from "@/lib/hooks/useTaskLists";
 import type { TaskList } from "@/lib/types/domain";
 import type { RowDisplayPrefs } from "@/lib/hooks/useRowDisplayPrefs";
+import { pushUndo } from "@/lib/undo/store";
 import { TaskRow, type TaskTreeNode } from "./TaskRow";
 import { ShareListModal } from "./ShareListModal";
 
@@ -31,8 +32,9 @@ interface TaskColumnProps {
   totalCount: number;
   /** True if this column is rendered as the sticky-pinned "unassigned" column */
   pinned?: boolean;
-  /** Max columns visible across the viewport — drives responsive width */
-  maxVisible?: number;
+  /** How many columns are sharing the main area right now (= min(count, max)).
+      Each column takes 1/divisor of the parent width. */
+  divisor?: number;
   /** Per-user pref of which inline badges to render on each task row */
   display: RowDisplayPrefs;
   onOpenEdit: (taskId: string) => void;
@@ -61,7 +63,7 @@ export function TaskColumn({
   roots,
   totalCount,
   pinned,
-  maxVisible = 4,
+  divisor = 1,
   display,
   onOpenEdit,
 }: TaskColumnProps) {
@@ -132,27 +134,53 @@ export function TaskColumn({
       setEditingName(false);
       return;
     }
-    updateList.mutate({ listId: list.id, patch: { name: trimmed } });
+    const prev = list.name;
+    const listId = list.id;
+    updateList.mutate({ listId, patch: { name: trimmed } });
+    pushUndo({
+      description: "שינוי שם רשימה",
+      undo: () => updateList.mutate({ listId, patch: { name: prev } }),
+      redo: () => updateList.mutate({ listId, patch: { name: trimmed } }),
+    });
     setEditingName(false);
   };
 
   const setEmoji = (emoji: string | null) => {
     if (!list) return;
-    updateList.mutate({ listId: list.id, patch: { emoji } });
+    const prev = list.emoji ?? null;
+    const listId = list.id;
+    updateList.mutate({ listId, patch: { emoji } });
+    pushUndo({
+      description: "שינוי אימוג'י",
+      undo: () => updateList.mutate({ listId, patch: { emoji: prev } }),
+      redo: () => updateList.mutate({ listId, patch: { emoji } }),
+    });
     setEmojiOpen(false);
   };
 
   const setColor = (color: string | null) => {
     if (!list) return;
-    updateList.mutate({ listId: list.id, patch: { color } });
+    const prev = list.color ?? null;
+    const listId = list.id;
+    updateList.mutate({ listId, patch: { color } });
+    pushUndo({
+      description: "שינוי צבע רשימה",
+      undo: () => updateList.mutate({ listId, patch: { color: prev } }),
+      redo: () => updateList.mutate({ listId, patch: { color } }),
+    });
     setColorOpen(false);
   };
 
   const togglePin = () => {
     if (!list) return;
-    updateList.mutate({
-      listId: list.id,
-      patch: { is_pinned: !list.is_pinned },
+    const prev = !!list.is_pinned;
+    const next = !prev;
+    const listId = list.id;
+    updateList.mutate({ listId, patch: { is_pinned: next } });
+    pushUndo({
+      description: next ? "נעיצת רשימה" : "הסרת נעיצה",
+      undo: () => updateList.mutate({ listId, patch: { is_pinned: prev } }),
+      redo: () => updateList.mutate({ listId, patch: { is_pinned: next } }),
     });
     setMenuOpen(false);
   };
@@ -173,14 +201,12 @@ export function TaskColumn({
         pinned && "bg-ink-50/95",
         isOver && "ring-2 ring-primary-400 border-primary-300"
       )}
-      // Width: pinned columns get a fixed comfortable width.
-      // Non-pinned columns share the main scroll area equally up to maxVisible
-      // before overflowing into horizontal scroll.
+      // Width: each column takes 1/divisor of its parent container width
+      // (in px), minus the shared 12px gap. When the count > maxVisible, the
+      // parent's overflow-x:auto handles horizontal scroll.
       style={{
         flex: "0 0 auto",
-        width: pinned
-          ? "clamp(260px, 22vw, 320px)"
-          : `clamp(260px, calc((100vw - 460px) / ${maxVisible} - 12px), 460px)`,
+        width: `calc((100% - ${(divisor - 1) * 12}px) / ${divisor})`,
         ...(listColor
           ? { ["--list-color" as string]: listColor }
           : {}),

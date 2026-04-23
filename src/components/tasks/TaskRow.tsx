@@ -3,7 +3,6 @@ import { useDraggable, useDroppable } from "@dnd-kit/core";
 import {
   Play,
   Pause,
-  Star,
   MoreHorizontal,
   Copy,
   Pencil,
@@ -612,8 +611,8 @@ function ChildrenBlock({
   );
 }
 
-/** Collapsed urgency chip: single outline star with the value (1-5) inside,
- *  rendered in plain black to match the rest of the row icons. Click to expand. */
+/** Collapsed urgency chip: 5 thin vertical bars, filled up to the value.
+ *  Click to open a larger 5-bar picker for editing. */
 function UrgencyChip({
   value,
   onChange,
@@ -622,30 +621,31 @@ function UrgencyChip({
   onChange: (v: number) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const set = value > 0;
 
   return (
     <div className="relative shrink-0">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        aria-label="דחיפות"
-        className="relative flex items-center justify-center w-5 h-5 rounded-md hover:bg-ink-100 text-ink-900"
+        aria-label={`דחיפות ${value}`}
+        title={`דחיפות ${value}/5`}
+        className="flex items-end justify-center gap-[1.5px] px-0.5 py-1 rounded-md hover:bg-ink-100"
       >
-        <Star className="w-4 h-4" strokeWidth={1.75} />
-        {set && (
+        {[1, 2, 3, 4, 5].map((n) => (
           <span
-            className="absolute inset-0 flex items-center justify-center text-[9px] font-bold text-ink-900 tabular-nums"
-            aria-hidden
-          >
-            {value}
-          </span>
-        )}
+            key={n}
+            className={cn(
+              "w-[2px] rounded-sm transition-colors",
+              n <= value ? "bg-ink-900" : "bg-ink-200"
+            )}
+            style={{ height: `${4 + n * 2}px` }}
+          />
+        ))}
       </button>
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute end-0 mt-1 z-20 bg-white border border-ink-200 rounded-xl shadow-lift p-1.5 flex items-center gap-0.5">
+          <div className="absolute end-0 mt-1 z-20 bg-white border border-ink-200 rounded-xl shadow-lift p-2 flex items-end gap-1">
             {[1, 2, 3, 4, 5].map((n) => (
               <button
                 key={n}
@@ -654,12 +654,17 @@ function UrgencyChip({
                   onChange(n === value ? 0 : n);
                   setOpen(false);
                 }}
-                className="p-0.5 hover:scale-110 transition-transform text-ink-900"
+                className="flex flex-col items-center gap-0.5"
+                title={`${n}/5`}
               >
-                <Star
-                  className={cn("w-4 h-4", n <= value && "fill-current")}
-                  strokeWidth={1.75}
+                <span
+                  className={cn(
+                    "w-2 rounded-sm transition-colors",
+                    n <= value ? "bg-ink-900" : "bg-ink-200"
+                  )}
+                  style={{ height: `${6 + n * 4}px` }}
                 />
+                <span className="text-[9px] font-mono text-ink-500">{n}</span>
               </button>
             ))}
           </div>

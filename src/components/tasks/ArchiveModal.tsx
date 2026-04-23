@@ -5,6 +5,8 @@ import {
 } from "@/lib/hooks/useTaskLists";
 import { format, differenceInDays } from "date-fns";
 import { he } from "date-fns/locale";
+import { ListIcon } from "./list-icons";
+import { ClipboardList } from "lucide-react";
 
 interface ArchiveModalProps {
   onClose: () => void;
@@ -63,8 +65,8 @@ export function ArchiveModal({ onClose }: ArchiveModalProps) {
                         : undefined
                     }
                   >
-                    <span className="text-base leading-none">
-                      {l.emoji ?? "📋"}
+                    <span className="text-ink-700 leading-none">
+                      <ListIcon emoji={l.emoji} fallback={ClipboardList} className="w-4 h-4" />
                     </span>
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-medium text-ink-900 truncate">

@@ -3,6 +3,7 @@ import { ChevronUp, ChevronDown, BarChart3 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { useTimeUnit, formatSeconds } from "@/lib/hooks/useTimeUnit";
 import type { Task, TaskList } from "@/lib/types/domain";
+import { ListIcon } from "./list-icons";
 
 interface StatsPanelProps {
   /** Visible task lists to compute stats for */
@@ -145,7 +146,11 @@ function ListStatsRow({
             className="w-2 h-2 rounded-full shrink-0"
             style={{ backgroundColor: color }}
           />
-          {list?.emoji && <span className="text-sm leading-none">{list.emoji}</span>}
+          {list?.emoji && (
+            <span className="text-ink-700 leading-none">
+              <ListIcon emoji={list.emoji} className="w-3.5 h-3.5" />
+            </span>
+          )}
           <span className="font-medium truncate">{label}</span>
         </span>
       </td>

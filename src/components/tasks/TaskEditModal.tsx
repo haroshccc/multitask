@@ -241,7 +241,9 @@ export function TaskEditModal({ taskId, onClose }: TaskEditModalProps) {
                         <option value="">לא משויכת</option>
                         {lists.map((l) => (
                           <option key={l.id} value={l.id}>
-                            {l.emoji ? `${l.emoji} ` : ""}
+                            {l.emoji && !l.emoji.startsWith("icon:")
+                              ? `${l.emoji} `
+                              : ""}
                             {l.name}
                           </option>
                         ))}

@@ -611,8 +611,9 @@ function ChildrenBlock({
   );
 }
 
-/** Collapsed urgency chip: 5 thin vertical bars, filled up to the value.
- *  Click to open a larger 5-bar picker for editing. */
+/** Collapsed urgency chip: three short horizontal lines stacked vertically,
+ *  filled bottom-up by value (1-3). Click to open a picker with 1-3 options.
+ *  Legacy data values 4/5 are clamped to 3. */
 function UrgencyChip({
   value,
   onChange,
@@ -621,50 +622,55 @@ function UrgencyChip({
   onChange: (v: number) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const filled = Math.min(3, Math.max(0, value));
 
   return (
     <div className="relative shrink-0">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        aria-label={`דחיפות ${value}`}
-        title={`דחיפות ${value}/5`}
-        className="flex items-end justify-center gap-[1.5px] px-0.5 py-1 rounded-md hover:bg-ink-100"
+        aria-label={`דחיפות ${filled}/3`}
+        title={`דחיפות ${filled}/3`}
+        className="flex flex-col items-center justify-center gap-[2px] px-1 py-1 rounded-md hover:bg-ink-100"
       >
-        {[1, 2, 3, 4, 5].map((n) => (
+        {/* Top, middle, bottom — fill bottom-up. */}
+        {[3, 2, 1].map((n) => (
           <span
             key={n}
             className={cn(
-              "w-[2px] rounded-sm transition-colors",
-              n <= value ? "bg-ink-900" : "bg-ink-200"
+              "h-[2px] w-3 rounded-sm transition-colors",
+              n <= filled ? "bg-ink-900" : "bg-ink-200"
             )}
-            style={{ height: `${4 + n * 2}px` }}
           />
         ))}
       </button>
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute end-0 mt-1 z-20 bg-white border border-ink-200 rounded-xl shadow-lift p-2 flex items-end gap-1">
-            {[1, 2, 3, 4, 5].map((n) => (
+          <div className="absolute end-0 mt-1 z-20 bg-white border border-ink-200 rounded-xl shadow-lift p-2 flex items-center gap-2">
+            {[1, 2, 3].map((n) => (
               <button
                 key={n}
                 type="button"
                 onClick={() => {
-                  onChange(n === value ? 0 : n);
+                  onChange(n === filled ? 0 : n);
                   setOpen(false);
                 }}
-                className="flex flex-col items-center gap-0.5"
-                title={`${n}/5`}
+                className="flex flex-col items-center gap-1.5 p-1 rounded-md hover:bg-ink-100"
+                title={`${n}/3`}
               >
-                <span
-                  className={cn(
-                    "w-2 rounded-sm transition-colors",
-                    n <= value ? "bg-ink-900" : "bg-ink-200"
-                  )}
-                  style={{ height: `${6 + n * 4}px` }}
-                />
-                <span className="text-[9px] font-mono text-ink-500">{n}</span>
+                <div className="flex flex-col items-center gap-[3px]">
+                  {[3, 2, 1].map((row) => (
+                    <span
+                      key={row}
+                      className={cn(
+                        "h-[3px] w-5 rounded-sm",
+                        row <= n ? "bg-ink-900" : "bg-ink-200"
+                      )}
+                    />
+                  ))}
+                </div>
+                <span className="text-[10px] font-mono text-ink-500">{n}</span>
               </button>
             ))}
           </div>

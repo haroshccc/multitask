@@ -6,6 +6,7 @@ import { useTaskLists } from "@/lib/hooks/useTaskLists";
 import { useThoughtLists } from "@/lib/hooks/useThoughtLists";
 import { useCreateTaskList } from "@/lib/hooks/useTaskLists";
 import { useCreateThoughtList } from "@/lib/hooks/useThoughtLists";
+import { ListIcon } from "@/components/tasks/list-icons";
 import type { DashboardScreen, TaskList, ThoughtList } from "@/lib/types/domain";
 
 export type ListKind = "task" | "thought";
@@ -180,7 +181,11 @@ function ListChip({
       style={visible && bg ? { borderColor: bg, color: bg } : undefined}
       title={visible ? "הסתר רשימה" : "הצג רשימה"}
     >
-      {list.emoji && <span>{list.emoji}</span>}
+      {list.emoji && (
+        <span className="inline-flex items-center">
+          <ListIcon emoji={list.emoji} className="w-3.5 h-3.5" />
+        </span>
+      )}
       <span>{list.name}</span>
       {visible ? (
         <Eye className="w-3 h-3 opacity-60" />

@@ -22,6 +22,7 @@ import type { RowDisplayPrefs } from "@/lib/hooks/useRowDisplayPrefs";
 import { pushUndo } from "@/lib/undo/store";
 import { TaskRow, type TaskTreeNode } from "./TaskRow";
 import { ShareListModal } from "./ShareListModal";
+import { LIST_ICON_PRESETS, ListIcon } from "./list-icons";
 
 interface TaskColumnProps {
   /** null = the "unassigned" pinned column */
@@ -39,18 +40,6 @@ interface TaskColumnProps {
   display: RowDisplayPrefs;
   onOpenEdit: (taskId: string) => void;
 }
-
-// 20 category icons matching the "themes" palette screenshots. Ordered by row:
-//   1. work / household / shopping / study / fitness
-//   2. appointments / ideas / leisure / personal-care / projects
-//   3. health / finance / garden / pets / travel
-//   4. cooking / holidays / communication / creation / repairs
-const EMOJI_PRESETS = [
-  "📋", "🏠", "🛒", "📚", "🏃",
-  "📅", "💡", "🎬", "🪥", "📁",
-  "🩺", "💰", "🪴", "🐾", "🧳",
-  "🍳", "🎁", "📱", "🎨", "🔧",
-];
 
 const COLOR_PRESETS = [
   "#ef4444",
@@ -230,19 +219,22 @@ export function TaskColumn({
           />
         )}
 
-        {/* Emoji slot (click to change; empty circle if none) */}
+        {/* Icon slot (click to change) */}
         <button
           type="button"
           onClick={() => canEdit && setEmojiOpen((v) => !v)}
           disabled={!canEdit}
           className={cn(
-            "text-base rounded-md leading-none h-6 w-6 flex items-center justify-center shrink-0",
+            "rounded-md h-6 w-6 flex items-center justify-center shrink-0 text-ink-900",
             canEdit && "hover:bg-ink-100",
             !displayEmoji && canEdit && "text-ink-300 border border-dashed border-ink-300"
           )}
-          title={canEdit ? "אימוג'י" : undefined}
+          title={canEdit ? "אייקון" : undefined}
         >
-          {displayEmoji ?? (listId === null ? "📥" : "·")}
+          <ListIcon emoji={displayEmoji} className="w-4 h-4" />
+          {!displayEmoji && !canEdit && (
+            <span className="text-ink-300">·</span>
+          )}
         </button>
 
         {emojiOpen && (
@@ -250,16 +242,25 @@ export function TaskColumn({
             <div className="fixed inset-0 z-20" onClick={() => setEmojiOpen(false)} />
             <div className="absolute top-full start-2 mt-1 z-30 bg-white border border-ink-200 rounded-xl shadow-lift p-2">
               <div className="grid grid-cols-5 gap-1">
-                {EMOJI_PRESETS.map((e) => (
-                  <button
-                    key={e}
-                    type="button"
-                    onClick={() => setEmoji(e)}
-                    className="w-7 h-7 rounded-md hover:bg-ink-100 flex items-center justify-center text-base"
-                  >
-                    {e}
-                  </button>
-                ))}
+                {LIST_ICON_PRESETS.map((preset) => {
+                  const PresetIcon = preset.icon;
+                  const stored = `icon:${preset.key}`;
+                  const selected = list?.emoji === stored;
+                  return (
+                    <button
+                      key={preset.key}
+                      type="button"
+                      onClick={() => setEmoji(stored)}
+                      title={preset.label}
+                      className={cn(
+                        "w-8 h-8 rounded-md flex items-center justify-center text-ink-900 hover:bg-ink-100",
+                        selected && "bg-ink-100 ring-1 ring-ink-300"
+                      )}
+                    >
+                      <PresetIcon className="w-4 h-4" strokeWidth={1.75} />
+                    </button>
+                  );
+                })}
               </div>
               <button
                 type="button"

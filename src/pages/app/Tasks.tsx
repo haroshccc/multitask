@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   DndContext,
   PointerSensor,
@@ -58,6 +59,22 @@ export function Tasks() {
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [rowDisplayOpen, setRowDisplayOpen] = useState(false);
   const [statusesOpen, setStatusesOpen] = useState(false);
+
+  // Allow ?edit=<taskId> in the URL to pre-open the TaskEditModal — used by
+  // the QuickCapture "+ משימה חדשה" action to land the user directly on an
+  // editable draft. We strip the param once consumed so the modal can be
+  // closed without it snapping back open.
+  const [urlParams, setUrlParams] = useSearchParams();
+  useEffect(() => {
+    const editId = urlParams.get("edit");
+    if (editId && editId !== editingTaskId) {
+      setEditingTaskId(editId);
+      const next = new URLSearchParams(urlParams);
+      next.delete("edit");
+      setUrlParams(next, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlParams]);
   const [statsOpen, setStatsOpen] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
     // Default: closed (user can open via the chevron on the header)
@@ -370,10 +387,10 @@ export function Tasks() {
           collisionDetection={pointerWithin}
           onDragEnd={handleDragEnd}
         >
-          {/* On mobile: stack vertically — main area first (primary work),
-              Unassigned below. On md+: side-by-side with Unassigned on the
-              leading (right in RTL) edge. */}
-          <div className="flex flex-col-reverse md:flex-row items-stretch gap-3 min-h-[calc(100vh-340px)]">
+          {/* On mobile: stack vertically — Unassigned on top (collapsible to
+              a thin bar), then the main list area. On md+: side-by-side with
+              Unassigned on the leading (right in RTL) edge. */}
+          <div className="flex flex-col md:flex-row items-stretch gap-3 min-h-[calc(100vh-340px)]">
             <UnassignedBanner
               open={unassignedOpen}
               onToggle={() => setUnassignedOpen((v) => !v)}

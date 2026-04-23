@@ -1,5 +1,12 @@
 import { useDroppable } from "@dnd-kit/core";
-import { Inbox, ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import {
+  Inbox,
+  ChevronLeft,
+  ChevronRight,
+  ChevronUp,
+  ChevronDown,
+  Plus,
+} from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils/cn";
 import { useCreateTask } from "@/lib/hooks/useTasks";
@@ -55,31 +62,53 @@ export function UnassignedBanner({
     setFocusTaskId(t.id);
   };
 
-  // Collapsed: narrow vertical strip — icon + count + expand button.
+  // Collapsed — two variants:
+  //   Mobile: thin horizontal strip (like the FilterBar collapsed state).
+  //   Desktop: narrow vertical strip on the leading edge.
   if (!open) {
     return (
       <div
         ref={setNodeRef}
         className={cn(
-          "flex-shrink-0 bg-white border border-ink-200 rounded-xl shadow-soft flex flex-col items-center py-3 px-1 w-10 transition-colors",
+          "bg-white border border-ink-200 rounded-xl shadow-soft transition-colors",
+          // Mobile: full width thin bar
+          "w-full md:w-10",
+          // Desktop: narrow vertical strip
+          "md:flex-shrink-0",
           isOver && "ring-2 ring-primary-400 border-primary-300"
         )}
       >
+        {/* Mobile-only thin horizontal bar */}
         <button
           onClick={onToggle}
           type="button"
-          className="p-1 rounded-md hover:bg-ink-100 text-ink-600"
+          className="md:hidden w-full flex items-center gap-2 px-3 py-1.5 hover:bg-ink-50 rounded-xl"
           title="פתח לא משויכות"
         >
-          <ChevronRight className="w-4 h-4" />
+          <Inbox className="w-4 h-4 text-ink-600 shrink-0" />
+          <span className="text-sm font-semibold text-ink-900">לא משויכות</span>
+          <span className="text-xs text-ink-500 tabular-nums">({totalCount})</span>
+          <ChevronDown className="w-3.5 h-3.5 text-ink-500 ms-auto" />
         </button>
-        <div className="flex-1 flex flex-col items-center justify-center gap-2">
-          <Inbox className="w-5 h-5 text-ink-500" />
-          <div
-            className="text-xs font-semibold text-ink-700 tabular-nums px-1 py-0.5 rounded bg-ink-100"
-            style={{ writingMode: "vertical-rl" }}
+
+        {/* Desktop-only narrow vertical strip */}
+        <div className="hidden md:flex flex-col items-center py-3 px-1">
+          <button
+            onClick={onToggle}
+            type="button"
+            className="p-1 rounded-md hover:bg-ink-100 text-ink-600"
+            title="פתח לא משויכות"
           >
-            {totalCount} לא משויכות
+            <ChevronRight className="w-4 h-4" />
+          </button>
+          <div className="flex-1 flex flex-col items-center justify-center gap-2">
+            <Inbox className="w-5 h-5 text-ink-500" />
+            <div
+              className="text-xs font-semibold text-ink-700 tabular-nums px-1 py-0.5 rounded bg-ink-100"
+              style={{ writingMode: "vertical-rl" }}
+            >
+              {totalCount} לא משויכות
+            </div>
           </div>
         </div>
       </div>
@@ -114,7 +143,9 @@ export function UnassignedBanner({
           className="p-1 rounded-md text-ink-500 hover:text-ink-900 hover:bg-ink-100"
           title="סגור לא משויכות"
         >
-          <ChevronLeft className="w-4 h-4" />
+          {/* Mobile closes upward; desktop closes sideways (toward the edge). */}
+          <ChevronUp className="w-4 h-4 md:hidden" />
+          <ChevronLeft className="w-4 h-4 hidden md:block" />
         </button>
       </div>
 

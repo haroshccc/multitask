@@ -23,12 +23,14 @@ interface AnimatedFabProps {
  */
 const ICONS: LucideIcon[] = [Mic, Plus, CheckSquare, CalendarIcon, FolderKanban];
 
+// Brand-gradient cycle only: yellow → amber → pink → orange. No greens /
+// blues / purples, so the FAB always reads as part of the Multitask identity.
 const GRADIENTS: string[] = [
-  "linear-gradient(135deg, #f59e0b 0%, #f97316 100%)", // amber → orange
-  "linear-gradient(135deg, #ec4899 0%, #db2777 100%)", // pink
-  "linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)", // purple
-  "linear-gradient(135deg, #3b82f6 0%, #0ea5e9 100%)", // blue
-  "linear-gradient(135deg, #10b981 0%, #14b8a6 100%)", // green → teal
+  "linear-gradient(135deg, #facc15 0%, #f59e0b 100%)", // yellow → amber
+  "linear-gradient(135deg, #f59e0b 0%, #ec4899 100%)", // amber → pink
+  "linear-gradient(135deg, #ec4899 0%, #f97316 100%)", // pink → orange
+  "linear-gradient(135deg, #f97316 0%, #facc15 100%)", // orange → yellow
+  "linear-gradient(135deg, #facc15 0%, #ec4899 100%)", // yellow → pink
 ];
 
 export function AnimatedFab({ onClick, paused = false }: AnimatedFabProps) {
@@ -50,7 +52,12 @@ export function AnimatedFab({ onClick, paused = false }: AnimatedFabProps) {
       onClick={onClick}
       aria-label="יצירה מהירה"
       title="יצירה מהירה"
-      className="fixed bottom-20 md:bottom-6 end-4 md:end-6 z-30 w-16 h-16 md:w-[72px] md:h-[72px] rounded-full shadow-lift flex items-center justify-center text-white ring-1 ring-white/20 hover:scale-105 transition-transform"
+      // Mobile: sits inside the bottom nav, protruding upward slightly so it
+      // reads as a primary action attached to the bar.
+      // md+: free-floating bottom-right with a larger footprint.
+      className="fixed z-40 rounded-full shadow-lift flex items-center justify-center text-white ring-1 ring-white/25 hover:scale-105 transition-transform
+        bottom-8 end-4 w-16 h-16
+        md:bottom-6 md:end-6 md:w-[72px] md:h-[72px]"
       animate={{ background: gradient }}
       transition={{ duration: 1.4, ease: "easeInOut" }}
     >

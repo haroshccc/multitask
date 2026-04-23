@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils/cn";
 import { useNavigate } from "react-router-dom";
 import { useCreateThought } from "@/lib/hooks/useThoughts";
 import { useCreateRecording, useUploadRecordingBlob, useTriggerRecordingProcessing } from "@/lib/hooks/useRecordings";
+import { useCreateTask } from "@/lib/hooks/useTasks";
 import { useOrgScope } from "@/lib/hooks/useOrgScope";
 
 interface QuickCaptureProps {
@@ -22,6 +23,7 @@ export function QuickCapture({ open, onClose }: QuickCaptureProps) {
   const createRecording = useCreateRecording();
   const uploadBlob = useUploadRecordingBlob();
   const triggerProcessing = useTriggerRecordingProcessing();
+  const createTask = useCreateTask();
 
   const [mode, setMode] = useState<Mode>("menu");
   const [text, setText] = useState("");
@@ -214,9 +216,24 @@ export function QuickCapture({ open, onClose }: QuickCaptureProps) {
                   <MenuAction
                     icon={CheckSquare}
                     label="משימה חדשה"
-                    onClick={() => {
-                      onClose();
-                      navigate("/app/tasks");
+                    onClick={async () => {
+                      try {
+                        const t = await createTask.mutateAsync({
+                          title: "",
+                          task_list_id: null, // defaults to "לא משויכות"
+                          parent_task_id: null,
+                          status: "todo",
+                          urgency: 3,
+                        });
+                        onClose();
+                        // Take the user to the Tasks screen with the new task
+                        // pre-opened in the edit modal; there they can set
+                        // title, pick a list, etc.
+                        navigate(`/app/tasks?edit=${t.id}`);
+                      } catch (err) {
+                        console.error("quick task create failed:", err);
+                        setError("יצירת משימה נכשלה. נסי שוב.");
+                      }
                     }}
                   />
                   <MenuAction

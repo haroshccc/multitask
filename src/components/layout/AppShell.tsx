@@ -18,6 +18,7 @@ import {
   X,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth/AuthContext";
+import { useRealtimeSync } from "@/lib/hooks/useRealtimeSync";
 import { cn } from "@/lib/utils/cn";
 import { QuickCapture } from "@/components/capture/QuickCapture";
 import { Logo } from "@/components/brand/Logo";
@@ -45,6 +46,10 @@ export function AppShell() {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [captureOpen, setCaptureOpen] = useState(false);
+
+  // Subscribe the whole session to Realtime invalidations for the active org.
+  // Must stay mounted at AppShell level — DO NOT move into individual screens.
+  useRealtimeSync();
 
   const handleSignOut = async () => {
     await signOut();

@@ -253,6 +253,22 @@ interface ReorderTaskInput {
   taskListId?: string | null;
 }
 
+export function useDuplicateTaskTree() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (taskId: string): Promise<string> => {
+      const { data, error } = await supabase.rpc("duplicate_task_tree", {
+        p_source_task_id: taskId,
+      });
+      if (error) throw error;
+      return data as unknown as string;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: taskKeys.all });
+    },
+  });
+}
+
 export function useReorderTask() {
   const qc = useQueryClient();
   return useMutation({

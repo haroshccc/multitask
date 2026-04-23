@@ -1,17 +1,17 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabase/client";
 import { useAuth } from "@/lib/auth/AuthContext";
 
 export function AuthCallback() {
   const navigate = useNavigate();
-  const { loading, session, memberships, refreshProfile } = useAuth();
+  const { loading, session, memberships } = useAuth();
   const [exchanging, setExchanging] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // StrictMode mounts components twice in dev; guard against exchanging the
+  // same one-time OAuth code twice (the second attempt always fails).
+  const exchangedRef = useRef(false);
 
-  // On mount: explicitly exchange the ?code= URL param for a session.
-  // Relying on Supabase client's detectSessionInUrl is racy with router
-  // navigation — we want a deterministic success/fail we can branch on.
   useEffect(() => {
     const url = new URL(window.location.href);
     const code = url.searchParams.get("code");
@@ -24,14 +24,13 @@ export function AuthCallback() {
     }
 
     if (!code) {
-      // Nothing to exchange — just fall through to the routing effect below
       setExchanging(false);
       return;
     }
 
-    // Hard timeout so we never leave the user staring at a spinner. If the
-    // exchange (or anything downstream) stalls, surface an actionable error
-    // instead of an infinite "משלימה התחברות...".
+    if (exchangedRef.current) return;
+    exchangedRef.current = true;
+
     const timeoutId = window.setTimeout(() => {
       setError(
         "ההתחברות אורכת יותר מהצפוי. נסי לרענן את הדף או להתחבר שוב."
@@ -44,24 +43,33 @@ export function AuthCallback() {
       .then(({ error: exchErr }) => {
         window.clearTimeout(timeoutId);
         if (exchErr) {
+          // "Lock stolen" is transient contention between the exchange and
+          // onAuthStateChange — the session still arrives. Treat it as success.
+          if (/lock.*stolen/i.test(exchErr.message)) {
+            console.warn("exchange reported lock contention; treating as OK");
+            setExchanging(false);
+            return;
+          }
           console.error("exchangeCodeForSession failed:", exchErr);
           setError(exchErr.message);
           setExchanging(false);
           return;
         }
-        // Don't await refreshProfile — AuthContext's onAuthStateChange
-        // listener will load profile+memberships once the session is set.
-        // Blocking on it here meant any hanging DB query left the UI stuck
-        // on "משלימה התחברות..." forever.
-        refreshProfile().catch((err) => {
-          console.error("refreshProfile after auth failed:", err);
-        });
+        // Don't load profile/memberships here — AuthContext's
+        // onAuthStateChange listener already schedules that once the session
+        // is set (see the setTimeout(0) in AuthContext).
         setExchanging(false);
       })
       .catch((err) => {
         window.clearTimeout(timeoutId);
+        const msg = err instanceof Error ? err.message : String(err);
+        if (/lock.*stolen/i.test(msg)) {
+          console.warn("exchange reported lock contention; treating as OK");
+          setExchanging(false);
+          return;
+        }
         console.error("exchangeCodeForSession threw:", err);
-        setError(String(err));
+        setError(msg);
         setExchanging(false);
       });
 

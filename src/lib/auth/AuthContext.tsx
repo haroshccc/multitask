@@ -73,21 +73,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     })();
 
-    const { data: subscription } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
+    const { data: subscription } = supabase.auth.onAuthStateChange((_event, newSession) => {
       if (!mounted) return;
       setSession(newSession);
-      try {
+      // IMPORTANT: never `await` inside this callback. Supabase holds the
+      // internal auth-token lock while invoking subscribers; awaiting any
+      // query from here re-enters the lock and deadlocks ("Lock was released
+      // because another request stole it"). Defer the DB work to a new tick.
+      setTimeout(() => {
+        if (!mounted) return;
         if (newSession?.user) {
-          await loadProfileAndMemberships(newSession.user.id);
+          loadProfileAndMemberships(newSession.user.id).catch((err) => {
+            console.error("Auth state change handler failed:", err);
+          });
         } else {
           setProfile(null);
           setMemberships([]);
           setActiveOrgId(null);
           localStorage.removeItem(ACTIVE_ORG_STORAGE_KEY);
         }
-      } catch (err) {
-        console.error("Auth state change handler failed:", err);
-      }
+      }, 0);
     });
 
     return () => {

@@ -1487,6 +1487,57 @@ Hero: "החלל לחשוב. החלל לעשות."
 
   **הפאזה הבאה (לסשן הבא):** §16 — מסך יומן.
 
+- **2026-04-24** — פאזה 4 הסתיימה: מסך יומן (§16) + מסך Gantt (§17).
+  - **יומן** — יום/שבוע/חודש כ-custom component (CSS grid + absolute-positioned
+    blocks). אלגוריתם column-packing לחפיפות, קו "עכשיו" אדום, highlight של
+    היום הנוכחי בשבוע.
+  - מקווקו = משימות מתוזמנות (dashed border); מלא = אירועים (solid).
+    פסי זמן בפועל (`time_entries`) מצוירים כ-stripes ירוקים בצד inline-start
+    של כל רצועת שעה — רואים חריגה מול התכנון ברגע אחד.
+  - `TasksEventsToggle` (both/tasks/events) יושב ב-`ListsBanner.extra`.
+  - יצירת אירוע: קליק על רצועת זמן פנויה פותח `EventEditModal` עם שעת
+    ברירת מחדל; עריכת משימה פותחת את `TaskEditModal` המשותף.
+  - סינון: `useFiltersFromUrl` עם lists/tags/onlyMine; טאסקים עוברים גם
+    דרך `scheduledAfter/Before` כדי לצמצם תעבורת דאטה לטווח הנראה.
+  - **Gantt** — custom timeline (SVG arrows + CSS grid) ב-4 רמות זום
+    (יום/שבוע/חודש/רבעון). שורות משימות עם indent של `parent_task_id`,
+    בלוק = `scheduled_at → +duration_minutes` (fallback: `estimated_hours`).
+  - גרירה אופקית של בלוק = `updateTask({ scheduled_at })`; גרירת קצה =
+    `updateTask({ duration_minutes })`. Snap מותאם רזולוציה (15 דקות בזום יום,
+    עד יום שלם בזום רבעון). pointer events raw, לא `@dnd-kit`, כי הציר רציף.
+  - חיצי תלויות: SVG paths עם marker, כל 4 סוגי relation (בחירת endpoint
+    לפי `relation`). flip קואורדינטות X ל-RTL (SVG לא יורש `dir="rtl"`).
+  - **Critical path** — seed מהמשימות שסוף שלהן = סוף הפרויקט, הילוך לאחור
+    על `finish_to_start` reverse-edges ומסומן כ-critical כל מי שה-slack
+    שלו (פער הזמן בין סוף הקודם לתחילת הבא) קטן/שווה לשעה. Critical bars
+    מצוירים בגרדיאנט danger→primary, רקע שורה מוצל, חיצים אדומים רציפים.
+    Toggle "Critical path בלבד" מסנן ל-UI.
+  - שכבת דאטה — שני hooks חדשים נוספו לתשתית:
+    - `useTimeEntriesByRange({from,to})` + שאילתת org-wide עם `allTimeEntriesRange`
+      realtime family (ליומן).
+    - `useAllTaskDependencies()` + `listAllTaskDependencies` (ל-Gantt).
+      Realtime על `task_dependencies` משבטל את המשפחה.
+  - החלטות שלא היו מפורשות ב-SPEC המקורי:
+    - **קריטי = slack ≤ 1 שעה** — סף tolerance כדי שהיסטי קטן בגלל
+      רזולוציית `duration_minutes` לא ישבור את חישוב ה-critical path.
+    - **Gantt fallback timing**: משימה עם `estimated_hours` בלבד (בלי
+      `scheduled_at`) מוצגת החל מ"היום" במקום להישמט. משימות בלי אחד מהשניים
+      לא מוצגות כלל — הן "עדיין לא בתמונה" של ציר הזמן.
+    - **יומן — שבוע מתחיל ביום א'** (המוסכמה הישראלית), לא יום ב' (ISO).
+    - **יומן בתצוגה חודשית** — כל פריט מוצג פעם אחת (ביום ה-start). אירוע
+      רב-יומי לא מתפרס על כל הימים ב-MVP הזה; ה-view הזה הוא "תצוגה מהירה"
+      ולא מקור אמת. שבוע/יום כן מחתכים נכון.
+    - **פעולות יצירת Meet / סנכרון Google**: placeholder ב-modal ("בקרוב"),
+      הסנכרון עצמו עובר לפאזה 9b לפי §9 של ה-SPEC.
+  - **חוב טכני מול פאזה 3 wrap-up** (להאחדה בפאזת ליטוש עתידית):
+    - `EventEditModal` משתמש ב-`<input type="datetime-local">` נייטיבי,
+      לא ב-`<DateTimePicker>` שנכנס ל-Tasks בפאזה 3. כשנוסיף "צור
+      משימה ביומן" (במקום רק "אירוע") נעבור גם לשם לרכיבים האחידים
+      (`<DateTimePicker>`, `<DurationInput>`, `<UrgencyChip>`).
+    - הטולברים ב-Calendar/Gantt לא עברו דרך "גלגל הגדרות הדף" שנכנס
+      ל-Tasks — הם יושבים בראש המסך כפאנל גלוי תמיד, כי שתי ההגדרות
+      (view, zoom) הן מדרגת-שינוי-תכופה ולא preferences.
+
 
 
 

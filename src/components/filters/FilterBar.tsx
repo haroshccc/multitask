@@ -78,6 +78,9 @@ interface FilterBarProps {
   onChange: (next: FilterConfig) => void;
   fields: FilterField[];
   className?: string;
+  /** When true, skip the outer `card` wrapper and inner padding — useful when
+   *  this sits alongside another component inside a shared banner card. */
+  embed?: boolean;
 }
 
 const COLLAPSE_STORAGE_KEY = (screen: string) => `multitask.filterbar.${screen}.collapsed`;
@@ -88,6 +91,7 @@ export function FilterBar({
   onChange,
   fields,
   className,
+  embed = false,
 }: FilterBarProps) {
   const { data: savedFilters = [] } = useSavedFilters(screenKey);
   const createSaved = useCreateSavedFilter();
@@ -120,7 +124,16 @@ export function FilterBar({
 
   return (
     <>
-      <div className={cn("card space-y-2", !collapsed && "p-3", collapsed && "px-3 py-1.5", className)}>
+      <div
+        className={cn(
+          "space-y-2",
+          !embed && "card",
+          !embed && !collapsed && "p-3",
+          !embed && collapsed && "px-3 py-1.5",
+          embed && "p-2",
+          className
+        )}
+      >
         {/* Header row: title + state + minimize */}
         <div className="flex items-center gap-2 flex-wrap">
           <button

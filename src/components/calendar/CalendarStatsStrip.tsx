@@ -9,6 +9,8 @@ interface Props {
   timeEntries: TimeEntry[];
   anchor: Date;
   className?: string;
+  /** Skip the outer `card` wrapper — for embedding inside a shared banner. */
+  embed?: boolean;
 }
 
 /**
@@ -21,6 +23,7 @@ export function CalendarStatsStrip({
   timeEntries,
   anchor,
   className,
+  embed = false,
 }: Props) {
   const stats = useMemo(() => {
     const weekStart = startOfWeek(anchor);
@@ -74,7 +77,8 @@ export function CalendarStatsStrip({
   return (
     <div
       className={cn(
-        "card px-3 py-2 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs",
+        "px-3 py-2 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs",
+        !embed && "card",
         className
       )}
     >

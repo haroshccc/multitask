@@ -12,6 +12,8 @@ interface StatsPanelProps {
   tasks: Task[];
   open: boolean;
   onToggle: () => void;
+  /** Skip the outer `card` wrapper — for embedding inside a shared banner. */
+  embed?: boolean;
 }
 
 interface ListStats {
@@ -32,7 +34,7 @@ const UNASSIGNED_KEY = "__unassigned__";
  * as a slim row: name → percent → counts → time. Toggle collapses it to a
  * single header line.
  */
-export function StatsPanel({ lists, tasks, open, onToggle }: StatsPanelProps) {
+export function StatsPanel({ lists, tasks, open, onToggle, embed = false }: StatsPanelProps) {
   const [timeUnit] = useTimeUnit();
 
   const stats: ListStats[] = useMemo(() => {
@@ -78,7 +80,7 @@ export function StatsPanel({ lists, tasks, open, onToggle }: StatsPanelProps) {
   }, [lists, tasks]);
 
   return (
-    <div className="card overflow-hidden">
+    <div className={cn("overflow-hidden", !embed && "card")}>
       <button
         type="button"
         onClick={onToggle}

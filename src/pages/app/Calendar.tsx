@@ -18,6 +18,7 @@ import { CalendarWeekView } from "@/components/calendar/CalendarWeekView";
 import { CalendarMonthView } from "@/components/calendar/CalendarMonthView";
 import { CalendarAgendaView } from "@/components/calendar/CalendarAgendaView";
 import { CalendarStatsStrip } from "@/components/calendar/CalendarStatsStrip";
+import { WorkbenchBanner } from "@/components/layout/WorkbenchBanner";
 import { EventEditModal } from "@/components/calendar/EventEditModal";
 import {
   type CalendarItem,
@@ -37,6 +38,7 @@ import {
   useTaskLists,
   useTasks,
   useTimeEntriesByRange,
+  useCreateTask,
 } from "@/lib/hooks";
 import { useCalendarPrefs } from "@/lib/hooks/useCalendarPrefs";
 import { useMediaQuery } from "@/lib/hooks/useMediaQuery";
@@ -149,6 +151,23 @@ export function Calendar() {
     end: Date;
   } | null>(null);
 
+  const createTask = useCreateTask();
+  const handleCreateTask = async () => {
+    const now = new Date();
+    const start = new Date(now);
+    start.setMinutes(0, 0, 0);
+    const task = await createTask.mutateAsync({
+      title: "",
+      task_list_id: null,
+      parent_task_id: null,
+      scheduled_at: start.toISOString(),
+      duration_minutes: 60,
+      urgency: 3,
+      status: "todo",
+    });
+    setEditingTaskId(task.id);
+  };
+
   const handleItemClick = (item: CalendarItem) => {
     if (item.kind === "task") setEditingTaskId((item.source as { id: string }).id);
     else setEditingEventId((item.source as { id: string }).id);
@@ -173,20 +192,33 @@ export function Calendar() {
       title="יומן"
       subtitle="יום · שבוע · חודש · אג׳נדה — משימות ואירועים באותה רצועת זמן, עם השוואת מתוכנן ובפועל."
       actions={
-        <button
-          onClick={() => {
-            const now = new Date();
-            const start = new Date(now.getTime());
-            start.setMinutes(0, 0, 0);
-            const end = new Date(start.getTime() + 60 * 60_000);
-            setCreatingEvent({ start, end });
-          }}
-          className="btn-accent text-xs"
-          type="button"
-        >
-          <Plus className="w-4 h-4" />
-          אירוע חדש
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Task creation button — styled to match the "outlined task" look on
+              the calendar grid (colored border, colored text, empty inside). */}
+          <button
+            onClick={handleCreateTask}
+            className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium bg-white border-[1.5px] border-ink-500 text-ink-700 hover:bg-ink-50 hover:-translate-y-0.5 transition-all"
+            type="button"
+          >
+            <Plus className="w-4 h-4" />
+            📋 משימה חדשה
+          </button>
+          {/* Event creation button — matches the "filled event" look. */}
+          <button
+            onClick={() => {
+              const now = new Date();
+              const start = new Date(now.getTime());
+              start.setMinutes(0, 0, 0);
+              const end = new Date(start.getTime() + 60 * 60_000);
+              setCreatingEvent({ start, end });
+            }}
+            className="btn-accent text-xs"
+            type="button"
+          >
+            <Plus className="w-4 h-4" />
+            אירוע חדש
+          </button>
+        </div>
       }
     >
       <div className="space-y-3">
@@ -195,11 +227,25 @@ export function Calendar() {
           kind="task"
           extra={<TasksEventsToggle value={layer} onChange={setLayer} />}
         />
-        <FilterBar
-          screenKey="calendar"
-          filters={filters}
-          onChange={setFilters}
-          fields={fields}
+        <WorkbenchBanner
+          filters={
+            <FilterBar
+              screenKey="calendar"
+              filters={filters}
+              onChange={setFilters}
+              fields={fields}
+              embed
+            />
+          }
+          stats={
+            <CalendarStatsStrip
+              tasks={tasks}
+              events={events}
+              timeEntries={timeEntries}
+              anchor={anchor}
+              embed
+            />
+          }
         />
         <CalendarToolbar
           view={view}
@@ -207,13 +253,6 @@ export function Calendar() {
           anchor={anchor}
           onAnchorChange={setAnchor}
           availableViews={availableViews}
-        />
-
-        <CalendarStatsStrip
-          tasks={tasks}
-          events={events}
-          timeEntries={timeEntries}
-          anchor={anchor}
         />
 
         {view === "day" && (

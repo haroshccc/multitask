@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { MAX_VISIBLE_BOUNDS } from "@/lib/hooks/useMaxVisibleColumns";
 import { ScreenScaffold } from "@/components/layout/ScreenScaffold";
-import { ListsBanner } from "@/components/lists/ListsBanner";
+import { TasksChrome } from "@/components/tasks/TasksChrome";
 import {
   FilterBar,
   useFiltersFromUrl,
@@ -30,7 +30,6 @@ import { TaskColumn } from "@/components/tasks/TaskColumn";
 import { ArchiveModal } from "@/components/tasks/ArchiveModal";
 import { RowDisplaySettingsModal } from "@/components/tasks/RowDisplaySettingsModal";
 import { StatsPanel } from "@/components/tasks/StatsPanel";
-import { WorkbenchBanner } from "@/components/layout/WorkbenchBanner";
 import { UnassignedBanner } from "@/components/tasks/UnassignedBanner";
 import { StatusesModal } from "@/components/tasks/StatusesModal";
 import type { TaskTreeNode } from "@/components/tasks/TaskRow";
@@ -40,6 +39,8 @@ import {
   useMoveTaskToList,
   useSetTaskParent,
   useListVisibility,
+  useSetListVisibility,
+  useCreateTaskList,
   useMyTaskStatuses,
   useMaxVisibleColumns,
   useRowDisplayPrefs,
@@ -52,6 +53,8 @@ export function Tasks() {
   const { data: tasks = [] } = useTasks(filters);
   const { data: lists = [] } = useTaskLists();
   const { data: visibility } = useListVisibility("tasks");
+  const setListVisibility = useSetListVisibility();
+  const createTaskList = useCreateTaskList();
   const moveToList = useMoveTaskToList();
   const setParent = useSetTaskParent();
 
@@ -60,6 +63,37 @@ export function Tasks() {
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [rowDisplayOpen, setRowDisplayOpen] = useState(false);
   const [statusesOpen, setStatusesOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem("multitask.tasks.filtersOpen") === "true";
+  });
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem("multitask.tasks.filtersOpen", String(filtersOpen));
+  }, [filtersOpen]);
+
+  const filtersActiveCount = useMemo(() => {
+    let n = 0;
+    Object.values(filters).forEach((v) => {
+      if (Array.isArray(v)) n += v.length;
+      else if (v !== undefined && v !== null && v !== "" && v !== false) n += 1;
+    });
+    return n;
+  }, [filters]);
+
+  const toggleListVisibility = (listId: string) => {
+    const current = visibility?.hidden_list_ids ?? [];
+    const next = current.includes(listId)
+      ? current.filter((id) => id !== listId)
+      : [...current, listId];
+    setListVisibility.mutate({ screenKey: "tasks", hiddenListIds: next });
+  };
+
+  const handleCreateList = async () => {
+    const name = window.prompt("שם הרשימה החדשה:");
+    if (!name?.trim()) return;
+    await createTaskList.mutateAsync({ name: name.trim(), kind: "custom" });
+  };
 
   // Allow ?edit=<taskId> in the URL to pre-open the TaskEditModal — used by
   // the QuickCapture "+ משימה חדשה" action to land the user directly on an
@@ -366,29 +400,41 @@ export function Tasks() {
         </div>
       }
     >
-      <div className="space-y-3">
-        <ListsBanner screenKey="tasks" kind="task" />
-
-        <WorkbenchBanner
-          filters={
-            <FilterBar
-              screenKey="tasks"
-              filters={filters}
-              onChange={setFilters}
-              fields={fields}
-              embed
-            />
-          }
-          stats={
-            <StatsPanel
-              lists={visibleLists}
-              tasks={tasks}
-              open={statsOpen}
-              onToggle={() => setStatsOpen((v) => !v)}
-              embed
-            />
-          }
+      <div className="space-y-2">
+        <TasksChrome
+          lists={lists.map((l) => ({
+            id: l.id,
+            name: l.name,
+            emoji: l.emoji,
+            color: l.color,
+          }))}
+          hiddenListIds={hiddenSet}
+          onToggleListVisibility={toggleListVisibility}
+          onCreateList={handleCreateList}
+          filtersActiveCount={filtersActiveCount}
+          filtersOpen={filtersOpen}
+          onToggleFilters={() => setFiltersOpen((v) => !v)}
+          statsOpen={statsOpen}
+          onToggleStats={() => setStatsOpen((v) => !v)}
         />
+
+        {filtersOpen && (
+          <FilterBar
+            screenKey="tasks"
+            filters={filters}
+            onChange={setFilters}
+            fields={fields}
+          />
+        )}
+
+        {statsOpen && (
+          <StatsPanel
+            lists={visibleLists}
+            tasks={tasks}
+            open
+            onToggle={() => setStatsOpen(false)}
+          />
+        )}
 
         <DndContext
           sensors={sensors}

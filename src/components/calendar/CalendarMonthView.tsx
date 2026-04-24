@@ -95,11 +95,33 @@ export function CalendarMonthView({
         {weeks.map((weekDays, weekIdx) => {
           const bands = multiDayPerWeek[weekIdx]!;
           const bandRows = bandRowsCount(bands);
-          // Pad the top of each cell so items don't overlap with the bands.
-          const bandAreaHeight = bandRows > 0 ? bandRows * (BAND_HEIGHT + BAND_GAP) + BAND_GAP : 0;
+          const bandAreaHeight =
+            bandRows > 0 ? bandRows * (BAND_HEIGHT + BAND_GAP) + BAND_GAP : 0;
 
           return (
             <div key={weekIdx} className="relative">
+              {/* Band overlay — sits on top of the week, aligned to the
+                  top of the cells. Cells get paddingTop = bandAreaHeight
+                  so chips start below the bands. */}
+              {bandAreaHeight > 0 && (
+                <div
+                  className="absolute inset-x-0 top-0 pointer-events-none z-10"
+                  style={{ height: bandAreaHeight }}
+                >
+                  {bands.map(({ item, startCol, span, row }) => (
+                    <MonthBand
+                      key={item.id + "-w" + weekIdx}
+                      item={item}
+                      now={now}
+                      startCol={startCol}
+                      span={span}
+                      row={row}
+                      onClick={() => onItemClick(item)}
+                    />
+                  ))}
+                </div>
+              )}
+
               <div className="grid grid-cols-7 auto-rows-fr">
                 {weekDays.map((day, colIdx) => {
                   const inMonth = isSameMonth(day, anchor);
@@ -124,7 +146,7 @@ export function CalendarMonthView({
                       <button
                         onClick={() => onDayClick(day)}
                         className={cn(
-                          "absolute top-1 start-1 text-[11px] font-semibold px-1 py-0.5 rounded-sm hover:bg-ink-100 transition-colors z-10",
+                          "absolute start-1 text-[11px] font-semibold px-1 py-0.5 rounded-sm hover:bg-ink-100 transition-colors z-20",
                           today
                             ? "text-primary-700"
                             : past
@@ -133,6 +155,7 @@ export function CalendarMonthView({
                             ? "text-ink-900"
                             : "text-ink-400"
                         )}
+                        style={{ top: bandAreaHeight + 2 }}
                         type="button"
                       >
                         {day.getDate()}
@@ -159,24 +182,6 @@ export function CalendarMonthView({
                     </div>
                   );
                 })}
-              </div>
-
-              {/* Absolute band overlay — one row per packed lane */}
-              <div
-                className="absolute inset-x-0 pointer-events-none"
-                style={{ top: 22, height: bandAreaHeight }}
-              >
-                {bands.map(({ item, startCol, span, row }) => (
-                  <MonthBand
-                    key={item.id + "-w" + weekIdx}
-                    item={item}
-                    now={now}
-                    startCol={startCol}
-                    span={span}
-                    row={row}
-                    onClick={() => onItemClick(item)}
-                  />
-                ))}
               </div>
             </div>
           );

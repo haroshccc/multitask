@@ -23,6 +23,8 @@ export const queryKeys = {
   tasksByProject: (orgId: string, projectId: string) =>
     ["tasks", orgId, "project", projectId] as const,
   taskDependencies: (taskId: string) => ["task", taskId, "dependencies"] as const,
+  allTaskDependencies: (orgId: string) =>
+    ["task-dependencies", orgId] as const,
   taskAttachments: (taskId: string) => ["task", taskId, "attachments"] as const,
   taskCustomFields: (projectId: string) =>
     ["project", projectId, "custom-fields"] as const,

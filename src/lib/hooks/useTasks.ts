@@ -233,8 +233,21 @@ export function useTaskDependencies(taskId: string | null | undefined) {
   });
 }
 
+/**
+ * Every dependency row for the active org — used by Gantt to draw the graph.
+ */
+export function useAllTaskDependencies() {
+  const scope = useOrgScope();
+  return useQuery({
+    queryKey: queryKeys.allTaskDependencies(scope.organizationId ?? ""),
+    queryFn: () => tasksService.listAllTaskDependencies(scope.organizationId!),
+    enabled: scope.enabled,
+  });
+}
+
 export function useCreateTaskDependency() {
   const qc = useQueryClient();
+  const scope = useOrgScope();
   return useMutation({
     mutationFn: ({
       taskId,
@@ -253,16 +266,27 @@ export function useCreateTaskDependency() {
       qc.invalidateQueries({
         queryKey: queryKeys.taskDependencies(vars.dependsOnTaskId),
       });
+      if (scope.organizationId) {
+        qc.invalidateQueries({
+          queryKey: queryKeys.allTaskDependencies(scope.organizationId),
+        });
+      }
     },
   });
 }
 
 export function useDeleteTaskDependency() {
   const qc = useQueryClient();
+  const scope = useOrgScope();
   return useMutation({
     mutationFn: (depId: string) => tasksService.deleteTaskDependency(depId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["task"] });
+      if (scope.organizationId) {
+        qc.invalidateQueries({
+          queryKey: queryKeys.allTaskDependencies(scope.organizationId),
+        });
+      }
     },
   });
 }

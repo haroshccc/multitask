@@ -45,6 +45,15 @@ export function useRealtimeSync() {
           qc.invalidateQueries({ queryKey: queryFamilies.allTaskLists(organizationId) });
         }
       )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "task_dependencies" },
+        () => {
+          qc.invalidateQueries({
+            queryKey: ["task-dependencies", organizationId],
+          });
+        }
+      )
       // Projects
       .on(
         "postgres_changes",

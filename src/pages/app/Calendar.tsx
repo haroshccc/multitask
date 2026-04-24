@@ -301,7 +301,11 @@ export function Calendar() {
         )}
       </div>
 
-      <TaskEditModal taskId={editingTaskId} onClose={() => setEditingTaskId(null)} />
+      <TaskEditModal
+        taskId={editingTaskId}
+        onClose={() => setEditingTaskId(null)}
+        defaultTab="schedule"
+      />
       <EventEditModal
         open={!!editingEventId || !!creatingEvent}
         eventId={editingEventId}

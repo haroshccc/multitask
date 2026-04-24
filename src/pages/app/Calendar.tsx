@@ -1,24 +1,18 @@
-import { useEffect, useMemo, useState } from "react";
-import { Plus } from "lucide-react";
+import { useMemo, useState } from "react";
 import { ScreenScaffold } from "@/components/layout/ScreenScaffold";
-import { ListsBanner } from "@/components/lists/ListsBanner";
 import {
   FilterBar,
   useFiltersFromUrl,
   type FilterField,
 } from "@/components/filters/FilterBar";
 import { TaskEditModal } from "@/components/tasks/TaskEditModal";
-import {
-  CalendarToolbar,
-  type CalendarView,
-} from "@/components/calendar/CalendarToolbar";
-import { TasksEventsToggle } from "@/components/calendar/TasksEventsToggle";
+import { type CalendarView } from "@/components/calendar/CalendarToolbar";
+import { CalendarChrome } from "@/components/calendar/CalendarChrome";
 import { CalendarDayView } from "@/components/calendar/CalendarDayView";
 import { CalendarWeekView } from "@/components/calendar/CalendarWeekView";
 import { CalendarMonthView } from "@/components/calendar/CalendarMonthView";
 import { CalendarAgendaView } from "@/components/calendar/CalendarAgendaView";
 import { CalendarStatsStrip } from "@/components/calendar/CalendarStatsStrip";
-import { WorkbenchBanner } from "@/components/layout/WorkbenchBanner";
 import { EventEditModal } from "@/components/calendar/EventEditModal";
 import {
   type CalendarItem,
@@ -35,42 +29,34 @@ import {
 import {
   useEvents,
   useListVisibility,
+  useSetListVisibility,
   useTaskLists,
+  useCreateTaskList,
   useTasks,
   useTimeEntriesByRange,
   useCreateTask,
 } from "@/lib/hooks";
 import { useCalendarPrefs } from "@/lib/hooks/useCalendarPrefs";
-import { useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import type { FilterConfig } from "@/lib/types/domain";
 
 const HOUR_HEIGHT_DAY = 48;
 const HOUR_HEIGHT_WEEK = 40;
 
 export function Calendar() {
-  const isNarrow = useMediaQuery("(max-width: 768px)");
-
-  // Default view — week on desktop, agenda on mobile. Users can still flip.
-  const [view, setView] = useState<CalendarView>(() =>
-    isNarrow ? "agenda" : "week"
-  );
-  // When the viewport crosses the breakpoint, gently nudge to the sensible
-  // default but let the user override afterwards.
-  useEffect(() => {
-    if (isNarrow && (view === "week" || view === "month")) {
-      setView("agenda");
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isNarrow]);
-
+  const [view, setView] = useState<CalendarView>("week");
   const [anchor, setAnchor] = useState<Date>(() => new Date());
   const [layer, setLayer] = useState<LayerMode>("both");
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [statsOpen, setStatsOpen] = useState(false);
 
   const { effectiveRange } = useCalendarPrefs();
 
   const [filters, setFilters] = useFiltersFromUrl();
   const { data: lists = [] } = useTaskLists();
   const { data: visibility } = useListVisibility("calendar");
+  const setListVisibility = useSetListVisibility();
+  const createTaskList = useCreateTaskList();
+
   const hiddenLists = useMemo(
     () => new Set(visibility?.hidden_list_ids ?? []),
     [visibility]
@@ -144,6 +130,15 @@ export function Calendar() {
     [lists]
   );
 
+  const filtersActiveCount = useMemo(() => {
+    let n = 0;
+    Object.values(filters).forEach((v) => {
+      if (Array.isArray(v)) n += v.length;
+      else if (v !== undefined && v !== null && v !== "" && v !== false) n += 1;
+    });
+    return n;
+  }, [filters]);
+
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [creatingEvent, setCreatingEvent] = useState<{
@@ -168,6 +163,14 @@ export function Calendar() {
     setEditingTaskId(task.id);
   };
 
+  const handleCreateEvent = () => {
+    const now = new Date();
+    const start = new Date(now);
+    start.setMinutes(0, 0, 0);
+    const end = new Date(start.getTime() + 60 * 60_000);
+    setCreatingEvent({ start, end });
+  };
+
   const handleItemClick = (item: CalendarItem) => {
     if (item.kind === "task") setEditingTaskId((item.source as { id: string }).id);
     else setEditingEventId((item.source as { id: string }).id);
@@ -183,77 +186,78 @@ export function Calendar() {
     setView("day");
   };
 
-  const availableViews: CalendarView[] = isNarrow
-    ? ["day", "agenda", "month"]
-    : ["day", "week", "month", "agenda"];
+  const toggleListVisibility = (listId: string) => {
+    const current = visibility?.hidden_list_ids ?? [];
+    const next = current.includes(listId)
+      ? current.filter((id) => id !== listId)
+      : [...current, listId];
+    setListVisibility.mutate({ screenKey: "calendar", hiddenListIds: next });
+  };
+
+  const handleCreateList = async () => {
+    const name = window.prompt("שם הרשימה החדשה:");
+    if (!name?.trim()) return;
+    await createTaskList.mutateAsync({ name: name.trim(), kind: "custom" });
+  };
+
+  const unifiedLists = useMemo(
+    () =>
+      lists.map((l) => ({
+        id: l.id,
+        name: l.name,
+        emoji: l.emoji,
+        color: l.color,
+      })),
+    [lists]
+  );
+
+  // Agenda + week + month + day are all peers — agenda is NOT a replacement
+  // for week. Same set on every breakpoint.
+  const availableViews: CalendarView[] = ["day", "week", "month", "agenda"];
 
   return (
-    <ScreenScaffold
-      title="יומן"
-      subtitle="יום · שבוע · חודש · אג׳נדה — משימות ואירועים באותה רצועת זמן, עם השוואת מתוכנן ובפועל."
-      actions={
-        <div className="flex items-center gap-2">
-          {/* Task creation button — styled to match the "outlined task" look on
-              the calendar grid (colored border, colored text, empty inside). */}
-          <button
-            onClick={handleCreateTask}
-            className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium bg-white border-[1.5px] border-ink-500 text-ink-700 hover:bg-ink-50 hover:-translate-y-0.5 transition-all"
-            type="button"
-          >
-            <Plus className="w-4 h-4" />
-            📋 משימה חדשה
-          </button>
-          {/* Event creation button — matches the "filled event" look. */}
-          <button
-            onClick={() => {
-              const now = new Date();
-              const start = new Date(now.getTime());
-              start.setMinutes(0, 0, 0);
-              const end = new Date(start.getTime() + 60 * 60_000);
-              setCreatingEvent({ start, end });
-            }}
-            className="btn-accent text-xs"
-            type="button"
-          >
-            <Plus className="w-4 h-4" />
-            אירוע חדש
-          </button>
-        </div>
-      }
-    >
-      <div className="space-y-3">
-        <ListsBanner
-          screenKey="calendar"
-          kind="task"
-          extra={<TasksEventsToggle value={layer} onChange={setLayer} />}
-        />
-        <WorkbenchBanner
-          filters={
-            <FilterBar
-              screenKey="calendar"
-              filters={filters}
-              onChange={setFilters}
-              fields={fields}
-              embed
-            />
-          }
-          stats={
-            <CalendarStatsStrip
-              tasks={tasks}
-              events={events}
-              timeEntries={timeEntries}
-              anchor={anchor}
-              embed
-            />
-          }
-        />
-        <CalendarToolbar
+    <ScreenScaffold title="יומן" subtitle="">
+      <div className="space-y-2">
+        <CalendarChrome
           view={view}
           onViewChange={setView}
           anchor={anchor}
           onAnchorChange={setAnchor}
           availableViews={availableViews}
+          layer={layer}
+          onLayerChange={setLayer}
+          lists={unifiedLists}
+          hiddenListIds={hiddenLists}
+          onToggleListVisibility={toggleListVisibility}
+          onCreateList={handleCreateList}
+          filtersActiveCount={filtersActiveCount}
+          filtersOpen={filtersOpen}
+          onToggleFilters={() => setFiltersOpen((v) => !v)}
+          statsOpen={statsOpen}
+          onToggleStats={() => setStatsOpen((v) => !v)}
+          onCreateEvent={handleCreateEvent}
+          onCreateTask={handleCreateTask}
         />
+
+        {/* Optional filter panel */}
+        {filtersOpen && (
+          <FilterBar
+            screenKey="calendar"
+            filters={filters}
+            onChange={setFilters}
+            fields={fields}
+          />
+        )}
+
+        {/* Optional stats panel */}
+        {statsOpen && (
+          <CalendarStatsStrip
+            tasks={tasks}
+            events={events}
+            timeEntries={timeEntries}
+            anchor={anchor}
+          />
+        )}
 
         {view === "day" && (
           <CalendarDayView
@@ -295,8 +299,6 @@ export function Calendar() {
             onCreateAt={handleCreateAt}
           />
         )}
-
-        <CalendarLegend />
       </div>
 
       <TaskEditModal taskId={editingTaskId} onClose={() => setEditingTaskId(null)} />
@@ -311,51 +313,6 @@ export function Calendar() {
         }}
       />
     </ScreenScaffold>
-  );
-}
-
-function CalendarLegend() {
-  return (
-    <div className="text-[11px] text-ink-500 flex items-center gap-4 flex-wrap px-1">
-      <span className="inline-flex items-center gap-1.5">
-        <span
-          className="inline-block w-4 h-2 rounded-sm"
-          style={{ border: "1.5px solid #6b6b80", backgroundColor: "white" }}
-        />
-        משימה מתוזמנת
-      </span>
-      <span className="inline-flex items-center gap-1.5">
-        <span
-          className="inline-block w-4 h-2 rounded-sm"
-          style={{
-            border: "1.5px solid #f59e0b",
-            backgroundColor: "rgba(245, 158, 11, 0.85)",
-          }}
-        />
-        אירוע
-      </span>
-      <span className="inline-flex items-center gap-1.5">
-        <span
-          className="inline-block w-4 h-2 rounded-sm"
-          style={{ border: "1.5px solid #ef4444", backgroundColor: "rgba(239, 68, 68, 0.1)" }}
-        />
-        משימה באיחור
-      </span>
-      <span className="inline-flex items-center gap-1.5">
-        <span
-          className="inline-block w-4 h-2 rounded-sm"
-          style={{
-            border: "1.5px solid #6b6b80",
-            backgroundColor: "rgba(107, 107, 128, 0.35)",
-          }}
-        />
-        זמן בפועל
-      </span>
-      <span className="inline-flex items-center gap-1.5">
-        <span className="inline-block w-3 h-0.5 bg-danger-500" />
-        כעת
-      </span>
-    </div>
   );
 }
 

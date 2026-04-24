@@ -340,7 +340,7 @@ export function CalendarBlock({
             completed && "line-through"
           )}
         >
-          {isTask ? "📋 " : ""}
+          
           {item.title}
         </div>
       </div>
@@ -406,7 +406,6 @@ function AllDayChip({
       title={item.title}
       type="button"
     >
-      <span>📋</span>
       <span className="truncate max-w-[140px]">{item.title}</span>
     </button>
   );

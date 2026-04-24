@@ -119,6 +119,7 @@ export function GanttGrid({
           {rows.map((r, i) => {
             const isCritical =
               r.kind === "task" && !!r.task && criticalSet.has(r.task.id);
+            const isPhase = !!r.isPhase;
             return (
             <button
               key={r.id}
@@ -126,9 +127,15 @@ export function GanttGrid({
               className={cn(
                 "w-full h-10 flex items-center gap-2 px-2 text-start text-[13px] border-b border-ink-150 hover:bg-ink-50",
                 r.completed && "opacity-60",
-                isCritical && "bg-danger-500/5"
+                isCritical && "bg-danger-500/5",
+                isPhase && "font-bold bg-ink-50/60"
               )}
-              style={{ paddingInlineStart: 8 + r.depth * 16 }}
+              style={{
+                paddingInlineStart: 8 + r.depth * 16,
+                ...(isPhase
+                  ? ({ borderInlineStartWidth: 4, borderInlineStartColor: r.accentColor ?? "#6b6b80" } as React.CSSProperties)
+                  : {}),
+              }}
               type="button"
               title={r.title}
             >

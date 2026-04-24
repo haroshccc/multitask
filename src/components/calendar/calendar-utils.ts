@@ -23,6 +23,8 @@ export interface CalendarItem {
   completed: boolean;
   /** Raw source (for click → open modal). */
   source: Task | EventRow;
+  /** For tasks: true when it's a phase (visualize as a background band). */
+  isPhase?: boolean;
 }
 
 /** Milliseconds in a minute / hour / day — tiny convenience. */
@@ -95,9 +97,16 @@ export function isSameMonth(a: Date, b: Date): boolean {
 }
 
 /** True if the item visibly spans more than one local day (i.e. crosses midnight). */
-export function isMultiDay(item: { start: Date; end: Date; allDay: boolean }): boolean {
+export function isMultiDay(item: {
+  start: Date;
+  end: Date;
+  allDay: boolean;
+  isPhase?: boolean;
+}): boolean {
+  // Phases always render as a band (they visualize the phase's full lifetime,
+  // even a short one-hour phase reads as "this is a group" not a timed item).
+  if (item.isPhase) return true;
   if (item.allDay) return true;
-  // An event that ends exactly at 00:00 the next day is still "single-day".
   const endAdjusted = new Date(item.end.getTime() - 1);
   return !isSameDay(item.start, endAdjusted);
 }
@@ -157,6 +166,7 @@ export function taskToItem(t: Task, listColor: string | null): CalendarItem | nu
     listId: t.task_list_id,
     completed: !!t.completed_at,
     source: t,
+    isPhase: !!t.is_phase,
   };
 }
 

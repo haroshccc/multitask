@@ -253,6 +253,8 @@ export function TaskRow({
     setDropRef(el);
   };
 
+  const isPhase = task.is_phase === true;
+
   return (
     <>
       <div
@@ -260,9 +262,19 @@ export function TaskRow({
         className={cn(
           "group flex items-start gap-1.5 rounded-md transition-colors px-1.5 py-1",
           isDragging && "opacity-40",
-          isOver && "bg-primary-50 ring-1 ring-primary-300"
+          isOver && "bg-primary-50 ring-1 ring-primary-300",
+          // Phase rows get a colored stripe on the leading edge, slightly
+          // larger font, and a subtle background tint to read as a
+          // group-header visually.
+          isPhase &&
+            "border-s-4 bg-[color:var(--list-color,#6b6b80)]/5 py-1.5 text-[14px] font-semibold"
         )}
-        style={{ paddingInlineStart: depth * 18 + 4 }}
+        style={{
+          paddingInlineStart: depth * 18 + 4,
+          ...(isPhase
+            ? ({ borderInlineStartColor: "var(--list-color, #6b6b80)" } as React.CSSProperties)
+            : {}),
+        }}
       >
         {/* Drag handle */}
         <button
@@ -328,6 +340,17 @@ export function TaskRow({
             </svg>
           )}
         </button>
+
+        {/* Phase badge — visible chip so the row reads as a header */}
+        {isPhase && (
+          <span
+            className="shrink-0 self-center inline-flex items-center rounded-sm px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white"
+            style={{ backgroundColor: "var(--list-color, #6b6b80)" }}
+            title="שלב — פריט שמקבץ תחתיו תתי-משימות"
+          >
+            שלב
+          </span>
+        )}
 
         {/* Title input */}
         <input

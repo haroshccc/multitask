@@ -95,8 +95,8 @@ export function Gantt() {
   }, [tasks, hiddenLists]);
 
   const rows = useMemo(
-    () => buildRows(filteredTasks, events, layer),
-    [filteredTasks, events, layer]
+    () => buildRows(filteredTasks, events, layer, lists),
+    [filteredTasks, events, layer, lists]
   );
 
   const criticalSet = useMemo(

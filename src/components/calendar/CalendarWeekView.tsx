@@ -365,6 +365,7 @@ function MultiDayBand({
   onClick: () => void;
 }) {
   const isTask = item.kind === "task";
+  const isPhase = !!item.isPhase;
   const past = isPast(item, now);
   const overdue = isOverdueTask(item, now);
   const accent = item.color ?? (isTask ? "#6b6b80" : "#f59e0b");
@@ -384,6 +385,12 @@ function MultiDayBand({
     borderColor: strokeColor,
     color: overdue ? "#b91c1c" : "#2d2d3a",
   };
+  // Phase: filled-shade background + white text, no stripes inside.
+  const phaseStyle: React.CSSProperties = {
+    backgroundColor: accent,
+    borderColor: accent,
+    color: "#fff",
+  };
 
   return (
     <button
@@ -391,20 +398,20 @@ function MultiDayBand({
       className={cn(
         "absolute rounded-md px-2 py-1 text-xs font-medium border-[1.5px] truncate text-start shadow-soft",
         past && "opacity-65",
-        item.completed && "line-through opacity-55"
+        item.completed && "line-through opacity-55",
+        isPhase && "font-bold uppercase tracking-wider"
       )}
       style={{
         top,
         insetInlineStart: left,
         width,
         height: 22,
-        ...(isTask ? taskStyle : eventStyle),
+        ...(isPhase ? phaseStyle : isTask ? taskStyle : eventStyle),
       }}
       title={item.title}
       type="button"
     >
-
-      {item.title}
+      {isPhase ? `שלב · ${item.title}` : item.title}
     </button>
   );
 }

@@ -263,6 +263,7 @@ function MonthBand({
   onClick: () => void;
 }) {
   const isTask = item.kind === "task";
+  const isPhase = !!item.isPhase;
   const past = isPast(item, now);
   const overdue = isOverdueTask(item, now);
   const accent = item.color ?? (isTask ? "#6b6b80" : "#f59e0b");
@@ -282,6 +283,11 @@ function MonthBand({
     borderColor: strokeColor,
     color: overdue ? "#b91c1c" : "#2d2d3a",
   };
+  const phaseStyle: React.CSSProperties = {
+    backgroundColor: accent,
+    borderColor: accent,
+    color: "#fff",
+  };
 
   return (
     <button
@@ -289,7 +295,8 @@ function MonthBand({
       className={cn(
         "absolute rounded-sm px-1.5 text-[10px] font-medium border-[1.5px] truncate text-start pointer-events-auto",
         past && "opacity-60",
-        item.completed && "line-through opacity-55"
+        item.completed && "line-through opacity-55",
+        isPhase && "font-bold uppercase"
       )}
       style={{
         top,
@@ -297,12 +304,12 @@ function MonthBand({
         width,
         height: BAND_HEIGHT,
         lineHeight: `${BAND_HEIGHT - 3}px`,
-        ...(isTask ? taskStyle : eventStyle),
+        ...(isPhase ? phaseStyle : isTask ? taskStyle : eventStyle),
       }}
       title={item.title}
       type="button"
     >
-      {item.title}
+      {isPhase ? `שלב · ${item.title}` : item.title}
     </button>
   );
 }

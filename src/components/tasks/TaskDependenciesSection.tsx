@@ -1,14 +1,15 @@
 import { useMemo, useState } from "react";
-import { Plus, Trash2, Link2, ArrowRight, ChevronDown } from "lucide-react";
+import { Plus, Trash2, Link2, ArrowRight, ChevronDown, Pencil, Check, X } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import {
   useTaskDependencies,
   useCreateTaskDependency,
   useDeleteTaskDependency,
+  useUpdateTaskDependency,
   useTasks,
 } from "@/lib/hooks/useTasks";
 import { pushUndo } from "@/lib/undo/store";
-import type { DependencyRelation, Task } from "@/lib/types/domain";
+import type { DependencyRelation, Task, TaskDependency } from "@/lib/types/domain";
 
 interface TaskDependenciesSectionProps {
   taskId: string;
@@ -63,6 +64,7 @@ export function TaskDependenciesSection({ taskId }: TaskDependenciesSectionProps
   const { data: allTasks = [] } = useTasks();
   const createDep = useCreateTaskDependency();
   const deleteDep = useDeleteTaskDependency();
+  const updateDep = useUpdateTaskDependency();
 
   const tasksById = useMemo(() => {
     const m = new Map<string, Task>();
@@ -166,35 +168,29 @@ export function TaskDependenciesSection({ taskId }: TaskDependenciesSectionProps
               const dependsOn = tasksById.get(dep.depends_on_task_id);
               const title = dependsOn?.title ?? "משימה לא נגישה";
               return (
-                <li
+                <PredecessorRow
                   key={dep.id}
-                  className="flex items-center gap-2 rounded-xl border border-ink-200 bg-white px-3 py-1.5 text-sm"
-                >
-                  <span className="flex-1 min-w-0 truncate text-ink-900">
-                    {title}
-                  </span>
-                  <RelationChip value={dep.relation} />
-                  {dep.lag_days !== 0 && (
-                    <span className="text-[10px] font-mono tabular-nums text-ink-500 px-1.5 py-0.5 rounded-md bg-ink-100">
-                      {dep.lag_days > 0 ? `+${dep.lag_days}י` : `${dep.lag_days}י`}
-                    </span>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() =>
-                      removeDep(dep.id, {
-                        task: dep.task_id,
-                        depOn: dep.depends_on_task_id,
-                        relation: dep.relation,
-                        lag: dep.lag_days,
-                      })
-                    }
-                    className="p-1 text-ink-400 hover:text-danger-500"
-                    title="מחק תלות"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </li>
+                  dep={dep}
+                  title={title}
+                  onSave={(patch) => {
+                    const prev = { relation: dep.relation, lag_days: dep.lag_days };
+                    updateDep.mutate({ depId: dep.id, patch });
+                    pushUndo({
+                      description: "עריכת תלות",
+                      undo: () =>
+                        updateDep.mutate({ depId: dep.id, patch: prev }),
+                      redo: () => updateDep.mutate({ depId: dep.id, patch }),
+                    });
+                  }}
+                  onDelete={() =>
+                    removeDep(dep.id, {
+                      task: dep.task_id,
+                      depOn: dep.depends_on_task_id,
+                      relation: dep.relation,
+                      lag: dep.lag_days,
+                    })
+                  }
+                />
               );
             })}
           </ul>
@@ -285,6 +281,105 @@ export function TaskDependenciesSection({ taskId }: TaskDependenciesSectionProps
         </div>
       )}
     </div>
+  );
+}
+
+function PredecessorRow({
+  dep,
+  title,
+  onSave,
+  onDelete,
+}: {
+  dep: TaskDependency;
+  title: string;
+  onSave: (patch: { relation?: DependencyRelation; lag_days?: number }) => void;
+  onDelete: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [relation, setRelation] = useState<DependencyRelation>(dep.relation);
+  const [lagDays, setLagDays] = useState<number>(dep.lag_days);
+
+  const cancel = () => {
+    setRelation(dep.relation);
+    setLagDays(dep.lag_days);
+    setEditing(false);
+  };
+
+  const save = () => {
+    const patch: { relation?: DependencyRelation; lag_days?: number } = {};
+    if (relation !== dep.relation) patch.relation = relation;
+    if (lagDays !== dep.lag_days) patch.lag_days = lagDays;
+    if (Object.keys(patch).length > 0) onSave(patch);
+    setEditing(false);
+  };
+
+  if (editing) {
+    return (
+      <li className="rounded-xl border border-primary-300 bg-primary-50/40 px-3 py-2 space-y-2 text-sm">
+        <div className="text-ink-900 font-medium truncate">{title}</div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <label className="eyebrow shrink-0">סוג:</label>
+          <RelationSelect value={relation} onChange={setRelation} />
+          <label className="eyebrow shrink-0 ms-2">פער:</label>
+          <input
+            type="number"
+            value={lagDays}
+            onChange={(e) => setLagDays(Number(e.target.value) || 0)}
+            className="field text-sm w-20 py-1"
+            placeholder="ימים"
+          />
+          <span className="text-[10px] text-ink-500">ימים (יכול להיות שלילי)</span>
+        </div>
+        <div className="flex items-center gap-1 justify-end">
+          <button
+            type="button"
+            onClick={cancel}
+            className="btn-ghost text-xs"
+            title="בטל"
+          >
+            <X className="w-3.5 h-3.5" />
+            בטל
+          </button>
+          <button
+            type="button"
+            onClick={save}
+            className="btn-accent text-xs"
+            title="שמור שינוי"
+          >
+            <Check className="w-3.5 h-3.5" />
+            שמור
+          </button>
+        </div>
+      </li>
+    );
+  }
+
+  return (
+    <li className="flex items-center gap-2 rounded-xl border border-ink-200 bg-white px-3 py-1.5 text-sm">
+      <span className="flex-1 min-w-0 truncate text-ink-900">{title}</span>
+      <RelationChip value={dep.relation} />
+      {dep.lag_days !== 0 && (
+        <span className="text-[10px] font-mono tabular-nums text-ink-500 px-1.5 py-0.5 rounded-md bg-ink-100">
+          {dep.lag_days > 0 ? `+${dep.lag_days}י` : `${dep.lag_days}י`}
+        </span>
+      )}
+      <button
+        type="button"
+        onClick={() => setEditing(true)}
+        className="p-1 text-ink-400 hover:text-primary-600"
+        title="ערוך תלות"
+      >
+        <Pencil className="w-3.5 h-3.5" />
+      </button>
+      <button
+        type="button"
+        onClick={onDelete}
+        className="p-1 text-ink-400 hover:text-danger-500"
+        title="מחק תלות"
+      >
+        <Trash2 className="w-3.5 h-3.5" />
+      </button>
+    </li>
   );
 }
 

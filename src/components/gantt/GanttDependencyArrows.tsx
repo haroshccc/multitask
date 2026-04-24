@@ -35,14 +35,20 @@ export function GanttDependencyArrows({
   criticalSet,
   isRtl,
 }: GanttDependencyArrowsProps) {
+  // Only task rows participate in task_dependencies — arrows are drawn
+  // between task bars, not event bars.
   const rowIndex = useMemo(() => {
     const m = new Map<string, number>();
-    rows.forEach((r, i) => m.set(r.task.id, i));
+    rows.forEach((r, i) => {
+      if (r.kind === "task" && r.task) m.set(r.task.id, i);
+    });
     return m;
   }, [rows]);
   const rowById = useMemo(() => {
     const m = new Map<string, GanttRow>();
-    for (const r of rows) m.set(r.task.id, r);
+    for (const r of rows) {
+      if (r.kind === "task" && r.task) m.set(r.task.id, r);
+    }
     return m;
   }, [rows]);
 
@@ -62,6 +68,7 @@ export function GanttDependencyArrows({
     const fromRow = rowById.get(dep.depends_on_task_id);
     const toRow = rowById.get(dep.task_id);
     if (!fromRow || !toRow) continue;
+    if (!fromRow.task || !toRow.task) continue;
     const fromIdx = rowIndex.get(fromRow.task.id);
     const toIdx = rowIndex.get(toRow.task.id);
     if (fromIdx == null || toIdx == null) continue;
@@ -99,7 +106,7 @@ export function GanttDependencyArrows({
     ].join(" ");
 
     const critical =
-      criticalSet.has(fromRow.task.id) && criticalSet.has(toRow.task.id);
+      criticalSet.has(fromRow.task!.id) && criticalSet.has(toRow.task!.id);
 
     paths.push({ d, critical, key: dep.id });
   }

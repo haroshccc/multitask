@@ -8,11 +8,16 @@ import {
   EyeOff,
   Check,
   Flame,
+  Layers,
+  CheckSquare,
+  Calendar as CalendarIcon,
+  PanelRightClose,
+  PanelRightOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { ListIcon } from "@/components/tasks/list-icons";
 import { ToggleButton, PopoverButton } from "@/components/layout/ChromeControls";
-import { addDays, type GanttZoom } from "./gantt-utils";
+import { addDays, type GanttLayer, type GanttZoom } from "./gantt-utils";
 
 interface UnifiedList {
   id: string;
@@ -26,6 +31,10 @@ interface GanttChromeProps {
   onZoomChange: (z: GanttZoom) => void;
   anchor: Date;
   onAnchorChange: (d: Date) => void;
+
+  // Layer (tasks / events / both)
+  layer: GanttLayer;
+  onLayerChange: (l: GanttLayer) => void;
 
   // Lists
   lists: UnifiedList[];
@@ -42,6 +51,10 @@ interface GanttChromeProps {
   showCriticalOnly: boolean;
   onToggleCriticalOnly: () => void;
 
+  // Sidebar (task-name column) collapse
+  sidebarCollapsed: boolean;
+  onToggleSidebar: () => void;
+
   className?: string;
 }
 
@@ -50,6 +63,15 @@ const ZOOM_LABELS: Record<GanttZoom, string> = {
   week: "שבוע",
   month: "חודש",
   quarter: "רבעון",
+};
+
+// Day zoom is too dense for a multi-row Gantt — dropped per user feedback.
+const AVAILABLE_ZOOMS: GanttZoom[] = ["week", "month", "quarter"];
+
+const LAYER_LABELS: Record<GanttLayer, string> = {
+  both: "שניהם",
+  tasks: "משימות",
+  events: "אירועים",
 };
 
 /**
@@ -69,6 +91,8 @@ export function GanttChrome({
   onZoomChange,
   anchor,
   onAnchorChange,
+  layer,
+  onLayerChange,
   lists,
   hiddenListIds,
   onToggleListVisibility,
@@ -78,6 +102,8 @@ export function GanttChrome({
   onToggleFilters,
   showCriticalOnly,
   onToggleCriticalOnly,
+  sidebarCollapsed,
+  onToggleSidebar,
   className,
 }: GanttChromeProps) {
   const step = (n: 1 | -1) => {
@@ -121,10 +147,9 @@ export function GanttChrome({
         </button>
       </div>
 
-      {/* Zoom — inline tabs on md+, popover on mobile would add complexity;
-          keeping tabs but icon-style for density. */}
+      {/* Zoom tabs — week / month / quarter. Day was dropped (too dense). */}
       <div className="inline-flex rounded-md border border-ink-200 p-0.5 bg-ink-50 text-[11px]">
-        {(["day", "week", "month", "quarter"] as GanttZoom[]).map((z) => (
+        {AVAILABLE_ZOOMS.map((z) => (
           <button
             key={z}
             onClick={() => onZoomChange(z)}
@@ -142,6 +167,38 @@ export function GanttChrome({
       </div>
 
       <div className="ms-auto inline-flex items-center gap-1 flex-wrap">
+        {/* Layer popover (tasks / events / both) */}
+        <PopoverButton
+          icon={<Layers className="w-3.5 h-3.5" />}
+          label={LAYER_LABELS[layer]}
+          title="סוג רשומות"
+        >
+          {(close) => (
+            <div className="py-1">
+              {(["both", "tasks", "events"] as GanttLayer[]).map((m) => (
+                <button
+                  key={m}
+                  onClick={() => {
+                    onLayerChange(m);
+                    close();
+                  }}
+                  className={cn(
+                    "w-full flex items-center gap-2 px-3 py-1.5 text-sm text-start hover:bg-ink-50",
+                    layer === m && "bg-primary-50 text-primary-700 font-medium"
+                  )}
+                  type="button"
+                >
+                  {m === "both" && <Layers className="w-3.5 h-3.5" />}
+                  {m === "tasks" && <CheckSquare className="w-3.5 h-3.5" />}
+                  {m === "events" && <CalendarIcon className="w-3.5 h-3.5" />}
+                  {LAYER_LABELS[m]}
+                  {layer === m && <Check className="w-3.5 h-3.5 ms-auto" />}
+                </button>
+              ))}
+            </div>
+          )}
+        </PopoverButton>
+
         {/* Lists popover */}
         <PopoverButton
           icon={<ListIcon2 className="w-3.5 h-3.5" />}
@@ -224,6 +281,19 @@ export function GanttChrome({
           icon={<Flame className="w-3.5 h-3.5" />}
           label="נתיב קריטי"
           badge={showCriticalOnly ? "on" : undefined}
+        />
+
+        <ToggleButton
+          active={sidebarCollapsed}
+          onClick={onToggleSidebar}
+          icon={
+            sidebarCollapsed ? (
+              <PanelRightOpen className="w-3.5 h-3.5" />
+            ) : (
+              <PanelRightClose className="w-3.5 h-3.5" />
+            )
+          }
+          label={sidebarCollapsed ? "הצג שמות" : "מזער שמות"}
         />
       </div>
     </div>

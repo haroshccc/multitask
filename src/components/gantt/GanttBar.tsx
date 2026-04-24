@@ -135,19 +135,24 @@ export function GanttBar({
     onClick();
   };
 
-  const done = !!row.task.completed_at;
+  const done = row.completed;
+  const isEvent = row.kind === "event";
+  const highlight =
+    isCritical ||
+    (row.kind === "task" && row.task ? row.task.urgency >= 4 : false);
 
   return (
     <div
-      data-task-id={row.task.id}
+      data-row-id={row.id}
       className={cn(
         "absolute top-1/2 -translate-y-1/2 h-6 rounded-md flex items-center text-[11px] font-medium text-white select-none cursor-grab shadow-soft",
         drag && "cursor-grabbing shadow-lift z-20",
         done && "opacity-60",
-        isCritical
+        isEvent
+          ? "bg-gradient-to-l from-primary-600 to-primary-400 border border-primary-700"
+          : highlight
           ? "bg-gradient-to-l from-danger-500 to-primary-500"
-          : "bg-gradient-to-l from-primary-500 to-primary-400",
-        row.task.urgency >= 4 && !isCritical && "bg-gradient-to-l from-danger-500 to-primary-500"
+          : "bg-gradient-to-l from-primary-500 to-primary-400"
       )}
       style={{
         insetInlineStart: leftPx,
@@ -155,12 +160,13 @@ export function GanttBar({
       }}
       onPointerDown={beginDrag("move")}
       onClick={handleClick}
-      title={`${row.task.title}
+      title={`${row.title}
 ${row.start.toLocaleString("he-IL")} → ${row.end.toLocaleString("he-IL")}`}
     >
       <span className="truncate px-2 pointer-events-none">
         {done ? "✓ " : ""}
-        {row.task.title}
+        {isEvent ? "● " : ""}
+        {row.title}
       </span>
       {/* Resize handle — on the trailing edge (end). In RTL that's the LEFT
           visual edge; in LTR it's the RIGHT edge. We use inline-end for both. */}

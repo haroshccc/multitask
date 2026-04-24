@@ -1713,6 +1713,91 @@ Hero: "החלל לחשוב. החלל לעשות."
   - SPEC §15.11 חדש ("שלבים") מתעד את המודל, הוויזואל וההחלטות.
   - הבחירה: **Option C** (planned + overage hybrid) — נבחרה במפורש
     ע"י המשתמש כי היא מראה "תכנון מול מציאות" במבט אחד.
+  - ⚠ **מיגרציה `20260424000001_task_phases.sql` עוד לא הוחלה על ה-DB.**
+    עד שהיא רצה, הכפתור "הגדר כשלב" יחזיר שגיאה בשמירה. להחלה ידנית
+    דרך Supabase Dashboard → SQL Editor, או `supabase db push` מקומית.
+
+- **2026-04-24 (סוף יום)** — פאזה 4 פוסט-מורטם / polish batch.
+  סיכום כל העבודה בין ה-MVP של פאזה 4 (PR #9) לבין פאזה 5:
+
+  **תשתית chrome אחידה (§12.8 חדש):**
+  - `CalendarChrome`, `TasksChrome`, `GanttChrome` — באנר עליון דק
+    אחד פר מסך עם כפתורים אייקוניים (popover / toggle). ברירת מחדל:
+    הכל סגור. כפתור → פאנל מתחת או popover מוצמד.
+  - Popovers עם `createPortal` + `position: fixed` + viewport-clamp,
+    ו-close ב-Esc / outside-click. פתרון יציב לבעיית "popover נחתך
+    בקצוות" שחזרה כמה פעמים.
+  - `layout/ChromeControls.tsx` משתף את `ToggleButton` + `PopoverButton`
+    בין 3 המסכים (חוק שלושת הפעמים).
+
+  **יומן (פוסט-פאזה 4.1):**
+  - Multi-day band עובר גם לתצוגת חודש (bar משתרע אופקית על ימי-שלב,
+    שבועות, עם packing לשורות ללא חפיפה).
+  - Agenda עבר עיצוב מחדש — כרטיס רציף אחד עם צ׳יפ תאריך גדול
+    (צבעוני להיום) מהימין כמפריד-ימים חד-משמעי.
+  - `isMultiDay(item)` מחזיר true גם לשלבים (מתמיד רינדור באנר למעלה).
+  - Event spanning two days: שירבוט אופקי רצוף בראש העמודות במקום
+    שני בלוקים של 24h בצדדים.
+  - TaskEditModal נפתח על טאב "תזמון" כשפותחים מהיומן/Gantt.
+  - `הערכת שעות` עברה מטאב "תזמון" לטאב "זמן" (ליד הסטופר) לפי
+    בקשת המשתמש — אותה שכבת-מחשבה.
+  - `CalendarStatsStrip` קטן: שעות עבודה השבוע · אירועים · הושלמו ·
+    באיחור — toggleable בבאנר.
+
+  **משימות:**
+  - `TasksChrome` מחליף ListsBanner + WorkbenchBanner — הכל בכרטיס
+    דק אחד. רשימות popover עם צ׳קבוקסים + "+ רשימה חדשה".
+  - `PlanVsActualBar` (רכיב משותף) — חיווי ויזואלי של שעות מתוכננות
+    מול שעות שנעשו בפועל. בטאב "זמן" של TaskEditModal ובטור המשימות
+    האינליין. מילוי גרדיאנט עד 100%, דימום אדום אחרי זה.
+
+  **Gantt:**
+  - `GanttChrome` — כפתורי popover ו-toggle: ניווט תאריך, זום (שבוע/
+    חודש/רבעון — יום הוסר), layer (משימות/אירועים/שניהם), רשימות,
+    סינון, critical-only, collapse-sidebar.
+  - אירועים כשורות ב-Gantt (לא רק משימות); drag → עדכון
+    `starts_at/ends_at`. קליק על אירוע פותח `EventEditModal`; קליק
+    על משימה פותח `TaskEditModal`.
+  - `GanttRow` widened ל-discriminated union (task | event) עם
+    `isPhase`, `phaseId`, `childrenEnd`, `accentColor`.
+  - Hover info card מעל כל בר עם title + טווח + badges + כפתור
+    עיפרון-עריכה.
+  - סף drag 4px — קליק נקי פותח את המודל, לא נבלע ע"י mis-detection.
+  - Collapsible task-name sidebar (רצועה של 24px במצב מזער).
+
+  **תיקוני באגים יסודיים:**
+  - `useCalendarPrefs` (24h toggle): היה מחזיר object חדש בכל
+    `getSnapshot` → `useSyncExternalStore` חשב שזה שינוי →
+    infinite loop. תוקן עם `cachedSnapshot` מודולרי.
+  - זמני סטופר ידניים: הטריגר ב-DB מנסה לחשב `duration_seconds`
+    ב-AFTER-INSERT (שם Postgres זורק מודיפיקציות ל-NEW). תוקן
+    בצד-לקוח ב-`createManualEntry` / `updateTimeEntry` שמחשבים ומעבירים
+    `duration_seconds` במפורש.
+  - TaskDependenciesSection: נוסף עיפרון-עריכה + שינוי relation/lag
+    על-תלויות קיימות (service + hook `updateTaskDependency`).
+  - מסך חודשי: באנרים רב-יומיים לא התנגשו עם מספרי הימים (restructure
+    להצמיד band overlay מעל התאים עם padding דינמי).
+  - Gantt critical-path label/icon: "Target/מטרה" הוחלף ל-"נתיב
+    קריטי" עם Flame icon.
+  - Filter options: הוסרו slugs של אייקונים (`icon:chart`) מהתוויות —
+    שם הרשימה בלבד.
+
+  **SPEC updates:**
+  - §12.8 "Screen Chrome" — עקרון מובייל-ראשית לכל המסכים הבאים.
+  - §15.11 "שלבים" — מודל + ויזואל + Option C.
+  - §16 התראה על השינוי בשפת-הוויזואליזציה (אירוע מלא / משימה
+    מתאר / זמן-בפועל כ-overlay חופף — מחליפה את "מקווקו/מלא"
+    המקורי).
+
+  **מה נותר פתוח לפאזה הבאה:**
+  - החלת מיגרציית השלבים על ה-DB (user action).
+  - RRULE expansion אמיתית ב-UI (אירוע חוזר עדיין מופיע כפעם אחת).
+  - Timezone picker מוגדר פר-משתמש.
+  - `TaskEditModal` ו-`EventEditModal` להאחד כ-"EntityEditModal"
+    משותף (קיים ב-SPEC §16 — עדיין לא). שניהם כבר משתמשים באותו
+    `<DateTimePicker>`.
+  - DashboardGrid מלא ליומן/Gantt (CalendarStatsStrip הוא stand-in).
+  - Sync ליומן Google (פאזה 9b לפי §9).
 
 
 

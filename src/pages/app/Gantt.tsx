@@ -119,7 +119,7 @@ export function Gantt() {
         label: "רשימה",
         options: lists.map((l) => ({
           value: l.id,
-          label: `${l.emoji ?? ""} ${l.name}`.trim(),
+          label: l.name,
         })),
       },
       {

@@ -1,17 +1,17 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
 /**
  * Shared chrome-bar building blocks used by `CalendarChrome`,
- * `TasksChrome`, `GanttChrome`. Per SPEC §12.8 these render as:
+ * `TasksChrome`, `GanttChrome`. Per SPEC §12.8.
  *
- *   - Compact icon + label (icon-only on mobile, icon+label on md+).
- *   - `start-0` popover positioning so the popover opens toward the
- *     layout-end (away from the screen-right in RTL) and stays in
- *     the viewport. `max-w-[calc(100vw-1rem)]` guards the overflow.
- *
- * Any new screen that needs a chrome should use these, not reimplement.
+ * Popovers use a **React portal + position: fixed** so they escape any
+ * overflow / transform context of the chrome card and clamp to the
+ * viewport. This avoids the "opens too far left / right" bugs that
+ * absolute-positioned popovers suffer when the trigger sits near an
+ * edge of the chrome.
  */
 
 interface ToggleButtonProps {
@@ -76,47 +76,85 @@ export function PopoverButton({
   children,
 }: PopoverButtonProps) {
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
-  const [shiftPx, setShiftPx] = useState(0);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
 
+  // Close on outside click / escape.
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
+      const target = e.target as Node;
+      if (triggerRef.current?.contains(target)) return;
+      if (popoverRef.current?.contains(target)) return;
+      setOpen(false);
+    };
+    const onEsc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
     };
     window.addEventListener("mousedown", onDown);
-    return () => window.removeEventListener("mousedown", onDown);
+    window.addEventListener("keydown", onEsc);
+    return () => {
+      window.removeEventListener("mousedown", onDown);
+      window.removeEventListener("keydown", onEsc);
+    };
   }, [open]);
 
-  // Auto-nudge the popover back into the viewport. We anchor with `start-0`
-  // (popover's inline-start = trigger's inline-start → in RTL, popover's
-  // right edge aligns with trigger's right edge and the popover grows
-  // leftward). When the trigger sits near the start edge of the chrome,
-  // that leftward growth can overflow — measure after render and translate
-  // the popover back in. Same idea in LTR, just mirrored.
+  // Compute popover position whenever it opens (or viewport changes).
   useLayoutEffect(() => {
-    if (!open || !popoverRef.current) {
-      if (shiftPx !== 0) setShiftPx(0);
+    if (!open || !triggerRef.current || !popoverRef.current) {
+      if (!open && pos) setPos(null);
       return;
     }
-    // Reset then measure.
-    popoverRef.current.style.transform = "translateX(0)";
-    const rect = popoverRef.current.getBoundingClientRect();
-    const vw = window.innerWidth;
-    const PAD = 8;
-    let delta = 0;
-    if (rect.left < PAD) delta = PAD - rect.left;
-    else if (rect.right > vw - PAD) delta = -(rect.right - (vw - PAD));
-    setShiftPx(delta);
+    const compute = () => {
+      const trig = triggerRef.current;
+      const pop = popoverRef.current;
+      if (!trig || !pop) return;
+      const trigRect = trig.getBoundingClientRect();
+      const popRect = pop.getBoundingClientRect();
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const PAD = 8;
+
+      // Prefer below the trigger.
+      let top = trigRect.bottom + 4;
+      if (top + popRect.height > vh - PAD) {
+        const above = trigRect.top - popRect.height - 4;
+        if (above >= PAD) top = above;
+      }
+
+      // Align: start the popover's right edge with the trigger's right edge
+      // in RTL (the "chevron down" direction). In LTR, align lefts.
+      const isRtl =
+        typeof document !== "undefined" &&
+        document.documentElement.dir === "rtl";
+      let left: number;
+      if (isRtl) {
+        left = trigRect.right - popRect.width;
+      } else {
+        left = trigRect.left;
+      }
+      // Clamp horizontally.
+      if (left < PAD) left = PAD;
+      if (left + popRect.width > vw - PAD) left = vw - PAD - popRect.width;
+
+      setPos({ top, left });
+    };
+    compute();
+    const onResize = () => compute();
+    window.addEventListener("resize", onResize);
+    window.addEventListener("scroll", onResize, true);
+    return () => {
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("scroll", onResize, true);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   return (
-    <div className="relative" ref={ref}>
+    <>
       <button
+        ref={triggerRef}
         onClick={() => setOpen((v) => !v)}
         className={cn(
           "inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium border transition-colors",
@@ -138,18 +176,27 @@ export function PopoverButton({
           className={cn("w-3 h-3 transition-transform", open && "rotate-180")}
         />
       </button>
-      {open && (
-        <div
-          ref={popoverRef}
-          className={cn(
-            "absolute top-full start-0 mt-1 z-30 bg-white border border-ink-200 rounded-lg shadow-lift max-w-[calc(100vw-1rem)]",
-            wide ? "min-w-[260px]" : "min-w-[180px]"
-          )}
-          style={{ transform: `translateX(${shiftPx}px)` }}
-        >
-          {children(() => setOpen(false))}
-        </div>
-      )}
-    </div>
+      {open &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            ref={popoverRef}
+            className={cn(
+              "fixed z-50 bg-white border border-ink-200 rounded-lg shadow-lift",
+              wide ? "min-w-[260px]" : "min-w-[180px]",
+              "max-w-[calc(100vw-16px)]"
+            )}
+            style={
+              pos
+                ? { top: pos.top, left: pos.left }
+                : // First render: place off-screen for measurement.
+                  { top: -9999, left: -9999 }
+            }
+          >
+            {children(() => setOpen(false))}
+          </div>,
+          document.body
+        )}
+    </>
   );
 }

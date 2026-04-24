@@ -121,7 +121,7 @@ export function Calendar() {
         label: "רשימה",
         options: lists.map((l) => ({
           value: l.id,
-          label: `${l.emoji ?? ""} ${l.name}`.trim(),
+          label: l.name,
         })),
       },
       { key: "tags", type: "multi-text", label: "תגים" },

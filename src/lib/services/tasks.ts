@@ -4,6 +4,7 @@ import type {
   TaskInsert,
   TaskUpdate,
   TaskDependency,
+  DependencyRelation,
   FilterConfig,
 } from "@/lib/types/domain";
 
@@ -293,4 +294,23 @@ export async function createTaskDependency(
 export async function deleteTaskDependency(depId: string): Promise<void> {
   const { error } = await supabase.from("task_dependencies").delete().eq("id", depId);
   if (error) throw error;
+}
+
+/**
+ * Partial update for an existing dependency. Only relation + lag_days are
+ * editable — the two endpoints are the identity of the edge; changing them
+ * means a different dependency, so use delete+create for that case.
+ */
+export async function updateTaskDependency(
+  depId: string,
+  patch: { relation?: DependencyRelation; lag_days?: number }
+): Promise<TaskDependency> {
+  const { data, error } = await supabase
+    .from("task_dependencies")
+    .update(patch)
+    .eq("id", depId)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
 }

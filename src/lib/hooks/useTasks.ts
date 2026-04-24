@@ -290,3 +290,31 @@ export function useDeleteTaskDependency() {
     },
   });
 }
+
+export function useUpdateTaskDependency() {
+  const qc = useQueryClient();
+  const scope = useOrgScope();
+  return useMutation({
+    mutationFn: ({
+      depId,
+      patch,
+    }: {
+      depId: string;
+      patch: {
+        relation?: "finish_to_start" | "start_to_start" | "finish_to_finish" | "start_to_finish";
+        lag_days?: number;
+      };
+    }) => tasksService.updateTaskDependency(depId, patch),
+    onSuccess: (dep) => {
+      qc.invalidateQueries({ queryKey: queryKeys.taskDependencies(dep.task_id) });
+      qc.invalidateQueries({
+        queryKey: queryKeys.taskDependencies(dep.depends_on_task_id),
+      });
+      if (scope.organizationId) {
+        qc.invalidateQueries({
+          queryKey: queryKeys.allTaskDependencies(scope.organizationId),
+        });
+      }
+    },
+  });
+}

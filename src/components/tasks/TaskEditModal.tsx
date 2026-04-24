@@ -398,7 +398,21 @@ export function TaskEditModal({ taskId, onClose, defaultTab = "overview" }: Task
                       />
                     </Field>
                   </div>
-                  <Field label="הערכת שעות">
+
+                  <div className="pt-2 border-t border-ink-200">
+                    {task && <TaskDependenciesSection taskId={task.id} />}
+                  </div>
+
+                  <p className="text-xs text-ink-400">
+                    הערכת שעות בפועל עברה לטאב "זמן" ליד הסטופר. חזרה (RRULE)
+                    ומשימת-אם — בקרוב.
+                  </p>
+                </div>
+              )}
+
+              {tab === "history" && task && (
+                <div className="space-y-4">
+                  <Field label="הערכת שעות (לתכנון)">
                     <DurationInput
                       value={estimatedMinutes}
                       onChange={(m) => {
@@ -409,18 +423,9 @@ export function TaskEditModal({ taskId, onClose, defaultTab = "overview" }: Task
                       ariaLabel="הערכת שעות"
                     />
                   </Field>
-
-                  <div className="pt-2 border-t border-ink-200">
-                    {task && <TaskDependenciesSection taskId={task.id} />}
-                  </div>
-
-                  <p className="text-xs text-ink-400">
-                    חזרה (RRULE) ומשימת-אם — בקרוב.
-                  </p>
+                  <TimeEntriesTab task={task} />
                 </div>
               )}
-
-              {tab === "history" && task && <TimeEntriesTab task={task} />}
 
               {tab === "attachments" && <AttachmentsTab />}
             </div>

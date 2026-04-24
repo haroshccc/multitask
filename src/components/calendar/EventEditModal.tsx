@@ -1,32 +1,41 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Video, MapPin, Trash2 } from "lucide-react";
+import {
+  X,
+  Video,
+  MapPin,
+  Trash2,
+  Users,
+  Repeat,
+  ListTodo,
+} from "lucide-react";
+import { cn } from "@/lib/utils/cn";
 import {
   useEvent,
   useCreateEvent,
   useUpdateEvent,
   useDeleteEvent,
 } from "@/lib/hooks/useEvents";
-import type { EventRow } from "@/lib/types/domain";
+import { DateTimePicker } from "@/components/ui/DateTimePicker";
+import { EventParticipantsSection } from "./EventParticipantsSection";
+import { RrulePicker } from "./RrulePicker";
 
 /**
- * Event edit modal — SPEC §16. A lighter cousin of TaskEditModal, scoped to
- * the events table only. Used when the calendar's "+" creates an event or a
- * user clicks an existing event on the grid.
- *
- * Props:
- * - `eventId = null` + `initialStart` present → creation mode.
- * - `eventId` set → edit mode (loads row by id).
+ * Event edit modal — SPEC §16. Three tabs: details / participants / recurrence.
+ * Uses the same `DateTimePicker` as the Tasks screen so the feel stays
+ * consistent; `video_call_url` button for Meet is a placeholder (SPEC §9 —
+ * deferred to Phase 9b).
  */
 
 interface EventEditModalProps {
   open: boolean;
   eventId: string | null;
-  /** When creating a new event, seed the start/end from the click target. */
   initialStart?: Date;
   initialEnd?: Date;
   onClose: () => void;
 }
+
+type Tab = "details" | "participants" | "recurrence";
 
 export function EventEditModal({
   open,
@@ -41,15 +50,17 @@ export function EventEditModal({
   const updateEvent = useUpdateEvent();
   const deleteEvent = useDeleteEvent();
 
+  const [tab, setTab] = useState<Tab>("details");
+
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [location, setLocation] = useState("");
   const [videoCallUrl, setVideoCallUrl] = useState("");
   const [allDay, setAllDay] = useState(false);
-  const [startsAt, setStartsAt] = useState("");
-  const [endsAt, setEndsAt] = useState("");
+  const [startsAt, setStartsAt] = useState<string | null>(null);
+  const [endsAt, setEndsAt] = useState<string | null>(null);
+  const [recurrenceRule, setRecurrenceRule] = useState<string | null>(null);
 
-  // Hydrate when modal opens or the source row changes.
   useEffect(() => {
     if (!open) return;
     if (isEdit && existing) {
@@ -58,8 +69,10 @@ export function EventEditModal({
       setLocation(existing.location ?? "");
       setVideoCallUrl(existing.video_call_url ?? "");
       setAllDay(existing.all_day);
-      setStartsAt(existing.starts_at.slice(0, 16));
-      setEndsAt(existing.ends_at.slice(0, 16));
+      setStartsAt(existing.starts_at);
+      setEndsAt(existing.ends_at);
+      setRecurrenceRule(existing.recurrence_rule);
+      setTab("details");
     } else if (!isEdit) {
       const s = initialStart ?? new Date();
       const e = initialEnd ?? new Date(s.getTime() + 60 * 60_000);
@@ -68,21 +81,24 @@ export function EventEditModal({
       setLocation("");
       setVideoCallUrl("");
       setAllDay(false);
-      setStartsAt(toLocalInput(s));
-      setEndsAt(toLocalInput(e));
+      setStartsAt(s.toISOString());
+      setEndsAt(e.toISOString());
+      setRecurrenceRule(null);
+      setTab("details");
     }
   }, [open, isEdit, existing, initialStart, initialEnd]);
 
   const save = async () => {
-    if (!title.trim()) return;
+    if (!title.trim() || !startsAt || !endsAt) return;
     const payload = {
       title: title.trim(),
       description: description || null,
       location: location || null,
       video_call_url: videoCallUrl || null,
       all_day: allDay,
-      starts_at: new Date(startsAt).toISOString(),
-      ends_at: new Date(endsAt).toISOString(),
+      starts_at: startsAt,
+      ends_at: endsAt,
+      recurrence_rule: recurrenceRule,
     };
     if (isEdit && eventId) {
       await updateEvent.mutateAsync({ eventId, patch: payload });
@@ -114,7 +130,7 @@ export function EventEditModal({
             exit={{ y: 30, opacity: 0 }}
             transition={{ type: "spring", stiffness: 400, damping: 32 }}
             onClick={(e) => e.stopPropagation()}
-            className="bg-white rounded-3xl shadow-lift w-full max-w-xl my-8 overflow-hidden"
+            className="bg-white rounded-3xl shadow-lift w-full max-w-2xl my-8 overflow-hidden"
           >
             <div className="px-5 py-3 border-b border-ink-200 flex items-center justify-between gap-3">
               <h3 className="text-lg font-semibold text-ink-900">
@@ -129,83 +145,142 @@ export function EventEditModal({
               </button>
             </div>
 
-            <div className="p-5 space-y-4">
-              <Field label="כותרת">
-                <input
-                  autoFocus
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder="שם האירוע"
-                  className="field"
-                />
-              </Field>
+            {/* Tabs */}
+            <div className="border-b border-ink-200 px-3 flex items-center gap-1 text-sm">
+              <TabBtn active={tab === "details"} onClick={() => setTab("details")}>
+                <ListTodo className="w-4 h-4" />
+                פרטים
+              </TabBtn>
+              <TabBtn
+                active={tab === "participants"}
+                onClick={() => setTab("participants")}
+              >
+                <Users className="w-4 h-4" />
+                מוזמנים
+              </TabBtn>
+              <TabBtn
+                active={tab === "recurrence"}
+                onClick={() => setTab("recurrence")}
+              >
+                <Repeat className="w-4 h-4" />
+                חזרה
+              </TabBtn>
+            </div>
 
-              <Field label="תיאור">
-                <textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  className="field min-h-[80px] resize-y"
-                  placeholder="פרטים..."
-                />
-              </Field>
+            <div className="p-5 max-h-[calc(100vh-16rem)] overflow-y-auto">
+              {tab === "details" && (
+                <div className="space-y-4">
+                  <Field label="כותרת">
+                    <input
+                      autoFocus
+                      value={title}
+                      onChange={(e) => setTitle(e.target.value)}
+                      placeholder="שם האירוע"
+                      className="field"
+                    />
+                  </Field>
 
-              <label className="flex items-center gap-2 text-sm text-ink-700 select-none">
-                <input
-                  type="checkbox"
-                  checked={allDay}
-                  onChange={(e) => setAllDay(e.target.checked)}
-                  className="w-4 h-4"
-                />
-                אירוע של יום שלם
-              </label>
+                  <Field label="תיאור">
+                    <textarea
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      className="field min-h-[80px] resize-y"
+                      placeholder="פרטים..."
+                    />
+                  </Field>
 
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="התחלה">
-                  <input
-                    type={allDay ? "date" : "datetime-local"}
-                    value={allDay ? startsAt.slice(0, 10) : startsAt}
-                    onChange={(e) => setStartsAt(e.target.value)}
-                    className="field"
-                  />
-                </Field>
-                <Field label="סיום">
-                  <input
-                    type={allDay ? "date" : "datetime-local"}
-                    value={allDay ? endsAt.slice(0, 10) : endsAt}
-                    onChange={(e) => setEndsAt(e.target.value)}
-                    className="field"
-                  />
-                </Field>
-              </div>
+                  <label className="flex items-center gap-2 text-sm text-ink-700 select-none">
+                    <input
+                      type="checkbox"
+                      checked={allDay}
+                      onChange={(e) => setAllDay(e.target.checked)}
+                      className="w-4 h-4"
+                    />
+                    אירוע של יום שלם
+                  </label>
 
-              <Field label="מיקום">
-                <div className="relative">
-                  <MapPin className="w-4 h-4 absolute start-3 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" />
-                  <input
-                    value={location}
-                    onChange={(e) => setLocation(e.target.value)}
-                    className="field ps-9"
-                    placeholder="כתובת או אולם..."
-                  />
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label="התחלה">
+                      <DateTimePicker
+                        value={startsAt}
+                        onChange={(v) => {
+                          setStartsAt(v);
+                          // Keep the duration constant when the user shifts start.
+                          if (v && startsAt && endsAt) {
+                            const dur =
+                              new Date(endsAt).getTime() -
+                              new Date(startsAt).getTime();
+                            setEndsAt(new Date(new Date(v).getTime() + dur).toISOString());
+                          }
+                        }}
+                        dateOnly={allDay}
+                      />
+                    </Field>
+                    <Field label="סיום">
+                      <DateTimePicker
+                        value={endsAt}
+                        onChange={setEndsAt}
+                        dateOnly={allDay}
+                      />
+                    </Field>
+                  </div>
+
+                  <Field label="מיקום">
+                    <div className="relative">
+                      <MapPin className="w-4 h-4 absolute start-3 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" />
+                      <input
+                        value={location}
+                        onChange={(e) => setLocation(e.target.value)}
+                        className="field ps-9"
+                        placeholder="כתובת או אולם..."
+                      />
+                    </div>
+                  </Field>
+
+                  <Field label="לינק וידאו">
+                    <div className="flex items-center gap-2">
+                      <div className="relative flex-1">
+                        <Video className="w-4 h-4 absolute start-3 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" />
+                        <input
+                          type="url"
+                          value={videoCallUrl}
+                          onChange={(e) => setVideoCallUrl(e.target.value)}
+                          dir="ltr"
+                          className="field ps-9"
+                          placeholder="https://meet.google.com/..."
+                        />
+                      </div>
+                      <button
+                        disabled
+                        className="btn-outline text-xs opacity-60 cursor-not-allowed"
+                        title="בקרוב — יצירת Meet אוטומטית תגיע בפאזה 9b"
+                        type="button"
+                      >
+                        🎥 צור Meet
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-ink-400 mt-1">
+                      הדבק לינק Zoom / Teams / Meet ידנית, או המתן ליצירה אוטומטית
+                      (בקרוב).
+                    </p>
+                  </Field>
                 </div>
-              </Field>
+              )}
 
-              <Field label="לינק וידאו">
-                <div className="relative">
-                  <Video className="w-4 h-4 absolute start-3 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" />
-                  <input
-                    type="url"
-                    value={videoCallUrl}
-                    onChange={(e) => setVideoCallUrl(e.target.value)}
-                    dir="ltr"
-                    className="field ps-9"
-                    placeholder="https://meet.google.com/..."
-                  />
-                </div>
-                <p className="text-[11px] text-ink-400 mt-1">
-                  יצירת Meet אוטומטית — בקרוב (שלב 9b).
-                </p>
-              </Field>
+              {tab === "participants" && (
+                <EventParticipantsSection
+                  eventId={eventId}
+                  ownerId={existing?.owner_id ?? null}
+                />
+              )}
+
+              {tab === "recurrence" && (
+                <RrulePicker
+                  value={recurrenceRule}
+                  onChange={setRecurrenceRule}
+                  anchorDate={startsAt ? new Date(startsAt) : null}
+                />
+              )}
             </div>
 
             <div className="px-5 py-3 border-t border-ink-200 flex items-center gap-2">
@@ -240,6 +315,31 @@ export function EventEditModal({
   );
 }
 
+function TabBtn({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "inline-flex items-center gap-1.5 px-3 py-2 border-b-2 -mb-px transition-colors",
+        active
+          ? "border-primary-500 text-primary-700 font-medium"
+          : "border-transparent text-ink-600 hover:text-ink-900"
+      )}
+      type="button"
+    >
+      {children}
+    </button>
+  );
+}
+
 function Field({
   label,
   children,
@@ -253,15 +353,4 @@ function Field({
       {children}
     </div>
   );
-}
-
-function toLocalInput(d: Date): string {
-  // YYYY-MM-DDTHH:MM — matches <input type="datetime-local"> expected value.
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-// Helper: read-only peek at an event (for code that wants to type-guard). ------
-export function isEventRow(x: unknown): x is EventRow {
-  return !!x && typeof x === "object" && "starts_at" in (x as Record<string, unknown>);
 }

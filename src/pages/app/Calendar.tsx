@@ -17,6 +17,7 @@ import { CalendarDayView } from "@/components/calendar/CalendarDayView";
 import { CalendarWeekView } from "@/components/calendar/CalendarWeekView";
 import { CalendarMonthView } from "@/components/calendar/CalendarMonthView";
 import { CalendarAgendaView } from "@/components/calendar/CalendarAgendaView";
+import { CalendarStatsStrip } from "@/components/calendar/CalendarStatsStrip";
 import { EventEditModal } from "@/components/calendar/EventEditModal";
 import {
   type CalendarItem,
@@ -206,6 +207,13 @@ export function Calendar() {
           anchor={anchor}
           onAnchorChange={setAnchor}
           availableViews={availableViews}
+        />
+
+        <CalendarStatsStrip
+          tasks={tasks}
+          events={events}
+          timeEntries={timeEntries}
+          anchor={anchor}
         />
 
         {view === "day" && (

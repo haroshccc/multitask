@@ -1799,8 +1799,92 @@ Hero: "החלל לחשוב. החלל לעשות."
   - DashboardGrid מלא ליומן/Gantt (CalendarStatsStrip הוא stand-in).
   - Sync ליומן Google (פאזה 9b לפי §9).
 
+- **2026-04-24** — פאזה 5 הסתיימה: מסך מחשבות (§19) +
+  סגירת 2 מ-3 חובות טכניים פתוחים (RRULE, timezone).
 
+  **מסך מחשבות (§19):**
+  - `ThoughtsChrome` — חמישה כפתורי chrome לפי §12.8 (רשימות popover,
+    סטטיסטיקות toggle, סינון toggle, תצוגה popover, ארכיון toggle).
+    מובייל = אייקונים בלבד, דסקטופ = אייקון + טקסט. הכל סגור
+    כברירת מחדל; העדפות (view / sort / density) נשמרות ב-
+    `localStorage` תחת `multitask:thoughts:{view,sort,density}`.
+  - `ThoughtComposer` — textarea שמתמקד אוטומטית בראש המסך. Enter
+    שומר (אופטימיסטית), Shift+Enter = שורה חדשה. focus חוזר
+    אוטומטית אחרי שמירה כך שהמשתמש ממשיך להקליד.
+  - `ThoughtCard` — כרטיס פר מחשבה: chips של רשימות (עם × לביטול
+    שיוך), source + timestamp יחסי, כותרת-AI, טקסט עד 3 שורות,
+    ושלושה כפתורי פעולה: "📎 לרשימה" (popover), "⚡ עבד" (פותח
+    את באנר ה-AI inline כ-accordion), "✓ סמן" (processed_at).
+    כרטיס משויך לריבוי רשימות מקבל `ring-1` עדין; ליחידה — border
+    בצבע הרשימה בצד הלידינג.
+  - `ThoughtAiBanner` — accordion בתוך הכרטיס. **שרשור הצעות**
+    פועל: כל לחיצה משאירה את שאר ההצעות פעילות; ההצעה שבוצעה
+    מסומנת ✓ + לינק "פתח" לישות שנוצרה. שבעה כפתורי פעולה
+    קבועים + הצעות דינמיות מ-`mockProvider`. סגירת הבאנר פותחת
+    תפריט "סמן כמעובדת / לארכיון / השאר פתוחה".
+  - `SendMessagePopover` — פנל inline בתוך הבאנר, לא modal. wa.me +
+    mailto (§10: בלי בוט משלנו). "תזמן שליחה" disabled עם tooltip
+    "בקרוב".
+  - `ThoughtEditModal` — 3 טאבים (פרטים / מקור / נוצרו מזה). הטאב
+    "נוצרו מזה" קורא `thought_processings` ומאפשר לקפוץ ישירות
+    למודל של המשימה/אירוע/פרויקט שנוצרו.
+  - "מקור" ב-`TaskEditModal` ו-`EventEditModal` — כל אחד מהם מציג
+    כרטיסון עם "← נוצר מהמחשבה" כשיש `source_thought_id`, עם לינק
+    "פתח" שמפעיל את `ThoughtEditModal`. סוגר את הלופ בשני הכיוונים.
 
+  **AI adapter (`src/lib/ai/thought-suggestions.ts`):**
+  - `ThoughtAiProvider` interface עם `generateTitle` + `getSuggestions`.
+  - `mockProvider` דטרמיניסטי עם היוריסטיקות של תאריכים/אנשים/פעולות
+    מרובות. החלפה ל-Claude Haiku תהיה שינוי קובץ אחד; ה-UI לא זז.
+
+  **חיפוש גלובלי — deep-link:**
+  - `GlobalSearchPalette` מנתב ל-`?thought=<id>` (וגם לטיפוסים אחרים).
+    `Thoughts.tsx` קוראת את ה-param ב-mount, פותחת את המודל, ומנקה
+    את ה-URL כך שסגירה לא תפתח אותו שוב.
+
+  **ווידג'ט דשבורד:**
+  - `UnprocessedThoughts` (`src/components/dashboard/widgets/`) — חמש
+    העליונות + badge של ספירה + לינק למסך. מחובר ל-`Dashboard.tsx`
+    כ-preview מוקדם בזמן ש-DashboardGrid המלא עדיין לא מלא.
+
+  **תוספות לשכבת הדאטה:**
+  - `useThoughtAssignments(thoughtId)` + `useBulkThoughtAssignments(ids[])`
+    (hooks) + `listAssignmentsForThoughts(ids[])` (service). ה-bulk
+    מחזיק את מסך המחשבות על round-trip אחד של assignments לכל
+    הכרטיסים יחד.
+
+  **חוב טכני סגור בסשן הזה:**
+  - **RRULE expansion** — `expandRrule(rule, anchor, start, end)`
+    ב-`calendar-utils.ts` מחזיר את כל המופעים של חוק RFC-5545 בתוך
+    החלון הנצפה. DAILY/WEEKLY(+BYDAY)/MONTHLY/YEARLY + INTERVAL +
+    UNTIL. `Calendar.tsx` מרחיב אירוע חוזר לפריטים נפרדים שמייצגים
+    מופעים שונים — לחיצה על כל מופע פותחת את האירוע-האב.
+  - **Timezone picker** — `CalendarPrefs.timezone` (ברירת מחדל =
+    הזיהוי של הדפדפן). `HourRangeSettings` מוסיף select עם חיפוש +
+    כפתור "זיהוי אוטומטי". ה-chrome + `AgendaView` + `MonthView` +
+    `CalendarBlock` (day/week) מעבירים את ה-TZ לפורמטרים. Gantt
+    נשאר על הזמן המקומי של הדפדפן בסשן הזה (דיף קטן יותר; הפער שם
+    חזותי זניח).
+
+  **חוב טכני שנותר פתוח לפאזה 6:**
+  - מיגרציית `20260424000001_task_phases.sql` עדיין לא הוחלה על ה-DB
+    (לא היה לי Supabase MCP; ביקשתי מהמשתמשת להריץ אותה ידנית).
+  - `EntityEditModal` משותף — נדחה בכוונה.
+  - `projects.source_thought_id` — אין עמודה כזו עדיין בסכמה, לכן
+    בפרויקטים שנוצרו ממחשבה ה-provenance נרשמת רק ב-
+    `thought_processings`. מיגרציה קטנה בפאזה 6 תוסיף את העמודה.
+
+  **החלטות שלא היו ב-SPEC המקורי:**
+  - ה-AI adapter הוא client-side mock בלבד כרגע. ההחלטה לדחות
+    אינטגרציה אמיתית ל-Anthropic API היא כדי לנעול את ה-UX לפני
+    שמוציאים תקציב AI אמיתי — המבנה של ההצעות (קבועות + דינמיות)
+    והממשק של ה-adapter נבדקו בפועל במסך.
+  - מסך המחשבות לא משתמש ב-`DashboardGrid` (בניגוד ל-§14 שדיבר עליה
+    לדשבורד הבית): המסך הוא טקסטארה אחת גדולה + פיד — לא אוסף
+    ווידג'טים. ה-chrome היחיד מספיק לכל הבקרות הרוחביות.
+  - סינון לפי "מעובדת/לא מעובדת" הפך ל-view mode ב-chrome (popover
+    "תצוגה") במקום boolean ב-FilterBar — כי זה החיתוך העיקרי של
+    המסך ולא סינון משני. ה-FilterBar מחזיק רק `sources[]` + `tags[]`.
 
 
 

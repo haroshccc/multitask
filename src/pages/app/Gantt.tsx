@@ -6,9 +6,12 @@ import {
   type FilterField,
 } from "@/components/filters/FilterBar";
 import { TaskEditModal } from "@/components/tasks/TaskEditModal";
+import { EventEditModal } from "@/components/calendar/EventEditModal";
 import { GanttChrome } from "@/components/gantt/GanttChrome";
 import { GanttGrid } from "@/components/gantt/GanttGrid";
 import {
+  type GanttLayer,
+  type GanttRow,
   type GanttZoom,
   addDays,
   buildRows,
@@ -19,17 +22,20 @@ import {
 import {
   useAllTaskDependencies,
   useCreateTaskList,
+  useEvents,
   useListVisibility,
   useSetListVisibility,
   useTaskLists,
   useTasks,
+  useUpdateEvent,
   useUpdateTask,
 } from "@/lib/hooks";
 
 export function Gantt() {
-  const [zoom, setZoom] = useState<GanttZoom>("day");
+  const [zoom, setZoom] = useState<GanttZoom>("week");
   const [anchor, setAnchor] = useState<Date>(() => new Date());
   const [showCriticalOnly, setShowCriticalOnly] = useState(false);
+  const [layer, setLayer] = useState<GanttLayer>("both");
   const [filtersOpen, setFiltersOpen] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
     return localStorage.getItem("multitask.gantt.filtersOpen") === "true";
@@ -38,6 +44,18 @@ export function Gantt() {
     if (typeof window === "undefined") return;
     localStorage.setItem("multitask.gantt.filtersOpen", String(filtersOpen));
   }, [filtersOpen]);
+
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem("multitask.gantt.sidebarCollapsed") === "true";
+  });
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem(
+      "multitask.gantt.sidebarCollapsed",
+      String(sidebarCollapsed)
+    );
+  }, [sidebarCollapsed]);
 
   const [filters, setFilters] = useFiltersFromUrl();
   const { data: tasks = [] } = useTasks(filters);
@@ -52,6 +70,7 @@ export function Gantt() {
   );
 
   const updateTask = useUpdateTask();
+  const updateEvent = useUpdateEvent();
 
   const windowStart = useMemo(() => {
     const span = defaultSpanDays(zoom);
@@ -62,6 +81,12 @@ export function Gantt() {
     [windowStart, zoom]
   );
 
+  // Fetch events in the visible window so the "events" layer has data.
+  const { data: events = [] } = useEvents({
+    from: windowStart.toISOString(),
+    to: windowEnd.toISOString(),
+  });
+
   const filteredTasks = useMemo(() => {
     return tasks.filter((t) => {
       if (t.task_list_id && hiddenLists.has(t.task_list_id)) return false;
@@ -69,7 +94,10 @@ export function Gantt() {
     });
   }, [tasks, hiddenLists]);
 
-  const rows = useMemo(() => buildRows(filteredTasks), [filteredTasks]);
+  const rows = useMemo(
+    () => buildRows(filteredTasks, events, layer),
+    [filteredTasks, events, layer]
+  );
 
   const criticalSet = useMemo(
     () => computeCriticalPath(rows, deps),
@@ -78,7 +106,9 @@ export function Gantt() {
 
   const visibleRows = useMemo(() => {
     if (!showCriticalOnly) return rows;
-    return rows.filter((r) => criticalSet.has(r.task.id));
+    return rows.filter((r) =>
+      r.kind === "task" && r.task ? criticalSet.has(r.task.id) : false
+    );
   }, [rows, showCriticalOnly, criticalSet]);
 
   const fields: FilterField[] = useMemo(
@@ -118,12 +148,33 @@ export function Gantt() {
   }, [filters]);
 
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [editingEventId, setEditingEventId] = useState<string | null>(null);
+
+  const handleRowClick = (row: GanttRow) => {
+    if (row.kind === "event" && row.event) {
+      setEditingEventId(row.event.id);
+    } else if (row.kind === "task" && row.task) {
+      setEditingTaskId(row.task.id);
+    }
+  };
 
   const handleBarChange = (
-    taskId: string,
+    row: GanttRow,
     patch: { scheduled_at: string; duration_minutes: number }
   ) => {
-    updateTask.mutate({ taskId, patch });
+    if (row.kind === "task" && row.task) {
+      updateTask.mutate({ taskId: row.task.id, patch });
+    } else if (row.kind === "event" && row.event) {
+      // For events, translate duration_minutes back to an ends_at.
+      const startsAt = patch.scheduled_at;
+      const endsAt = new Date(
+        new Date(startsAt).getTime() + patch.duration_minutes * 60_000
+      ).toISOString();
+      updateEvent.mutate({
+        eventId: row.event.id,
+        patch: { starts_at: startsAt, ends_at: endsAt },
+      });
+    }
   };
 
   const toggleListVisibility = (listId: string) => {
@@ -159,6 +210,8 @@ export function Gantt() {
           onZoomChange={setZoom}
           anchor={anchor}
           onAnchorChange={setAnchor}
+          layer={layer}
+          onLayerChange={setLayer}
           lists={unifiedLists}
           hiddenListIds={hiddenLists}
           onToggleListVisibility={toggleListVisibility}
@@ -168,6 +221,8 @@ export function Gantt() {
           onToggleFilters={() => setFiltersOpen((v) => !v)}
           showCriticalOnly={showCriticalOnly}
           onToggleCriticalOnly={() => setShowCriticalOnly((v) => !v)}
+          sidebarCollapsed={sidebarCollapsed}
+          onToggleSidebar={() => setSidebarCollapsed((v) => !v)}
         />
 
         {filtersOpen && (
@@ -187,8 +242,10 @@ export function Gantt() {
           windowStart={windowStart}
           windowEnd={windowEnd}
           criticalSet={criticalSet}
-          onRowClick={setEditingTaskId}
+          onRowClick={handleRowClick}
           onBarChange={handleBarChange}
+          sidebarCollapsed={sidebarCollapsed}
+          onToggleSidebar={() => setSidebarCollapsed((v) => !v)}
         />
       </div>
 
@@ -196,6 +253,11 @@ export function Gantt() {
         taskId={editingTaskId}
         onClose={() => setEditingTaskId(null)}
         defaultTab="schedule"
+      />
+      <EventEditModal
+        open={!!editingEventId}
+        eventId={editingEventId}
+        onClose={() => setEditingEventId(null)}
       />
     </ScreenScaffold>
   );

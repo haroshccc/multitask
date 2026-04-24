@@ -21,11 +21,15 @@ interface GanttGridProps {
   windowStart: Date;
   windowEnd: Date;
   criticalSet: Set<string>;
-  onRowClick: (taskId: string) => void;
+  onRowClick: (row: GanttRow) => void;
   onBarChange: (
-    taskId: string,
+    row: GanttRow,
     patch: { scheduled_at: string; duration_minutes: number }
   ) => void;
+  /** Caller controls whether the task-name sidebar shows (collapsed mode
+   *  gives the timeline full width). */
+  sidebarCollapsed?: boolean;
+  onToggleSidebar?: () => void;
 }
 
 export function GanttGrid({
@@ -37,6 +41,8 @@ export function GanttGrid({
   criticalSet,
   onRowClick,
   onBarChange,
+  sidebarCollapsed,
+  onToggleSidebar,
 }: GanttGridProps) {
   const pxPerDay = pxPerDayFn(zoom);
   const totalDays = Math.max(
@@ -79,45 +85,79 @@ export function GanttGrid({
   return (
     <div className="card overflow-hidden">
       <div className="flex" style={{ minHeight: timelineHeight + 64 }}>
-        {/* Left column: task rows */}
+        {/* Left column: task rows — can be collapsed to a thin strip */}
+        {sidebarCollapsed ? (
+          <button
+            onClick={onToggleSidebar}
+            className="shrink-0 border-e border-ink-200 bg-ink-50/60 hover:bg-ink-100 w-6 flex items-center justify-center text-ink-500"
+            title="הצג שמות משימות"
+            type="button"
+          >
+            <span className="rotate-180" style={{ writingMode: "vertical-rl" }}>
+              ☰
+            </span>
+          </button>
+        ) : (
         <div
           className="shrink-0 border-e border-ink-200 bg-white"
           style={{ width: LEFT_COL_WIDTH }}
         >
           {/* Spacer for the 2-row header */}
-          <div className="h-16 border-b border-ink-200 bg-ink-50/60 flex items-end px-3 py-2">
+          <div className="h-16 border-b border-ink-200 bg-ink-50/60 flex items-end justify-between px-3 py-2">
             <span className="eyebrow">משימה</span>
+            {onToggleSidebar && (
+              <button
+                onClick={onToggleSidebar}
+                className="p-1 rounded-md hover:bg-ink-100 text-ink-500"
+                title="מזער את עמודת המשימות"
+                type="button"
+              >
+                ⟨
+              </button>
+            )}
           </div>
-          {rows.map((r, i) => (
+          {rows.map((r, i) => {
+            const isCritical =
+              r.kind === "task" && !!r.task && criticalSet.has(r.task.id);
+            return (
             <button
-              key={r.task.id}
-              onClick={() => onRowClick(r.task.id)}
+              key={r.id}
+              onClick={() => onRowClick(r)}
               className={cn(
                 "w-full h-10 flex items-center gap-2 px-2 text-start text-[13px] border-b border-ink-150 hover:bg-ink-50",
-                r.task.completed_at && "opacity-60",
-                criticalSet.has(r.task.id) && "bg-danger-500/5"
+                r.completed && "opacity-60",
+                isCritical && "bg-danger-500/5"
               )}
               style={{ paddingInlineStart: 8 + r.depth * 16 }}
               type="button"
-              title={r.task.title}
+              title={r.title}
             >
               <span
                 className={cn(
                   "w-1.5 h-1.5 rounded-full shrink-0",
-                  criticalSet.has(r.task.id) ? "bg-danger-500" : "bg-ink-300"
+                  isCritical
+                    ? "bg-danger-500"
+                    : r.kind === "event"
+                    ? "bg-primary-500"
+                    : "bg-ink-300"
                 )}
               />
               <span className="truncate flex-1 min-w-0">
-                {r.task.completed_at ? "✓ " : ""}
-                {r.task.title}
+                {r.completed ? "✓ " : ""}
+                {r.kind === "event" && (
+                  <span className="text-[10px] text-primary-600 me-1">●</span>
+                )}
+                {r.title}
               </span>
               <span className="text-[10px] text-ink-400 shrink-0 tabular-nums">
                 {r.start.toLocaleDateString("he-IL", { month: "numeric", day: "numeric" })}
               </span>
               {i === rows.length - 1 ? null : null}
             </button>
-          ))}
+            );
+          })}
         </div>
+        )}
 
         {/* Timeline scrollable area */}
         <div className="flex-1 overflow-x-auto scrollbar-thin" ref={scrollRef}>
@@ -187,16 +227,20 @@ export function GanttGrid({
                 })
               )}
               {/* Horizontal row lines */}
-              {rows.map((r, i) => (
-                <div
-                  key={r.task.id + "-row-line"}
-                  className={cn(
-                    "absolute inset-x-0 border-b border-ink-150",
-                    criticalSet.has(r.task.id) && "bg-danger-500/5"
-                  )}
-                  style={{ top: i * ROW_HEIGHT, height: ROW_HEIGHT }}
-                />
-              ))}
+              {rows.map((r, i) => {
+                const isCritical =
+                  r.kind === "task" && !!r.task && criticalSet.has(r.task.id);
+                return (
+                  <div
+                    key={r.id + "-row-line"}
+                    className={cn(
+                      "absolute inset-x-0 border-b border-ink-150",
+                      isCritical && "bg-danger-500/5"
+                    )}
+                    style={{ top: i * ROW_HEIGHT, height: ROW_HEIGHT }}
+                  />
+                );
+              })}
 
               {/* Now line */}
               {nowLeft !== null && (
@@ -209,22 +253,26 @@ export function GanttGrid({
               )}
 
               {/* Bars */}
-              {rows.map((r, i) => (
-                <div
-                  key={r.task.id + "-bar"}
-                  className="absolute inset-x-0"
-                  style={{ top: i * ROW_HEIGHT, height: ROW_HEIGHT }}
-                >
-                  <GanttBar
-                    row={r}
-                    pxPerDay={pxPerDay}
-                    origin={windowStart}
-                    isCritical={criticalSet.has(r.task.id)}
-                    onClick={() => onRowClick(r.task.id)}
-                    onChange={(patch) => onBarChange(r.task.id, patch)}
-                  />
-                </div>
-              ))}
+              {rows.map((r, i) => {
+                const isCritical =
+                  r.kind === "task" && !!r.task && criticalSet.has(r.task.id);
+                return (
+                  <div
+                    key={r.id + "-bar"}
+                    className="absolute inset-x-0"
+                    style={{ top: i * ROW_HEIGHT, height: ROW_HEIGHT }}
+                  >
+                    <GanttBar
+                      row={r}
+                      pxPerDay={pxPerDay}
+                      origin={windowStart}
+                      isCritical={isCritical}
+                      onClick={() => onRowClick(r)}
+                      onChange={(patch) => onBarChange(r, patch)}
+                    />
+                  </div>
+                );
+              })}
 
               {/* Dependency arrows */}
               <GanttDependencyArrows

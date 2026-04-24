@@ -5,17 +5,29 @@
  * `estimated_hours`. Rows are ordered by the tasks' natural sort + nesting
  * under `parent_task_id`.
  */
-import type { Task, TaskDependency } from "@/lib/types/domain";
+import type { EventRow, Task, TaskDependency } from "@/lib/types/domain";
 
 export type GanttZoom = "day" | "week" | "month" | "quarter";
+export type GanttLayer = "both" | "tasks" | "events";
+
+export type GanttRowKind = "task" | "event";
 
 export interface GanttRow {
-  task: Task;
+  id: string;
+  kind: GanttRowKind;
+  /** Present when kind === "task" */
+  task?: Task;
+  /** Present when kind === "event" */
+  event?: EventRow;
   depth: number;
   /** Start date — from scheduled_at, or "today" if only estimated_hours. */
   start: Date;
   /** End date — start + duration/estimated_hours (min 30 min). */
   end: Date;
+  /** Human-readable title for rendering (always present). */
+  title: string;
+  /** True when the underlying entity is in a "done" state (strike-through). */
+  completed: boolean;
 }
 
 // Time helpers ---------------------------------------------------------------
@@ -106,45 +118,86 @@ export function calcTaskTiming(task: Task, fallbackStart: Date = new Date()):
 /**
  * Build the ordered + indented row list. Parents appear above children.
  * Tasks with no schedulable timing are filtered out.
+ *
+ * When `events` is provided and `layer` allows it, events render as flat
+ * additional rows (no hierarchy — events don't have parents).
  */
-export function buildRows(tasks: Task[]): GanttRow[] {
-  const byId = new Map<string, Task>();
-  const childrenOf = new Map<string | null, Task[]>();
-  for (const t of tasks) {
-    byId.set(t.id, t);
-    const pid = t.parent_task_id ?? null;
-    if (!childrenOf.has(pid)) childrenOf.set(pid, []);
-    childrenOf.get(pid)!.push(t);
-  }
-  for (const arr of childrenOf.values()) {
-    arr.sort((a, b) => a.sort_order - b.sort_order);
-  }
-
+export function buildRows(
+  tasks: Task[],
+  events: EventRow[] = [],
+  layer: GanttLayer = "both"
+): GanttRow[] {
   const rows: GanttRow[] = [];
   const fallback = new Date();
 
-  const walk = (pid: string | null, depth: number) => {
-    const kids = childrenOf.get(pid) ?? [];
-    for (const t of kids) {
-      const timing = calcTaskTiming(t, fallback);
-      if (timing) {
-        rows.push({ task: t, depth, start: timing.start, end: timing.end });
-      }
-      walk(t.id, depth + 1);
+  if (layer !== "events") {
+    const byId = new Map<string, Task>();
+    const childrenOf = new Map<string | null, Task[]>();
+    for (const t of tasks) {
+      byId.set(t.id, t);
+      const pid = t.parent_task_id ?? null;
+      if (!childrenOf.has(pid)) childrenOf.set(pid, []);
+      childrenOf.get(pid)!.push(t);
     }
-  };
-  // Start from real roots (parent_task_id null). If a task's parent doesn't
-  // exist in our slice (rare), treat it as a root.
-  const orphans = tasks.filter(
-    (t) => t.parent_task_id && !byId.has(t.parent_task_id)
-  );
-  walk(null, 0);
-  for (const o of orphans) {
-    const timing = calcTaskTiming(o, fallback);
-    if (timing) {
-      rows.push({ task: o, depth: 0, start: timing.start, end: timing.end });
+    for (const arr of childrenOf.values()) {
+      arr.sort((a, b) => a.sort_order - b.sort_order);
+    }
+
+    const walk = (pid: string | null, depth: number) => {
+      const kids = childrenOf.get(pid) ?? [];
+      for (const t of kids) {
+        const timing = calcTaskTiming(t, fallback);
+        if (timing) {
+          rows.push({
+            id: `task:${t.id}`,
+            kind: "task",
+            task: t,
+            depth,
+            start: timing.start,
+            end: timing.end,
+            title: t.title,
+            completed: !!t.completed_at,
+          });
+        }
+        walk(t.id, depth + 1);
+      }
+    };
+    const orphans = tasks.filter(
+      (t) => t.parent_task_id && !byId.has(t.parent_task_id)
+    );
+    walk(null, 0);
+    for (const o of orphans) {
+      const timing = calcTaskTiming(o, fallback);
+      if (timing) {
+        rows.push({
+          id: `task:${o.id}`,
+          kind: "task",
+          task: o,
+          depth: 0,
+          start: timing.start,
+          end: timing.end,
+          title: o.title,
+          completed: !!o.completed_at,
+        });
+      }
     }
   }
+
+  if (layer !== "tasks") {
+    for (const e of events) {
+      rows.push({
+        id: `event:${e.id}`,
+        kind: "event",
+        event: e,
+        depth: 0,
+        start: new Date(e.starts_at),
+        end: new Date(e.ends_at),
+        title: e.title,
+        completed: false,
+      });
+    }
+  }
+
   return rows;
 }
 
@@ -170,8 +223,11 @@ export function computeCriticalPath(
 ): Set<string> {
   if (rows.length === 0) return new Set();
 
+  // Only task rows can be on the critical path (dependencies live on tasks).
   const byId = new Map<string, GanttRow>();
-  for (const r of rows) byId.set(r.task.id, r);
+  for (const r of rows) {
+    if (r.kind === "task" && r.task) byId.set(r.task.id, r);
+  }
 
   // Forward edges: predecessorId → [successorId...]
   const forward = new Map<string, string[]>();
@@ -194,8 +250,9 @@ export function computeCriticalPath(
 
   const critical = new Set<string>();
 
-  // Seed: tasks whose end == projectEnd.
+  // Seed: task rows whose end == projectEnd.
   for (const r of rows) {
+    if (r.kind !== "task" || !r.task) continue;
     if (Math.abs(r.end.getTime() - projectEnd) < EPS) {
       critical.add(r.task.id);
     }

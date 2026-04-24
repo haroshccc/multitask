@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
@@ -77,6 +77,8 @@ export function PopoverButton({
 }: PopoverButtonProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const [shiftPx, setShiftPx] = useState(0);
 
   useEffect(() => {
     if (!open) return;
@@ -87,6 +89,29 @@ export function PopoverButton({
     };
     window.addEventListener("mousedown", onDown);
     return () => window.removeEventListener("mousedown", onDown);
+  }, [open]);
+
+  // Auto-nudge the popover back into the viewport. We anchor with `start-0`
+  // (popover's inline-start = trigger's inline-start → in RTL, popover's
+  // right edge aligns with trigger's right edge and the popover grows
+  // leftward). When the trigger sits near the start edge of the chrome,
+  // that leftward growth can overflow — measure after render and translate
+  // the popover back in. Same idea in LTR, just mirrored.
+  useLayoutEffect(() => {
+    if (!open || !popoverRef.current) {
+      if (shiftPx !== 0) setShiftPx(0);
+      return;
+    }
+    // Reset then measure.
+    popoverRef.current.style.transform = "translateX(0)";
+    const rect = popoverRef.current.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const PAD = 8;
+    let delta = 0;
+    if (rect.left < PAD) delta = PAD - rect.left;
+    else if (rect.right > vw - PAD) delta = -(rect.right - (vw - PAD));
+    setShiftPx(delta);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   return (
@@ -115,10 +140,12 @@ export function PopoverButton({
       </button>
       {open && (
         <div
+          ref={popoverRef}
           className={cn(
             "absolute top-full start-0 mt-1 z-30 bg-white border border-ink-200 rounded-lg shadow-lift max-w-[calc(100vw-1rem)]",
             wide ? "min-w-[260px]" : "min-w-[180px]"
           )}
+          style={{ transform: `translateX(${shiftPx}px)` }}
         >
           {children(() => setOpen(false))}
         </div>

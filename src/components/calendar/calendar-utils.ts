@@ -112,38 +112,71 @@ export function isMultiDay(item: {
 }
 
 // Formatting (Hebrew locale) -------------------------------------------------
+//
+// All formatters accept an optional IANA `timeZone` — when passed, the Date's
+// instant is rendered *in that zone* instead of the browser's local zone.
+// This lets a user in Jerusalem see a calendar in "America/New_York" without
+// changing the underlying timestamps in the DB.
 
 const HE = "he-IL";
 
-export function formatHour(d: Date): string {
-  return d.toLocaleTimeString(HE, { hour: "2-digit", minute: "2-digit" });
+function withTz(
+  options: Intl.DateTimeFormatOptions,
+  timeZone?: string
+): Intl.DateTimeFormatOptions {
+  return timeZone ? { ...options, timeZone } : options;
 }
 
-export function formatDayShort(d: Date): string {
-  return d.toLocaleDateString(HE, { weekday: "short", day: "numeric", month: "numeric" });
+export function formatHour(d: Date, timeZone?: string): string {
+  return d.toLocaleTimeString(
+    HE,
+    withTz({ hour: "2-digit", minute: "2-digit" }, timeZone)
+  );
 }
 
-export function formatDayLong(d: Date): string {
-  return d.toLocaleDateString(HE, {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
+export function formatDayShort(d: Date, timeZone?: string): string {
+  return d.toLocaleDateString(
+    HE,
+    withTz({ weekday: "short", day: "numeric", month: "numeric" }, timeZone)
+  );
 }
 
-export function formatMonthYear(d: Date): string {
-  return d.toLocaleDateString(HE, { month: "long", year: "numeric" });
+export function formatDayLong(d: Date, timeZone?: string): string {
+  return d.toLocaleDateString(
+    HE,
+    withTz(
+      {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      },
+      timeZone
+    )
+  );
 }
 
-export function formatWeekRange(d: Date): string {
+export function formatMonthYear(d: Date, timeZone?: string): string {
+  return d.toLocaleDateString(HE, withTz({ month: "long", year: "numeric" }, timeZone));
+}
+
+export function formatWeekRange(d: Date, timeZone?: string): string {
   const s = startOfWeek(d);
   const e = addDays(s, 6);
   const sameMonth = isSameMonth(s, e);
   if (sameMonth) {
-    return `${s.getDate()}–${e.getDate()} ${e.toLocaleDateString(HE, { month: "long", year: "numeric" })}`;
+    return `${s.getDate()}–${e.getDate()} ${e.toLocaleDateString(
+      HE,
+      withTz({ month: "long", year: "numeric" }, timeZone)
+    )}`;
   }
-  return `${s.toLocaleDateString(HE, { day: "numeric", month: "short" })} – ${e.toLocaleDateString(HE, { day: "numeric", month: "short", year: "numeric" })}`;
+  return `${s.toLocaleDateString(
+    HE,
+    withTz({ day: "numeric", month: "short" }, timeZone)
+  )} – ${e.toLocaleDateString(
+    HE,
+    withTz({ day: "numeric", month: "short", year: "numeric" }, timeZone)
+  )}`;
 }
 
 // Item normalization ---------------------------------------------------------
@@ -286,4 +319,159 @@ export function isPast(item: CalendarItem, now: Date): boolean {
 export function isPastDay(day: Date, now: Date): boolean {
   const dayEnd = endOfDay(day);
   return dayEnd.getTime() < now.getTime();
+}
+
+// RRULE expansion ------------------------------------------------------------
+//
+// Minimal RFC-5545 expander: given an RRULE string, an anchor datetime (the
+// master event's `starts_at`), and a window [windowStart, windowEnd),
+// returns the timestamps at which the event recurs inside that window.
+// Supports DAILY / WEEKLY(+BYDAY) / MONTHLY / YEARLY, INTERVAL, UNTIL.
+//
+// Every instance keeps the anchor's time-of-day — we only shift the date.
+// The master anchor itself is included when it falls inside the window; it
+// is NOT treated as "the first instance + others" — it IS one of them.
+
+const WEEKDAY_TO_INDEX: Record<string, number> = {
+  SU: 0,
+  MO: 1,
+  TU: 2,
+  WE: 3,
+  TH: 4,
+  FR: 5,
+  SA: 6,
+};
+
+interface ParsedRrule {
+  freq: "DAILY" | "WEEKLY" | "MONTHLY" | "YEARLY";
+  interval: number;
+  byday?: number[]; // 0..6
+  until?: Date;
+}
+
+function parseRrule(raw: string): ParsedRrule | null {
+  const clean = raw.replace(/^RRULE:/i, "");
+  const parts = clean.split(";");
+  const map: Record<string, string> = {};
+  for (const p of parts) {
+    const [k, v] = p.split("=");
+    if (k && v) map[k.toUpperCase()] = v;
+  }
+  const freq = map.FREQ as ParsedRrule["freq"];
+  if (!freq || !["DAILY", "WEEKLY", "MONTHLY", "YEARLY"].includes(freq)) return null;
+  const interval = map.INTERVAL ? Math.max(1, Number(map.INTERVAL)) : 1;
+  const byday = map.BYDAY
+    ? map.BYDAY.split(",")
+        .map((d) => WEEKDAY_TO_INDEX[d.trim().toUpperCase()])
+        .filter((n) => n !== undefined)
+    : undefined;
+  let until: Date | undefined;
+  if (map.UNTIL) {
+    // RRULE UNTIL is either YYYYMMDD or YYYYMMDDTHHMMSSZ.
+    const m = map.UNTIL.match(
+      /^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})Z?)?$/
+    );
+    if (m) {
+      const [, y, mo, d, h, mi, s] = m;
+      until = new Date(
+        Date.UTC(+y, +mo - 1, +d, +(h ?? 23), +(mi ?? 59), +(s ?? 59))
+      );
+    }
+  }
+  return { freq, interval, byday, until };
+}
+
+/**
+ * Expand an RRULE into actual occurrence Dates inside a [windowStart, windowEnd)
+ * window, keeping the anchor's time-of-day on every instance.
+ */
+export function expandRrule(
+  rule: string,
+  anchor: Date,
+  windowStart: Date,
+  windowEnd: Date,
+  maxOccurrences = 366
+): Date[] {
+  const parsed = parseRrule(rule);
+  if (!parsed) return [];
+  const { freq, interval, byday, until } = parsed;
+
+  const effectiveEnd = until && until < windowEnd ? until : windowEnd;
+  if (anchor >= effectiveEnd) return [];
+
+  const out: Date[] = [];
+  const push = (d: Date) => {
+    if (d < windowStart || d >= effectiveEnd) return;
+    if (d < anchor) return; // recurrence can't predate the master
+    out.push(d);
+  };
+
+  // Helper: replicate the anchor's time on a given y/m/d.
+  const withAnchorTime = (y: number, m: number, d: number): Date => {
+    const x = new Date(y, m, d, anchor.getHours(), anchor.getMinutes(), anchor.getSeconds(), anchor.getMilliseconds());
+    return x;
+  };
+
+  if (freq === "DAILY") {
+    // Walk day by day, stepping `interval` at a time, starting at anchor.
+    // Cap at maxOccurrences to avoid runaway loops on malformed rules.
+    const cursor = new Date(anchor);
+    for (let i = 0; i < maxOccurrences && cursor < effectiveEnd; i++) {
+      push(new Date(cursor));
+      cursor.setDate(cursor.getDate() + interval);
+    }
+    return out;
+  }
+
+  if (freq === "WEEKLY") {
+    // If BYDAY is absent, fall back to anchor's weekday.
+    const daySet =
+      byday && byday.length > 0 ? new Set(byday) : new Set([anchor.getDay()]);
+    // Walk forward one week at a time (of `interval` weeks). For each week,
+    // emit every listed weekday that lands within [anchor, effectiveEnd).
+    // Align the week start to the week of the anchor (Sun-based locally).
+    const weekAnchor = startOfWeek(anchor);
+    for (let w = 0; w < maxOccurrences; w++) {
+      const weekStart = addDays(weekAnchor, w * interval * 7);
+      if (weekStart >= effectiveEnd) break;
+      for (let d = 0; d < 7; d++) {
+        if (!daySet.has(d)) continue;
+        const day = addDays(weekStart, d);
+        const dt = withAnchorTime(day.getFullYear(), day.getMonth(), day.getDate());
+        push(dt);
+      }
+    }
+    return out;
+  }
+
+  if (freq === "MONTHLY") {
+    const dom = anchor.getDate();
+    for (let i = 0; i < maxOccurrences; i++) {
+      const y = anchor.getFullYear();
+      const m = anchor.getMonth() + i * interval;
+      // Skip months that can't hold the day-of-month (e.g. Feb 30).
+      const probe = new Date(y, m + 1, 0); // last day of target month
+      if (probe.getDate() < dom) continue;
+      const dt = withAnchorTime(y, m, dom);
+      if (dt >= effectiveEnd) break;
+      push(dt);
+    }
+    return out;
+  }
+
+  if (freq === "YEARLY") {
+    const dom = anchor.getDate();
+    const mo = anchor.getMonth();
+    for (let i = 0; i < maxOccurrences; i++) {
+      const y = anchor.getFullYear() + i * interval;
+      const probe = new Date(y, mo + 1, 0);
+      if (probe.getDate() < dom) continue;
+      const dt = withAnchorTime(y, mo, dom);
+      if (dt >= effectiveEnd) break;
+      push(dt);
+    }
+    return out;
+  }
+
+  return out;
 }

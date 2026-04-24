@@ -14,6 +14,7 @@ import {
   startOfMonth,
   startOfWeek,
 } from "./calendar-utils";
+import { useCalendarPrefs } from "@/lib/hooks/useCalendarPrefs";
 
 const BAND_HEIGHT = 20;
 const BAND_GAP = 2;
@@ -323,6 +324,8 @@ function MonthItemChip({
   now: Date;
   onClick: () => void;
 }) {
+  const { prefs } = useCalendarPrefs();
+  const tz = prefs.timezone;
   const isTask = item.kind === "task";
   const past = isPast(item, now);
   const overdue = isOverdueTask(item, now);
@@ -337,11 +340,11 @@ function MonthItemChip({
           past && "opacity-55"
         )}
         style={{ backgroundColor: `${accent}D9`, borderColor: accent }}
-        title={`${item.title} · ${formatHour(item.start)}`}
+        title={`${item.title} · ${formatHour(item.start, tz)}`}
         type="button"
       >
         <span className="shrink-0 text-white/85 font-normal">
-          {item.allDay ? "" : formatHour(item.start)}
+          {item.allDay ? "" : formatHour(item.start, tz)}
         </span>
         <span className="truncate">{item.title}</span>
       </button>
@@ -360,11 +363,11 @@ function MonthItemChip({
         color: overdue ? "#b91c1c" : "#2d2d3a",
         backgroundColor: overdue ? "rgba(239, 68, 68, 0.06)" : "white",
       }}
-      title={`${item.title} · ${formatHour(item.start)}`}
+      title={`${item.title} · ${formatHour(item.start, tz)}`}
       type="button"
     >
       <span className="shrink-0 text-ink-500">
-        {item.allDay ? "" : formatHour(item.start)}
+        {item.allDay ? "" : formatHour(item.start, tz)}
       </span>
       <span className="truncate">{item.title}</span>
     </button>

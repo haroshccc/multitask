@@ -10,6 +10,7 @@ import {
   startOfDay,
   startOfWeek,
 } from "./calendar-utils";
+import { useCalendarPrefs } from "@/lib/hooks/useCalendarPrefs";
 
 interface CalendarAgendaViewProps {
   /** Anchor date — shows a 2-week window starting from `startOfWeek(anchor)`. */
@@ -88,10 +89,12 @@ function DayGroup({
   onItemClick: (item: CalendarItem) => void;
   onCreateAt: (start: Date) => void;
 }) {
+  const { prefs } = useCalendarPrefs();
+  const tz = prefs.timezone;
   const now = new Date();
-  const dayName = day.toLocaleDateString("he-IL", { weekday: "long" });
+  const dayName = day.toLocaleDateString("he-IL", { weekday: "long", timeZone: tz });
   const dayNum = day.getDate();
-  const monthShort = day.toLocaleDateString("he-IL", { month: "short" });
+  const monthShort = day.toLocaleDateString("he-IL", { month: "short", timeZone: tz });
   const past = day.getTime() < startOfDay(now).getTime();
 
   return (
@@ -171,6 +174,8 @@ function AgendaRow({
   now: Date;
   onClick: () => void;
 }) {
+  const { prefs } = useCalendarPrefs();
+  const tz = prefs.timezone;
   const isTask = item.kind === "task";
   const past = isPast(item, now);
   const overdue = isOverdueTask(item, now);
@@ -193,8 +198,8 @@ function AgendaRow({
             <span className="font-medium">כל היום</span>
           ) : (
             <>
-              <div>{formatHour(item.start)}</div>
-              <div className="text-ink-400">{formatHour(item.end)}</div>
+              <div>{formatHour(item.start, tz)}</div>
+              <div className="text-ink-400">{formatHour(item.end, tz)}</div>
             </>
           )}
         </div>

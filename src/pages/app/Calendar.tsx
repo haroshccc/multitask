@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Plus } from "lucide-react";
 import { ScreenScaffold } from "@/components/layout/ScreenScaffold";
 import { ListsBanner } from "@/components/lists/ListsBanner";
@@ -16,6 +16,8 @@ import { TasksEventsToggle } from "@/components/calendar/TasksEventsToggle";
 import { CalendarDayView } from "@/components/calendar/CalendarDayView";
 import { CalendarWeekView } from "@/components/calendar/CalendarWeekView";
 import { CalendarMonthView } from "@/components/calendar/CalendarMonthView";
+import { CalendarAgendaView } from "@/components/calendar/CalendarAgendaView";
+import { CalendarStatsStrip } from "@/components/calendar/CalendarStatsStrip";
 import { EventEditModal } from "@/components/calendar/EventEditModal";
 import {
   type CalendarItem,
@@ -36,12 +38,33 @@ import {
   useTasks,
   useTimeEntriesByRange,
 } from "@/lib/hooks";
+import { useCalendarPrefs } from "@/lib/hooks/useCalendarPrefs";
+import { useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import type { FilterConfig } from "@/lib/types/domain";
 
+const HOUR_HEIGHT_DAY = 48;
+const HOUR_HEIGHT_WEEK = 40;
+
 export function Calendar() {
-  const [view, setView] = useState<CalendarView>("week");
+  const isNarrow = useMediaQuery("(max-width: 768px)");
+
+  // Default view — week on desktop, agenda on mobile. Users can still flip.
+  const [view, setView] = useState<CalendarView>(() =>
+    isNarrow ? "agenda" : "week"
+  );
+  // When the viewport crosses the breakpoint, gently nudge to the sensible
+  // default but let the user override afterwards.
+  useEffect(() => {
+    if (isNarrow && (view === "week" || view === "month")) {
+      setView("agenda");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isNarrow]);
+
   const [anchor, setAnchor] = useState<Date>(() => new Date());
   const [layer, setLayer] = useState<LayerMode>("both");
+
+  const { effectiveRange } = useCalendarPrefs();
 
   const [filters, setFilters] = useFiltersFromUrl();
   const { data: lists = [] } = useTaskLists();
@@ -51,14 +74,13 @@ export function Calendar() {
     [visibility]
   );
 
-  // Compute the visible range based on view + anchor. This controls both the
-  // queries we issue and how items get clipped inside each sub-view.
   const range = useMemo(() => rangeFor(view, anchor), [view, anchor]);
 
-  // Data — tasks are filtered by the FilterBar; events ignore those filters
-  // since most FilterBar fields (urgency, statuses) don't apply to events.
-  // Lists Banner visibility is applied on the client side for instant toggle.
-  const { data: tasks = [] } = useTasks({ ...filters, scheduledAfter: range.fromIso, scheduledBefore: range.toIso } as FilterConfig);
+  const { data: tasks = [] } = useTasks({
+    ...filters,
+    scheduledAfter: range.fromIso,
+    scheduledBefore: range.toIso,
+  } as FilterConfig);
   const { data: events = [] } = useEvents({
     from: range.fromIso,
     to: range.toIso,
@@ -79,9 +101,11 @@ export function Calendar() {
     if (layer !== "events") {
       for (const t of tasks) {
         if (!t.scheduled_at) continue;
-        // Respect Lists Banner: tasks whose list is hidden drop out.
         if (t.task_list_id && hiddenLists.has(t.task_list_id)) continue;
-        const item = taskToItem(t, listColorById.get(t.task_list_id ?? "") ?? null);
+        const item = taskToItem(
+          t,
+          listColorById.get(t.task_list_id ?? "") ?? null
+        );
         if (item) out.push(item);
       }
     }
@@ -118,7 +142,6 @@ export function Calendar() {
     [lists]
   );
 
-  // Modal state — tasks use TaskEditModal, events use EventEditModal.
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [creatingEvent, setCreatingEvent] = useState<{
@@ -141,10 +164,14 @@ export function Calendar() {
     setView("day");
   };
 
+  const availableViews: CalendarView[] = isNarrow
+    ? ["day", "agenda", "month"]
+    : ["day", "week", "month", "agenda"];
+
   return (
     <ScreenScaffold
       title="יומן"
-      subtitle="יום · שבוע · חודש — משימות ואירועים באותה רצועת זמן, עם השוואת מתוכנן ובפועל."
+      subtitle="יום · שבוע · חודש · אג׳נדה — משימות ואירועים באותה רצועת זמן, עם השוואת מתוכנן ובפועל."
       actions={
         <button
           onClick={() => {
@@ -179,6 +206,14 @@ export function Calendar() {
           onViewChange={setView}
           anchor={anchor}
           onAnchorChange={setAnchor}
+          availableViews={availableViews}
+        />
+
+        <CalendarStatsStrip
+          tasks={tasks}
+          events={events}
+          timeEntries={timeEntries}
+          anchor={anchor}
         />
 
         {view === "day" && (
@@ -186,6 +221,9 @@ export function Calendar() {
             date={anchor}
             items={items}
             actualStripes={actualStripes}
+            hourStart={effectiveRange.hourStart}
+            hourEnd={effectiveRange.hourEnd}
+            hourHeight={HOUR_HEIGHT_DAY}
             onItemClick={handleItemClick}
             onCreateAt={handleCreateAt}
           />
@@ -195,6 +233,9 @@ export function Calendar() {
             anchor={anchor}
             items={items}
             actualStripes={actualStripes}
+            hourStart={effectiveRange.hourStart}
+            hourEnd={effectiveRange.hourEnd}
+            hourHeight={HOUR_HEIGHT_WEEK}
             onItemClick={handleItemClick}
             onCreateAt={handleCreateAt}
           />
@@ -205,6 +246,14 @@ export function Calendar() {
             items={items}
             onItemClick={handleItemClick}
             onDayClick={handleMonthDayClick}
+          />
+        )}
+        {view === "agenda" && (
+          <CalendarAgendaView
+            anchor={anchor}
+            items={items}
+            onItemClick={handleItemClick}
+            onCreateAt={handleCreateAt}
           />
         )}
 
@@ -232,20 +281,36 @@ function CalendarLegend() {
       <span className="inline-flex items-center gap-1.5">
         <span
           className="inline-block w-4 h-2 rounded-sm"
-          style={{ border: "1.5px dashed #6b6b80", backgroundColor: "rgba(245, 158, 11, 0.08)" }}
+          style={{ border: "1.5px solid #6b6b80", backgroundColor: "white" }}
         />
-        משימה מתוזמנת (מקווקו)
+        משימה מתוזמנת
       </span>
       <span className="inline-flex items-center gap-1.5">
         <span
           className="inline-block w-4 h-2 rounded-sm"
-          style={{ border: "1.5px solid #f59e0b", backgroundColor: "rgba(245, 158, 11, 0.14)" }}
+          style={{
+            border: "1.5px solid #f59e0b",
+            backgroundColor: "rgba(245, 158, 11, 0.85)",
+          }}
         />
-        אירוע (מלא)
+        אירוע
       </span>
       <span className="inline-flex items-center gap-1.5">
-        <span className="inline-block w-1 h-4 rounded-full bg-success-500/70" />
-        זמן בפועל (מסטופר)
+        <span
+          className="inline-block w-4 h-2 rounded-sm"
+          style={{ border: "1.5px solid #ef4444", backgroundColor: "rgba(239, 68, 68, 0.1)" }}
+        />
+        משימה באיחור
+      </span>
+      <span className="inline-flex items-center gap-1.5">
+        <span
+          className="inline-block w-4 h-2 rounded-sm"
+          style={{
+            border: "1.5px solid #6b6b80",
+            backgroundColor: "rgba(107, 107, 128, 0.35)",
+          }}
+        />
+        זמן בפועל
       </span>
       <span className="inline-flex items-center gap-1.5">
         <span className="inline-block w-3 h-0.5 bg-danger-500" />
@@ -255,17 +320,19 @@ function CalendarLegend() {
   );
 }
 
-function rangeFor(view: CalendarView, anchor: Date): { from: Date; to: Date; fromIso: string; toIso: string } {
+function rangeFor(
+  view: CalendarView,
+  anchor: Date
+): { from: Date; to: Date; fromIso: string; toIso: string } {
   let from: Date;
   let to: Date;
   if (view === "day") {
     from = startOfDay(anchor);
     to = addDays(from, 1);
-  } else if (view === "week") {
+  } else if (view === "week" || view === "agenda") {
     from = startOfWeek(anchor);
-    to = addDays(from, 7);
+    to = addDays(from, view === "agenda" ? 14 : 7);
   } else {
-    // Month view: include the leading/trailing days of the grid (up to 6 extras).
     from = startOfWeek(startOfMonth(anchor));
     const end = endOfMonth(anchor);
     to = addDays(startOfWeek(end), 7);

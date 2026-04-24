@@ -7,32 +7,47 @@ import {
   formatMonthYear,
   formatWeekRange,
 } from "./calendar-utils";
+import { HourRangeSettings } from "./HourRangeSettings";
 
-export type CalendarView = "day" | "week" | "month";
+export type CalendarView = "day" | "week" | "month" | "agenda";
 
 interface CalendarToolbarProps {
   view: CalendarView;
   onViewChange: (v: CalendarView) => void;
   anchor: Date;
   onAnchorChange: (d: Date) => void;
+  /** Hide views that don't make sense right now (e.g. hide week on mobile). */
+  availableViews?: CalendarView[];
+  /** If true, render the hour-range settings gear (only useful for day/week). */
+  showHourSettings?: boolean;
 }
+
+const LABELS: Record<CalendarView, string> = {
+  day: "יום",
+  week: "שבוע",
+  month: "חודש",
+  agenda: "אג׳נדה",
+};
 
 export function CalendarToolbar({
   view,
   onViewChange,
   anchor,
   onAnchorChange,
+  availableViews = ["day", "week", "month", "agenda"],
+  showHourSettings = true,
 }: CalendarToolbarProps) {
   const step = (direction: 1 | -1) => {
     if (view === "day") onAnchorChange(addDays(anchor, direction));
-    else if (view === "week") onAnchorChange(addDays(anchor, direction * 7));
+    else if (view === "week" || view === "agenda")
+      onAnchorChange(addDays(anchor, direction * 7));
     else onAnchorChange(addMonths(anchor, direction));
   };
 
   const label =
     view === "day"
       ? formatDayLong(anchor)
-      : view === "week"
+      : view === "week" || view === "agenda"
       ? formatWeekRange(anchor)
       : formatMonthYear(anchor);
 
@@ -40,7 +55,7 @@ export function CalendarToolbar({
     <div className="card p-2 flex items-center gap-2 flex-wrap">
       {/* View toggle */}
       <div className="inline-flex rounded-md border border-ink-200 p-0.5 bg-ink-50 text-xs">
-        {(["day", "week", "month"] as CalendarView[]).map((v) => (
+        {availableViews.map((v) => (
           <button
             key={v}
             onClick={() => onViewChange(v)}
@@ -50,14 +65,14 @@ export function CalendarToolbar({
                 ? "bg-white text-ink-900 shadow-soft"
                 : "text-ink-600 hover:text-ink-900"
             )}
+            type="button"
           >
-            {v === "day" ? "יום" : v === "week" ? "שבוע" : "חודש"}
+            {LABELS[v]}
           </button>
         ))}
       </div>
 
-      {/* Date navigation. In RTL, "previous" sits on the right edge intuitively,
-          so we use logical-direction icons that flip with dir="rtl". */}
+      {/* Date navigation. In RTL, ChevronRight points toward the past. */}
       <div className="inline-flex items-center gap-1">
         <button
           onClick={() => step(-1)}
@@ -84,7 +99,13 @@ export function CalendarToolbar({
         </button>
       </div>
 
-      <span className="text-sm font-semibold text-ink-900 ms-auto">{label}</span>
+      <span className="text-sm font-semibold text-ink-900 mx-2 truncate flex-1">
+        {label}
+      </span>
+
+      {showHourSettings && (view === "day" || view === "week") && (
+        <HourRangeSettings />
+      )}
     </div>
   );
 }

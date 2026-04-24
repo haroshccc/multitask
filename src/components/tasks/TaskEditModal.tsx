@@ -47,6 +47,7 @@ import {
   minutesToHours,
 } from "@/components/ui/DurationInput";
 import { TaskDependenciesSection } from "@/components/tasks/TaskDependenciesSection";
+import { PlanVsActualBar } from "@/components/tasks/PlanVsActualBar";
 
 interface TaskEditModalProps {
   taskId: string | null;
@@ -611,7 +612,11 @@ function TagInput({
   );
 }
 
-function TimeEntriesTab({ task }: { task: { id: string; actual_seconds: number } }) {
+function TimeEntriesTab({
+  task,
+}: {
+  task: { id: string; actual_seconds: number; estimated_hours?: number | null };
+}) {
   const { data: entries = [] } = useTaskTimeEntries(task.id);
   const { data: active } = useActiveTimer();
   const startTimer = useStartTimer();
@@ -641,35 +646,52 @@ function TimeEntriesTab({ task }: { task: { id: string; actual_seconds: number }
     setShowManual(false);
   };
 
+  const estimatedSeconds = task.estimated_hours
+    ? Math.round(Number(task.estimated_hours) * 3600)
+    : null;
+
   return (
     <div className="space-y-4">
-      <div className="card-lift p-3 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Clock className="w-5 h-5 text-ink-500" />
-          <div>
-            <div className="text-xs text-ink-500 flex items-center gap-2">
-              סה"כ עד כה
-              <UnitSwitch value={timeUnit} onChange={setTimeUnit} />
-            </div>
-            <div className="font-mono text-lg tabular-nums">
-              {formatSeconds(task.actual_seconds, timeUnit)}
+      <div className="card-lift p-3 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Clock className="w-5 h-5 text-ink-500" />
+            <div>
+              <div className="text-xs text-ink-500 flex items-center gap-2">
+                סה"כ עד כה
+                <UnitSwitch value={timeUnit} onChange={setTimeUnit} />
+              </div>
+              <div className="font-mono text-lg tabular-nums">
+                {formatSeconds(task.actual_seconds, timeUnit)}
+                {estimatedSeconds && (
+                  <span className="text-sm text-ink-500 ms-2">
+                    / {formatSeconds(estimatedSeconds, timeUnit)}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
+          {isActive ? (
+            <button onClick={() => stopTimer.mutate()} className="btn-primary text-sm">
+              <Pause className="w-4 h-4" />
+              עצור
+            </button>
+          ) : (
+            <button
+              onClick={() => startTimer.mutate({ taskId: task.id })}
+              className="btn-accent text-sm"
+            >
+              <Play className="w-4 h-4" />
+              התחל
+            </button>
+          )}
         </div>
-        {isActive ? (
-          <button onClick={() => stopTimer.mutate()} className="btn-primary text-sm">
-            <Pause className="w-4 h-4" />
-            עצור
-          </button>
-        ) : (
-          <button
-            onClick={() => startTimer.mutate({ taskId: task.id })}
-            className="btn-accent text-sm"
-          >
-            <Play className="w-4 h-4" />
-            התחל
-          </button>
-        )}
+        {/* Plan-vs-actual progress — visible regardless of estimate so users
+            can eyeball how close they are to their budget in real time. */}
+        <PlanVsActualBar
+          estimatedSeconds={estimatedSeconds}
+          actualSeconds={task.actual_seconds}
+        />
       </div>
 
       <div>

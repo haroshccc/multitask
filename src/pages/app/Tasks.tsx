@@ -424,6 +424,7 @@ export function Tasks() {
             filters={filters}
             onChange={setFilters}
             fields={fields}
+            alwaysExpanded
           />
         )}
 

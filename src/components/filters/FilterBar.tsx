@@ -81,6 +81,10 @@ interface FilterBarProps {
   /** When true, skip the outer `card` wrapper and inner padding — useful when
    *  this sits alongside another component inside a shared banner card. */
   embed?: boolean;
+  /** When true, the outer parent already controls open/close (e.g. via a
+   *  chrome toggle button). Forces the content to stay expanded and hides
+   *  the inner collapse chevron so we don't show two competing toggles. */
+  alwaysExpanded?: boolean;
 }
 
 const COLLAPSE_STORAGE_KEY = (screen: string) => `multitask.filterbar.${screen}.collapsed`;
@@ -92,21 +96,27 @@ export function FilterBar({
   fields,
   className,
   embed = false,
+  alwaysExpanded = false,
 }: FilterBarProps) {
   const { data: savedFilters = [] } = useSavedFilters(screenKey);
   const createSaved = useCreateSavedFilter();
   const deleteSaved = useDeleteSavedFilter();
   const [savingName, setSavingName] = useState<string | null>(null);
-  const [collapsed, setCollapsed] = useState<boolean>(() => {
+  const [internalCollapsed, setCollapsed] = useState<boolean>(() => {
     if (typeof window === "undefined") return true;
     const raw = localStorage.getItem(COLLAPSE_STORAGE_KEY(screenKey));
     return raw === null ? true : raw === "true";
   });
 
+  // When the parent already controls open/close (chrome toggle), the inner
+  // collapse state is irrelevant — force expanded and never persist.
+  const collapsed = alwaysExpanded ? false : internalCollapsed;
+
   useEffect(() => {
     if (typeof window === "undefined") return;
+    if (alwaysExpanded) return;
     localStorage.setItem(COLLAPSE_STORAGE_KEY(screenKey), String(collapsed));
-  }, [collapsed, screenKey]);
+  }, [collapsed, screenKey, alwaysExpanded]);
 
   const activeCount = countActive(filters);
   const clearAll = () => onChange({});
@@ -136,25 +146,39 @@ export function FilterBar({
       >
         {/* Header row: title + state + minimize */}
         <div className="flex items-center gap-2 flex-wrap">
-          <button
-            onClick={() => setCollapsed((v) => !v)}
-            className="inline-flex items-center gap-1.5 rounded-md px-1 py-0.5 hover:bg-ink-100"
-            title={collapsed ? "הרחב באנר סינון" : "מזער באנר סינון"}
-            type="button"
-          >
-            <SlidersHorizontal className="w-4 h-4 text-ink-500" />
-            <span className="text-sm font-semibold text-ink-900">סינון</span>
-            {activeCount > 0 && (
-              <span className="inline-flex items-center justify-center rounded-full bg-primary-500 text-white text-[10px] w-4 h-4">
-                {activeCount}
-              </span>
-            )}
-            {collapsed ? (
-              <ChevronDown className="w-3.5 h-3.5 text-ink-500" />
-            ) : (
-              <ChevronUp className="w-3.5 h-3.5 text-ink-500" />
-            )}
-          </button>
+          {alwaysExpanded ? (
+            // Parent already has an open/close affordance; just render the
+            // label + active count without the chevron.
+            <div className="inline-flex items-center gap-1.5 px-1 py-0.5">
+              <SlidersHorizontal className="w-4 h-4 text-ink-500" />
+              <span className="text-sm font-semibold text-ink-900">סינון</span>
+              {activeCount > 0 && (
+                <span className="inline-flex items-center justify-center rounded-full bg-primary-500 text-white text-[10px] w-4 h-4">
+                  {activeCount}
+                </span>
+              )}
+            </div>
+          ) : (
+            <button
+              onClick={() => setCollapsed((v) => !v)}
+              className="inline-flex items-center gap-1.5 rounded-md px-1 py-0.5 hover:bg-ink-100"
+              title={collapsed ? "הרחב באנר סינון" : "מזער באנר סינון"}
+              type="button"
+            >
+              <SlidersHorizontal className="w-4 h-4 text-ink-500" />
+              <span className="text-sm font-semibold text-ink-900">סינון</span>
+              {activeCount > 0 && (
+                <span className="inline-flex items-center justify-center rounded-full bg-primary-500 text-white text-[10px] w-4 h-4">
+                  {activeCount}
+                </span>
+              )}
+              {collapsed ? (
+                <ChevronDown className="w-3.5 h-3.5 text-ink-500" />
+              ) : (
+                <ChevronUp className="w-3.5 h-3.5 text-ink-500" />
+              )}
+            </button>
+          )}
 
           {/* Middle: active chips (visible in both states) */}
           <ActiveFilterChips

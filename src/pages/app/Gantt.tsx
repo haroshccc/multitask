@@ -1,13 +1,12 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { ScreenScaffold } from "@/components/layout/ScreenScaffold";
-import { ListsBanner } from "@/components/lists/ListsBanner";
 import {
   FilterBar,
   useFiltersFromUrl,
   type FilterField,
 } from "@/components/filters/FilterBar";
 import { TaskEditModal } from "@/components/tasks/TaskEditModal";
-import { GanttToolbar } from "@/components/gantt/GanttToolbar";
+import { GanttChrome } from "@/components/gantt/GanttChrome";
 import { GanttGrid } from "@/components/gantt/GanttGrid";
 import {
   type GanttZoom,
@@ -19,7 +18,9 @@ import {
 } from "@/components/gantt/gantt-utils";
 import {
   useAllTaskDependencies,
+  useCreateTaskList,
   useListVisibility,
+  useSetListVisibility,
   useTaskLists,
   useTasks,
   useUpdateTask,
@@ -29,12 +30,22 @@ export function Gantt() {
   const [zoom, setZoom] = useState<GanttZoom>("day");
   const [anchor, setAnchor] = useState<Date>(() => new Date());
   const [showCriticalOnly, setShowCriticalOnly] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem("multitask.gantt.filtersOpen") === "true";
+  });
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem("multitask.gantt.filtersOpen", String(filtersOpen));
+  }, [filtersOpen]);
 
   const [filters, setFilters] = useFiltersFromUrl();
   const { data: tasks = [] } = useTasks(filters);
   const { data: deps = [] } = useAllTaskDependencies();
   const { data: lists = [] } = useTaskLists();
   const { data: visibility } = useListVisibility("gantt");
+  const setListVisibility = useSetListVisibility();
+  const createTaskList = useCreateTaskList();
   const hiddenLists = useMemo(
     () => new Set(visibility?.hidden_list_ids ?? []),
     [visibility]
@@ -42,8 +53,6 @@ export function Gantt() {
 
   const updateTask = useUpdateTask();
 
-  // Visible window — one "page" ahead of/behind the anchor (so scrolling
-  // horizontally keeps working without re-querying).
   const windowStart = useMemo(() => {
     const span = defaultSpanDays(zoom);
     return addDays(startOfDay(anchor), -Math.floor(span / 3));
@@ -99,6 +108,15 @@ export function Gantt() {
     [lists]
   );
 
+  const filtersActiveCount = useMemo(() => {
+    let n = 0;
+    Object.values(filters).forEach((v) => {
+      if (Array.isArray(v)) n += v.length;
+      else if (v !== undefined && v !== null && v !== "" && v !== false) n += 1;
+    });
+    return n;
+  }, [filters]);
+
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
 
   const handleBarChange = (
@@ -108,27 +126,59 @@ export function Gantt() {
     updateTask.mutate({ taskId, patch });
   };
 
+  const toggleListVisibility = (listId: string) => {
+    const current = visibility?.hidden_list_ids ?? [];
+    const next = current.includes(listId)
+      ? current.filter((id) => id !== listId)
+      : [...current, listId];
+    setListVisibility.mutate({ screenKey: "gantt", hiddenListIds: next });
+  };
+
+  const handleCreateList = async () => {
+    const name = window.prompt("שם הרשימה החדשה:");
+    if (!name?.trim()) return;
+    await createTaskList.mutateAsync({ name: name.trim(), kind: "custom" });
+  };
+
+  const unifiedLists = useMemo(
+    () =>
+      lists.map((l) => ({
+        id: l.id,
+        name: l.name,
+        emoji: l.emoji,
+        color: l.color,
+      })),
+    [lists]
+  );
+
   return (
-    <ScreenScaffold
-      title="Gantt"
-      subtitle="ציר זמן עם תלויות, זום יום/שבוע/חודש/רבעון, וחישוב אוטומטי של Critical Path."
-    >
-      <div className="space-y-3">
-        <ListsBanner screenKey="gantt" kind="task" />
-        <FilterBar
-          screenKey="gantt"
-          filters={filters}
-          onChange={setFilters}
-          fields={fields}
-        />
-        <GanttToolbar
+    <ScreenScaffold title="Gantt" subtitle="">
+      <div className="space-y-2">
+        <GanttChrome
           zoom={zoom}
           onZoomChange={setZoom}
           anchor={anchor}
           onAnchorChange={setAnchor}
+          lists={unifiedLists}
+          hiddenListIds={hiddenLists}
+          onToggleListVisibility={toggleListVisibility}
+          onCreateList={handleCreateList}
+          filtersActiveCount={filtersActiveCount}
+          filtersOpen={filtersOpen}
+          onToggleFilters={() => setFiltersOpen((v) => !v)}
           showCriticalOnly={showCriticalOnly}
-          onShowCriticalOnlyChange={setShowCriticalOnly}
+          onToggleCriticalOnly={() => setShowCriticalOnly((v) => !v)}
         />
+
+        {filtersOpen && (
+          <FilterBar
+            screenKey="gantt"
+            filters={filters}
+            onChange={setFilters}
+            fields={fields}
+            alwaysExpanded
+          />
+        )}
 
         <GanttGrid
           rows={visibleRows}
@@ -140,37 +190,13 @@ export function Gantt() {
           onRowClick={setEditingTaskId}
           onBarChange={handleBarChange}
         />
-
-        <GanttLegend />
       </div>
 
-      <TaskEditModal taskId={editingTaskId} onClose={() => setEditingTaskId(null)} />
+      <TaskEditModal
+        taskId={editingTaskId}
+        onClose={() => setEditingTaskId(null)}
+        defaultTab="schedule"
+      />
     </ScreenScaffold>
-  );
-}
-
-function GanttLegend() {
-  return (
-    <div className="text-[11px] text-ink-500 flex items-center gap-4 flex-wrap px-1">
-      <span className="inline-flex items-center gap-1.5">
-        <span className="inline-block w-6 h-2 rounded-sm bg-gradient-to-l from-primary-500 to-primary-400" />
-        משימה רגילה
-      </span>
-      <span className="inline-flex items-center gap-1.5">
-        <span className="inline-block w-6 h-2 rounded-sm bg-gradient-to-l from-danger-500 to-primary-500" />
-        Critical path
-      </span>
-      <span className="inline-flex items-center gap-1.5">
-        <span className="inline-block w-6 h-0.5 border-t border-ink-400 border-dashed" />
-        תלות finish-to-start
-      </span>
-      <span className="inline-flex items-center gap-1.5">
-        <span className="inline-block w-3 h-0.5 bg-danger-500" />
-        כעת
-      </span>
-      <span className="text-ink-400">
-        גרירה אופקית = שינוי תאריך · גרירת קצה = שינוי משך · קליק = עריכה מלאה
-      </span>
-    </div>
   );
 }

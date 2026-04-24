@@ -246,6 +246,7 @@ export function Calendar() {
             filters={filters}
             onChange={setFilters}
             fields={fields}
+            alwaysExpanded
           />
         )}
 

@@ -1,6 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
-  ChevronDown,
   SlidersHorizontal,
   BarChart3,
   Plus,
@@ -11,6 +9,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { ListIcon } from "@/components/tasks/list-icons";
+import { ToggleButton, PopoverButton } from "@/components/layout/ChromeControls";
 
 interface UnifiedList {
   id: string;
@@ -157,114 +156,3 @@ export function TasksChrome({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Building blocks (duplicated from CalendarChrome for now; fold into a shared
-// lib once we have a 3rd consumer — rule of three).
-
-function ToggleButton({
-  active,
-  onClick,
-  icon,
-  label,
-  badge,
-}: {
-  active: boolean;
-  onClick: () => void;
-  icon: ReactNode;
-  label: string;
-  badge?: string;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={cn(
-        "inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium border transition-colors",
-        active
-          ? "bg-ink-900 border-ink-900 text-white"
-          : "bg-white border-ink-200 text-ink-700 hover:bg-ink-50"
-      )}
-      type="button"
-      title={label}
-    >
-      {icon}
-      <span className="hidden md:inline">{label}</span>
-      {badge && (
-        <span
-          className={cn(
-            "inline-flex items-center justify-center min-w-[16px] h-[16px] rounded-full text-[9px] font-semibold px-1",
-            active ? "bg-white text-ink-900" : "bg-primary-500 text-white"
-          )}
-        >
-          {badge}
-        </span>
-      )}
-    </button>
-  );
-}
-
-function PopoverButton({
-  icon,
-  label,
-  title,
-  badge,
-  wide,
-  children,
-}: {
-  icon: ReactNode;
-  label: string;
-  title?: string;
-  badge?: string;
-  wide?: boolean;
-  children: (close: () => void) => ReactNode;
-}) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    };
-    window.addEventListener("mousedown", onDown);
-    return () => window.removeEventListener("mousedown", onDown);
-  }, [open]);
-
-  return (
-    <div className="relative" ref={ref}>
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className={cn(
-          "inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium border transition-colors",
-          open
-            ? "bg-ink-100 border-ink-300 text-ink-900"
-            : "bg-white border-ink-200 text-ink-700 hover:bg-ink-50"
-        )}
-        type="button"
-        title={title}
-      >
-        {icon}
-        <span className="hidden md:inline">{label}</span>
-        {badge && (
-          <span className="inline-flex items-center justify-center min-w-[16px] h-[16px] rounded-full text-[9px] font-semibold px-1 bg-primary-500 text-white">
-            {badge}
-          </span>
-        )}
-        <ChevronDown
-          className={cn("w-3 h-3 transition-transform", open && "rotate-180")}
-        />
-      </button>
-      {open && (
-        <div
-          className={cn(
-            "absolute top-full start-0 mt-1 z-30 bg-white border border-ink-200 rounded-lg shadow-lift max-w-[calc(100vw-1rem)]",
-            wide ? "min-w-[260px]" : "min-w-[180px]"
-          )}
-        >
-          {children(() => setOpen(false))}
-        </div>
-      )}
-    </div>
-  );
-}

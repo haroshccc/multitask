@@ -1,5 +1,5 @@
-import { useState, useMemo } from "react";
-import { Plus, ChevronDown, ChevronUp, Eye, EyeOff } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Plus, ChevronDown, Eye, EyeOff, MoreHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { useListVisibility, useSetListVisibility } from "@/lib/hooks/useListVisibility";
 import { useTaskLists } from "@/lib/hooks/useTaskLists";
@@ -26,6 +26,12 @@ interface UnifiedList {
   color: string | null;
 }
 
+/**
+ * Compact lists banner — horizontal row of list names with a colored underline
+ * when active (tab-like). Clicking a name toggles its visibility for the
+ * current screen. Hidden lists live behind a "⋯ N מוסתרות" button that opens
+ * an attached popover (not a detached thought-bubble) anchored to the button.
+ */
 export function ListsBanner({ screenKey, kind, className, extra }: ListsBannerProps) {
   const taskListsQuery = useTaskLists();
   const thoughtListsQuery = useThoughtLists();
@@ -36,7 +42,20 @@ export function ListsBanner({ screenKey, kind, className, extra }: ListsBannerPr
 
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
-  const [showHidden, setShowHidden] = useState(false);
+  const [hiddenOpen, setHiddenOpen] = useState(false);
+  const hiddenRef = useRef<HTMLDivElement>(null);
+
+  // Close hidden popover on outside click.
+  useEffect(() => {
+    if (!hiddenOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (hiddenRef.current && !hiddenRef.current.contains(e.target as Node)) {
+        setHiddenOpen(false);
+      }
+    };
+    window.addEventListener("mousedown", onDown);
+    return () => window.removeEventListener("mousedown", onDown);
+  }, [hiddenOpen]);
 
   const lists: UnifiedList[] = useMemo(() => {
     if (kind === "task") {
@@ -57,7 +76,6 @@ export function ListsBanner({ screenKey, kind, className, extra }: ListsBannerPr
 
   const hiddenIds = visibility?.hidden_list_ids ?? [];
   const hiddenSet = new Set(hiddenIds);
-
   const visibleLists = lists.filter((l) => !hiddenSet.has(l.id));
   const hiddenLists = lists.filter((l) => hiddenSet.has(l.id));
 
@@ -72,10 +90,7 @@ export function ListsBanner({ screenKey, kind, className, extra }: ListsBannerPr
   const handleCreate = async () => {
     if (!newName.trim()) return;
     if (kind === "task") {
-      await createTaskList.mutateAsync({
-        name: newName.trim(),
-        kind: "custom",
-      });
+      await createTaskList.mutateAsync({ name: newName.trim(), kind: "custom" });
     } else {
       await createThoughtList.mutateAsync({ name: newName.trim() });
     }
@@ -84,19 +99,24 @@ export function ListsBanner({ screenKey, kind, className, extra }: ListsBannerPr
   };
 
   return (
-    <div className={cn("card p-3 space-y-2", className)}>
-      <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-xs font-semibold text-ink-500 ps-1">רשימות:</span>
+    <div
+      className={cn(
+        "card px-3 py-1.5 flex items-center gap-1 flex-wrap overflow-visible",
+        className
+      )}
+    >
+      <span className="text-[10px] font-semibold text-ink-400 uppercase tracking-wider ps-1 pe-2 shrink-0">
+        רשימות
+      </span>
+
+      {/* Visible lists — tab-style with colored underline */}
+      <div className="flex items-center gap-0.5 flex-wrap min-w-0">
         {visibleLists.map((l) => (
-          <ListChip
-            key={l.id}
-            list={l}
-            visible
-            onToggle={() => toggle(l.id)}
-          />
+          <ListItem key={l.id} list={l} onClick={() => toggle(l.id)} />
         ))}
+
         {creating ? (
-          <div className="flex items-center gap-1 ps-2">
+          <div className="flex items-center gap-1 px-1.5">
             <input
               autoFocus
               value={newName}
@@ -109,91 +129,98 @@ export function ListsBanner({ screenKey, kind, className, extra }: ListsBannerPr
                 }
               }}
               placeholder="שם רשימה..."
-              className="field text-xs w-40 py-1"
+              className="field text-xs w-32 py-0.5"
             />
-            <button onClick={handleCreate} className="btn-accent text-xs py-1 px-2">
+            <button onClick={handleCreate} className="btn-accent text-[10px] py-0.5 px-1.5" type="button">
               שמור
             </button>
           </div>
         ) : (
           <button
             onClick={() => setCreating(true)}
-            className="btn-ghost text-xs py-1 px-2"
+            className="p-1 rounded-sm text-ink-400 hover:text-primary-600 hover:bg-ink-100"
             title="רשימה חדשה"
+            type="button"
           >
-            <Plus className="w-4 h-4" />
+            <Plus className="w-3.5 h-3.5" />
           </button>
         )}
-
-        {extra && <div className="ms-auto flex items-center gap-2">{extra}</div>}
       </div>
 
-      {hiddenLists.length > 0 && (
-        <div>
-          <button
-            onClick={() => setShowHidden((v) => !v)}
-            className="text-xs text-ink-500 hover:text-ink-700 flex items-center gap-1"
-          >
-            {showHidden ? (
-              <ChevronUp className="w-3 h-3" />
-            ) : (
-              <ChevronDown className="w-3 h-3" />
+      <div className="ms-auto flex items-center gap-1 shrink-0">
+        {/* Hidden lists popover */}
+        {hiddenLists.length > 0 && (
+          <div className="relative" ref={hiddenRef}>
+            <button
+              onClick={() => setHiddenOpen((v) => !v)}
+              className={cn(
+                "inline-flex items-center gap-1 rounded-sm px-1.5 py-1 text-[11px] text-ink-500 hover:bg-ink-100",
+                hiddenOpen && "bg-ink-100 text-ink-700"
+              )}
+              type="button"
+              title="רשימות מוסתרות"
+            >
+              <MoreHorizontal className="w-3.5 h-3.5" />
+              <span>
+                {hiddenLists.length} מוסתרות
+              </span>
+              <ChevronDown
+                className={cn("w-3 h-3 transition-transform", hiddenOpen && "rotate-180")}
+              />
+            </button>
+            {hiddenOpen && (
+              <div className="absolute top-full end-0 mt-1 z-30 bg-white border border-ink-200 rounded-lg shadow-lift min-w-[200px] py-1">
+                <div className="text-[10px] font-semibold text-ink-400 uppercase tracking-wider px-3 py-1 border-b border-ink-100">
+                  לחץ להצגה
+                </div>
+                {hiddenLists.map((l) => (
+                  <button
+                    key={l.id}
+                    onClick={() => toggle(l.id)}
+                    className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-start hover:bg-ink-50"
+                    type="button"
+                  >
+                    <span
+                      className="w-2 h-2 rounded-full shrink-0"
+                      style={{ backgroundColor: l.color ?? "#a8a8bc" }}
+                    />
+                    {l.emoji && (
+                      <ListIcon emoji={l.emoji} className="w-3.5 h-3.5" />
+                    )}
+                    <span className="truncate flex-1 text-ink-700">{l.name}</span>
+                    <EyeOff className="w-3 h-3 text-ink-400 shrink-0" />
+                  </button>
+                ))}
+              </div>
             )}
-            רשימות מוסתרות ({hiddenLists.length})
-          </button>
-          {showHidden && (
-            <div className="flex items-center gap-2 flex-wrap mt-1">
-              {hiddenLists.map((l) => (
-                <ListChip
-                  key={l.id}
-                  list={l}
-                  visible={false}
-                  onToggle={() => toggle(l.id)}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+          </div>
+        )}
+
+        {extra && <div className="flex items-center gap-2">{extra}</div>}
+      </div>
     </div>
   );
 }
 
-function ListChip({
-  list,
-  visible,
-  onToggle,
-}: {
-  list: UnifiedList;
-  visible: boolean;
-  onToggle: () => void;
-}) {
-  // Lists always render with a colour now; fall back to a neutral gray for
-  // legacy rows that never picked one.
-  const bg = list.color ?? "#a8a8bc";
+function ListItem({ list, onClick }: { list: UnifiedList; onClick: () => void }) {
+  const color = list.color ?? "#6b6b80";
   return (
     <button
-      onClick={onToggle}
-      className={cn(
-        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium border transition-all",
-        visible
-          ? "border-ink-200 bg-white text-ink-900 hover:-translate-y-0.5"
-          : "border-ink-200 bg-ink-50 text-ink-500 hover:bg-ink-100"
-      )}
-      style={visible ? { borderColor: bg, color: bg } : undefined}
-      title={visible ? "הסתר רשימה" : "הצג רשימה"}
+      onClick={onClick}
+      className="group relative inline-flex items-center gap-1 px-2 py-1 text-sm font-medium text-ink-900 hover:bg-ink-50 rounded-sm transition-colors"
+      title={`הסתר "${list.name}"`}
+      type="button"
     >
       {list.emoji && (
-        <span className="inline-flex items-center">
-          <ListIcon emoji={list.emoji} className="w-3.5 h-3.5" />
-        </span>
+        <ListIcon emoji={list.emoji} className="w-3.5 h-3.5" />
       )}
-      <span>{list.name}</span>
-      {visible ? (
-        <Eye className="w-3 h-3 opacity-60" />
-      ) : (
-        <EyeOff className="w-3 h-3 opacity-60" />
-      )}
+      <span className="leading-none">{list.name}</span>
+      {/* Colored underline — the "active" indicator. */}
+      <span
+        className="absolute start-1 end-1 -bottom-0.5 h-[2px] rounded-full"
+        style={{ backgroundColor: color }}
+      />
+      <Eye className="w-2.5 h-2.5 text-ink-400 opacity-0 group-hover:opacity-70 transition-opacity" />
     </button>
   );
 }

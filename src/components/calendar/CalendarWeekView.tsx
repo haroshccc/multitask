@@ -7,6 +7,9 @@ import {
   MIN,
   addDays,
   clipItem,
+  isMultiDay,
+  isOverdueTask,
+  isPast,
   isPastDay,
   isSameDay,
   layoutDayOverlaps,
@@ -41,28 +44,43 @@ export function CalendarWeekView({
   const weekStart = startOfWeek(anchor);
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
 
+  // Items that span more than one visible day (all-day events OR timed items
+  // that cross midnight). These render as a continuous band across the week
+  // header, NOT as 24-hour blocks inside each day.
+  const weekWindowStart = startOfDay(days[0]!);
+  const multiDayBands = useMemo(
+    () => buildMultiDayBands(items, days),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [items, weekWindowStart.getTime()]
+  );
+
+  const multiDayItemIds = useMemo(
+    () => new Set(multiDayBands.map((b) => b.item.id)),
+    [multiDayBands]
+  );
+
   const perDay = useMemo(
     () =>
       days.map((day) => {
         const dayStart = startOfDay(day);
         const dayEnd = new Date(dayStart.getTime() + 24 * HOUR);
-        const allDay: CalendarItem[] = [];
         const timed: CalendarItem[] = [];
         for (const raw of items) {
+          if (multiDayItemIds.has(raw.id)) continue; // handled by the band row
+          if (raw.allDay) continue; // handled by the band row
           if (raw.start >= dayEnd || raw.end <= dayStart) continue;
           const clipped = clipItem(raw, dayStart, dayEnd);
           if (!clipped) continue;
-          if (clipped.allDay) allDay.push(clipped);
-          else timed.push(clipped);
+          timed.push(clipped);
         }
         const layout = layoutDayOverlaps(timed);
         const stripes = actualStripes.filter(
           (s) => s.start < dayEnd && s.end > dayStart
         );
-        return { day, dayStart, dayEnd, allDay, layout, stripes };
+        return { day, dayStart, dayEnd, layout, stripes };
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [items, actualStripes, weekStart.getTime()]
+    [items, actualStripes, weekStart.getTime(), multiDayItemIds]
   );
 
   const hourMarks = Array.from(
@@ -80,8 +98,6 @@ export function CalendarWeekView({
     const slotStart = new Date(dayStart.getTime() + hourStart * HOUR + minutesFromWindowStart * MIN);
     onCreateAt(slotStart);
   };
-
-  const hasAllDay = perDay.some((d) => d.allDay.length > 0);
 
   const percentFor = (date: Date, dayStart: Date) => {
     const windowStart = dayStart.getTime() + hourStart * HOUR;
@@ -127,23 +143,32 @@ export function CalendarWeekView({
         })}
       </div>
 
-      {/* All-day row */}
-      {hasAllDay && (
+      {/* Multi-day / all-day band row — items that span 2+ days render as a
+          continuous horizontal bar across the days they cover. */}
+      {multiDayBands.length > 0 && (
         <div
-          className="grid border-b border-ink-200 bg-ink-50/40 min-h-[28px]"
+          className="grid border-b border-ink-200 bg-ink-50/40"
           style={headerGrid()}
         >
-          <div className="text-[10px] text-ink-500 px-2 py-1 self-center">כל היום</div>
-          {perDay.map(({ day, allDay }) => (
-            <div
-              key={day.toISOString() + "-ad"}
-              className="border-s border-ink-200 px-1 py-1 flex flex-wrap gap-1"
-            >
-              {allDay.map((it) => (
-                <AllDayMini key={it.id} item={it} now={now} onClick={() => onItemClick(it)} />
-              ))}
-            </div>
-          ))}
+          <div className="text-[10px] text-ink-500 px-2 py-1 self-start">
+            כל היום
+          </div>
+          <div
+            className="col-span-7 relative"
+            style={{ minHeight: bandRowsNeeded(multiDayBands) * 22 + 4 }}
+          >
+            {multiDayBands.map(({ item, startCol, span, row }) => (
+              <MultiDayBand
+                key={item.id}
+                item={item}
+                now={now}
+                startCol={startCol}
+                span={span}
+                row={row}
+                onClick={() => onItemClick(item)}
+              />
+            ))}
+          </div>
         </div>
       )}
 
@@ -264,57 +289,122 @@ export function CalendarWeekView({
   );
 }
 
-function AllDayMini({
+interface MultiDayBandData {
+  item: CalendarItem;
+  /** Column index inside the visible 7-day week (0 = first visible day). */
+  startCol: number;
+  /** How many consecutive days it spans inside the visible week. */
+  span: number;
+  /** Row in the stacked band area; 0 = top. */
+  row: number;
+}
+
+/** Build the packed list of multi-day bands. Each row avoids column overlap. */
+function buildMultiDayBands(
+  items: CalendarItem[],
+  days: Date[]
+): MultiDayBandData[] {
+  const windowStart = startOfDay(days[0]!).getTime();
+  const windowEnd = new Date(startOfDay(days[6]!).getTime() + 24 * HOUR).getTime();
+  const candidates = items
+    .filter((it) => isMultiDay(it))
+    .filter((it) => it.end.getTime() > windowStart && it.start.getTime() < windowEnd)
+    .sort((a, b) => a.start.getTime() - b.start.getTime());
+
+  const rows: Array<Array<[number, number]>> = []; // rows[rowIdx] = [[startCol, endCol)...]
+  const out: MultiDayBandData[] = [];
+
+  for (const it of candidates) {
+    const startMs = Math.max(it.start.getTime(), windowStart);
+    const endMs = Math.min(it.end.getTime(), windowEnd);
+    const startCol = Math.max(
+      0,
+      Math.floor((startMs - windowStart) / (24 * HOUR))
+    );
+    const endColExclusive = Math.min(
+      7,
+      Math.ceil((endMs - windowStart) / (24 * HOUR))
+    );
+    const span = Math.max(1, endColExclusive - startCol);
+
+    // Find first row without overlap.
+    let rowIdx = 0;
+    while (rowIdx < rows.length) {
+      const conflicts = rows[rowIdx]!.some(
+        ([s, e]) => !(endColExclusive <= s || startCol >= e)
+      );
+      if (!conflicts) break;
+      rowIdx++;
+    }
+    if (rowIdx === rows.length) rows.push([]);
+    rows[rowIdx]!.push([startCol, endColExclusive]);
+
+    out.push({ item: it, startCol, span, row: rowIdx });
+  }
+  return out;
+}
+
+function bandRowsNeeded(bands: MultiDayBandData[]): number {
+  if (bands.length === 0) return 0;
+  return Math.max(...bands.map((b) => b.row)) + 1;
+}
+
+function MultiDayBand({
   item,
   now,
+  startCol,
+  span,
+  row,
   onClick,
 }: {
   item: CalendarItem;
   now: Date;
+  startCol: number;
+  span: number;
+  row: number;
   onClick: () => void;
 }) {
-  const past = item.end.getTime() < now.getTime();
-  const overdue = item.kind === "task" && !item.completed && past;
-  const accent = item.color ?? (item.kind === "task" ? "#6b6b80" : "#f59e0b");
+  const isTask = item.kind === "task";
+  const past = isPast(item, now);
+  const overdue = isOverdueTask(item, now);
+  const accent = item.color ?? (isTask ? "#6b6b80" : "#f59e0b");
+  const strokeColor = overdue ? "#ef4444" : accent;
 
-  if (item.kind === "event") {
-    return (
-      <button
-        onClick={onClick}
-        className={cn(
-          "inline-flex items-center rounded-sm px-1.5 py-0.5 text-[10px] font-medium border text-white",
-          past && "opacity-55"
-        )}
-        style={{
-          backgroundColor: `${accent}D9`,
-          borderColor: accent,
-        }}
-        title={item.title}
-        type="button"
-      >
-        <span className="truncate max-w-[80px]">{item.title}</span>
-      </button>
-    );
-  }
+  const width = `calc(${(span / 7) * 100}% - 6px)`;
+  const left = `calc(${(startCol / 7) * 100}% + 3px)`;
+  const top = row * 22 + 2;
+
+  const eventStyle: React.CSSProperties = {
+    backgroundColor: `${accent}D9`,
+    borderColor: accent,
+    color: "#fff",
+  };
+  const taskStyle: React.CSSProperties = {
+    backgroundColor: overdue ? "rgba(239, 68, 68, 0.08)" : "white",
+    borderColor: strokeColor,
+    color: overdue ? "#b91c1c" : "#2d2d3a",
+  };
 
   return (
     <button
       onClick={onClick}
       className={cn(
-        "inline-flex items-center rounded-sm px-1.5 py-0.5 text-[10px] font-medium border bg-white",
-        item.completed && "line-through opacity-60"
+        "absolute rounded-sm px-2 py-0.5 text-[11px] font-medium border truncate text-start",
+        past && "opacity-65",
+        item.completed && "line-through opacity-55"
       )}
       style={{
-        borderColor: overdue ? "#ef4444" : accent,
-        color: overdue ? "#b91c1c" : "#2d2d3a",
-        backgroundColor: overdue ? "rgba(239, 68, 68, 0.06)" : "white",
+        top,
+        insetInlineStart: left,
+        width,
+        height: 20,
+        ...(isTask ? taskStyle : eventStyle),
       }}
       title={item.title}
       type="button"
     >
-      <span className="truncate max-w-[80px]">
-        📋 {item.title}
-      </span>
+      {isTask ? "📋 " : ""}
+      {item.title}
     </button>
   );
 }

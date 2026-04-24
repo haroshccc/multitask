@@ -7,6 +7,7 @@ import {
   type CalendarItem,
   clipItem,
   formatHour,
+  isMultiDay,
   isOverdueTask,
   isPast,
   isSameDay,
@@ -44,10 +45,17 @@ export function CalendarDayView({
     const allDay: CalendarItem[] = [];
     const timed: CalendarItem[] = [];
     for (const raw of items) {
+      // Multi-day items (all-day OR timed items that cross midnight) collapse
+      // into the all-day band above the timed grid. This keeps 24h-stretched
+      // blocks out of the per-hour area.
+      if (raw.allDay || isMultiDay(raw)) {
+        // Only include on this day if the range covers it.
+        if (raw.start < dayEnd && raw.end > dayStart) allDay.push(raw);
+        continue;
+      }
       const clipped = clipItem(raw, dayStart, dayEnd);
       if (!clipped) continue;
-      if (clipped.allDay) allDay.push(clipped);
-      else timed.push(clipped);
+      timed.push(clipped);
     }
     return { allDay, timed };
   }, [items, dayStart, dayEnd]);

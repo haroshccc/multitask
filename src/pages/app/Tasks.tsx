@@ -30,6 +30,7 @@ import { TaskColumn } from "@/components/tasks/TaskColumn";
 import { ArchiveModal } from "@/components/tasks/ArchiveModal";
 import { RowDisplaySettingsModal } from "@/components/tasks/RowDisplaySettingsModal";
 import { StatsPanel } from "@/components/tasks/StatsPanel";
+import { WorkbenchBanner } from "@/components/layout/WorkbenchBanner";
 import { UnassignedBanner } from "@/components/tasks/UnassignedBanner";
 import { StatusesModal } from "@/components/tasks/StatusesModal";
 import type { TaskTreeNode } from "@/components/tasks/TaskRow";
@@ -368,18 +369,25 @@ export function Tasks() {
       <div className="space-y-3">
         <ListsBanner screenKey="tasks" kind="task" />
 
-        <StatsPanel
-          lists={visibleLists}
-          tasks={tasks}
-          open={statsOpen}
-          onToggle={() => setStatsOpen((v) => !v)}
-        />
-
-        <FilterBar
-          screenKey="tasks"
-          filters={filters}
-          onChange={setFilters}
-          fields={fields}
+        <WorkbenchBanner
+          filters={
+            <FilterBar
+              screenKey="tasks"
+              filters={filters}
+              onChange={setFilters}
+              fields={fields}
+              embed
+            />
+          }
+          stats={
+            <StatsPanel
+              lists={visibleLists}
+              tasks={tasks}
+              open={statsOpen}
+              onToggle={() => setStatsOpen((v) => !v)}
+              embed
+            />
+          }
         />
 
         <DndContext

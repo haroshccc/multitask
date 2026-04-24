@@ -94,6 +94,14 @@ export function isSameMonth(a: Date, b: Date): boolean {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth();
 }
 
+/** True if the item visibly spans more than one local day (i.e. crosses midnight). */
+export function isMultiDay(item: { start: Date; end: Date; allDay: boolean }): boolean {
+  if (item.allDay) return true;
+  // An event that ends exactly at 00:00 the next day is still "single-day".
+  const endAdjusted = new Date(item.end.getTime() - 1);
+  return !isSameDay(item.start, endAdjusted);
+}
+
 // Formatting (Hebrew locale) -------------------------------------------------
 
 const HE = "he-IL";

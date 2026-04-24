@@ -6,8 +6,6 @@ import {
   type ActualStripe,
   type CalendarItem,
   clipItem,
-  dayPercent,
-  durationPercent,
   formatHour,
   isOverdueTask,
   isPast,

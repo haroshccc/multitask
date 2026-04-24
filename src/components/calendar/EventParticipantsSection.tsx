@@ -72,8 +72,7 @@ export function EventParticipantsSection({ eventId, ownerId }: Props) {
       .filter((m) => {
         if (!q) return true;
         const name = m.profile?.full_name?.toLowerCase() ?? "";
-        const email = m.profile?.email?.toLowerCase() ?? "";
-        return name.includes(q) || email.includes(q);
+        return name.includes(q);
       })
       .slice(0, 8);
   }, [members, participantIds, query]);
@@ -115,9 +114,7 @@ export function EventParticipantsSection({ eventId, ownerId }: Props) {
               (m) => m.membership.user_id === p.user_id
             );
             const label =
-              member?.profile?.full_name ||
-              member?.profile?.email ||
-              p.user_id.slice(0, 8);
+              member?.profile?.full_name || p.user_id.slice(0, 8);
             const isOwner = p.user_id === ownerId;
             const isMe = p.user_id === user?.id;
             const meta = RSVP_META[p.rsvp_status];
@@ -181,14 +178,14 @@ export function EventParticipantsSection({ eventId, ownerId }: Props) {
             onFocus={() => setPickerOpen(true)}
             onBlur={() => setTimeout(() => setPickerOpen(false), 150)}
             className="field ps-9 text-sm"
-            placeholder="חפש מוזמן מתוך הארגון..."
+            placeholder="חפש מוזמן בשם מתוך הארגון..."
           />
         </div>
         {pickerOpen && candidates.length > 0 && (
           <ul className="absolute top-full mt-1 inset-x-0 bg-white border border-ink-200 rounded-md shadow-lift max-h-56 overflow-auto z-10">
             {candidates.map((c) => {
               const label =
-                c.profile?.full_name || c.profile?.email || c.membership.user_id.slice(0, 8);
+                c.profile?.full_name || c.membership.user_id.slice(0, 8);
               return (
                 <li key={c.membership.user_id}>
                   <button
@@ -200,11 +197,6 @@ export function EventParticipantsSection({ eventId, ownerId }: Props) {
                       {initials(label)}
                     </div>
                     <span className="flex-1 truncate">{label}</span>
-                    {c.profile?.email && (
-                      <span className="text-[10px] text-ink-500 truncate">
-                        {c.profile.email}
-                      </span>
-                    )}
                   </button>
                 </li>
               );

@@ -169,7 +169,7 @@ export function ListsBanner({ screenKey, kind, className, extra }: ListsBannerPr
               />
             </button>
             {hiddenOpen && (
-              <div className="absolute top-full end-0 mt-1 z-30 bg-white border border-ink-200 rounded-lg shadow-lift min-w-[200px] py-1">
+              <div className="absolute top-full start-0 mt-1 z-30 bg-white border border-ink-200 rounded-lg shadow-lift min-w-[200px] max-w-[calc(100vw-1rem)] py-1">
                 <div className="text-[10px] font-semibold text-ink-400 uppercase tracking-wider px-3 py-1 border-b border-ink-100">
                   לחץ להצגה
                 </div>

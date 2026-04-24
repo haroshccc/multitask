@@ -425,7 +425,11 @@ function PopoverButton({
       {open && (
         <div
           className={cn(
-            "absolute top-full end-0 mt-1 z-30 bg-white border border-ink-200 rounded-lg shadow-lift",
+            // start-0 in RTL = right:0 → popover's right (start) edge anchors
+            // to the trigger's right edge and the popover grows leftward
+            // (toward end), keeping it on-screen even when the trigger sits
+            // near the visual-right side of the chrome.
+            "absolute top-full start-0 mt-1 z-30 bg-white border border-ink-200 rounded-lg shadow-lift max-w-[calc(100vw-1rem)]",
             wide ? "min-w-[260px]" : "min-w-[180px]"
           )}
         >

@@ -45,6 +45,15 @@ export function useRealtimeSync() {
           qc.invalidateQueries({ queryKey: queryFamilies.allTaskLists(organizationId) });
         }
       )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "task_dependencies" },
+        () => {
+          qc.invalidateQueries({
+            queryKey: ["task-dependencies", organizationId],
+          });
+        }
+      )
       // Projects
       .on(
         "postgres_changes",
@@ -126,6 +135,9 @@ export function useRealtimeSync() {
             qc.invalidateQueries({ queryKey: queryFamilies.taskFamily(taskId) });
           }
           qc.invalidateQueries({ queryKey: ["timer", "active"] });
+          qc.invalidateQueries({
+            queryKey: queryFamilies.allTimeEntriesRange(organizationId),
+          });
         }
       )
       // Notifications — scoped by user

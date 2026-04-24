@@ -42,6 +42,27 @@ export async function listTimeEntries(taskId: string): Promise<TimeEntry[]> {
   return data ?? [];
 }
 
+/**
+ * All time entries for the organization that overlap with [from, to).
+ * Used by the calendar overlay ("actual" stripes over "planned" blocks).
+ * Overlap = started_at < to AND (ended_at IS NULL OR ended_at > from).
+ */
+export async function listTimeEntriesByRange(
+  organizationId: string,
+  from: string,
+  to: string
+): Promise<TimeEntry[]> {
+  const { data, error } = await supabase
+    .from("time_entries")
+    .select("*")
+    .eq("organization_id", organizationId)
+    .lt("started_at", to)
+    .or(`ended_at.is.null,ended_at.gt.${from}`)
+    .order("started_at", { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
 export async function createManualEntry(input: {
   task_id: string;
   organization_id: string;

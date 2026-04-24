@@ -22,6 +22,25 @@ export function useTaskTimeEntries(taskId: string | null | undefined) {
   });
 }
 
+/**
+ * All time entries across the org that overlap with the given range.
+ * Used by the calendar to render "actual" (solid) stripes over "planned"
+ * (dashed) scheduled slots — see SPEC §16.
+ */
+export function useTimeEntriesByRange(range: { from: string; to: string } | null) {
+  const scope = useOrgScope();
+  return useQuery<TimeEntry[]>({
+    queryKey: queryKeys.timeEntriesByRange(
+      scope.organizationId ?? "",
+      range?.from ?? "",
+      range?.to ?? ""
+    ),
+    queryFn: () =>
+      service.listTimeEntriesByRange(scope.organizationId!, range!.from, range!.to),
+    enabled: scope.enabled && !!range,
+  });
+}
+
 export function useStartTimer() {
   const qc = useQueryClient();
   const scope = useOrgScope();

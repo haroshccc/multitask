@@ -23,6 +23,8 @@ export const queryKeys = {
   tasksByProject: (orgId: string, projectId: string) =>
     ["tasks", orgId, "project", projectId] as const,
   taskDependencies: (taskId: string) => ["task", taskId, "dependencies"] as const,
+  allTaskDependencies: (orgId: string) =>
+    ["task-dependencies", orgId] as const,
   taskAttachments: (taskId: string) => ["task", taskId, "attachments"] as const,
   taskCustomFields: (projectId: string) =>
     ["project", projectId, "custom-fields"] as const,
@@ -66,6 +68,8 @@ export const queryKeys = {
 
   // Time entries / timer
   timeEntries: (taskId: string) => ["task", taskId, "time-entries"] as const,
+  timeEntriesByRange: (orgId: string, from: string, to: string) =>
+    ["time-entries-range", orgId, from, to] as const,
   activeTimer: () => ["timer", "active"] as const,
 
   // Notifications
@@ -94,6 +98,7 @@ export const queryKeys = {
  */
 export const queryFamilies = {
   allTasks: (orgId: string) => ["tasks", orgId] as const,
+  allTimeEntriesRange: (orgId: string) => ["time-entries-range", orgId] as const,
   allProjects: (orgId: string) => ["projects", orgId] as const,
   allEvents: (orgId: string) => ["events", orgId] as const,
   allRecordings: (orgId: string) => ["recordings", orgId] as const,

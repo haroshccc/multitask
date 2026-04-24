@@ -239,6 +239,33 @@ export async function listTaskDependencies(taskId: string): Promise<TaskDependen
   return data ?? [];
 }
 
+/**
+ * All dependencies where both endpoints live in the given org. RLS ensures
+ * cross-org leakage can't happen; filtering client-side by task IDs would
+ * still work but the Gantt grid renders the whole graph at once, so we fetch
+ * all rows in a single query.
+ */
+export async function listAllTaskDependencies(
+  organizationId: string
+): Promise<TaskDependency[]> {
+  // The join ensures we only get rows whose source task is in this org.
+  // (The DB has a policy that matches the endpoint task to the same org.)
+  const { data: tasksInOrg, error: tasksErr } = await supabase
+    .from("tasks")
+    .select("id")
+    .eq("organization_id", organizationId);
+  if (tasksErr) throw tasksErr;
+  const ids = (tasksInOrg ?? []).map((t) => t.id);
+  if (ids.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from("task_dependencies")
+    .select("*")
+    .in("task_id", ids);
+  if (error) throw error;
+  return data ?? [];
+}
+
 export async function createTaskDependency(
   taskId: string,
   dependsOnTaskId: string,

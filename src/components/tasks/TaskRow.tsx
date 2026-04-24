@@ -34,6 +34,7 @@ import { useMyTaskStatuses } from "@/lib/hooks/useUserTaskStatuses";
 import type { RowDisplayPrefs } from "@/lib/hooks/useRowDisplayPrefs";
 import { pushUndo } from "@/lib/undo/store";
 import { Link as LinkIcon, Calendar as CalendarIcon } from "lucide-react";
+import { PlanVsActualBar } from "@/components/tasks/PlanVsActualBar";
 import type { Task } from "@/lib/types/domain";
 
 export interface TaskTreeNode {
@@ -417,10 +418,17 @@ export function TaskRow({
         )}
 
         {display.estimatedVsActual && task.estimated_hours != null && (
-          <ProgressVsEstimate
-            actualSeconds={task.actual_seconds}
-            estimatedHours={task.estimated_hours}
-          />
+          <span
+            className="shrink-0 w-24 sm:w-28"
+            onClick={(e) => e.stopPropagation()}
+            title={`בפועל מתוך ${formatHoursShort(task.estimated_hours)}`}
+          >
+            <PlanVsActualBar
+              estimatedSeconds={task.estimated_hours * 3600}
+              actualSeconds={task.actual_seconds}
+              compact
+            />
+          </span>
         )}
 
         {display.link && task.external_url && (
@@ -770,35 +778,6 @@ function formatHoursShort(hours: number): string {
   }
   const m = Math.round(hours * 60);
   return `הוקצו ${m}ד`;
-}
-
-function ProgressVsEstimate({
-  actualSeconds,
-  estimatedHours,
-}: {
-  actualSeconds: number;
-  estimatedHours: number;
-}) {
-  const estimatedSeconds = estimatedHours * 3600;
-  if (estimatedSeconds <= 0) return null;
-  const ratio = actualSeconds / estimatedSeconds;
-  const pct = Math.round(ratio * 100);
-  const over = ratio > 1;
-  return (
-    <span
-      className={cn(
-        "shrink-0 text-[10px] font-mono tabular-nums px-1.5 py-0.5 rounded-md",
-        over
-          ? "bg-danger/10 text-danger-600"
-          : ratio > 0.8
-          ? "bg-warning/10 text-warning-600"
-          : "bg-success/10 text-success-600"
-      )}
-      title={`בפועל ${pct}% מהזמן שהוקצה`}
-    >
-      {pct}%
-    </span>
-  );
 }
 
 /**

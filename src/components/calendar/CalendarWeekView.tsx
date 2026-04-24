@@ -155,7 +155,7 @@ export function CalendarWeekView({
           </div>
           <div
             className="col-span-7 relative"
-            style={{ minHeight: bandRowsNeeded(multiDayBands) * 22 + 4 }}
+            style={{ minHeight: bandRowsNeeded(multiDayBands) * 26 + 6 }}
           >
             {multiDayBands.map(({ item, startCol, span, row }) => (
               <MultiDayBand
@@ -372,7 +372,7 @@ function MultiDayBand({
 
   const width = `calc(${(span / 7) * 100}% - 6px)`;
   const left = `calc(${(startCol / 7) * 100}% + 3px)`;
-  const top = row * 22 + 2;
+  const top = row * 26 + 3;
 
   const eventStyle: React.CSSProperties = {
     backgroundColor: `${accent}D9`,
@@ -389,7 +389,7 @@ function MultiDayBand({
     <button
       onClick={onClick}
       className={cn(
-        "absolute rounded-sm px-2 py-0.5 text-[11px] font-medium border truncate text-start",
+        "absolute rounded-md px-2 py-1 text-xs font-medium border-[1.5px] truncate text-start shadow-soft",
         past && "opacity-65",
         item.completed && "line-through opacity-55"
       )}
@@ -397,13 +397,13 @@ function MultiDayBand({
         top,
         insetInlineStart: left,
         width,
-        height: 20,
+        height: 22,
         ...(isTask ? taskStyle : eventStyle),
       }}
       title={item.title}
       type="button"
     >
-      {isTask ? "📋 " : ""}
+
       {item.title}
     </button>
   );

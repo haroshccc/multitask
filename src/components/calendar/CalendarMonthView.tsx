@@ -192,7 +192,7 @@ function MonthItemChip({
       <span className="shrink-0 text-ink-500">
         {item.allDay ? "" : formatHour(item.start)}
       </span>
-      <span className="truncate">📋 {item.title}</span>
+      <span className="truncate">{item.title}</span>
     </button>
   );
 }

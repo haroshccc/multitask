@@ -3,7 +3,6 @@ import { cn } from "@/lib/utils/cn";
 import {
   type CalendarItem,
   addDays,
-  formatDayLong,
   formatHour,
   isOverdueTask,
   isPast,
@@ -95,25 +94,38 @@ function DayHeader({
   count: number;
   onCreate: () => void;
 }) {
+  const dayName = day.toLocaleDateString("he-IL", { weekday: "long" });
+  const dateLong = day.toLocaleDateString("he-IL", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
   return (
     <div
       className={cn(
-        "sticky top-14 z-10 px-4 py-2.5 flex items-center gap-3 border-b-2 backdrop-blur-sm",
+        "sticky top-14 z-10 px-3 py-1.5 flex items-baseline gap-2 border-b-2 backdrop-blur-sm",
         today
           ? "bg-primary-50/90 border-primary-300"
           : "bg-ink-50/90 border-ink-300"
       )}
     >
-      <div
+      <span
         className={cn(
-          "text-[10px] uppercase tracking-wider font-bold",
-          today ? "text-primary-700" : "text-ink-500"
+          "text-sm font-bold",
+          today ? "text-primary-700" : "text-ink-900"
         )}
       >
-        {today ? "היום · " : ""}
-        {formatDayLong(day)}
-      </div>
-      <span className="text-[10px] text-ink-500">{count} פריטים</span>
+        {today ? "היום" : dayName}
+      </span>
+      <span
+        className={cn(
+          "text-[11px]",
+          today ? "text-primary-700" : "text-ink-600"
+        )}
+      >
+        {dateLong}
+      </span>
+      <span className="text-[10px] text-ink-500">· {count} פריטים</span>
       <button
         onClick={onCreate}
         className="ms-auto text-[11px] text-ink-500 hover:text-primary-600"
@@ -156,7 +168,7 @@ function AgendaRow({
         />
         <div className="flex-1 min-w-0">
           <div className="text-[13px] font-medium text-ink-900 truncate">
-            {isTask ? "📋 " : ""}
+            
             {item.title}
           </div>
           <div className="text-[11px] text-ink-500 mt-0.5">

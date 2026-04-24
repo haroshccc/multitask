@@ -7,8 +7,7 @@ import {
   Eye,
   EyeOff,
   Check,
-  Target,
-  ZoomIn,
+  Flame,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { ListIcon } from "@/components/tasks/list-icons";
@@ -222,18 +221,10 @@ export function GanttChrome({
         <ToggleButton
           active={showCriticalOnly}
           onClick={onToggleCriticalOnly}
-          icon={<Target className="w-3.5 h-3.5" />}
-          label="Critical בלבד"
+          icon={<Flame className="w-3.5 h-3.5" />}
+          label="נתיב קריטי"
+          badge={showCriticalOnly ? "on" : undefined}
         />
-
-        {/* Keep a little zoom icon label for visual consistency with other
-            chromes — no-op click (zoom tabs already live in the chrome). */}
-        <span
-          className="hidden md:inline-flex items-center gap-1 text-[10px] text-ink-400 px-1"
-          title="זום"
-        >
-          <ZoomIn className="w-3 h-3" />
-        </span>
       </div>
     </div>
   );

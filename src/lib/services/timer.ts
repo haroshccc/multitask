@@ -71,9 +71,25 @@ export async function createManualEntry(input: {
   ended_at: string;
   note?: string | null;
 }): Promise<TimeEntry> {
+  // IMPORTANT: the DB has an AFTER-INSERT trigger that tries to fill
+  // `duration_seconds` when it's missing, but NEW modifications are ignored
+  // in AFTER triggers — so the row stays NULL and never gets summed into
+  // `tasks.actual_seconds`. Compute it client-side before insert.
+  const durationSeconds = Math.max(
+    0,
+    Math.round(
+      (new Date(input.ended_at).getTime() -
+        new Date(input.started_at).getTime()) /
+        1000
+    )
+  );
   const { data, error } = await supabase
     .from("time_entries")
-    .insert({ ...input, is_manual: true })
+    .insert({
+      ...input,
+      duration_seconds: durationSeconds,
+      is_manual: true,
+    })
     .select()
     .single();
   if (error) throw error;
@@ -84,9 +100,35 @@ export async function updateTimeEntry(
   entryId: string,
   patch: Partial<Pick<TimeEntry, "started_at" | "ended_at" | "note">>
 ): Promise<TimeEntry> {
+  // Same reason as createManualEntry — if the edit changes start/end, recompute
+  // duration_seconds client-side so the aggregate trigger picks it up.
+  const nextPatch: Partial<
+    Pick<TimeEntry, "started_at" | "ended_at" | "note" | "duration_seconds">
+  > = { ...patch };
+  if (patch.started_at !== undefined || patch.ended_at !== undefined) {
+    const { data: current, error: getErr } = await supabase
+      .from("time_entries")
+      .select("started_at, ended_at")
+      .eq("id", entryId)
+      .single();
+    if (getErr) throw getErr;
+    const start = (patch.started_at ?? current.started_at) as string | null;
+    const end = (patch.ended_at ?? current.ended_at) as string | null;
+    if (start && end) {
+      nextPatch.duration_seconds = Math.max(
+        0,
+        Math.round(
+          (new Date(end).getTime() - new Date(start).getTime()) / 1000
+        )
+      );
+    } else if (patch.ended_at === null) {
+      nextPatch.duration_seconds = null;
+    }
+  }
+
   const { data, error } = await supabase
     .from("time_entries")
-    .update(patch)
+    .update(nextPatch)
     .eq("id", entryId)
     .select()
     .single();

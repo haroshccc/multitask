@@ -51,11 +51,13 @@ import { TaskDependenciesSection } from "@/components/tasks/TaskDependenciesSect
 interface TaskEditModalProps {
   taskId: string | null;
   onClose: () => void;
+  /** Which tab should be active when the modal opens. Default "overview". */
+  defaultTab?: "overview" | "schedule" | "history" | "attachments";
 }
 
 type Tab = "overview" | "schedule" | "history" | "attachments";
 
-export function TaskEditModal({ taskId, onClose }: TaskEditModalProps) {
+export function TaskEditModal({ taskId, onClose, defaultTab = "overview" }: TaskEditModalProps) {
   const open = !!taskId;
   const { data: task } = useTask(taskId);
   const { data: lists = [] } = useTaskLists();
@@ -64,7 +66,13 @@ export function TaskEditModal({ taskId, onClose }: TaskEditModalProps) {
   const updateTask = useUpdateTask();
   const completeTask = useCompleteTask();
 
-  const [tab, setTab] = useState<Tab>("overview");
+  const [tab, setTab] = useState<Tab>(defaultTab);
+
+  // If the caller changes `defaultTab`, honour it on re-open.
+  useEffect(() => {
+    if (open) setTab(defaultTab);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [taskId]);
 
   // Local draft state — committed to DB on blur / explicit save.
   const [title, setTitle] = useState("");

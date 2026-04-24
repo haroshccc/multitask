@@ -5,6 +5,7 @@ import {
   addDays,
   endOfMonth,
   formatHour,
+  isMultiDay,
   isOverdueTask,
   isPast,
   isPastDay,
@@ -14,7 +15,9 @@ import {
   startOfWeek,
 } from "./calendar-utils";
 
-const MAX_PER_DAY = 3;
+const BAND_HEIGHT = 20;
+const BAND_GAP = 2;
+
 const DAY_NAMES = ["א", "ב", "ג", "ד", "ה", "ו", "ש"];
 
 interface CalendarMonthViewProps {
@@ -36,26 +39,37 @@ export function CalendarMonthView({
   const weekCount = Math.ceil(
     (endOfWeekOffset(monthEnd, gridStart) + 1) / 7
   );
-  const totalDays = weekCount * 7;
 
-  const days = useMemo(
-    () => Array.from({ length: totalDays }, (_, i) => addDays(gridStart, i)),
+  const weeks = useMemo(
+    () =>
+      Array.from({ length: weekCount }, (_, w) =>
+        Array.from({ length: 7 }, (_, d) => addDays(gridStart, w * 7 + d))
+      ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [gridStart.getTime(), totalDays]
+    [gridStart.getTime(), weekCount]
   );
 
-  const itemsByDay = useMemo(() => {
-    const map = new Map<string, CalendarItem[]>();
+  // Items that appear only on their start day (non-multi-day) — grouped.
+  const singleDayByDate = useMemo(() => {
+    const m = new Map<string, CalendarItem[]>();
     for (const it of items) {
-      const key = keyOf(it.start);
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(it);
+      if (isMultiDay(it)) continue;
+      const k = keyOf(it.start);
+      if (!m.has(k)) m.set(k, []);
+      m.get(k)!.push(it);
     }
-    for (const arr of map.values()) {
+    for (const arr of m.values()) {
       arr.sort((a, b) => a.start.getTime() - b.start.getTime());
     }
-    return map;
+    return m;
   }, [items]);
+
+  // Multi-day items, clipped + packed per week row.
+  const multiDayPerWeek = useMemo(
+    () =>
+      weeks.map((weekDays) => buildWeekBands(items, weekDays)),
+    [items, weeks]
+  );
 
   const now = new Date();
 
@@ -76,65 +90,215 @@ export function CalendarMonthView({
         ))}
       </div>
 
-      <div className="grid grid-cols-7 auto-rows-fr">
-        {days.map((day, i) => {
-          const inMonth = isSameMonth(day, anchor);
-          const today = isSameDay(day, now);
-          const past = isPastDay(day, now);
-          const list = itemsByDay.get(keyOf(day)) ?? [];
-          const visible = list.slice(0, MAX_PER_DAY);
-          const overflow = list.length - visible.length;
+      {/* Weeks */}
+      <div className="divide-y divide-ink-200">
+        {weeks.map((weekDays, weekIdx) => {
+          const bands = multiDayPerWeek[weekIdx]!;
+          const bandRows = bandRowsCount(bands);
+          // Pad the top of each cell so items don't overlap with the bands.
+          const bandAreaHeight = bandRows > 0 ? bandRows * (BAND_HEIGHT + BAND_GAP) + BAND_GAP : 0;
+
           return (
-            <div
-              key={day.toISOString()}
-              className={cn(
-                "min-h-[100px] p-1 border-t border-ink-200 relative",
-                i % 7 !== 0 && "border-s border-ink-200",
-                !inMonth && "bg-ink-50/50 text-ink-400",
-                past && inMonth && !today && "bg-ink-100/40",
-                today && "bg-primary-50/40"
-              )}
-            >
-              <button
-                onClick={() => onDayClick(day)}
-                className={cn(
-                  "text-[11px] font-semibold px-1 py-0.5 rounded-sm hover:bg-ink-100 transition-colors",
-                  today
-                    ? "text-primary-700"
-                    : past
-                    ? "text-ink-500"
-                    : inMonth
-                    ? "text-ink-900"
-                    : "text-ink-400"
-                )}
-                type="button"
+            <div key={weekIdx} className="relative">
+              <div className="grid grid-cols-7 auto-rows-fr">
+                {weekDays.map((day, colIdx) => {
+                  const inMonth = isSameMonth(day, anchor);
+                  const today = isSameDay(day, now);
+                  const past = isPastDay(day, now);
+                  const singleItems = singleDayByDate.get(keyOf(day)) ?? [];
+                  const cap = 3;
+                  const visible = singleItems.slice(0, cap);
+                  const overflow = singleItems.length - visible.length;
+                  return (
+                    <div
+                      key={day.toISOString()}
+                      className={cn(
+                        "min-h-[110px] p-1 relative",
+                        colIdx > 0 && "border-s border-ink-200",
+                        !inMonth && "bg-ink-50/50 text-ink-400",
+                        past && inMonth && !today && "bg-ink-100/40",
+                        today && "bg-primary-50/40"
+                      )}
+                      style={{ paddingTop: 4 + bandAreaHeight }}
+                    >
+                      <button
+                        onClick={() => onDayClick(day)}
+                        className={cn(
+                          "absolute top-1 start-1 text-[11px] font-semibold px-1 py-0.5 rounded-sm hover:bg-ink-100 transition-colors z-10",
+                          today
+                            ? "text-primary-700"
+                            : past
+                            ? "text-ink-500"
+                            : inMonth
+                            ? "text-ink-900"
+                            : "text-ink-400"
+                        )}
+                        type="button"
+                      >
+                        {day.getDate()}
+                      </button>
+                      <div className="space-y-0.5">
+                        {visible.map((it) => (
+                          <MonthItemChip
+                            key={it.id}
+                            item={it}
+                            now={now}
+                            onClick={() => onItemClick(it)}
+                          />
+                        ))}
+                        {overflow > 0 && (
+                          <button
+                            onClick={() => onDayClick(day)}
+                            className="w-full text-start text-[10px] text-ink-500 hover:text-primary-600 px-1.5"
+                            type="button"
+                          >
+                            + עוד {overflow}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Absolute band overlay — one row per packed lane */}
+              <div
+                className="absolute inset-x-0 pointer-events-none"
+                style={{ top: 22, height: bandAreaHeight }}
               >
-                {day.getDate()}
-              </button>
-              <div className="mt-0.5 space-y-0.5">
-                {visible.map((it) => (
-                  <MonthItemChip
-                    key={it.id}
-                    item={it}
+                {bands.map(({ item, startCol, span, row }) => (
+                  <MonthBand
+                    key={item.id + "-w" + weekIdx}
+                    item={item}
                     now={now}
-                    onClick={() => onItemClick(it)}
+                    startCol={startCol}
+                    span={span}
+                    row={row}
+                    onClick={() => onItemClick(item)}
                   />
                 ))}
-                {overflow > 0 && (
-                  <button
-                    onClick={() => onDayClick(day)}
-                    className="w-full text-start text-[10px] text-ink-500 hover:text-primary-600 px-1.5"
-                    type="button"
-                  >
-                    + עוד {overflow}
-                  </button>
-                )}
               </div>
             </div>
           );
         })}
       </div>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+
+interface WeekBand {
+  item: CalendarItem;
+  startCol: number;
+  span: number;
+  row: number;
+}
+
+function buildWeekBands(items: CalendarItem[], weekDays: Date[]): WeekBand[] {
+  const weekStartMs = weekDays[0]!.getTime();
+  const weekEndMs = addDays(weekDays[6]!, 1).getTime();
+
+  const candidates = items
+    .filter((it) => isMultiDay(it))
+    .filter((it) => it.end.getTime() > weekStartMs && it.start.getTime() < weekEndMs)
+    .sort((a, b) => a.start.getTime() - b.start.getTime());
+
+  const rows: Array<Array<[number, number]>> = [];
+  const out: WeekBand[] = [];
+
+  for (const it of candidates) {
+    const startMs = Math.max(it.start.getTime(), weekStartMs);
+    const endMs = Math.min(it.end.getTime(), weekEndMs);
+    const startCol = Math.max(
+      0,
+      Math.floor((startMs - weekStartMs) / (24 * 3_600_000))
+    );
+    const endColExclusive = Math.min(
+      7,
+      Math.ceil((endMs - weekStartMs) / (24 * 3_600_000))
+    );
+    const span = Math.max(1, endColExclusive - startCol);
+
+    let rowIdx = 0;
+    while (rowIdx < rows.length) {
+      const conflicts = rows[rowIdx]!.some(
+        ([s, e]) => !(endColExclusive <= s || startCol >= e)
+      );
+      if (!conflicts) break;
+      rowIdx++;
+    }
+    if (rowIdx === rows.length) rows.push([]);
+    rows[rowIdx]!.push([startCol, endColExclusive]);
+    out.push({ item: it, startCol, span, row: rowIdx });
+  }
+
+  return out;
+}
+
+function bandRowsCount(bands: WeekBand[]): number {
+  if (bands.length === 0) return 0;
+  return Math.max(...bands.map((b) => b.row)) + 1;
+}
+
+function MonthBand({
+  item,
+  now,
+  startCol,
+  span,
+  row,
+  onClick,
+}: {
+  item: CalendarItem;
+  now: Date;
+  startCol: number;
+  span: number;
+  row: number;
+  onClick: () => void;
+}) {
+  const isTask = item.kind === "task";
+  const past = isPast(item, now);
+  const overdue = isOverdueTask(item, now);
+  const accent = item.color ?? (isTask ? "#6b6b80" : "#f59e0b");
+  const strokeColor = overdue ? "#ef4444" : accent;
+
+  const width = `calc(${(span / 7) * 100}% - 4px)`;
+  const left = `calc(${(startCol / 7) * 100}% + 2px)`;
+  const top = row * (BAND_HEIGHT + BAND_GAP) + BAND_GAP;
+
+  const eventStyle: React.CSSProperties = {
+    backgroundColor: `${accent}D9`,
+    borderColor: accent,
+    color: "#fff",
+  };
+  const taskStyle: React.CSSProperties = {
+    backgroundColor: overdue ? "rgba(239, 68, 68, 0.08)" : "white",
+    borderColor: strokeColor,
+    color: overdue ? "#b91c1c" : "#2d2d3a",
+  };
+
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "absolute rounded-sm px-1.5 text-[10px] font-medium border-[1.5px] truncate text-start pointer-events-auto",
+        past && "opacity-60",
+        item.completed && "line-through opacity-55"
+      )}
+      style={{
+        top,
+        insetInlineStart: left,
+        width,
+        height: BAND_HEIGHT,
+        lineHeight: `${BAND_HEIGHT - 3}px`,
+        ...(isTask ? taskStyle : eventStyle),
+      }}
+      title={item.title}
+      type="button"
+    >
+      {item.title}
+    </button>
   );
 }
 
@@ -152,7 +316,6 @@ function MonthItemChip({
   const overdue = isOverdueTask(item, now);
   const accent = item.color ?? (isTask ? "#6b6b80" : "#f59e0b");
 
-  // Events: filled.
   if (!isTask) {
     return (
       <button
@@ -173,7 +336,6 @@ function MonthItemChip({
     );
   }
 
-  // Tasks: outlined only.
   return (
     <button
       onClick={onClick}

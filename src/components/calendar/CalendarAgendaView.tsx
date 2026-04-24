@@ -20,8 +20,11 @@ interface CalendarAgendaViewProps {
 }
 
 /**
- * Agenda (list) view — optimized for narrow screens. Groups items under
- * clearly-separated day headers so you never lose track of the day boundary.
+ * Agenda (list) view — redesigned for clarity: single continuous list, days
+ * separated by a large rounded date chip on the right with a vertical rule
+ * beside it. Today gets a colored stripe. Unlike the previous "one card per
+ * day" approach this keeps the eye flowing down a single column and the day
+ * separator is unmissable without burning vertical space.
  */
 export function CalendarAgendaView({
   anchor,
@@ -53,86 +56,108 @@ export function CalendarAgendaView({
   }, [items]);
 
   return (
-    <div className="space-y-2">
+    <div className="card overflow-hidden">
       {days.map((day) => {
         const today = isSameDay(day, now);
         const list = byDay.get(keyOf(day)) ?? [];
         return (
-          <div key={day.toISOString()} className="card overflow-hidden">
-            <DayHeader day={day} today={today} count={list.length} onCreate={() => onCreateAt(day)} />
-            {list.length === 0 ? (
-              <div className="px-4 py-3 text-[11px] text-ink-400">
-                אין פריטים ליום זה
-              </div>
-            ) : (
-              <ul className="divide-y divide-ink-150">
-                {list.map((it) => (
-                  <AgendaRow
-                    key={it.id}
-                    item={it}
-                    now={now}
-                    onClick={() => onItemClick(it)}
-                  />
-                ))}
-              </ul>
-            )}
-          </div>
+          <DayGroup
+            key={day.toISOString()}
+            day={day}
+            today={today}
+            items={list}
+            onItemClick={onItemClick}
+            onCreateAt={onCreateAt}
+          />
         );
       })}
     </div>
   );
 }
 
-function DayHeader({
+function DayGroup({
   day,
   today,
-  count,
-  onCreate,
+  items,
+  onItemClick,
+  onCreateAt,
 }: {
   day: Date;
   today: boolean;
-  count: number;
-  onCreate: () => void;
+  items: CalendarItem[];
+  onItemClick: (item: CalendarItem) => void;
+  onCreateAt: (start: Date) => void;
 }) {
+  const now = new Date();
   const dayName = day.toLocaleDateString("he-IL", { weekday: "long" });
-  const dateLong = day.toLocaleDateString("he-IL", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
+  const dayNum = day.getDate();
+  const monthShort = day.toLocaleDateString("he-IL", { month: "short" });
+  const past = day.getTime() < startOfDay(now).getTime();
+
   return (
     <div
       className={cn(
-        "sticky top-14 z-10 px-3 py-1.5 flex items-baseline gap-2 border-b-2 backdrop-blur-sm",
-        today
-          ? "bg-primary-50/90 border-primary-300"
-          : "bg-ink-50/90 border-ink-300"
+        "flex border-b border-ink-200 last:border-b-0",
+        today && "bg-primary-50/30",
+        past && !today && "bg-ink-50/40"
       )}
     >
-      <span
+      {/* Big date chip on the right (start in RTL) */}
+      <div
         className={cn(
-          "text-sm font-bold",
-          today ? "text-primary-700" : "text-ink-900"
+          "flex flex-col items-center justify-start py-3 w-20 shrink-0 border-e",
+          today ? "border-primary-500 bg-primary-500" : "border-ink-200 bg-ink-50/60"
         )}
       >
-        {today ? "היום" : dayName}
-      </span>
-      <span
-        className={cn(
-          "text-[11px]",
-          today ? "text-primary-700" : "text-ink-600"
+        <span
+          className={cn(
+            "text-[10px] font-semibold uppercase tracking-wider leading-none mb-1",
+            today ? "text-white/90" : past ? "text-ink-400" : "text-ink-500"
+          )}
+        >
+          {today ? "היום" : dayName}
+        </span>
+        <span
+          className={cn(
+            "text-2xl font-bold leading-none tabular-nums",
+            today ? "text-white" : past ? "text-ink-500" : "text-ink-900"
+          )}
+        >
+          {dayNum}
+        </span>
+        <span
+          className={cn(
+            "text-[10px] mt-0.5 leading-none",
+            today ? "text-white/80" : past ? "text-ink-400" : "text-ink-500"
+          )}
+        >
+          {monthShort}
+        </span>
+      </div>
+
+      {/* Items column */}
+      <div className="flex-1 min-w-0 py-1">
+        {items.length === 0 ? (
+          <button
+            onClick={() => onCreateAt(day)}
+            className="w-full text-start px-4 py-2.5 text-[11px] text-ink-400 hover:text-primary-600 hover:bg-ink-50"
+            type="button"
+          >
+            + הוסף אירוע ליום זה
+          </button>
+        ) : (
+          <ul className="divide-y divide-ink-150">
+            {items.map((it) => (
+              <AgendaRow
+                key={it.id}
+                item={it}
+                now={now}
+                onClick={() => onItemClick(it)}
+              />
+            ))}
+          </ul>
         )}
-      >
-        {dateLong}
-      </span>
-      <span className="text-[10px] text-ink-500">· {count} פריטים</span>
-      <button
-        onClick={onCreate}
-        className="ms-auto text-[11px] text-ink-500 hover:text-primary-600"
-        type="button"
-      >
-        + אירוע
-      </button>
+      </div>
     </div>
   );
 }
@@ -156,27 +181,43 @@ function AgendaRow({
       <button
         onClick={onClick}
         className={cn(
-          "w-full px-4 py-2.5 flex items-center gap-3 text-start hover:bg-ink-50",
-          past && "opacity-70",
+          "w-full px-3 py-2 flex items-center gap-3 text-start hover:bg-ink-50",
+          past && "opacity-75",
           item.completed && "line-through opacity-55"
         )}
         type="button"
       >
+        {/* Time block — fixed width so titles align */}
+        <div className="w-20 shrink-0 text-[11px] text-ink-500 tabular-nums leading-tight">
+          {item.allDay ? (
+            <span className="font-medium">כל היום</span>
+          ) : (
+            <>
+              <div>{formatHour(item.start)}</div>
+              <div className="text-ink-400">{formatHour(item.end)}</div>
+            </>
+          )}
+        </div>
+
+        {/* Color accent bar */}
         <div
-          className="w-1.5 h-10 rounded-full shrink-0"
+          className="w-1 self-stretch rounded-full shrink-0"
           style={{ backgroundColor: overdue ? "#ef4444" : accent }}
         />
+
+        {/* Title + meta */}
         <div className="flex-1 min-w-0">
           <div className="text-[13px] font-medium text-ink-900 truncate">
-            
-            {item.title}
+            {item.title || <span className="italic text-ink-400">ללא כותרת</span>}
           </div>
-          <div className="text-[11px] text-ink-500 mt-0.5">
-            {item.allDay
-              ? "כל היום"
-              : `${formatHour(item.start)}–${formatHour(item.end)}`}
-            {overdue && <span className="ms-2 text-danger-600 font-medium">באיחור</span>}
-            {item.completed && <span className="ms-2 text-success-600 font-medium">בוצע</span>}
+          <div className="text-[10px] text-ink-500 mt-0.5 flex items-center gap-2">
+            <span>{isTask ? "משימה" : "אירוע"}</span>
+            {overdue && (
+              <span className="text-danger-600 font-medium">· באיחור</span>
+            )}
+            {item.completed && (
+              <span className="text-success-600 font-medium">· בוצע</span>
+            )}
           </div>
         </div>
       </button>

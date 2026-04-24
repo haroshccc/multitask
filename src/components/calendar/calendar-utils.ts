@@ -254,3 +254,18 @@ export function dayPercent(d: Date, dayStart: Date): number {
 export function durationPercent(ms: number): number {
   return (ms / DAY) * 100;
 }
+
+// Past-time semantics — a task is "overdue" if its scheduled end slipped past
+// without being completed. Events aren't "overdue" — they simply become past.
+export function isOverdueTask(item: CalendarItem, now: Date): boolean {
+  return item.kind === "task" && !item.completed && item.end.getTime() < now.getTime();
+}
+
+export function isPast(item: CalendarItem, now: Date): boolean {
+  return item.end.getTime() < now.getTime();
+}
+
+export function isPastDay(day: Date, now: Date): boolean {
+  const dayEnd = endOfDay(day);
+  return dayEnd.getTime() < now.getTime();
+}

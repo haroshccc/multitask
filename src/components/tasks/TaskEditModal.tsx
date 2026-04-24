@@ -17,9 +17,12 @@ import {
   FileText,
   MapPin,
   Pencil,
+  ExternalLink,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { useTask, useUpdateTask, useCompleteTask } from "@/lib/hooks/useTasks";
+import { useThought } from "@/lib/hooks/useThoughts";
+import { ThoughtEditModal } from "@/components/thoughts/ThoughtEditModal";
 import {
   useActiveTimer,
   useStartTimer,
@@ -401,6 +404,10 @@ export function TaskEditModal({ taskId, onClose, defaultTab = "overview" }: Task
                       </div>
                     </label>
                   )}
+
+                  {task?.source_thought_id && (
+                    <TaskSourceThoughtRow thoughtId={task.source_thought_id} />
+                  )}
                 </div>
               )}
 
@@ -463,6 +470,43 @@ export function TaskEditModal({ taskId, onClose, defaultTab = "overview" }: Task
         </motion.div>
       )}
     </AnimatePresence>
+  );
+}
+
+/**
+ * "מקור" row shown in the overview tab when the task was created from a
+ * thought. Clicking the link opens the thought's own edit modal in place
+ * so the user can see the original context without leaving the task.
+ */
+function TaskSourceThoughtRow({ thoughtId }: { thoughtId: string }) {
+  const { data: thought } = useThought(thoughtId);
+  const [open, setOpen] = useState(false);
+  if (!thought) return null;
+  const label =
+    thought.ai_generated_title ??
+    (thought.text_content ?? "מחשבה").slice(0, 80);
+  return (
+    <>
+      <div className="p-2 rounded-md border border-ink-200 bg-ink-50/40 flex items-center gap-2">
+        <Lightbulb className="w-4 h-4 text-accent-500 shrink-0" />
+        <div className="flex-1 min-w-0">
+          <div className="text-[11px] text-ink-500">נוצרה מהמחשבה</div>
+          <div className="text-sm text-ink-900 truncate">{label}</div>
+        </div>
+        <button
+          onClick={() => setOpen(true)}
+          className="inline-flex items-center gap-1 text-xs font-medium text-primary-600 hover:underline"
+          type="button"
+        >
+          <ExternalLink className="w-3.5 h-3.5" />
+          פתח
+        </button>
+      </div>
+      <ThoughtEditModal
+        thoughtId={open ? thoughtId : null}
+        onClose={() => setOpen(false)}
+      />
+    </>
   );
 }
 

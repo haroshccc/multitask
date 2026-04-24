@@ -8,6 +8,12 @@ import { useCallback, useSyncExternalStore } from "react";
  * Realtime invalidation. If we later want these synced across devices,
  * move the storage layer to `user_dashboard_layouts.widget_state` (which
  * is already scoped per user and per screen_key, so the schema is there).
+ *
+ * Implementation note: `useSyncExternalStore` REQUIRES the snapshot getter
+ * to return a stable reference between updates. Returning a fresh object
+ * literal every call sends React into an infinite "getSnapshot should be
+ * cached" loop and crashes the page. So we keep one shared `cachedSnapshot`
+ * and only swap it when something actually changes.
  */
 
 export interface CalendarPrefs {
@@ -27,7 +33,12 @@ const DEFAULT_PREFS: CalendarPrefs = {
   show24h: false,
 };
 
-function readPrefs(): CalendarPrefs {
+function clampHour(h: number, min: number, max: number): number {
+  if (!Number.isFinite(h)) return min;
+  return Math.max(min, Math.min(max, Math.round(h)));
+}
+
+function readFromStorage(): CalendarPrefs {
   if (typeof window === "undefined") return DEFAULT_PREFS;
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
@@ -43,55 +54,69 @@ function readPrefs(): CalendarPrefs {
   }
 }
 
-function clampHour(h: number, min: number, max: number): number {
-  if (!Number.isFinite(h)) return min;
-  return Math.max(min, Math.min(max, Math.round(h)));
+// Single shared snapshot — stable reference until `setSnapshot` swaps it.
+let cachedSnapshot: CalendarPrefs = readFromStorage();
+const listeners = new Set<() => void>();
+
+function getSnapshot(): CalendarPrefs {
+  return cachedSnapshot;
 }
 
-// Tiny event bus so multiple hook instances in the same document stay in sync.
-const listeners = new Set<() => void>();
-function emit() {
+function getServerSnapshot(): CalendarPrefs {
+  return DEFAULT_PREFS;
+}
+
+function setSnapshot(next: CalendarPrefs) {
+  cachedSnapshot = next;
   for (const l of listeners) l();
 }
+
 function subscribe(cb: () => void) {
   listeners.add(cb);
   const onStorage = (e: StorageEvent) => {
-    if (e.key === STORAGE_KEY) cb();
+    if (e.key !== STORAGE_KEY) return;
+    // Another tab wrote to storage — re-read and refresh listeners.
+    cachedSnapshot = readFromStorage();
+    for (const l of listeners) l();
   };
-  window.addEventListener("storage", onStorage);
+  if (typeof window !== "undefined") {
+    window.addEventListener("storage", onStorage);
+  }
   return () => {
     listeners.delete(cb);
-    window.removeEventListener("storage", onStorage);
+    if (typeof window !== "undefined") {
+      window.removeEventListener("storage", onStorage);
+    }
   };
 }
 
 export function useCalendarPrefs() {
-  const prefs = useSyncExternalStore(
-    subscribe,
-    readPrefs,
-    () => DEFAULT_PREFS
-  );
+  const prefs = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
-  const setPrefs = useCallback((next: Partial<CalendarPrefs>) => {
+  const setPrefs = useCallback((patch: Partial<CalendarPrefs>) => {
     const merged: CalendarPrefs = {
-      ...readPrefs(),
-      ...next,
+      ...cachedSnapshot,
+      ...patch,
     };
-    // Normalize: hourEnd must be > hourStart.
     merged.hourStart = clampHour(merged.hourStart, 0, 23);
     merged.hourEnd = clampHour(merged.hourEnd, merged.hourStart + 1, 24);
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
-    emit();
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+    }
+    setSnapshot(merged);
   }, []);
 
   const toggle24h = useCallback(() => {
-    setPrefs({ show24h: !readPrefs().show24h });
+    setPrefs({ show24h: !cachedSnapshot.show24h });
   }, [setPrefs]);
 
-  /** The effective range actually shown on the grid. */
-  const effectiveRange = prefs.show24h
-    ? { hourStart: 0, hourEnd: 24 }
-    : { hourStart: prefs.hourStart, hourEnd: prefs.hourEnd };
+  // Effective range derives from the snapshot — no new object unless we have
+  // to (`show24h` flip changes the values, otherwise return prefs).
+  const effectiveRange: { hourStart: number; hourEnd: number } = prefs.show24h
+    ? FULL_DAY_RANGE
+    : prefs;
 
   return { prefs, setPrefs, toggle24h, effectiveRange };
 }
+
+const FULL_DAY_RANGE = { hourStart: 0, hourEnd: 24 } as const;

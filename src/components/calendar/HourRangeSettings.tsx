@@ -48,7 +48,7 @@ export function HourRangeSettings() {
       </button>
 
       {open && (
-        <div className="absolute top-full end-0 mt-1 z-30 bg-white border border-ink-200 rounded-xl shadow-lift w-64 p-3 space-y-3">
+        <div className="absolute top-full start-0 mt-1 z-30 bg-white border border-ink-200 rounded-xl shadow-lift w-64 max-w-[calc(100vw-1rem)] p-3 space-y-3">
           <div>
             <label className="eyebrow block mb-1">שעות מוצגות כברירת מחדל</label>
             <p className="text-[11px] text-ink-500 mb-2">

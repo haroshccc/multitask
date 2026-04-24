@@ -137,9 +137,80 @@ export function GanttBar({
 
   const done = row.completed;
   const isEvent = row.kind === "event";
+  const isPhase = !!row.isPhase;
   const highlight =
     isCritical ||
     (row.kind === "task" && row.task ? row.task.urgency >= 4 : false);
+
+  // Phase rendering: the bar shows (1) a planned segment colored in a
+  // shade of the list, and (2) an overage segment (start=end of planned,
+  // end=latest child end) in danger-red when children slip past the
+  // planned end. SPEC §17 "option C" — planned + overage visualized.
+  if (isPhase && row.task) {
+    const plannedWidthDays = widthDays;
+    const plannedWidthPx = plannedWidthDays * pxPerDay;
+    const overageDays =
+      row.childrenEnd && row.childrenEnd > displayEnd
+        ? (row.childrenEnd.getTime() - displayEnd.getTime()) / DAY_MS
+        : 0;
+    const overagePx = overageDays * pxPerDay;
+    const accent = row.accentColor ?? "#6b6b80";
+    return (
+      <div
+        data-row-id={row.id}
+        className={cn(
+          "absolute top-1/2 -translate-y-1/2 h-7 rounded-md flex items-center text-[11px] font-bold text-white select-none cursor-grab shadow-soft overflow-hidden",
+          drag && "cursor-grabbing shadow-lift z-20",
+          done && "opacity-60"
+        )}
+        style={{
+          insetInlineStart: leftPx,
+          width: Math.max(plannedWidthPx + overagePx, 16),
+        }}
+        onPointerDown={beginDrag("move")}
+        onClick={handleClick}
+        title={`שלב: ${row.title}
+מתוכנן ${row.start.toLocaleDateString("he-IL")} → ${row.end.toLocaleDateString("he-IL")}${
+          overageDays > 0 && row.childrenEnd
+            ? `\nחריגה ${row.end.toLocaleDateString("he-IL")} → ${row.childrenEnd.toLocaleDateString("he-IL")}`
+            : ""
+        }`}
+      >
+        {/* Planned segment — shade of the list color */}
+        <div
+          className="h-full flex items-center px-2 shrink-0"
+          style={{
+            width: Math.max(plannedWidthPx, 16),
+            backgroundColor: accent,
+          }}
+        >
+          <span className="truncate pointer-events-none">
+            שלב · {row.title}
+          </span>
+        </div>
+        {/* Overage segment — danger-red bleed past the planned end */}
+        {overagePx > 0 && (
+          <div
+            className="h-full shrink-0 bg-[repeating-linear-gradient(45deg,rgba(239,68,68,0.85),rgba(239,68,68,0.85)_6px,rgba(239,68,68,0.6)_6px,rgba(239,68,68,0.6)_12px)]"
+            style={{ width: overagePx }}
+            title="חריגה מהתכנון של השלב"
+          />
+        )}
+        {/* Resize handle on the planned end boundary */}
+        <span
+          onPointerDown={beginDrag("resize")}
+          className="absolute inset-y-0 cursor-ew-resize flex items-center justify-center opacity-0 hover:opacity-100 bg-black/20 w-2"
+          style={{
+            // sits at the end of the planned segment, before any overage
+            insetInlineStart: plannedWidthPx - 8,
+          }}
+          aria-label="שנה משך מתוכנן"
+        >
+          <span className="w-0.5 h-3 bg-white/90 rounded-full" />
+        </span>
+      </div>
+    );
+  }
 
   return (
     <div

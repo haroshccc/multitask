@@ -372,6 +372,35 @@ export function TaskEditModal({ taskId, onClose, defaultTab = "overview" }: Task
                       />
                     </Field>
                   </div>
+
+                  {/* Phase toggle — only allowed for top-level tasks. A phase
+                      groups children under a single lifecycle band; planned
+                      vs. actual is shown as an overage stripe in Gantt /
+                      Calendar (SPEC §15.11 / §16 / §17). */}
+                  {task && task.parent_task_id === null && (
+                    <label className="flex items-start gap-2 cursor-pointer select-none p-2 rounded-md border border-ink-200 hover:bg-ink-50">
+                      <input
+                        type="checkbox"
+                        checked={!!task.is_phase}
+                        onChange={(e) => {
+                          updateTask.mutate({
+                            taskId: task.id,
+                            patch: { is_phase: e.target.checked },
+                          });
+                        }}
+                        className="w-4 h-4 mt-0.5"
+                      />
+                      <div>
+                        <div className="text-sm font-medium text-ink-900">
+                          הגדר כשלב
+                        </div>
+                        <div className="text-[11px] text-ink-500">
+                          שלב מקבץ תחתיו תתי-משימות ומופיע כרצועת-זמן רחבה
+                          ביומן וב-Gantt כשרואים את הרשימה לבדה.
+                        </div>
+                      </div>
+                    </label>
+                  )}
                 </div>
               )}
 

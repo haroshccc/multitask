@@ -1215,6 +1215,7 @@ export type Database = {
           google_event_ids: Json | null
           id: string
           is_event: boolean
+          is_phase: boolean
           location: string | null
           notes: string | null
           organization_id: string
@@ -1255,6 +1256,7 @@ export type Database = {
           google_event_ids?: Json | null
           id?: string
           is_event?: boolean
+          is_phase?: boolean
           location?: string | null
           notes?: string | null
           organization_id: string
@@ -1295,6 +1297,7 @@ export type Database = {
           google_event_ids?: Json | null
           id?: string
           is_event?: boolean
+          is_phase?: boolean
           location?: string | null
           notes?: string | null
           organization_id?: string

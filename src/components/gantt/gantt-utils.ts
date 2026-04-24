@@ -5,7 +5,8 @@
  * `estimated_hours`. Rows are ordered by the tasks' natural sort + nesting
  * under `parent_task_id`.
  */
-import type { EventRow, Task, TaskDependency } from "@/lib/types/domain";
+import type { EventRow, Task, TaskDependency, TaskList } from "@/lib/types/domain";
+import { generateShades, pickShade } from "@/lib/utils/color-shades";
 
 export type GanttZoom = "day" | "week" | "month" | "quarter";
 export type GanttLayer = "both" | "tasks" | "events";
@@ -28,6 +29,16 @@ export interface GanttRow {
   title: string;
   /** True when the underlying entity is in a "done" state (strike-through). */
   completed: boolean;
+  /** True when this row is a phase (task with is_phase=true). */
+  isPhase?: boolean;
+  /** For tasks under a phase: the phase's task id (for grouping in Gantt). */
+  phaseId?: string | null;
+  /** For phases: the inclusive end of actual children (may extend past
+   *  `end` = planned end → overage). */
+  childrenEnd?: Date | null;
+  /** Resolved color for this row — used to paint phase bands in a shade
+   *  of the list's color (hash-stable per phase id). */
+  accentColor?: string;
 }
 
 // Time helpers ---------------------------------------------------------------
@@ -125,10 +136,23 @@ export function calcTaskTiming(task: Task, fallbackStart: Date = new Date()):
 export function buildRows(
   tasks: Task[],
   events: EventRow[] = [],
-  layer: GanttLayer = "both"
+  layer: GanttLayer = "both",
+  lists: TaskList[] = []
 ): GanttRow[] {
   const rows: GanttRow[] = [];
   const fallback = new Date();
+
+  // Per-list shade palette — phases of a given list get different shades
+  // of the list's color. Computed once.
+  const palettesByList = new Map<string, string[]>();
+  for (const l of lists) {
+    palettesByList.set(l.id, generateShades(l.color ?? "#6b6b80", 5));
+  }
+  const accentForPhase = (t: Task): string => {
+    const palette = t.task_list_id ? palettesByList.get(t.task_list_id) : null;
+    if (!palette) return "#6b6b80";
+    return pickShade(t.id, palette);
+  };
 
   if (layer !== "events") {
     const byId = new Map<string, Task>();
@@ -143,10 +167,26 @@ export function buildRows(
       arr.sort((a, b) => a.sort_order - b.sort_order);
     }
 
-    const walk = (pid: string | null, depth: number) => {
+    // Helper: find the deepest descendant end time for a phase.
+    const findSubtreeEnd = (rootId: string): Date | null => {
+      let maxEnd: Date | null = null;
+      const stack = [rootId];
+      while (stack.length) {
+        const id = stack.pop()!;
+        for (const child of childrenOf.get(id) ?? []) {
+          const t = calcTaskTiming(child, fallback);
+          if (t && (!maxEnd || t.end > maxEnd)) maxEnd = t.end;
+          stack.push(child.id);
+        }
+      }
+      return maxEnd;
+    };
+
+    const walk = (pid: string | null, depth: number, phaseId: string | null) => {
       const kids = childrenOf.get(pid) ?? [];
       for (const t of kids) {
         const timing = calcTaskTiming(t, fallback);
+        const childPhaseId = t.is_phase ? t.id : phaseId;
         if (timing) {
           rows.push({
             id: `task:${t.id}`,
@@ -157,15 +197,19 @@ export function buildRows(
             end: timing.end,
             title: t.title,
             completed: !!t.completed_at,
+            isPhase: !!t.is_phase,
+            phaseId: t.is_phase ? null : phaseId,
+            childrenEnd: t.is_phase ? findSubtreeEnd(t.id) : null,
+            accentColor: t.is_phase ? accentForPhase(t) : undefined,
           });
         }
-        walk(t.id, depth + 1);
+        walk(t.id, depth + 1, childPhaseId);
       }
     };
     const orphans = tasks.filter(
       (t) => t.parent_task_id && !byId.has(t.parent_task_id)
     );
-    walk(null, 0);
+    walk(null, 0, null);
     for (const o of orphans) {
       const timing = calcTaskTiming(o, fallback);
       if (timing) {
@@ -178,6 +222,10 @@ export function buildRows(
           end: timing.end,
           title: o.title,
           completed: !!o.completed_at,
+          isPhase: !!o.is_phase,
+          phaseId: null,
+          childrenEnd: o.is_phase ? findSubtreeEnd(o.id) : null,
+          accentColor: o.is_phase ? accentForPhase(o) : undefined,
         });
       }
     }
@@ -223,10 +271,11 @@ export function computeCriticalPath(
 ): Set<string> {
   if (rows.length === 0) return new Set();
 
-  // Only task rows can be on the critical path (dependencies live on tasks).
+  // Only non-phase task rows participate in critical-path (phases are
+  // meta-bands that derive their end from children).
   const byId = new Map<string, GanttRow>();
   for (const r of rows) {
-    if (r.kind === "task" && r.task) byId.set(r.task.id, r);
+    if (r.kind === "task" && r.task && !r.isPhase) byId.set(r.task.id, r);
   }
 
   // Forward edges: predecessorId → [successorId...]
@@ -250,9 +299,9 @@ export function computeCriticalPath(
 
   const critical = new Set<string>();
 
-  // Seed: task rows whose end == projectEnd.
+  // Seed: non-phase task rows whose end == projectEnd.
   for (const r of rows) {
-    if (r.kind !== "task" || !r.task) continue;
+    if (r.kind !== "task" || !r.task || r.isPhase) continue;
     if (Math.abs(r.end.getTime() - projectEnd) < EPS) {
       critical.add(r.task.id);
     }

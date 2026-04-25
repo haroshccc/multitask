@@ -8,6 +8,8 @@ import {
   EyeOff,
   Check,
   Plus,
+  Rows3,
+  Columns3,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { ListIcon } from "@/components/tasks/list-icons";
@@ -16,6 +18,7 @@ import { ToggleButton, PopoverButton } from "@/components/layout/ChromeControls"
 export type ThoughtsViewMode = "all" | "unprocessed" | "unassigned";
 export type ThoughtsSortMode = "newest" | "oldest" | "unprocessed_first";
 export type ThoughtsDensity = "regular" | "compact";
+export type ThoughtsLayout = "feed" | "lists";
 
 interface UnifiedList {
   id: string;
@@ -49,6 +52,10 @@ interface ThoughtsChromeProps {
   // Archive
   archiveOpen: boolean;
   onToggleArchive: () => void;
+
+  // Layout (feed vs. lists/kanban)
+  layout: ThoughtsLayout;
+  onLayoutChange: (l: ThoughtsLayout) => void;
 
   className?: string;
 }
@@ -85,6 +92,8 @@ export function ThoughtsChrome({
   onDensityChange,
   archiveOpen,
   onToggleArchive,
+  layout,
+  onLayoutChange,
   className,
 }: ThoughtsChromeProps) {
   const visibleListCount = lists.length - hiddenListIds.size;
@@ -264,7 +273,52 @@ export function ThoughtsChrome({
         icon={<Archive className="w-3.5 h-3.5" />}
         label="ארכיון"
       />
+
+      {/* Layout toggle: feed (single column) vs. lists (kanban). */}
+      <div className="ms-auto inline-flex rounded-md border border-ink-200 overflow-hidden">
+        <LayoutTab
+          active={layout === "feed"}
+          onClick={() => onLayoutChange("feed")}
+          icon={<Rows3 className="w-3 h-3" />}
+          label="פיד"
+        />
+        <LayoutTab
+          active={layout === "lists"}
+          onClick={() => onLayoutChange("lists")}
+          icon={<Columns3 className="w-3 h-3" />}
+          label="רשימות"
+        />
+      </div>
     </div>
+  );
+}
+
+function LayoutTab({
+  active,
+  onClick,
+  icon,
+  label,
+}: {
+  active: boolean;
+  onClick: () => void;
+  icon: React.ReactNode;
+  label: string;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium border-e border-ink-200 last:border-e-0 transition-colors",
+        active
+          ? "bg-ink-900 text-white"
+          : "bg-white text-ink-700 hover:bg-ink-50"
+      )}
+      type="button"
+      title={label}
+    >
+      {icon}
+      <span className="hidden md:inline">{label}</span>
+    </button>
   );
 }
 

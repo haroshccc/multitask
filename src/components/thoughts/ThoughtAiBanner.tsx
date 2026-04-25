@@ -11,6 +11,8 @@ import {
   Check,
   ExternalLink,
   X,
+  Loader2,
+  Info,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import type { Thought } from "@/lib/types/domain";
@@ -20,33 +22,25 @@ import {
   useAssignThoughtToList,
   useRecordThoughtProcessing,
   useThoughtLists,
+  useTaskLists,
 } from "@/lib/hooks";
 import { useCreateEvent } from "@/lib/hooks/useEvents";
-import { mockProvider, type DynamicSuggestion } from "@/lib/ai/thought-suggestions";
+import {
+  mockProvider,
+  type AiPlan,
+  type SuggestedAction,
+} from "@/lib/ai/thought-suggestions";
 import { ListIcon } from "@/components/tasks/list-icons";
 import { SendMessagePopover } from "./SendMessagePopover";
 
-type FixedId =
-  | "task"
-  | "event"
-  | "project"
-  | "transcribe"
-  | "summarize"
-  | "assign"
-  | "message";
-
 interface AppliedRecord {
-  /** Suggestion id (fixed ids are the strings above; dynamic ids come from the provider). */
-  suggestionId: string;
   targetType: "task" | "event" | "project" | "recording" | "message";
   targetId: string;
-  /** Short human label for the "פתח" link ("ראה את המשימה שנוצרה"). */
   targetLabel: string;
 }
 
 interface ThoughtAiBannerProps {
   thought: Thought;
-  /** Called when the user explicitly closes the banner. */
   onClose: (action: "mark_processed" | "archive" | "leave") => void;
   onOpenTask?: (taskId: string) => void;
   onOpenEvent?: (eventId: string) => void;
@@ -54,11 +48,11 @@ interface ThoughtAiBannerProps {
 }
 
 /**
- * The inline accordion shown inside a thought card when the user clicks
- * "⚡ עבד". Hosts both fixed actions (always shown) and dynamic ones
- * surfaced by the AI adapter. Applying an action does NOT remove the other
- * actions — it just marks the applied one with a ✓ and an "פתח" link to
- * the created entity (SPEC §19 "שרשור הצעות").
+ * AI banner — accordion in a thought card. Loads a structured plan from
+ * the AI provider (mock for now, real Claude later) with pre-filled
+ * payloads. The user reviews each suggestion's details and approves; we
+ * never silently create entities. After approval, the chip stays visible
+ * with a ✓ and an "פתח" link to the new entity (SPEC §19 שרשור הצעות).
  */
 export function ThoughtAiBanner({
   thought,
@@ -67,32 +61,42 @@ export function ThoughtAiBanner({
   onOpenEvent,
   onOpenProject,
 }: ThoughtAiBannerProps) {
-  const [dynamic, setDynamic] = useState<DynamicSuggestion[]>([]);
-  const [applied, setApplied] = useState<Record<string, AppliedRecord>>({});
-  const [showSend, setShowSend] = useState(false);
+  const [plan, setPlan] = useState<AiPlan | null>(null);
+  const [planLoading, setPlanLoading] = useState(true);
+  const [applied, setApplied] = useState<Record<number, AppliedRecord>>({});
+  const [showSend, setShowSend] = useState<number | null>(null);
   const [showAssign, setShowAssign] = useState(false);
   const [showCloseMenu, setShowCloseMenu] = useState(false);
 
   const { data: thoughtLists = [] } = useThoughtLists();
+  const { data: taskLists = [] } = useTaskLists();
   const createTask = useCreateTask();
   const createEvent = useCreateEvent();
   const createProject = useCreateProject();
   const assignThoughtToList = useAssignThoughtToList();
   const recordProcessing = useRecordThoughtProcessing();
 
-  // Fetch dynamic suggestions once per thought.
+  // Build the AI plan once per thought + once task lists are loaded
+  // (matching against list names depends on them).
   useEffect(() => {
     let cancel = false;
-    mockProvider.getSuggestions(thought).then((s) => {
-      if (!cancel) setDynamic(s);
-    });
+    setPlanLoading(true);
+    mockProvider
+      .buildPlan(thought, { taskLists, thoughtLists })
+      .then((p) => {
+        if (!cancel) {
+          setPlan(p);
+          setPlanLoading(false);
+        }
+      });
     return () => {
       cancel = true;
     };
-  }, [thought.id]); // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [thought.id, taskLists.length, thoughtLists.length]);
 
   const record = (
-    suggestionId: string,
+    actionIndex: number,
     targetType: AppliedRecord["targetType"],
     targetId: string,
     targetLabel: string,
@@ -100,7 +104,7 @@ export function ThoughtAiBanner({
   ) => {
     setApplied((prev) => ({
       ...prev,
-      [suggestionId]: { suggestionId, targetType, targetId, targetLabel },
+      [actionIndex]: { targetType, targetId, targetLabel },
     }));
     recordProcessing.mutate({
       thought_id: thought.id,
@@ -110,84 +114,98 @@ export function ThoughtAiBanner({
     });
   };
 
-  const aiTitle =
-    thought.ai_generated_title ??
-    (thought.text_content ?? "מחשבה").split(/\r?\n/)[0].slice(0, 60);
+  const apply = async (actionIndex: number, action: SuggestedAction) => {
+    if (applied[actionIndex]) return;
 
-  const handleCreateTask = async () => {
-    if (applied["task"]) return onOpenTask?.(applied["task"].targetId);
-    const task = await createTask.mutateAsync({
-      title: aiTitle,
-      description: thought.text_content ?? null,
-      task_list_id: null,
-      parent_task_id: null,
-      urgency: 3,
-      status: "todo",
-      source_thought_id: thought.id,
-    });
-    record("task", "task", task.id, task.title);
-    onOpenTask?.(task.id);
+    if (action.kind === "create_task") {
+      const t = await createTask.mutateAsync({
+        title: action.payload.title,
+        description: action.payload.description ?? null,
+        task_list_id: action.payload.task_list_id ?? null,
+        parent_task_id: null,
+        urgency: action.payload.urgency ?? 3,
+        status: "todo",
+        scheduled_at: action.payload.due_at ?? null,
+        source_thought_id: thought.id,
+      });
+      record(actionIndex, "task", t.id, t.title);
+      onOpenTask?.(t.id);
+      return;
+    }
+
+    if (action.kind === "create_event") {
+      const e = await createEvent.mutateAsync({
+        title: action.payload.title,
+        description: action.payload.description ?? null,
+        starts_at: action.payload.starts_at,
+        ends_at: action.payload.ends_at,
+        all_day: action.payload.all_day,
+        source_thought_id: thought.id,
+      });
+      record(actionIndex, "event", e.id, e.title);
+      onOpenEvent?.(e.id);
+      return;
+    }
+
+    if (action.kind === "create_project") {
+      const p = await createProject.mutateAsync({
+        name: action.payload.name,
+        description: action.payload.description ?? null,
+      });
+      record(actionIndex, "project", p.id, p.name);
+      onOpenProject?.(p.id);
+      return;
+    }
+
+    if (action.kind === "assign_list") {
+      await assignThoughtToList.mutateAsync({
+        thoughtId: thought.id,
+        listId: action.payload.list_id,
+      });
+      record(
+        actionIndex,
+        "task",
+        action.payload.list_id,
+        `רשימה: ${action.payload.list_name}`,
+        false
+      );
+      return;
+    }
+
+    if (action.kind === "send_message") {
+      setShowSend(actionIndex);
+      return;
+    }
   };
 
-  const handleCreateEvent = async () => {
-    if (applied["event"]) return onOpenEvent?.(applied["event"].targetId);
-    const now = new Date();
-    const start = new Date(now);
-    start.setMinutes(0, 0, 0);
-    start.setHours(start.getHours() + 1);
-    const end = new Date(start.getTime() + 60 * 60_000);
-    const event = await createEvent.mutateAsync({
-      title: aiTitle,
-      description: thought.text_content ?? null,
-      starts_at: start.toISOString(),
-      ends_at: end.toISOString(),
-      all_day: false,
-      source_thought_id: thought.id,
-    });
-    record("event", "event", event.id, event.title);
-    onOpenEvent?.(event.id);
-  };
-
-  const handleCreateProject = async () => {
-    if (applied["project"]) return onOpenProject?.(applied["project"].targetId);
-    // `projects` table doesn't yet have `source_thought_id` (deferred to a
-    // future phase); the provenance is still captured in `thought_processings`.
-    const project = await createProject.mutateAsync({
-      name: aiTitle,
-      description: thought.text_content ?? null,
-    });
-    record("project", "project", project.id, project.name);
-    onOpenProject?.(project.id);
-  };
-
-  const handleAssign = async (listId: string, listName: string) => {
-    await assignThoughtToList.mutateAsync({ thoughtId: thought.id, listId });
-    // Assignment is not a "creation" in the processings sense — we still log
-    // it so the trail on the thought is complete.
-    record(`assign:${listId}`, "task", listId, `רשימה: ${listName}`, false);
-    setShowAssign(false);
-  };
-
-  const handleSent = (channel: "whatsapp" | "email") => {
-    // We don't have a concrete entity id — use the thought.id as a placeholder
-    // for the trail; target_type='message' tells the audit what it is.
+  const handleSent = (actionIndex: number, channel: "whatsapp" | "email") => {
     record(
-      `message:${channel}`,
+      actionIndex,
       "message",
       thought.id,
       channel === "whatsapp" ? "WhatsApp" : "מייל"
     );
-    setShowSend(false);
+    setShowSend(null);
   };
 
-  const hasAudio = !!thought.recording_id;
+  const handleAssignToThoughtList = async (listId: string, listName: string) => {
+    await assignThoughtToList.mutateAsync({ thoughtId: thought.id, listId });
+    setShowAssign(false);
+    // Use a synthetic index that won't collide with `plan.actions` indices.
+    const syntheticIdx = -1 - Object.keys(applied).length;
+    record(syntheticIdx, "task", listId, `רשימת מחשבות: ${listName}`, false);
+  };
 
   return (
     <div className="border border-ink-200 rounded-xl bg-ink-50/60 p-3 space-y-3">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-ink-700">
           <Zap className="w-3.5 h-3.5 text-accent-500" />
           עיבוד AI
+          {planLoading && (
+            <Loader2 className="w-3 h-3 animate-spin text-ink-500" />
+          )}
         </div>
         <div className="relative">
           <button
@@ -229,242 +247,314 @@ export function ThoughtAiBanner({
         </div>
       </div>
 
-      {/* Fixed suggestions */}
-      <div className="flex flex-wrap gap-1.5">
-        <FixedChip
-          id="task"
-          icon={<CheckSquare className="w-3.5 h-3.5" />}
-          label="→ משימה"
-          applied={applied["task"]}
-          onApply={handleCreateTask}
-          onOpen={() =>
-            applied["task"] && onOpenTask?.(applied["task"].targetId)
-          }
-        />
-        <FixedChip
-          id="event"
-          icon={<Calendar className="w-3.5 h-3.5" />}
-          label="→ אירוע"
-          applied={applied["event"]}
-          onApply={handleCreateEvent}
-          onOpen={() =>
-            applied["event"] && onOpenEvent?.(applied["event"].targetId)
-          }
-        />
-        <FixedChip
-          id="project"
-          icon={<FolderKanban className="w-3.5 h-3.5" />}
-          label="→ פרויקט"
-          applied={applied["project"]}
-          onApply={handleCreateProject}
-          onOpen={() =>
-            applied["project"] && onOpenProject?.(applied["project"].targetId)
-          }
-        />
-        <FixedChip
-          id="transcribe"
-          icon={<Mic className="w-3.5 h-3.5" />}
-          label="תמלל"
-          applied={applied["transcribe"]}
-          disabled={!hasAudio}
-          tooltip={hasAudio ? undefined : "זמין רק למחשבות אודיו"}
-          onApply={() => {
-            /* Transcription wiring lives in the recordings phase. */
-            record("transcribe", "recording", thought.recording_id!, "תמלול");
-          }}
-          onOpen={() => {
-            /* No modal yet — dashboard link eventually. */
-          }}
-        />
-        <FixedChip
-          id="summarize"
-          icon={<FileText className="w-3.5 h-3.5" />}
-          label="סכם"
-          applied={applied["summarize"]}
-          onApply={() => {
-            /* Summarization also rides on the real AI adapter. Mock: record it. */
-            record("summarize", "task", thought.id, "סיכום");
-          }}
-          onOpen={() => {}}
-        />
-        <FixedChip
-          id="assign"
-          icon={<Tag className="w-3.5 h-3.5" />}
-          label="שייך"
-          onApply={() => setShowAssign((v) => !v)}
-          applied={undefined}
-          onOpen={() => {}}
-        />
-        <FixedChip
-          id="message"
-          icon={<MessageCircle className="w-3.5 h-3.5" />}
-          label="שלח הודעה"
-          applied={applied["message:whatsapp"] ?? applied["message:email"]}
-          onApply={() => setShowSend((v) => !v)}
-          onOpen={() => setShowSend(true)}
-        />
-      </div>
-
-      {/* Assign popover (inline) */}
-      {showAssign && (
-        <div className="border border-ink-200 rounded-lg bg-white p-2 max-h-40 overflow-y-auto">
-          <div className="text-[10px] font-semibold text-ink-400 uppercase tracking-wider px-1 pb-1">
-            בחר רשימה לשיוך
-          </div>
-          {thoughtLists.length === 0 ? (
-            <p className="text-xs text-ink-500 px-2 py-2">
-              עוד אין רשימות מחשבות.
-            </p>
-          ) : (
-            thoughtLists.map((l) => (
-              <button
-                key={l.id}
-                onClick={() => handleAssign(l.id, l.name)}
-                className="w-full flex items-center gap-2 px-2 py-1.5 text-sm text-start hover:bg-ink-50 rounded"
-                type="button"
-              >
-                <span
-                  className="w-2.5 h-2.5 rounded-sm"
-                  style={{ backgroundColor: l.color ?? "#6b6b80" }}
-                />
-                {l.emoji && <ListIcon emoji={l.emoji} className="w-3.5 h-3.5" />}
-                <span>{l.name}</span>
-              </button>
-            ))
-          )}
+      {/* Plan summary line */}
+      {plan && plan.actions.length === 0 && !planLoading && (
+        <div className="text-xs text-ink-500 inline-flex items-center gap-1">
+          <Info className="w-3 h-3" />
+          לא זוהתה פעולה ספציפית בטקסט. תוכלי להפעיל פעולה ידנית למטה.
         </div>
       )}
 
-      {/* Send-message popover */}
-      {showSend && (
-        <SendMessagePopover
-          suggestedBody={thought.text_content ?? ""}
-          onClose={() => setShowSend(false)}
-          onSent={handleSent}
-        />
-      )}
-
-      {/* Dynamic suggestions */}
-      {dynamic.length > 0 && (
-        <div className="space-y-1.5 border-t border-ink-200 pt-2">
-          <div className="text-[10px] font-semibold text-ink-400 uppercase tracking-wider">
-            הצעות מה-AI
-          </div>
-          {dynamic.map((s) => {
-            const aId = applied[s.id];
+      {/* AI-driven suggestions with previews */}
+      {plan && (
+        <div className="space-y-2">
+          {plan.actions.map((action, idx) => {
+            const a = applied[idx];
             return (
-              <div
-                key={s.id}
-                className="flex items-center gap-2 text-xs text-ink-700"
-              >
-                {aId ? (
-                  <>
-                    <Check className="w-3.5 h-3.5 text-success-500 shrink-0" />
-                    <span className="line-through text-ink-500 flex-1">
-                      {s.label}
-                    </span>
-                    <span className="text-primary-600">בוצע</span>
-                  </>
-                ) : (
-                  <>
-                    <span className="w-3.5 h-3.5 rounded-full border border-ink-300 shrink-0" />
-                    <span className="flex-1">{s.label}</span>
-                    <button
-                      onClick={() => handleDynamic(s)}
-                      className="text-primary-600 hover:underline"
-                      type="button"
-                    >
-                      החל
-                    </button>
-                  </>
-                )}
-              </div>
+              <SuggestionRow
+                key={idx}
+                action={action}
+                applied={a}
+                onApply={() => apply(idx, action)}
+                onOpen={() => {
+                  if (!a) return;
+                  if (a.targetType === "task") onOpenTask?.(a.targetId);
+                  else if (a.targetType === "event") onOpenEvent?.(a.targetId);
+                  else if (a.targetType === "project")
+                    onOpenProject?.(a.targetId);
+                }}
+                showSendInline={showSend === idx}
+                onSentInline={(ch) => handleSent(idx, ch)}
+                onCloseSendInline={() => setShowSend(null)}
+                thoughtText={thought.text_content ?? ""}
+              />
             );
           })}
         </div>
       )}
+
+      {/* Always-available manual fallbacks (assign-to-thought-list, summarize, transcribe) */}
+      <div className="border-t border-ink-200 pt-2 space-y-2">
+        <div className="text-[10px] font-semibold text-ink-400 uppercase tracking-wider">
+          פעולות נוספות
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          <button
+            onClick={() => setShowAssign((v) => !v)}
+            className="inline-flex items-center gap-1 rounded-full border border-ink-300 bg-white text-ink-700 text-[11px] font-medium px-2 py-1 hover:bg-ink-100"
+            type="button"
+          >
+            <Tag className="w-3.5 h-3.5" />
+            שייך לרשימת מחשבות
+          </button>
+          {thought.recording_id && (
+            <button
+              onClick={() =>
+                record(-1000, "recording", thought.recording_id!, "תמלול")
+              }
+              className="inline-flex items-center gap-1 rounded-full border border-ink-300 bg-white text-ink-700 text-[11px] font-medium px-2 py-1 hover:bg-ink-100"
+              type="button"
+            >
+              <Mic className="w-3.5 h-3.5" />
+              תמלל
+            </button>
+          )}
+          <button
+            onClick={() => record(-2000, "task", thought.id, "סיכום")}
+            className="inline-flex items-center gap-1 rounded-full border border-ink-300 bg-white text-ink-700 text-[11px] font-medium px-2 py-1 hover:bg-ink-100"
+            type="button"
+          >
+            <FileText className="w-3.5 h-3.5" />
+            סכם
+          </button>
+        </div>
+
+        {showAssign && (
+          <div className="border border-ink-200 rounded-lg bg-white p-2 max-h-40 overflow-y-auto">
+            {thoughtLists.length === 0 ? (
+              <p className="text-xs text-ink-500 px-2 py-2">
+                עוד אין רשימות מחשבות.
+              </p>
+            ) : (
+              thoughtLists.map((l) => (
+                <button
+                  key={l.id}
+                  onClick={() => handleAssignToThoughtList(l.id, l.name)}
+                  className="w-full flex items-center gap-2 px-2 py-1.5 text-sm text-start hover:bg-ink-50 rounded"
+                  type="button"
+                >
+                  <span
+                    className="w-2.5 h-2.5 rounded-sm"
+                    style={{ backgroundColor: l.color ?? "#6b6b80" }}
+                  />
+                  {l.emoji && <ListIcon emoji={l.emoji} className="w-3.5 h-3.5" />}
+                  <span>{l.name}</span>
+                </button>
+              ))
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
-
-  // Handler for dynamic suggestions: each `kind` has a sensible default
-  // action, delegating to the same handlers as the fixed suggestions.
-  function handleDynamic(s: DynamicSuggestion) {
-    switch (s.kind) {
-      case "create_event":
-        return handleCreateEvent();
-      case "split_tasks":
-      case "link_project":
-      case "assign_list":
-      case "create_contact":
-      default:
-        // For now: record that the user engaged with the suggestion even if
-        // the downstream flow is another phase. Keeps the audit trail
-        // truthful.
-        return record(s.id, "task", thought.id, s.label, true);
-    }
-  }
 }
 
-// Fixed chip --------------------------------------------------------------
+// -----------------------------------------------------------------------------
+// SuggestionRow — preview + apply for one AI action
+// -----------------------------------------------------------------------------
 
-interface FixedChipProps {
-  id: FixedId;
-  icon: React.ReactNode;
-  label: string;
-  applied?: AppliedRecord;
-  onApply: () => void;
-  onOpen: () => void;
-  disabled?: boolean;
-  tooltip?: string;
-}
-
-function FixedChip({
-  icon,
-  label,
+function SuggestionRow({
+  action,
   applied,
   onApply,
   onOpen,
-  disabled,
-  tooltip,
-}: FixedChipProps) {
-  if (applied) {
+  showSendInline,
+  onSentInline,
+  onCloseSendInline,
+  thoughtText,
+}: {
+  action: SuggestedAction;
+  applied?: AppliedRecord;
+  onApply: () => void;
+  onOpen: () => void;
+  showSendInline: boolean;
+  onSentInline: (ch: "whatsapp" | "email") => void;
+  onCloseSendInline: () => void;
+  thoughtText: string;
+}) {
+  const meta = ACTION_META[action.kind];
+  const Icon = meta.icon;
+
+  return (
+    <div className="border border-ink-200 rounded-lg bg-white">
+      <div className="flex items-start gap-2 p-2">
+        <div className="mt-0.5">
+          <Icon className={cn("w-4 h-4", meta.iconColor)} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-xs font-semibold text-ink-900 mb-0.5">
+            {meta.label}
+          </div>
+          <ActionPreview action={action} />
+          <div className="text-[10px] text-ink-500 mt-1 italic">
+            {action.reasoning}
+          </div>
+        </div>
+        <div className="shrink-0">
+          {applied ? (
+            <button
+              onClick={onOpen}
+              className="inline-flex items-center gap-1 text-[11px] font-medium text-success-700 bg-success-500/10 border border-success-500 rounded-full px-2 py-1"
+              type="button"
+            >
+              <Check className="w-3 h-3" />
+              <ExternalLink className="w-3 h-3" />
+              פתח
+            </button>
+          ) : (
+            <button
+              onClick={onApply}
+              className="inline-flex items-center gap-1 text-[11px] font-medium text-white bg-primary-500 hover:bg-primary-600 rounded-full px-2.5 py-1"
+              type="button"
+            >
+              צור
+            </button>
+          )}
+        </div>
+      </div>
+
+      {showSendInline && action.kind === "send_message" && (
+        <div className="px-2 pb-2">
+          <SendMessagePopover
+            suggestedRecipient={action.payload.recipient}
+            suggestedBody={action.payload.body || thoughtText}
+            onSent={onSentInline}
+            onClose={onCloseSendInline}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ActionPreview({ action }: { action: SuggestedAction }) {
+  if (action.kind === "create_task") {
+    const p = action.payload;
     return (
-      <div
-        className="inline-flex items-center gap-1 rounded-full border border-success-500 bg-success-500/10 text-success-700 text-[11px] font-medium px-2 py-1"
-        title={applied.targetLabel}
-      >
-        <Check className="w-3 h-3" />
-        {label}
-        <button
-          onClick={onOpen}
-          className="inline-flex items-center gap-0.5 ms-1 text-primary-600 hover:underline"
-          type="button"
-        >
-          <ExternalLink className="w-3 h-3" />
-          פתח
-        </button>
+      <div className="text-xs text-ink-700 space-y-0.5">
+        <div>
+          <span className="text-ink-500">כותרת:</span>{" "}
+          <span className="font-medium">{p.title}</span>
+        </div>
+        {p.task_list_name && (
+          <div>
+            <span className="text-ink-500">רשימה:</span> {p.task_list_name}
+          </div>
+        )}
+        {p.due_at && (
+          <div>
+            <span className="text-ink-500">תאריך:</span>{" "}
+            {new Date(p.due_at).toLocaleDateString("he-IL", {
+              weekday: "short",
+              day: "numeric",
+              month: "short",
+            })}
+          </div>
+        )}
       </div>
     );
   }
 
-  return (
-    <button
-      onClick={onApply}
-      disabled={disabled}
-      title={tooltip ?? label}
-      type="button"
-      className={cn(
-        "inline-flex items-center gap-1 rounded-full border text-[11px] font-medium px-2 py-1 transition-colors",
-        disabled
-          ? "border-ink-200 text-ink-300 cursor-not-allowed"
-          : "border-ink-300 bg-white text-ink-700 hover:bg-ink-100"
-      )}
-    >
-      {icon}
-      {label}
-    </button>
-  );
+  if (action.kind === "create_event") {
+    const p = action.payload;
+    const start = new Date(p.starts_at);
+    return (
+      <div className="text-xs text-ink-700 space-y-0.5">
+        <div>
+          <span className="text-ink-500">כותרת:</span>{" "}
+          <span className="font-medium">{p.title}</span>
+        </div>
+        <div>
+          <span className="text-ink-500">תאריך:</span>{" "}
+          {start.toLocaleDateString("he-IL", {
+            weekday: "long",
+            day: "numeric",
+            month: "long",
+          })}
+          {!p.all_day && (
+            <span className="ms-1">
+              ב-
+              {start.toLocaleTimeString("he-IL", {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </span>
+          )}
+          {p.all_day && <span className="ms-1 text-ink-500">(כל היום)</span>}
+        </div>
+      </div>
+    );
+  }
+
+  if (action.kind === "create_project") {
+    return (
+      <div className="text-xs text-ink-700">
+        <span className="text-ink-500">שם:</span>{" "}
+        <span className="font-medium">{action.payload.name}</span>
+      </div>
+    );
+  }
+
+  if (action.kind === "assign_list") {
+    return (
+      <div className="text-xs text-ink-700">
+        <span className="text-ink-500">לרשימה:</span>{" "}
+        <span className="font-medium">{action.payload.list_name}</span>
+      </div>
+    );
+  }
+
+  if (action.kind === "send_message") {
+    const p = action.payload;
+    return (
+      <div className="text-xs text-ink-700 space-y-0.5">
+        {p.recipient && (
+          <div>
+            <span className="text-ink-500">נמען:</span> {p.recipient}
+          </div>
+        )}
+        <div className="truncate">
+          <span className="text-ink-500">תוכן:</span> {p.body}
+        </div>
+      </div>
+    );
+  }
+
+  return null;
 }
+
+// -----------------------------------------------------------------------------
+
+const ACTION_META: Record<
+  SuggestedAction["kind"],
+  { label: string; icon: typeof CheckSquare; iconColor: string }
+> = {
+  create_task: {
+    label: "צור משימה",
+    icon: CheckSquare,
+    iconColor: "text-primary-600",
+  },
+  create_event: {
+    label: "צור אירוע",
+    icon: Calendar,
+    iconColor: "text-accent-600",
+  },
+  create_project: {
+    label: "צור פרויקט",
+    icon: FolderKanban,
+    iconColor: "text-primary-600",
+  },
+  assign_list: {
+    label: "שייך לרשימה",
+    icon: Tag,
+    iconColor: "text-ink-700",
+  },
+  send_message: {
+    label: "שלח הודעה",
+    icon: MessageCircle,
+    iconColor: "text-ink-700",
+  },
+};
 
 function MenuItem({
   onClick,

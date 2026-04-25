@@ -16,6 +16,7 @@ import {
 } from "./calendar-utils";
 import { useCalendarPrefs } from "@/lib/hooks/useCalendarPrefs";
 import { DayNoteSlot } from "./DayNoteSlot";
+import { TaskCheckButton } from "./TaskCheckButton";
 
 interface CalendarDayViewProps {
   date: Date;
@@ -65,6 +66,14 @@ export function CalendarDayView({
       if (!clipped) continue;
       timed.push(clipped);
     }
+    // Sort: completed all-day tasks slide to the end. Everything else
+    // keeps its natural order. (Timed tasks aren't here — they stay
+    // pinned to their hour in the grid below.)
+    allDay.sort((a, b) => {
+      const aDone = a.kind === "task" && a.completed ? 1 : 0;
+      const bDone = b.kind === "task" && b.completed ? 1 : 0;
+      return aDone - bDone;
+    });
     return { allDay, timed };
   }, [items, dayStart, dayEnd]);
 
@@ -361,14 +370,24 @@ export function CalendarBlock({
             {formatHour(item.start, tz)}
           </div>
         )}
-        <div
-          className={cn(
-            "font-medium leading-tight truncate",
-            completed && "line-through"
+        <div className="flex items-start gap-1">
+          {isTask && (
+            <TaskCheckButton
+              taskId={(item.source as { id: string }).id}
+              completed={completed}
+              accent={accent}
+              size="sm"
+              className="mt-0.5"
+            />
           )}
-        >
-          
-          {item.title}
+          <span
+            className={cn(
+              "font-medium leading-tight truncate flex-1 min-w-0",
+              completed && "line-through"
+            )}
+          >
+            {item.title}
+          </span>
         </div>
       </div>
 
@@ -423,7 +442,7 @@ function AllDayChip({
       onClick={onClick}
       className={cn(
         "inline-flex items-center gap-1 rounded-sm px-2 py-0.5 text-xs font-medium border bg-white",
-        item.completed && "line-through opacity-60"
+        item.completed && "opacity-60"
       )}
       style={{
         borderColor: overdue ? "#ef4444" : accent,
@@ -433,7 +452,20 @@ function AllDayChip({
       title={item.title}
       type="button"
     >
-      <span className="truncate max-w-[140px]">{item.title}</span>
+      <TaskCheckButton
+        taskId={(item.source as { id: string }).id}
+        completed={item.completed}
+        accent={overdue ? "#ef4444" : accent}
+        size="sm"
+      />
+      <span
+        className={cn(
+          "truncate max-w-[140px]",
+          item.completed && "line-through"
+        )}
+      >
+        {item.title}
+      </span>
     </button>
   );
 }

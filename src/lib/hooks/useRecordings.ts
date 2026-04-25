@@ -90,20 +90,22 @@ export function useUpdateRecording() {
   });
 }
 
-export function useUploadRecordingBlob() {
+/** Legacy Supabase-Storage upload mutation. R2 uploads use `useFileUpload`. */
+export function useUploadRecordingBlobLegacy() {
   return useMutation({
-    mutationFn: ({ storagePath, blob }: { storagePath: string; blob: Blob }) =>
-      service.uploadRecordingBlob(storagePath, blob),
+    mutationFn: ({ storageKey, blob }: { storageKey: string; blob: Blob }) =>
+      service.uploadRecordingBlobLegacy(storageKey, blob),
   });
 }
 
-export function useRecordingAudioUrl(
-  storagePath: string | null | undefined
+/** Legacy Supabase-Storage signed URL. R2 rows use `presignDownload`. */
+export function useRecordingAudioUrlLegacy(
+  storageKey: string | null | undefined
 ) {
   return useQuery({
-    queryKey: ["recording-audio-url", storagePath],
-    queryFn: () => service.getRecordingAudioUrl(storagePath!),
-    enabled: !!storagePath,
+    queryKey: ["recording-audio-url-legacy", storageKey],
+    queryFn: () => service.getRecordingAudioUrlLegacy(storageKey!),
+    enabled: !!storageKey,
     staleTime: 50 * 60 * 1000, // slightly under the default 60m signed-url lifetime
   });
 }

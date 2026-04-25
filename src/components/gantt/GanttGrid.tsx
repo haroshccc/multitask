@@ -26,6 +26,10 @@ interface GanttGridProps {
     row: GanttRow,
     patch: { scheduled_at: string; duration_minutes: number }
   ) => void;
+  /** Click on empty timeline space → open the create picker pinned to
+   *  the date under the click. The y-axis is rows so we don't bother
+   *  with hour-level resolution; defaults to 09:00. */
+  onCreateAt?: (start: Date) => void;
   /** Caller controls whether the task-name sidebar shows (collapsed mode
    *  gives the timeline full width). */
   sidebarCollapsed?: boolean;
@@ -41,6 +45,7 @@ export function GanttGrid({
   criticalSet,
   onRowClick,
   onBarChange,
+  onCreateAt,
   sidebarCollapsed,
   onToggleSidebar,
 }: GanttGridProps) {
@@ -213,10 +218,27 @@ export function GanttGrid({
               </div>
             </div>
 
-            {/* Body: grid background + bars + arrows */}
+            {/* Body: grid background + bars + arrows. Clicking an empty
+                area → open the create picker pinned to that day's 09:00. */}
             <div
-              className="relative"
+              className={cn(
+                "relative",
+                onCreateAt && "cursor-pointer"
+              )}
               style={{ height: timelineHeight, width: timelineWidth }}
+              onClick={(e) => {
+                if (!onCreateAt) return;
+                if (e.target !== e.currentTarget) return;
+                const rect = e.currentTarget.getBoundingClientRect();
+                const isRtl =
+                  typeof document !== "undefined" &&
+                  document.documentElement.dir === "rtl";
+                const x = isRtl ? rect.right - e.clientX : e.clientX - rect.left;
+                const days = x / pxPerDay;
+                const start = new Date(windowStart.getTime() + days * DAY_MS);
+                start.setHours(9, 0, 0, 0);
+                onCreateAt(start);
+              }}
             >
               {/* Vertical tick lines */}
               {tickGroups.flatMap((g) =>

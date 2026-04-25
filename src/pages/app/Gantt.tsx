@@ -149,6 +149,18 @@ export function Gantt() {
 
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
+  /** Same picker pattern as Calendar: clicking an empty timeline area
+   *  opens the create modal with an event/task toggle at the top. */
+  const [creating, setCreating] = useState<{
+    start: Date;
+    end: Date;
+    kind: "event" | "task";
+  } | null>(null);
+
+  const handleGanttCreateAt = (start: Date) => {
+    const end = new Date(start.getTime() + 60 * 60_000);
+    setCreating({ start, end, kind: "event" });
+  };
 
   const handleRowClick = (row: GanttRow) => {
     if (row.kind === "event" && row.event) {
@@ -244,6 +256,7 @@ export function Gantt() {
           criticalSet={criticalSet}
           onRowClick={handleRowClick}
           onBarChange={handleBarChange}
+          onCreateAt={handleGanttCreateAt}
           sidebarCollapsed={sidebarCollapsed}
           onToggleSidebar={() => setSidebarCollapsed((v) => !v)}
         />
@@ -259,6 +272,86 @@ export function Gantt() {
         eventId={editingEventId}
         onClose={() => setEditingEventId(null)}
       />
+
+      {/* Create-flow picker — mirrors Calendar.tsx. The toggle inside
+          the modals' top slot lets the user flip between event and task
+          without losing the time/date context. */}
+      {creating?.kind === "event" && (
+        <EventEditModal
+          open
+          eventId={null}
+          initialStart={creating.start}
+          initialEnd={creating.end}
+          onClose={() => setCreating(null)}
+          topSlot={
+            <GanttCreateKindToggle
+              kind="event"
+              onChange={(k) =>
+                setCreating((c) => (c ? { ...c, kind: k } : c))
+              }
+            />
+          }
+        />
+      )}
+      {creating?.kind === "task" && (
+        <TaskEditModal
+          taskId={null}
+          onClose={() => setCreating(null)}
+          createDraft={{
+            title: "",
+            scheduled_at: creating.start.toISOString(),
+            duration_minutes: Math.round(
+              (creating.end.getTime() - creating.start.getTime()) / 60000
+            ),
+          }}
+          defaultTab="schedule"
+          topSlot={
+            <GanttCreateKindToggle
+              kind="task"
+              onChange={(k) =>
+                setCreating((c) => (c ? { ...c, kind: k } : c))
+              }
+            />
+          }
+        />
+      )}
     </ScreenScaffold>
+  );
+}
+
+function GanttCreateKindToggle({
+  kind,
+  onChange,
+}: {
+  kind: "event" | "task";
+  onChange: (k: "event" | "task") => void;
+}) {
+  return (
+    <div className="inline-flex rounded-md border border-ink-200 overflow-hidden text-xs mt-1">
+      <button
+        onClick={() => onChange("event")}
+        className={
+          "px-3 py-1 font-medium border-e border-ink-200 transition-colors " +
+          (kind === "event"
+            ? "bg-ink-900 text-white"
+            : "bg-white text-ink-700 hover:bg-ink-50")
+        }
+        type="button"
+      >
+        אירוע
+      </button>
+      <button
+        onClick={() => onChange("task")}
+        className={
+          "px-3 py-1 font-medium transition-colors " +
+          (kind === "task"
+            ? "bg-ink-900 text-white"
+            : "bg-white text-ink-700 hover:bg-ink-50")
+        }
+        type="button"
+      >
+        משימה
+      </button>
+    </div>
   );
 }

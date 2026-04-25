@@ -52,23 +52,28 @@
 
 ## 3. סדר הבנייה
 
-1. Design tokens מ־`design-language.html`
-2. Types משותפים
-3. Supabase schema + RLS + Realtime + seeds
-4. Services + React Query hooks
-5. Layout בסיסי (Topbar + Sidebar + Routing)
-6. **DashboardGrid infrastructure** (רוחבי)
-7. **FilterBar infrastructure** (רוחבי)
-8. **Lists Banner** (רוחבי למשימות/יומן/Gantt)
-9. מסך משימות
-10. מסך יומן
-11. מסך Gantt
-12. מסך הקלטות
-13. מסך מחשבות
-14. מסך פרויקטים / תמחור
-15. מסך דשבורד הבית
-16. הגדרות + Admin
-17. Landing אינטראקטיבי
+> **סטטוס נכון לסוף פאזה 5 (2026-04-25):** פאזות 1-2 (תשתית) +
+> פאזה 3 (משימות) + פאזה 4 (יומן + Gantt) + פאזה 5 (מחשבות)
+> **הסתיימו ומוזגו ל-main**. הפאזה הבאה היא 6 = **הקלטות + R2**.
+> פירוט מלא בכל פאזה בסוף ה-SPEC ב-Changelog.
+
+1. ✅ Design tokens מ־`design-language.html`
+2. ✅ Types משותפים
+3. ✅ Supabase schema + RLS + Realtime + seeds
+4. ✅ Services + React Query hooks
+5. ✅ Layout בסיסי (Topbar + Sidebar + Routing)
+6. ✅ **DashboardGrid infrastructure** (רוחבי)
+7. ✅ **FilterBar infrastructure** (רוחבי)
+8. ✅ **Lists Banner** (רוחבי למשימות/יומן/Gantt)
+9. ✅ מסך משימות *(פאזה 3)*
+10. ✅ מסך יומן *(פאזה 4 + 4.1 polish + פאזה 5 polish)*
+11. ✅ מסך Gantt *(פאזה 4)*
+12. ⏭ **מסך הקלטות** — הפאזה הבאה (פאזה 6, יחד עם תשתית R2)
+13. ✅ מסך מחשבות *(פאזה 5; קדם להקלטות בכוונה כי ההקלטות תלויות ב-R2)*
+14. ⬜ מסך פרויקטים / תמחור
+15. ⬜ מסך דשבורד הבית
+16. ⬜ הגדרות + Admin
+17. ⬜ Landing אינטראקטיבי
 
 כל מסך: commit + push + merge ל־main.
 

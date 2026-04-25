@@ -7,6 +7,24 @@
 
 # שלום! ממשיכים מהאפיון של Multitask לפאזה 6.
 
+## ⚠ סטטוס בנייה (חשוב — אל תפספס)
+
+**פאזות 1-5 הסתיימו ומוזגו ל-`main`.** הקוד והאפיון בסנכרון מלא:
+
+| פאזה | מצב | מה נבנה |
+|------|-----|---------|
+| 1-2 | ✅ done | תשתית (tokens, types, schema+RLS+Realtime, services+hooks, layout) |
+| 3 | ✅ done | מסך משימות (§15) — קוד ב-`src/pages/app/Tasks.tsx`, `components/tasks/` |
+| 4 | ✅ done | מסך יומן (§16) + מסך Gantt (§17) — `components/calendar/`, `components/gantt/` |
+| 5 | ✅ done | מסך מחשבות (§19) — `components/thoughts/`, `lib/ai/thought-suggestions.ts` |
+| **6** | ⏭ **next** | **מסך הקלטות (§18) + תשתית Cloudflare R2** |
+| 7+ | ⬜ later | פרויקטים, דשבורד, הגדרות, Landing |
+
+**אם אתה חושב שצריך "לבנות 4 או 5 קודם" — קרא שוב את SPEC.md
+§3 ואת ה-Changelog בסוף.** המסכים האלה קיימים, חיים, ועברו כבר
+שני גלי polish רחבים. אם משהו ב-UI לא עובד אצלך — תפעיל
+`npm run dev` ותסתכל; אל תניח שהוא חסר.
+
 ## הקשר ל-AI
 
 לפני כל דבר אחר — קרא את שני המסמכים האלה במלואם:

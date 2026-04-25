@@ -21,7 +21,12 @@ import {
   Save,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
-import { useTask, useUpdateTask, useCompleteTask } from "@/lib/hooks/useTasks";
+import {
+  useTask,
+  useUpdateTask,
+  useCompleteTask,
+  useCreateTask,
+} from "@/lib/hooks/useTasks";
 import { useThought } from "@/lib/hooks/useThoughts";
 import { ThoughtEditModal } from "@/components/thoughts/ThoughtEditModal";
 import {
@@ -53,23 +58,62 @@ import { TaskDependenciesSection } from "@/components/tasks/TaskDependenciesSect
 import { PlanVsActualBar } from "@/components/tasks/PlanVsActualBar";
 import { UnsavedChangesGuard } from "@/components/ui/UnsavedChangesGuard";
 
+/** Initial draft for create mode — only fields the caller wants to pre-fill. */
+export interface TaskCreateDraft {
+  title?: string;
+  description?: string | null;
+  task_list_id?: string | null;
+  scheduled_at?: string | null;
+  duration_minutes?: number | null;
+  estimated_hours?: number | null;
+  urgency?: number;
+  status?: string;
+  source_thought_id?: string | null;
+  tags?: string[];
+}
+
 interface TaskEditModalProps {
+  /** When non-null = edit mode. */
   taskId: string | null;
   onClose: () => void;
   /** Which tab should be active when the modal opens. Default "overview". */
   defaultTab?: "overview" | "schedule" | "history" | "attachments";
+  /**
+   * When provided AND `taskId` is null, the modal opens in **create mode**:
+   * the form is pre-filled from the draft, "save" creates the task, and
+   * the new id is reported via `onCreated` ONLY on a successful save.
+   * Closing without saving does NOT create anything.
+   */
+  createDraft?: TaskCreateDraft | null;
+  /** Fires once after the create-mode save completes. */
+  onCreated?: (taskId: string) => void;
+  /**
+   * Optional UI strip rendered at the top of the modal in CREATE mode
+   * only — used by Calendar's "create event/task picker" so the user
+   * can flip between event and task without losing the time/date context.
+   */
+  topSlot?: React.ReactNode;
 }
 
 type Tab = "overview" | "schedule" | "history" | "attachments";
 
-export function TaskEditModal({ taskId, onClose, defaultTab = "overview" }: TaskEditModalProps) {
-  const open = !!taskId;
+export function TaskEditModal({
+  taskId,
+  onClose,
+  defaultTab = "overview",
+  createDraft = null,
+  onCreated,
+  topSlot,
+}: TaskEditModalProps) {
+  const isCreate = !taskId && !!createDraft;
+  const open = !!taskId || isCreate;
   const { data: task } = useTask(taskId);
   const { data: lists = [] } = useTaskLists();
   const { data: myStatuses = [] } = useMyTaskStatuses();
   const { data: orgMembers = [] } = useOrgMembers();
   const updateTask = useUpdateTask();
   const completeTask = useCompleteTask();
+  const createTask = useCreateTask();
 
   const [tab, setTab] = useState<Tab>(defaultTab);
 
@@ -77,7 +121,7 @@ export function TaskEditModal({ taskId, onClose, defaultTab = "overview" }: Task
   useEffect(() => {
     if (open) setTab(defaultTab);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [taskId]);
+  }, [taskId, isCreate]);
 
   // Local draft state — committed to DB only via the explicit save button
   // (or via the unsaved-changes guard on close). Autosave-on-blur was
@@ -99,25 +143,55 @@ export function TaskEditModal({ taskId, onClose, defaultTab = "overview" }: Task
   const [isPhase, setIsPhase] = useState<boolean>(false);
 
   useEffect(() => {
-    if (!task) return;
-    setTitle(task.title);
-    setDescription(task.description ?? "");
-    setNotes(task.notes ?? "");
-    setUrgency(task.urgency);
-    setStatus(task.status);
-    setListId(task.task_list_id);
-    setTags(task.tags ?? []);
-    setLocation(task.location ?? "");
-    setExternalUrl(task.external_url ?? "");
-    setScheduledAt(task.scheduled_at ?? null);
-    setAssigneeId(task.assignee_user_id ?? null);
-    setDurationMinutes(task.duration_minutes ?? null);
-    setEstimatedMinutes(hoursToMinutes(task.estimated_hours ?? null));
-    setIsPhase(!!task.is_phase);
-  }, [task?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+    // Edit mode: hydrate from the persisted task.
+    if (task) {
+      setTitle(task.title);
+      setDescription(task.description ?? "");
+      setNotes(task.notes ?? "");
+      setUrgency(task.urgency);
+      setStatus(task.status);
+      setListId(task.task_list_id);
+      setTags(task.tags ?? []);
+      setLocation(task.location ?? "");
+      setExternalUrl(task.external_url ?? "");
+      setScheduledAt(task.scheduled_at ?? null);
+      setAssigneeId(task.assignee_user_id ?? null);
+      setDurationMinutes(task.duration_minutes ?? null);
+      setEstimatedMinutes(hoursToMinutes(task.estimated_hours ?? null));
+      setIsPhase(!!task.is_phase);
+      return;
+    }
+    // Create mode: seed from the draft (if any). Closing without saving
+    // never creates anything.
+    if (isCreate && createDraft) {
+      setTitle(createDraft.title ?? "");
+      setDescription(createDraft.description ?? "");
+      setNotes("");
+      setUrgency(createDraft.urgency ?? 3);
+      setStatus(createDraft.status ?? "todo");
+      setListId(createDraft.task_list_id ?? null);
+      setTags(createDraft.tags ?? []);
+      setLocation("");
+      setExternalUrl("");
+      setScheduledAt(createDraft.scheduled_at ?? null);
+      setAssigneeId(null);
+      setDurationMinutes(createDraft.duration_minutes ?? null);
+      setEstimatedMinutes(
+        createDraft.estimated_hours != null
+          ? hoursToMinutes(createDraft.estimated_hours)
+          : null
+      );
+      setIsPhase(false);
+    }
+  }, [task?.id, isCreate]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /** Dirty whenever any draft field differs from the persisted task row. */
+  /** Dirty:
+   *  - edit mode: any draft field differs from the persisted task row.
+   *  - create mode: the user typed at least a title (the form is otherwise
+   *    pre-filled by the draft, which we don't count as "their changes").
+   */
   const dirty = useMemo(() => {
+    if (isCreate) return title.trim().length > 0;
     if (!task) return false;
     const tagsEqual =
       tags.length === (task.tags?.length ?? 0) &&
@@ -139,6 +213,7 @@ export function TaskEditModal({ taskId, onClose, defaultTab = "overview" }: Task
       !tagsEqual
     );
   }, [
+    isCreate,
     task,
     title,
     description,
@@ -159,6 +234,38 @@ export function TaskEditModal({ taskId, onClose, defaultTab = "overview" }: Task
   const [guardOpen, setGuardOpen] = useState(false);
 
   const saveAll = async (): Promise<boolean> => {
+    // Create mode — the entity does not exist yet. Build it now, surface
+    // its id via `onCreated`, then close. If the user discards instead,
+    // nothing is created.
+    if (isCreate) {
+      if (!title.trim()) return false;
+      try {
+        const created = await createTask.mutateAsync({
+          title: title.trim(),
+          description: description || null,
+          notes: notes || null,
+          urgency,
+          status,
+          task_list_id: listId,
+          parent_task_id: null,
+          assignee_user_id: assigneeId,
+          tags,
+          location: location || null,
+          external_url: externalUrl || null,
+          scheduled_at: scheduledAt,
+          duration_minutes: durationMinutes,
+          estimated_hours:
+            estimatedMinutes != null ? minutesToHours(estimatedMinutes) : null,
+          is_phase: isPhase,
+          source_thought_id: createDraft?.source_thought_id ?? null,
+        });
+        onCreated?.(created.id);
+        return true;
+      } catch {
+        return false;
+      }
+    }
+
     if (!task) return true;
     try {
       await updateTask.mutateAsync({
@@ -262,6 +369,12 @@ export function TaskEditModal({ taskId, onClose, defaultTab = "overview" }: Task
                 <X className="w-4 h-4 text-ink-600" />
               </button>
             </div>
+
+            {isCreate && topSlot && (
+              <div className="px-5 py-2 border-b border-ink-200 bg-ink-50/40">
+                {topSlot}
+              </div>
+            )}
 
             {/* Tabs */}
             <div className="border-b border-ink-200 px-3 flex items-center gap-1 text-sm">

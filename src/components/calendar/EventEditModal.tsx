@@ -37,7 +37,23 @@ interface EventEditModalProps {
   eventId: string | null;
   initialStart?: Date;
   initialEnd?: Date;
+  /** Optional pre-filled title for create mode. */
+  initialTitle?: string;
+  /** Optional pre-filled description for create mode. */
+  initialDescription?: string;
+  /** Optional pre-filled all-day flag for create mode. */
+  initialAllDay?: boolean;
+  /** Optional source-thought link for provenance (create mode). */
+  initialSourceThoughtId?: string | null;
   onClose: () => void;
+  /** Fires once after a successful create-mode save. */
+  onCreated?: (eventId: string) => void;
+  /**
+   * Optional UI strip rendered at the top of the modal in CREATE mode
+   * only. Used by Calendar's "create event/task picker" to let the user
+   * flip the modal to TaskEditModal without losing context.
+   */
+  topSlot?: React.ReactNode;
 }
 
 type Tab = "details" | "participants" | "recurrence";
@@ -47,7 +63,13 @@ export function EventEditModal({
   eventId,
   initialStart,
   initialEnd,
+  initialTitle,
+  initialDescription,
+  initialAllDay,
+  initialSourceThoughtId,
   onClose,
+  onCreated,
+  topSlot,
 }: EventEditModalProps) {
   const isEdit = !!eventId;
   const { data: existing } = useEvent(eventId);
@@ -81,17 +103,26 @@ export function EventEditModal({
     } else if (!isEdit) {
       const s = initialStart ?? new Date();
       const e = initialEnd ?? new Date(s.getTime() + 60 * 60_000);
-      setTitle("");
-      setDescription("");
+      setTitle(initialTitle ?? "");
+      setDescription(initialDescription ?? "");
       setLocation("");
       setVideoCallUrl("");
-      setAllDay(false);
+      setAllDay(initialAllDay ?? false);
       setStartsAt(s.toISOString());
       setEndsAt(e.toISOString());
       setRecurrenceRule(null);
       setTab("details");
     }
-  }, [open, isEdit, existing, initialStart, initialEnd]);
+  }, [
+    open,
+    isEdit,
+    existing,
+    initialStart,
+    initialEnd,
+    initialTitle,
+    initialDescription,
+    initialAllDay,
+  ]);
 
   const [guardOpen, setGuardOpen] = useState(false);
 
@@ -138,12 +169,14 @@ export function EventEditModal({
       starts_at: startsAt,
       ends_at: endsAt,
       recurrence_rule: recurrenceRule,
+      source_thought_id: initialSourceThoughtId ?? null,
     };
     try {
       if (isEdit && eventId) {
         await updateEvent.mutateAsync({ eventId, patch: payload });
       } else {
-        await createEvent.mutateAsync(payload);
+        const created = await createEvent.mutateAsync(payload);
+        onCreated?.(created.id);
       }
       onClose();
       return true;
@@ -185,9 +218,12 @@ export function EventEditModal({
             className="bg-white rounded-3xl shadow-lift w-full max-w-2xl my-8 overflow-hidden"
           >
             <div className="px-5 py-3 border-b border-ink-200 flex items-center justify-between gap-3">
-              <h3 className="text-lg font-semibold text-ink-900">
-                {isEdit ? "עריכת אירוע" : "אירוע חדש"}
-              </h3>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-lg font-semibold text-ink-900">
+                  {isEdit ? "עריכת אירוע" : "אירוע חדש"}
+                </h3>
+                {!isEdit && topSlot}
+              </div>
               <button
                 onClick={handleClose}
                 className="p-1.5 rounded-lg hover:bg-ink-100"

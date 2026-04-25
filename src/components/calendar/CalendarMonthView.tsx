@@ -25,7 +25,10 @@ interface CalendarMonthViewProps {
   anchor: Date;
   items: CalendarItem[];
   onItemClick: (item: CalendarItem) => void;
+  /** Click on the date digit — usually navigates to day view. */
   onDayClick: (day: Date) => void;
+  /** Click on the empty area of a day cell — opens the create picker. */
+  onCellClick?: (day: Date) => void;
 }
 
 export function CalendarMonthView({
@@ -33,6 +36,7 @@ export function CalendarMonthView({
   items,
   onItemClick,
   onDayClick,
+  onCellClick,
 }: CalendarMonthViewProps) {
   const monthStart = startOfMonth(anchor);
   const monthEnd = endOfMonth(anchor);
@@ -135,12 +139,21 @@ export function CalendarMonthView({
                   return (
                     <div
                       key={day.toISOString()}
+                      onClick={(e) => {
+                        // Only open the create picker when the user clicks
+                        // the empty area of the cell — not on a child
+                        // (date digit or chip), which has its own handler.
+                        if (e.target === e.currentTarget && onCellClick) {
+                          onCellClick(day);
+                        }
+                      }}
                       className={cn(
                         "min-h-[110px] p-1 relative flex flex-col",
                         colIdx > 0 && "border-s border-ink-200",
                         !inMonth && "bg-ink-50/50 text-ink-400",
                         past && inMonth && !today && "bg-ink-100/40",
-                        today && "bg-primary-50/40"
+                        today && "bg-primary-50/40",
+                        onCellClick && "cursor-pointer"
                       )}
                       style={{ paddingTop: 4 + bandAreaHeight }}
                     >

@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils/cn";
 import type { Thought, ThoughtList } from "@/lib/types/domain";
 import {
   useAssignThoughtToList,
+  useUnassignThoughtFromList,
 } from "@/lib/hooks";
 import { ListIcon } from "@/components/tasks/list-icons";
 import { ThoughtCard } from "./ThoughtCard";
@@ -78,23 +79,54 @@ export function ThoughtsListsView({
   }, [thoughts, visibleLists, assignmentsByThought]);
 
   const assignToList = useAssignThoughtToList();
+  const unassignFromList = useUnassignThoughtFromList();
 
   // 4-px activation distance — same as Tasks: a click never starts a drag.
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } })
   );
 
+  /**
+   * Drag semantics — "move" between columns instead of "add":
+   *
+   *   list A → list B           : unassign A, assign B
+   *   list A → "לא משויכות"      : unassign A
+   *   "לא משויכות" → list B     : assign B
+   *   any → same column         : no-op
+   *
+   * The thoughts model is M:N (a thought can be in many lists at once),
+   * so "drag to move" is a UX choice: the user's mental model is kanban,
+   * and the modal still exposes multi-list assignment via chip toggles.
+   */
   const handleDragEnd = (e: DragEndEvent) => {
     const { active, over } = e;
     if (!over) return;
-    const thoughtId = (active.data.current as { thoughtId?: string })?.thoughtId;
+    const data = active.data.current as
+      | { thoughtId?: string; sourceListId?: string | null }
+      | undefined;
+    const thoughtId = data?.thoughtId;
+    const sourceListId = data?.sourceListId ?? null;
     const targetListId = (over.data.current as { listId?: string })?.listId;
     if (!thoughtId || !targetListId) return;
-    if (targetListId === "__unassigned__") return; // additive only — no auto-detach
-    // No-op if already assigned.
+    if (sourceListId === targetListId) return; // dropped on same column
+
+    if (targetListId === "__unassigned__") {
+      // Drag to "unassigned" → drop the source-list membership.
+      if (sourceListId && sourceListId !== "__unassigned__") {
+        unassignFromList.mutate({ thoughtId, listId: sourceListId });
+      }
+      return;
+    }
+
+    // Drag to a real list → unassign source (if any), then assign target.
+    if (sourceListId && sourceListId !== "__unassigned__") {
+      unassignFromList.mutate({ thoughtId, listId: sourceListId });
+    }
     const assigned = assignmentsByThought.get(thoughtId) ?? [];
-    if (assigned.some((l) => l.id === targetListId)) return;
-    assignToList.mutate({ thoughtId, listId: targetListId });
+    if (!assigned.some((l) => l.id === targetListId)) {
+      assignToList.mutate({ thoughtId, listId: targetListId });
+    }
+    return;
   };
 
   return (
@@ -197,6 +229,7 @@ function UnassignedColumn({
             <DraggableThoughtCard
               key={t.id}
               thought={t}
+              sourceListId="__unassigned__"
               assignedLists={assignmentsByThought.get(t.id) ?? []}
               allLists={allLists}
               processedCount={processingCounts?.get(t.id) ?? 0}
@@ -291,6 +324,7 @@ function ListColumn({
             <DraggableThoughtCard
               key={t.id}
               thought={t}
+              sourceListId={list.id}
               assignedLists={assignmentsByThought.get(t.id) ?? []}
               allLists={allLists}
               processedCount={processingCounts?.get(t.id) ?? 0}
@@ -310,6 +344,9 @@ function ListColumn({
 
 function DraggableThoughtCard(props: {
   thought: Thought;
+  /** The column this card is being rendered IN — drives drag-as-move
+   *  semantics. `"__unassigned__"` for the leading column. */
+  sourceListId: string;
   assignedLists: ThoughtList[];
   allLists: ThoughtList[];
   processedCount?: number;
@@ -319,8 +356,10 @@ function DraggableThoughtCard(props: {
   onOpenEvent: (id: string) => void;
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
-    id: `thought:${props.thought.id}`,
-    data: { thoughtId: props.thought.id },
+    // Per-column id so the same thought rendered in two columns has two
+    // distinct draggable nodes.
+    id: `thought:${props.thought.id}@${props.sourceListId}`,
+    data: { thoughtId: props.thought.id, sourceListId: props.sourceListId },
   });
   return (
     <div

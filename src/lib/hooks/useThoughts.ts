@@ -166,18 +166,30 @@ export function useBulkThoughtAssignments(thoughtIds: string[]) {
   });
 }
 
+/** Invalidate everything that depends on a thought's list assignments,
+ *  including the bulk-assignments query that the Thoughts page reads. */
+function invalidateAssignmentQueries(
+  qc: ReturnType<typeof useQueryClient>,
+  orgId: string | null,
+  thoughtId: string
+) {
+  if (orgId) {
+    qc.invalidateQueries({ queryKey: queryFamilies.allThoughts(orgId) });
+    // The bulk hook keys live under ["thought-assignments", orgId, ...]
+    qc.invalidateQueries({ queryKey: ["thought-assignments", orgId] });
+  }
+  // The single-thought assignments query.
+  qc.invalidateQueries({ queryKey: ["thought", thoughtId, "assignments"] });
+}
+
 export function useAssignThoughtToList() {
   const qc = useQueryClient();
   const scope = useOrgScope();
   return useMutation({
     mutationFn: ({ thoughtId, listId }: { thoughtId: string; listId: string }) =>
       service.assignThoughtToList(thoughtId, listId),
-    onSuccess: () => {
-      if (scope.organizationId) {
-        qc.invalidateQueries({
-          queryKey: queryFamilies.allThoughts(scope.organizationId),
-        });
-      }
+    onSuccess: (_data, vars) => {
+      invalidateAssignmentQueries(qc, scope.organizationId ?? null, vars.thoughtId);
     },
   });
 }
@@ -188,12 +200,8 @@ export function useUnassignThoughtFromList() {
   return useMutation({
     mutationFn: ({ thoughtId, listId }: { thoughtId: string; listId: string }) =>
       service.unassignThoughtFromList(thoughtId, listId),
-    onSuccess: () => {
-      if (scope.organizationId) {
-        qc.invalidateQueries({
-          queryKey: queryFamilies.allThoughts(scope.organizationId),
-        });
-      }
+    onSuccess: (_data, vars) => {
+      invalidateAssignmentQueries(qc, scope.organizationId ?? null, vars.thoughtId);
     },
   });
 }

@@ -12,10 +12,12 @@ import {
   isPast,
   isPastDay,
   isSameDay,
+  itemTooltip,
   layoutDayOverlaps,
   startOfDay,
   startOfWeek,
 } from "./calendar-utils";
+import { endDrag, getDrag } from "./calendar-drag";
 import { CalendarBlock } from "./CalendarDayView";
 import { DayNoteSlot } from "./DayNoteSlot";
 import { TaskCheckButton } from "./TaskCheckButton";
@@ -39,6 +41,8 @@ interface CalendarWeekViewProps {
   hourHeight: number;
   onItemClick: (item: CalendarItem) => void;
   onCreateAt: (start: Date) => void;
+  /** Reposition by drag. New start is already snapped to 15-min. */
+  onItemDrop?: (item: CalendarItem, newStart: Date) => void;
   /** Lookup: per-date note body (yyyy-mm-dd → string). */
   notesByDate?: Map<string, string>;
   /** Click on a column's date digit → open the per-day note editor. */
@@ -54,6 +58,7 @@ export function CalendarWeekView({
   hourHeight,
   onItemClick,
   onCreateAt,
+  onItemDrop,
   notesByDate,
   onDateNoteClick,
 }: CalendarWeekViewProps) {
@@ -113,6 +118,27 @@ export function CalendarWeekView({
     const minutesFromWindowStart = Math.round(((y / hourHeight) * 60) / 15) * 15;
     const slotStart = new Date(dayStart.getTime() + hourStart * HOUR + minutesFromWindowStart * MIN);
     onCreateAt(slotStart);
+  };
+
+  /** Drop handler for one day-column. Translates Y→time identically to the
+   *  day view's column drop, but uses the column's specific dayStart so a
+   *  drop on a different column also moves the item to that day. */
+  const handleColDrop = (
+    dayStart: Date,
+    e: React.DragEvent<HTMLDivElement>
+  ) => {
+    e.preventDefault();
+    const drag = getDrag();
+    if (!drag || !onItemDrop) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const y = e.clientY - rect.top;
+    const minutesFromWindowStart = (y / hourHeight) * 60 - drag.grabOffsetMin;
+    const snapped = Math.round(minutesFromWindowStart / 15) * 15;
+    const newStart = new Date(
+      dayStart.getTime() + hourStart * HOUR + snapped * MIN
+    );
+    onItemDrop(drag.item, newStart);
+    endDrag();
   };
 
   const percentFor = (date: Date, dayStart: Date) => {
@@ -234,6 +260,10 @@ export function CalendarWeekView({
                 past && !today && "bg-ink-100/30"
               )}
               onClick={(e) => handleColClick(dayStart, e)}
+              onDragOver={(e) => {
+                if (getDrag()) e.preventDefault();
+              }}
+              onDrop={(e) => handleColDrop(dayStart, e)}
             >
               {/* Past-time tint (today only) */}
               {pastTodayPercent > 0 && (
@@ -433,7 +463,7 @@ function MultiDayBand({
         height: 22,
         ...(isPhase ? phaseStyle : isTask ? taskStyle : eventStyle),
       }}
-      title={item.title}
+      title={itemTooltip(item)}
       type="button"
     >
       {isTask && !isPhase && (

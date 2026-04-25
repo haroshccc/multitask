@@ -13,6 +13,8 @@ import {
   X,
   Loader2,
   Info,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import type { Thought } from "@/lib/types/domain";
@@ -76,6 +78,10 @@ export function ThoughtAiBanner({
   const [showSend, setShowSend] = useState<number | null>(null);
   const [showAssign, setShowAssign] = useState(false);
   const [showCloseMenu, setShowCloseMenu] = useState(false);
+  // Collapsed state hides only the AI-suggestion list; the manual "פעולות
+  // ידניות" buttons stay visible always so the user keeps a way to create
+  // entities without scrolling through the AI proposals.
+  const [aiCollapsed, setAiCollapsed] = useState(false);
 
   const { data: thoughtLists = [] } = useThoughtLists();
   const { data: taskLists = [] } = useTaskLists();
@@ -408,7 +414,30 @@ export function ThoughtAiBanner({
         </div>
       </div>
 
-      {/* Plan summary line */}
+      {/* Collapsible AI section. Only the AI proposals collapse — the
+          manual fallbacks below this block are always visible so the
+          user keeps a quick path to create-from-scratch. */}
+      {plan && plan.actions.length > 0 && (
+        <button
+          onClick={() => setAiCollapsed((v) => !v)}
+          className="w-full flex items-center justify-between gap-2 text-[11px] font-medium text-ink-600 hover:text-ink-900 px-1"
+          type="button"
+        >
+          <span className="inline-flex items-center gap-1">
+            <Zap className="w-3 h-3 text-accent-500" />
+            הצעות AI ({plan.actions.length})
+          </span>
+          {aiCollapsed ? (
+            <ChevronDown className="w-3.5 h-3.5" />
+          ) : (
+            <ChevronUp className="w-3.5 h-3.5" />
+          )}
+        </button>
+      )}
+
+      {/* Plan summary line — even when AI returned no actions, surface the
+          empty-state so the user understands why the proposals area is
+          empty. Always shown (the collapse only affects non-empty plans). */}
       {plan && plan.actions.length === 0 && !planLoading && (
         <div className="text-xs text-ink-500 inline-flex items-center gap-1">
           <Info className="w-3 h-3" />
@@ -416,59 +445,64 @@ export function ThoughtAiBanner({
         </div>
       )}
 
-      {/* Bulk actions — when there are 2+ task suggestions, offer "צור הכל
-          המשימות" so the user can accept the brainstorm in one click. */}
-      {plan && (() => {
-        const taskActionIdxs = plan.actions
-          .map((a, i) => (a.kind === "create_task" ? i : -1))
-          .filter((i) => i >= 0 && !applied[i]);
-        if (taskActionIdxs.length < 2) return null;
-        return (
-          <div className="flex items-center justify-between text-xs px-1">
-            <span className="text-ink-500">
-              {taskActionIdxs.length} משימות מוצעות
-            </span>
-            <button
-              onClick={async () => {
-                for (const i of taskActionIdxs) {
-                  await apply(i, plan.actions[i]);
-                }
-              }}
-              className="inline-flex items-center gap-1 text-[11px] font-medium text-white bg-primary-500 hover:bg-primary-600 rounded-full px-2.5 py-1"
-              type="button"
-            >
-              צור הכל
-            </button>
-          </div>
-        );
-      })()}
-
-      {/* AI-driven suggestions with previews — scrollable when many. */}
-      {plan && (
-        <div className="space-y-2 max-h-[420px] overflow-y-auto pe-1">
-          {plan.actions.map((action, idx) => {
-            const a = applied[idx];
+      {!aiCollapsed && (
+        <>
+          {/* Bulk actions — when there are 2+ task suggestions, offer
+              "צור הכל המשימות" so the user can accept the brainstorm in
+              one click. */}
+          {plan && (() => {
+            const taskActionIdxs = plan.actions
+              .map((a, i) => (a.kind === "create_task" ? i : -1))
+              .filter((i) => i >= 0 && !applied[i]);
+            if (taskActionIdxs.length < 2) return null;
             return (
-              <SuggestionRow
-                key={idx}
-                action={action}
-                applied={a}
-                onApply={() => apply(idx, action)}
-                onOpen={() => {
-                  if (!a) return;
-                  if (a.targetType === "task") onOpenTask?.(a.targetId);
-                  else if (a.targetType === "event") onOpenEvent?.(a.targetId);
-                  else if (a.targetType === "project")
-                    onOpenProject?.(a.targetId);
-                }}
-                showSendInline={showSend === idx}
-                onSentInline={(ch) => handleSent(idx, ch)}
-                onCloseSendInline={() => setShowSend(null)}
-                thoughtText={thought.text_content ?? ""}
-              />
+              <div className="flex items-center justify-between text-xs px-1">
+                <span className="text-ink-500">
+                  {taskActionIdxs.length} משימות מוצעות
+                </span>
+                <button
+                  onClick={async () => {
+                    for (const i of taskActionIdxs) {
+                      await apply(i, plan.actions[i]);
+                    }
+                  }}
+                  className="inline-flex items-center gap-1 text-[11px] font-medium text-white bg-primary-500 hover:bg-primary-600 rounded-full px-2.5 py-1"
+                  type="button"
+                >
+                  צור הכל
+                </button>
+              </div>
             );
-          })}
-        </div>
+          })()}
+
+          {/* AI-driven suggestions with previews — scrollable when many. */}
+          {plan && plan.actions.length > 0 && (
+            <div className="space-y-2 max-h-[420px] overflow-y-auto pe-1">
+              {plan.actions.map((action, idx) => {
+                const a = applied[idx];
+                return (
+                  <SuggestionRow
+                    key={idx}
+                    action={action}
+                    applied={a}
+                    onApply={() => apply(idx, action)}
+                    onOpen={() => {
+                      if (!a) return;
+                      if (a.targetType === "task") onOpenTask?.(a.targetId);
+                      else if (a.targetType === "event") onOpenEvent?.(a.targetId);
+                      else if (a.targetType === "project")
+                        onOpenProject?.(a.targetId);
+                    }}
+                    showSendInline={showSend === idx}
+                    onSentInline={(ch) => handleSent(idx, ch)}
+                    onCloseSendInline={() => setShowSend(null)}
+                    thoughtText={thought.text_content ?? ""}
+                  />
+                );
+              })}
+            </div>
+          )}
+        </>
       )}
 
       {/* Always-available manual fallbacks. Even when the AI proposed nothing,

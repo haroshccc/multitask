@@ -42,7 +42,6 @@ import {
 } from "@/lib/hooks/useUserTaskStatuses";
 import { slugifyStatusKey } from "@/lib/services/user-task-statuses";
 import { useOrgMembers } from "@/lib/hooks/useOrgMembers";
-import { pushUndo } from "@/lib/undo/store";
 import type { TimeEntry, UserTaskStatus } from "@/lib/types/domain";
 import { DateTimePicker } from "@/components/ui/DateTimePicker";
 import {
@@ -80,7 +79,10 @@ export function TaskEditModal({ taskId, onClose, defaultTab = "overview" }: Task
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [taskId]);
 
-  // Local draft state — committed to DB on blur / explicit save.
+  // Local draft state — committed to DB only via the explicit save button
+  // (or via the unsaved-changes guard on close). Autosave-on-blur was
+  // removed in favor of full draft mode so the user has a single, clear
+  // mental model: edit → save (or close → guard).
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [notes, setNotes] = useState("");
@@ -94,6 +96,7 @@ export function TaskEditModal({ taskId, onClose, defaultTab = "overview" }: Task
   const [durationMinutes, setDurationMinutes] = useState<number | null>(null);
   const [estimatedMinutes, setEstimatedMinutes] = useState<number | null>(null);
   const [assigneeId, setAssigneeId] = useState<string | null>(null);
+  const [isPhase, setIsPhase] = useState<boolean>(false);
 
   useEffect(() => {
     if (!task) return;
@@ -110,30 +113,10 @@ export function TaskEditModal({ taskId, onClose, defaultTab = "overview" }: Task
     setAssigneeId(task.assignee_user_id ?? null);
     setDurationMinutes(task.duration_minutes ?? null);
     setEstimatedMinutes(hoursToMinutes(task.estimated_hours ?? null));
+    setIsPhase(!!task.is_phase);
   }, [task?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleBlurSave = () => {
-    if (!task) return;
-    updateTask.mutate({
-      taskId: task.id,
-      patch: {
-        title: title.trim() || task.title,
-        description: description || null,
-        notes: notes || null,
-        urgency,
-        status,
-        task_list_id: listId,
-        tags,
-        location: location || null,
-        external_url: externalUrl || null,
-      },
-    });
-  };
-
-  // Dirty when any free-text field has unblurred edits. The autosave-on-blur
-  // pattern means most changes commit immediately, but a user typing then
-  // hitting × without leaving the field still has unsaved work — this is
-  // exactly the case the close-with-changes guard catches.
+  /** Dirty whenever any draft field differs from the persisted task row. */
   const dirty = useMemo(() => {
     if (!task) return false;
     const tagsEqual =
@@ -143,11 +126,35 @@ export function TaskEditModal({ taskId, onClose, defaultTab = "overview" }: Task
       (title.trim() || task.title) !== task.title ||
       description !== (task.description ?? "") ||
       notes !== (task.notes ?? "") ||
+      urgency !== task.urgency ||
+      status !== task.status ||
+      listId !== task.task_list_id ||
+      assigneeId !== (task.assignee_user_id ?? null) ||
       location !== (task.location ?? "") ||
       externalUrl !== (task.external_url ?? "") ||
+      scheduledAt !== (task.scheduled_at ?? null) ||
+      durationMinutes !== (task.duration_minutes ?? null) ||
+      estimatedMinutes !== hoursToMinutes(task.estimated_hours ?? null) ||
+      isPhase !== !!task.is_phase ||
       !tagsEqual
     );
-  }, [task, title, description, notes, location, externalUrl, tags]);
+  }, [
+    task,
+    title,
+    description,
+    notes,
+    urgency,
+    status,
+    listId,
+    assigneeId,
+    location,
+    externalUrl,
+    scheduledAt,
+    durationMinutes,
+    estimatedMinutes,
+    isPhase,
+    tags,
+  ]);
 
   const [guardOpen, setGuardOpen] = useState(false);
 
@@ -163,9 +170,15 @@ export function TaskEditModal({ taskId, onClose, defaultTab = "overview" }: Task
           urgency,
           status,
           task_list_id: listId,
+          assignee_user_id: assigneeId,
           tags,
           location: location || null,
           external_url: externalUrl || null,
+          scheduled_at: scheduledAt,
+          duration_minutes: durationMinutes,
+          estimated_hours:
+            estimatedMinutes != null ? minutesToHours(estimatedMinutes) : null,
+          is_phase: isPhase,
         },
       });
       return true;
@@ -180,17 +193,6 @@ export function TaskEditModal({ taskId, onClose, defaultTab = "overview" }: Task
       return;
     }
     onClose();
-  };
-
-  const saveSchedulePatch = (
-    patch: Partial<{
-      scheduled_at: string | null;
-      duration_minutes: number | null;
-      estimated_hours: number | null;
-    }>
-  ) => {
-    if (!task) return;
-    updateTask.mutate({ taskId: task.id, patch });
   };
 
   if (!task && !open) return null;
@@ -249,7 +251,6 @@ export function TaskEditModal({ taskId, onClose, defaultTab = "overview" }: Task
                 <input
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  onBlur={handleBlurSave}
                   placeholder="שם המשימה"
                   className="text-lg font-semibold text-ink-900 bg-transparent border-0 outline-none flex-1 min-w-0"
                 />
@@ -291,22 +292,13 @@ export function TaskEditModal({ taskId, onClose, defaultTab = "overview" }: Task
                       <StatusPicker
                         value={status}
                         statuses={myStatuses}
-                        onChange={(next) => {
-                          setStatus(next);
-                          if (task) {
-                            updateTask.mutate({
-                              taskId: task.id,
-                              patch: { status: next },
-                            });
-                          }
-                        }}
+                        onChange={setStatus}
                       />
                     </Field>
                     <Field label="רשימה">
                       <select
                         value={listId ?? ""}
                         onChange={(e) => setListId(e.target.value || null)}
-                        onBlur={handleBlurSave}
                         className="field"
                       >
                         <option value="">לא משויכת</option>
@@ -324,64 +316,13 @@ export function TaskEditModal({ taskId, onClose, defaultTab = "overview" }: Task
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <Field label="דחיפות">
-                      <UrgencyBars
-                        value={urgency}
-                        onChange={(v) => {
-                          const prev = urgency;
-                          setUrgency(v);
-                          updateTask.mutate({
-                            taskId: task!.id,
-                            patch: { urgency: v },
-                          });
-                          pushUndo({
-                            description: "שינוי דחיפות",
-                            undo: () => {
-                              setUrgency(prev);
-                              updateTask.mutate({
-                                taskId: task!.id,
-                                patch: { urgency: prev },
-                              });
-                            },
-                            redo: () => {
-                              setUrgency(v);
-                              updateTask.mutate({
-                                taskId: task!.id,
-                                patch: { urgency: v },
-                              });
-                            },
-                          });
-                        }}
-                      />
+                      <UrgencyBars value={urgency} onChange={setUrgency} />
                     </Field>
                     <Field label="אחראי">
                       <AssigneePicker
                         value={assigneeId}
                         members={orgMembers}
-                        onChange={(userId) => {
-                          const prev = assigneeId;
-                          setAssigneeId(userId);
-                          updateTask.mutate({
-                            taskId: task!.id,
-                            patch: { assignee_user_id: userId },
-                          });
-                          pushUndo({
-                            description: "שינוי אחראי",
-                            undo: () => {
-                              setAssigneeId(prev);
-                              updateTask.mutate({
-                                taskId: task!.id,
-                                patch: { assignee_user_id: prev },
-                              });
-                            },
-                            redo: () => {
-                              setAssigneeId(userId);
-                              updateTask.mutate({
-                                taskId: task!.id,
-                                patch: { assignee_user_id: userId },
-                              });
-                            },
-                          });
-                        }}
+                        onChange={setAssigneeId}
                       />
                     </Field>
                   </div>
@@ -390,21 +331,19 @@ export function TaskEditModal({ taskId, onClose, defaultTab = "overview" }: Task
                     <textarea
                       value={description}
                       onChange={(e) => setDescription(e.target.value)}
-                      onBlur={handleBlurSave}
                       className="field min-h-[80px] resize-y"
                       placeholder="פרטים על המשימה..."
                     />
                   </Field>
 
                   <Field label="תגים">
-                    <TagInput tags={tags} onChange={setTags} onBlur={handleBlurSave} />
+                    <TagInput tags={tags} onChange={setTags} onBlur={() => {}} />
                   </Field>
 
                   <Field label="הערות">
                     <textarea
                       value={notes}
                       onChange={(e) => setNotes(e.target.value)}
-                      onBlur={handleBlurSave}
                       className="field min-h-[60px] resize-y"
                     />
                   </Field>
@@ -414,7 +353,6 @@ export function TaskEditModal({ taskId, onClose, defaultTab = "overview" }: Task
                       <input
                         value={location}
                         onChange={(e) => setLocation(e.target.value)}
-                        onBlur={handleBlurSave}
                         className="field"
                       />
                     </Field>
@@ -423,7 +361,6 @@ export function TaskEditModal({ taskId, onClose, defaultTab = "overview" }: Task
                         type="url"
                         value={externalUrl}
                         onChange={(e) => setExternalUrl(e.target.value)}
-                        onBlur={handleBlurSave}
                         className="field"
                         dir="ltr"
                       />
@@ -438,13 +375,8 @@ export function TaskEditModal({ taskId, onClose, defaultTab = "overview" }: Task
                     <label className="flex items-start gap-2 cursor-pointer select-none p-2 rounded-md border border-ink-200 hover:bg-ink-50">
                       <input
                         type="checkbox"
-                        checked={!!task.is_phase}
-                        onChange={(e) => {
-                          updateTask.mutate({
-                            taskId: task.id,
-                            patch: { is_phase: e.target.checked },
-                          });
-                        }}
+                        checked={isPhase}
+                        onChange={(e) => setIsPhase(e.target.checked)}
                         className="w-4 h-4 mt-0.5"
                       />
                       <div>
@@ -471,19 +403,13 @@ export function TaskEditModal({ taskId, onClose, defaultTab = "overview" }: Task
                     <Field label="תאריך ושעה">
                       <DateTimePicker
                         value={scheduledAt}
-                        onChange={(iso) => {
-                          setScheduledAt(iso);
-                          saveSchedulePatch({ scheduled_at: iso });
-                        }}
+                        onChange={setScheduledAt}
                       />
                     </Field>
                     <Field label="משך">
                       <DurationInput
                         value={durationMinutes}
-                        onChange={(m) => {
-                          setDurationMinutes(m);
-                          saveSchedulePatch({ duration_minutes: m });
-                        }}
+                        onChange={setDurationMinutes}
                         placeholder="00:00"
                         ariaLabel="משך משימה"
                       />
@@ -506,10 +432,7 @@ export function TaskEditModal({ taskId, onClose, defaultTab = "overview" }: Task
                   <Field label="הערכת שעות (לתכנון)">
                     <DurationInput
                       value={estimatedMinutes}
-                      onChange={(m) => {
-                        setEstimatedMinutes(m);
-                        saveSchedulePatch({ estimated_hours: minutesToHours(m) });
-                      }}
+                      onChange={setEstimatedMinutes}
                       placeholder="00:00"
                       ariaLabel="הערכת שעות"
                     />

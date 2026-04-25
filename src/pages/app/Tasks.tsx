@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { MAX_VISIBLE_BOUNDS } from "@/lib/hooks/useMaxVisibleColumns";
 import { ScreenScaffold } from "@/components/layout/ScreenScaffold";
-import { TasksChrome } from "@/components/tasks/TasksChrome";
+import { TasksChrome, type TasksLayout } from "@/components/tasks/TasksChrome";
 import {
   FilterBar,
   useFiltersFromUrl,
@@ -132,6 +132,19 @@ export function Tasks() {
     if (typeof window === "undefined") return;
     localStorage.setItem("multitask.tasks.unassignedOpen", String(unassignedOpen));
   }, [unassignedOpen]);
+
+  // Layout: kanban columns (the original) vs vertical-stack of lists.
+  const [layout, setLayout] = useState<TasksLayout>(() => {
+    if (typeof window === "undefined") return "columns";
+    return (
+      (localStorage.getItem("multitask.tasks.layout") as TasksLayout) ||
+      "columns"
+    );
+  });
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem("multitask.tasks.layout", layout);
+  }, [layout]);
 
   const hiddenSet = useMemo(
     () => new Set(visibility?.hidden_list_ids ?? []),
@@ -416,6 +429,8 @@ export function Tasks() {
           onToggleFilters={() => setFiltersOpen((v) => !v)}
           statsOpen={statsOpen}
           onToggleStats={() => setStatsOpen((v) => !v)}
+          layout={layout}
+          onLayoutChange={setLayout}
         />
 
         {filtersOpen && (
@@ -442,39 +457,70 @@ export function Tasks() {
           collisionDetection={pointerWithin}
           onDragEnd={handleDragEnd}
         >
-          {/* On mobile: stack vertically — Unassigned on top (collapsible to
-              a thin bar), then the main list area. On md+: side-by-side with
-              Unassigned on the leading (right in RTL) edge. */}
-          <div className="flex flex-col md:flex-row items-stretch gap-3 min-h-[calc(100vh-340px)]">
-            <UnassignedBanner
-              open={unassignedOpen}
-              onToggle={() => setUnassignedOpen((v) => !v)}
-              roots={listTrees.get("__unassigned__") ?? []}
-              totalCount={counts.get("__unassigned__") ?? 0}
-              display={rowDisplayPrefs}
-              onOpenEdit={setEditingTaskId}
-            />
+          {layout === "stack" ? (
+            // Stack layout: each list is a full-width section, top to bottom.
+            // Visible-lists filter still applies. Drag-and-drop still works
+            // across sections — the dnd context wraps both layouts.
+            <div className="flex flex-col gap-3">
+              <UnassignedBanner
+                open={unassignedOpen}
+                onToggle={() => setUnassignedOpen((v) => !v)}
+                roots={listTrees.get("__unassigned__") ?? []}
+                totalCount={counts.get("__unassigned__") ?? 0}
+                display={rowDisplayPrefs}
+                onOpenEdit={setEditingTaskId}
+                fullWidth
+              />
+              {visibleLists.map((list) => (
+                <TaskColumn
+                  key={list.id}
+                  list={list}
+                  roots={listTrees.get(list.id) ?? []}
+                  totalCount={counts.get(list.id) ?? 0}
+                  divisor={1}
+                  display={rowDisplayPrefs}
+                  onOpenEdit={setEditingTaskId}
+                />
+              ))}
+              {visibleLists.length === 0 && <EmptyListsHint lists={lists} />}
+            </div>
+          ) : (
+            // Columns (kanban) layout — the original Phase 3 layout.
+            // On mobile: stack vertically. On md+: side-by-side with
+            // Unassigned on the leading (right in RTL) edge.
+            <div className="flex flex-col md:flex-row items-stretch gap-3 min-h-[calc(100vh-340px)]">
+              <UnassignedBanner
+                open={unassignedOpen}
+                onToggle={() => setUnassignedOpen((v) => !v)}
+                roots={listTrees.get("__unassigned__") ?? []}
+                totalCount={counts.get("__unassigned__") ?? 0}
+                display={rowDisplayPrefs}
+                onOpenEdit={setEditingTaskId}
+              />
 
-            <div className="flex-1 min-w-0 overflow-x-auto scrollbar-thin">
-              <div className="flex items-stretch gap-3 pb-2">
-                {visibleLists.map((list) => (
-                  <TaskColumn
-                    key={list.id}
-                    list={list}
-                    roots={listTrees.get(list.id) ?? []}
-                    totalCount={counts.get(list.id) ?? 0}
-                    divisor={Math.min(
-                      Math.max(visibleLists.length, 1),
-                      maxVisibleColumns
-                    )}
-                    display={rowDisplayPrefs}
-                    onOpenEdit={setEditingTaskId}
-                  />
-                ))}
-                {visibleLists.length === 0 && <EmptyListsHint lists={lists} />}
+              <div className="flex-1 min-w-0 overflow-x-auto scrollbar-thin">
+                <div className="flex items-stretch gap-3 pb-2">
+                  {visibleLists.map((list) => (
+                    <TaskColumn
+                      key={list.id}
+                      list={list}
+                      roots={listTrees.get(list.id) ?? []}
+                      totalCount={counts.get(list.id) ?? 0}
+                      divisor={Math.min(
+                        Math.max(visibleLists.length, 1),
+                        maxVisibleColumns
+                      )}
+                      display={rowDisplayPrefs}
+                      onOpenEdit={setEditingTaskId}
+                    />
+                  ))}
+                  {visibleLists.length === 0 && (
+                    <EmptyListsHint lists={lists} />
+                  )}
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </DndContext>
       </div>
 

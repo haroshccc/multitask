@@ -6,10 +6,14 @@ import {
   EyeOff,
   Check,
   List as ListIcon2,
+  Columns3,
+  Rows3,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { ListIcon } from "@/components/tasks/list-icons";
 import { ToggleButton, PopoverButton } from "@/components/layout/ChromeControls";
+
+export type TasksLayout = "columns" | "stack";
 
 interface UnifiedList {
   id: string;
@@ -24,6 +28,10 @@ interface TasksChromeProps {
   hiddenListIds: Set<string>;
   onToggleListVisibility: (listId: string) => void;
   onCreateList: () => void;
+
+  // Layout
+  layout: TasksLayout;
+  onLayoutChange: (l: TasksLayout) => void;
 
   // Filter / stats panel toggles
   filtersActiveCount: number;
@@ -50,6 +58,8 @@ export function TasksChrome({
   hiddenListIds,
   onToggleListVisibility,
   onCreateList,
+  layout,
+  onLayoutChange,
   filtersActiveCount,
   filtersOpen,
   onToggleFilters,
@@ -152,7 +162,54 @@ export function TasksChrome({
         icon={<BarChart3 className="w-3.5 h-3.5" />}
         label="סטטיסטיקות"
       />
+
+      {/* Layout toggle: kanban (columns) vs vertical-stack of lists. The
+          per-list visibility filter (the lists popover above) still applies
+          to both modes. */}
+      <div className="ms-auto inline-flex rounded-md border border-ink-200 overflow-hidden">
+        <LayoutTab
+          active={layout === "columns"}
+          onClick={() => onLayoutChange("columns")}
+          icon={<Columns3 className="w-3 h-3" />}
+          label="עמודות"
+        />
+        <LayoutTab
+          active={layout === "stack"}
+          onClick={() => onLayoutChange("stack")}
+          icon={<Rows3 className="w-3 h-3" />}
+          label="ערמה"
+        />
+      </div>
     </div>
+  );
+}
+
+function LayoutTab({
+  active,
+  onClick,
+  icon,
+  label,
+}: {
+  active: boolean;
+  onClick: () => void;
+  icon: React.ReactNode;
+  label: string;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium border-e border-ink-200 last:border-e-0 transition-colors",
+        active
+          ? "bg-ink-900 text-white"
+          : "bg-white text-ink-700 hover:bg-ink-50"
+      )}
+      type="button"
+      title={label}
+    >
+      {icon}
+      <span className="hidden md:inline">{label}</span>
+    </button>
   );
 }
 

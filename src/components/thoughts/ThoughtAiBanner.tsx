@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import type { Thought } from "@/lib/types/domain";
-import { useCreateTask } from "@/lib/hooks/useTasks";
+import { useCreateTask, useTasks } from "@/lib/hooks/useTasks";
 import { useCreateProject } from "@/lib/hooks/useProjects";
 import {
   useAssignThoughtToList,
@@ -70,19 +70,30 @@ export function ThoughtAiBanner({
 
   const { data: thoughtLists = [] } = useThoughtLists();
   const { data: taskLists = [] } = useTaskLists();
+  // Pull a sample of recent tasks so the AI can learn from history (which
+  // lists the user typically dumps similar tasks into).
+  const { data: recentTasks = [] } = useTasks({});
   const createTask = useCreateTask();
   const createEvent = useCreateEvent();
   const createProject = useCreateProject();
   const assignThoughtToList = useAssignThoughtToList();
   const recordProcessing = useRecordThoughtProcessing();
 
-  // Build the AI plan once per thought + once task lists are loaded
-  // (matching against list names depends on them).
+  // Build the AI plan once per thought + once task lists / recent tasks
+  // load (history-aware list ranking depends on them).
   useEffect(() => {
     let cancel = false;
     setPlanLoading(true);
     mockProvider
-      .buildPlan(thought, { taskLists, thoughtLists })
+      .buildPlan(thought, {
+        taskLists,
+        thoughtLists,
+        recentTasks: recentTasks.slice(0, 80).map((t) => ({
+          title: t.title,
+          task_list_id: t.task_list_id,
+          tags: t.tags ?? [],
+        })),
+      })
       .then((p) => {
         if (!cancel) {
           setPlan(p);
@@ -93,7 +104,7 @@ export function ThoughtAiBanner({
       cancel = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [thought.id, taskLists.length, thoughtLists.length]);
+  }, [thought.id, taskLists.length, thoughtLists.length, recentTasks.length]);
 
   const record = (
     actionIndex: number,
@@ -255,9 +266,36 @@ export function ThoughtAiBanner({
         </div>
       )}
 
-      {/* AI-driven suggestions with previews */}
+      {/* Bulk actions — when there are 2+ task suggestions, offer "צור הכל
+          המשימות" so the user can accept the brainstorm in one click. */}
+      {plan && (() => {
+        const taskActionIdxs = plan.actions
+          .map((a, i) => (a.kind === "create_task" ? i : -1))
+          .filter((i) => i >= 0 && !applied[i]);
+        if (taskActionIdxs.length < 2) return null;
+        return (
+          <div className="flex items-center justify-between text-xs px-1">
+            <span className="text-ink-500">
+              {taskActionIdxs.length} משימות מוצעות
+            </span>
+            <button
+              onClick={async () => {
+                for (const i of taskActionIdxs) {
+                  await apply(i, plan.actions[i]);
+                }
+              }}
+              className="inline-flex items-center gap-1 text-[11px] font-medium text-white bg-primary-500 hover:bg-primary-600 rounded-full px-2.5 py-1"
+              type="button"
+            >
+              צור הכל
+            </button>
+          </div>
+        );
+      })()}
+
+      {/* AI-driven suggestions with previews — scrollable when many. */}
       {plan && (
-        <div className="space-y-2">
+        <div className="space-y-2 max-h-[420px] overflow-y-auto pe-1">
           {plan.actions.map((action, idx) => {
             const a = applied[idx];
             return (

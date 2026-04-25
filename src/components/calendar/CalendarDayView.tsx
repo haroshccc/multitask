@@ -285,10 +285,10 @@ export function CalendarBlock({
   // Color: list color for both (tasks borrow from list, events either list or primary).
   const accent = item.color ?? (isTask ? "#6b6b80" : "#f59e0b");
 
-  // Overdue overrides: light red.
-  const overdueAccent = "#ef4444";
-  const overdueBg = "rgba(239, 68, 68, 0.10)";
-  const strokeColor = overdue ? overdueAccent : accent;
+  // Overdue is now signalled by a tiny red dot in the corner — the block
+  // itself stays neutral so the calendar isn't a sea of red whenever the
+  // user falls behind on a few tasks.
+  const strokeColor = accent;
 
   let bg: string;
   let textColor = "#2d2d3a";
@@ -296,7 +296,7 @@ export function CalendarBlock({
 
   if (isTask) {
     // Tasks: outline only, empty inside.
-    bg = overdue ? overdueBg : "transparent";
+    bg = "transparent";
   } else {
     // Events: solid filled.
     bg = hexToRgba(accent, 0.85);
@@ -402,6 +402,16 @@ export function CalendarBlock({
           }}
         />
       )}
+
+      {/* Overdue marker — a tiny red dot in the top-end corner. Replaces
+          the older "tint the whole block red" treatment, which made the
+          calendar visually loud when many tasks slipped. */}
+      {isTask && overdue && !completed && (
+        <span
+          className="absolute top-1 end-1 w-1.5 h-1.5 rounded-full bg-danger-500 pointer-events-none"
+          title="באיחור"
+        />
+      )}
     </button>
   );
 }
@@ -436,18 +446,19 @@ function AllDayChip({
     );
   }
 
-  // Task chip: outline, empty inside.
+  // Task chip: outline, empty inside. Overdue → tiny red dot, not a
+  // red border/bg.
   return (
     <button
       onClick={onClick}
       className={cn(
-        "inline-flex items-center gap-1 rounded-sm px-2 py-0.5 text-xs font-medium border bg-white",
+        "relative inline-flex items-center gap-1 rounded-sm px-2 py-0.5 text-xs font-medium border bg-white",
         item.completed && "opacity-60"
       )}
       style={{
-        borderColor: overdue ? "#ef4444" : accent,
-        color: overdue ? "#b91c1c" : "#2d2d3a",
-        backgroundColor: overdue ? "rgba(239, 68, 68, 0.06)" : "white",
+        borderColor: accent,
+        color: "#2d2d3a",
+        backgroundColor: "white",
       }}
       title={item.title}
       type="button"
@@ -455,7 +466,7 @@ function AllDayChip({
       <TaskCheckButton
         taskId={(item.source as { id: string }).id}
         completed={item.completed}
-        accent={overdue ? "#ef4444" : accent}
+        accent={accent}
         size="sm"
       />
       <span
@@ -466,6 +477,12 @@ function AllDayChip({
       >
         {item.title}
       </span>
+      {overdue && !item.completed && (
+        <span
+          className="absolute -top-0.5 -end-0.5 w-1.5 h-1.5 rounded-full bg-danger-500 pointer-events-none"
+          title="באיחור"
+        />
+      )}
     </button>
   );
 }

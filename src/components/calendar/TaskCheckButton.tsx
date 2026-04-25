@@ -33,10 +33,12 @@ export function TaskCheckButton({
   const checkSize = size === "sm" ? "w-2 h-2" : "w-2.5 h-2.5";
 
   // Unchecked: hairline outline in the accent color (or a neutral grey).
-  // Checked: filled with success green so the V reads strongly even at
-  // 12px. Border stays at 1px throughout to keep the chip delicate.
-  const borderColor = completed ? "#16a34a" : accent ?? "#a8a8bc";
-  const bgColor = completed ? "#16a34a" : "transparent";
+  // Checked: filled with brand yellow so the V reads as "marked" without
+  // the green-success implication. The check itself is dark ink — V on
+  // yellow needs contrast that white can't give.
+  const borderColor = completed ? "#eab308" : accent ?? "#a8a8bc";
+  const bgColor = completed ? "#facc15" : "transparent";
+  const checkColor = "#1f2937";
 
   return (
     <button
@@ -58,7 +60,8 @@ export function TaskCheckButton({
     >
       {completed && (
         <Check
-          className={cn(checkSize, "text-white")}
+          className={cn(checkSize)}
+          style={{ color: checkColor }}
           // 2.5 = slim ✓ that still reads at 8-10px. The previous 3
           // produced a heavy-marker look the user flagged as "massive".
           strokeWidth={2.5}

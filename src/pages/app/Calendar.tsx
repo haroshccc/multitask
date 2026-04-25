@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ScreenScaffold } from "@/components/layout/ScreenScaffold";
 import {
   FilterBar,
@@ -39,8 +39,14 @@ import {
 import { useCalendarPrefs } from "@/lib/hooks/useCalendarPrefs";
 import type { FilterConfig } from "@/lib/types/domain";
 
-const HOUR_HEIGHT_DAY = 48;
-const HOUR_HEIGHT_WEEK = 40;
+// Min hour-row height. Below this the layout becomes hard to read.
+const HOUR_HEIGHT_DAY_MIN = 36;
+const HOUR_HEIGHT_WEEK_MIN = 32;
+// Vertical chrome above the grid that we have to subtract from the
+// viewport: top app bar, screen header, calendar chrome, optional
+// filter/stats panels, and the bottom safety margin. Approximate; the
+// grid will overflow gracefully if the actual chrome is taller.
+const VERTICAL_CHROME_RESERVE = 280;
 
 export function Calendar() {
   const [view, setView] = useState<CalendarView>("week");
@@ -50,6 +56,30 @@ export function Calendar() {
   const [statsOpen, setStatsOpen] = useState(false);
 
   const { effectiveRange } = useCalendarPrefs();
+
+  // Dynamic hour-height — stretches the grid to fill the viewport while
+  // keeping a sensible floor so rows stay readable on small displays.
+  // Re-computes on resize.
+  const [viewportH, setViewportH] = useState(() =>
+    typeof window === "undefined" ? 900 : window.innerHeight
+  );
+  useEffect(() => {
+    const onResize = () => setViewportH(window.innerHeight);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  const visibleHours = Math.max(
+    1,
+    effectiveRange.hourEnd - effectiveRange.hourStart
+  );
+  const dynamicHourHeightDay = Math.max(
+    HOUR_HEIGHT_DAY_MIN,
+    Math.floor((viewportH - VERTICAL_CHROME_RESERVE) / visibleHours)
+  );
+  const dynamicHourHeightWeek = Math.max(
+    HOUR_HEIGHT_WEEK_MIN,
+    Math.floor((viewportH - VERTICAL_CHROME_RESERVE) / visibleHours)
+  );
 
   const [filters, setFilters] = useFiltersFromUrl();
   const { data: lists = [] } = useTaskLists();
@@ -312,7 +342,7 @@ export function Calendar() {
             actualStripes={actualStripes}
             hourStart={effectiveRange.hourStart}
             hourEnd={effectiveRange.hourEnd}
-            hourHeight={HOUR_HEIGHT_DAY}
+            hourHeight={dynamicHourHeightDay}
             onItemClick={handleItemClick}
             onCreateAt={handleCreateAt}
           />
@@ -324,7 +354,7 @@ export function Calendar() {
             actualStripes={actualStripes}
             hourStart={effectiveRange.hourStart}
             hourEnd={effectiveRange.hourEnd}
-            hourHeight={HOUR_HEIGHT_WEEK}
+            hourHeight={dynamicHourHeightWeek}
             onItemClick={handleItemClick}
             onCreateAt={handleCreateAt}
           />

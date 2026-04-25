@@ -13,6 +13,8 @@ export interface CalendarItem {
   id: string;
   kind: CalendarItemKind;
   title: string;
+  /** Plain-text description / notes — surfaced in hover tooltips. */
+  description: string | null;
   start: Date;
   end: Date;
   allDay: boolean;
@@ -202,6 +204,7 @@ export function taskToItem(t: Task, listColor: string | null): CalendarItem | nu
     id: `task:${t.id}`,
     kind: "task",
     title: t.title,
+    description: t.description ?? null,
     start,
     end,
     allDay: false,
@@ -232,6 +235,7 @@ export function eventToItem(
     id: `event:${e.id}`,
     kind: "event",
     title: e.title,
+    description: e.description ?? null,
     start: new Date(e.starts_at),
     end: new Date(e.ends_at),
     allDay: e.all_day,
@@ -242,6 +246,18 @@ export function eventToItem(
     completed: false,
     source: e,
   };
+}
+
+/**
+ * Build the multi-line text that hover-tooltips show for a calendar item.
+ * Title on the first line; description (if any) on subsequent lines.
+ * Truncated to keep the native `title` tooltip readable.
+ */
+export function itemTooltip(item: CalendarItem): string {
+  const desc = item.description?.trim();
+  if (!desc) return item.title;
+  const trimmed = desc.length > 240 ? `${desc.slice(0, 240)}…` : desc;
+  return `${item.title}\n\n${trimmed}`;
 }
 
 /** Clip an item so only the portion inside [from, to) remains; returns null if none. */

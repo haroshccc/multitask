@@ -11,9 +11,17 @@ import {
   isOverdueTask,
   isPast,
   isSameDay,
+  itemTooltip,
   layoutDayOverlaps,
   startOfDay,
 } from "./calendar-utils";
+import {
+  beginDrag,
+  durationMin,
+  endDrag,
+  getDrag,
+  isItemDraggable,
+} from "./calendar-drag";
 import { useCalendarPrefs } from "@/lib/hooks/useCalendarPrefs";
 import { DayNoteSlot } from "./DayNoteSlot";
 import { TaskCheckButton } from "./TaskCheckButton";
@@ -27,6 +35,10 @@ interface CalendarDayViewProps {
   hourHeight: number;
   onItemClick: (item: CalendarItem) => void;
   onCreateAt: (start: Date) => void;
+  /** Reposition an item by drag-drop. The new start is already snapped
+   *  to the 15-minute grid; the page is responsible for preserving the
+   *  duration when patching the entity. */
+  onItemDrop?: (item: CalendarItem, newStart: Date) => void;
   /** Per-day note body — `undefined` means no note. */
   dayNote?: string;
   /** Click on the date digit → open the per-day note editor. */
@@ -42,6 +54,7 @@ export function CalendarDayView({
   hourHeight,
   onItemClick,
   onCreateAt,
+  onItemDrop,
   dayNote,
   onDateNoteClick,
 }: CalendarDayViewProps) {
@@ -97,6 +110,23 @@ export function CalendarDayView({
     const snapped = Math.round(minutesFromWindowStart / 15) * 15;
     const start = new Date(windowStart + snapped * MIN);
     onCreateAt(start);
+  };
+
+  /** Drop handler for the day column — translates the cursor's Y back to
+   *  a snapped time, accounting for the offset between the cursor and the
+   *  block's top so the user feels they're moving the block "from where
+   *  they grabbed it" rather than snapping its head to the cursor. */
+  const handleColumnDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const drag = getDrag();
+    if (!drag || !onItemDrop) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const y = e.clientY - rect.top;
+    const minutesFromWindowStart = (y / hourHeight) * 60 - drag.grabOffsetMin;
+    const snapped = Math.round(minutesFromWindowStart / 15) * 15;
+    const newStart = new Date(windowStart + snapped * MIN);
+    onItemDrop(drag.item, newStart);
+    endDrag();
   };
 
   const toPercent = (d: Date): number => {
@@ -166,6 +196,12 @@ export function CalendarDayView({
           className="relative flex-1 cursor-pointer"
           style={{ height: gridHeight }}
           onClick={handleGridClick}
+          onDragOver={(e) => {
+            // Without preventDefault HTML5 will not fire `drop`. We only
+            // accept drops while a calendar item is being dragged.
+            if (getDrag()) e.preventDefault();
+          }}
+          onDrop={handleColumnDrop}
         >
           {/* Past-time tint — subtle gray over elapsed portion of today. */}
           {pastTodayPercent > 0 && (
@@ -317,14 +353,38 @@ export function CalendarBlock({
     };
   };
 
+  const draggable = isItemDraggable(item);
+
   return (
     <button
       onClick={(e) => {
         e.stopPropagation();
         onClick();
       }}
+      draggable={draggable}
+      onDragStart={(e) => {
+        if (!draggable) return;
+        // Where on the block did the user grab it? Translate to "minutes
+        // from item.start" so the drop can reconstruct the requested time
+        // even when the cursor isn't at the block's top.
+        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+        const blockMin = durationMin(item);
+        const grabPxFromTop = e.clientY - rect.top;
+        const grabMinFromStart =
+          (grabPxFromTop / Math.max(rect.height, 1)) * blockMin;
+        beginDrag(item, grabMinFromStart);
+        // Required for Firefox to actually start a drag.
+        e.dataTransfer.effectAllowed = "move";
+        try {
+          e.dataTransfer.setData("text/plain", item.id);
+        } catch {
+          /* ignore — some browsers throw on synthetic events in tests */
+        }
+      }}
+      onDragEnd={() => endDrag()}
       className={cn(
-        "absolute rounded-md px-1.5 py-1 text-[11px] text-start overflow-hidden transition-all hover:z-20 hover:shadow-lift"
+        "absolute rounded-md px-1.5 py-1 text-[11px] text-start overflow-hidden transition-all hover:z-20 hover:shadow-lift",
+        draggable && "cursor-grab active:cursor-grabbing"
       )}
       style={{
         top: `${top}%`,
@@ -337,7 +397,7 @@ export function CalendarBlock({
         opacity,
       }}
       type="button"
-      title={item.title}
+      title={itemTooltip(item)}
     >
       {/* Actual time overlay — a solid-filled band in the task's list color
           sitting inside the outlined planned block, in the same column at the
@@ -453,7 +513,7 @@ function AllDayChip({
           // otherwise the resolved color.
           borderColor: item.originalColor ?? accent,
         }}
-        title={item.title}
+        title={itemTooltip(item)}
         type="button"
       >
         <span className="truncate max-w-[140px]">{item.title}</span>
@@ -475,7 +535,7 @@ function AllDayChip({
         color: "#2d2d3a",
         backgroundColor: "white",
       }}
-      title={item.title}
+      title={itemTooltip(item)}
       type="button"
     >
       <TaskCheckButton

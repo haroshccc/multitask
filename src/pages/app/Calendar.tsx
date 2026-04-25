@@ -42,6 +42,8 @@ import {
   useCreateTaskList,
   useTasks,
   useTimeEntriesByRange,
+  useUpdateEvent,
+  useUpdateTask,
 } from "@/lib/hooks";
 import { useCalendarPrefs } from "@/lib/hooks/useCalendarPrefs";
 import type { FilterConfig } from "@/lib/types/domain";
@@ -267,6 +269,39 @@ export function Calendar() {
     else setEditingEventId((item.source as { id: string }).id);
   };
 
+  const updateTask = useUpdateTask();
+  const updateEvent = useUpdateEvent();
+
+  /**
+   * Persist a drag-drop reposition. Duration is preserved — the new end is
+   * derived from the original `(end - start)`. Tasks: patch `scheduled_at`
+   * (and `duration_minutes` so the cache stays consistent for views that
+   * read it). Events: patch `starts_at` + `ends_at`.
+   */
+  const handleItemDrop = (item: CalendarItem, newStart: Date) => {
+    const durationMs = item.end.getTime() - item.start.getTime();
+    const newEnd = new Date(newStart.getTime() + durationMs);
+    if (item.kind === "task") {
+      const taskId = (item.source as { id: string }).id;
+      updateTask.mutate({
+        taskId,
+        patch: {
+          scheduled_at: newStart.toISOString(),
+          duration_minutes: Math.round(durationMs / 60_000),
+        },
+      });
+    } else {
+      const eventId = (item.source as { id: string }).id;
+      updateEvent.mutate({
+        eventId,
+        patch: {
+          starts_at: newStart.toISOString(),
+          ends_at: newEnd.toISOString(),
+        },
+      });
+    }
+  };
+
   /** Click on an empty time-slot in any view → open the picker (defaults
    *  to event since that's the most common create). The user can flip to
    *  task via the toggle inside the modal. */
@@ -404,6 +439,7 @@ export function Calendar() {
             hourHeight={dynamicHourHeightDay}
             onItemClick={handleItemClick}
             onCreateAt={handleCreateAt}
+            onItemDrop={handleItemDrop}
             dayNote={notesByDate.get(dateKey(anchor))}
             onDateNoteClick={setEditingNoteDate}
           />
@@ -418,6 +454,7 @@ export function Calendar() {
             hourHeight={dynamicHourHeightWeek}
             onItemClick={handleItemClick}
             onCreateAt={handleCreateAt}
+            onItemDrop={handleItemDrop}
             notesByDate={notesByDate}
             onDateNoteClick={setEditingNoteDate}
           />
@@ -429,6 +466,7 @@ export function Calendar() {
             onItemClick={handleItemClick}
             onDayClick={handleMonthDayClick}
             onCellClick={handleMonthCellClick}
+            onItemDrop={handleItemDrop}
             notesByDate={notesByDate}
           />
         )}

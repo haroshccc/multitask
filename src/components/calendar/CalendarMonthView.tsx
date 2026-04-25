@@ -12,9 +12,16 @@ import {
   isPastDay,
   isSameDay,
   isSameMonth,
+  itemTooltip,
   startOfMonth,
   startOfWeek,
 } from "./calendar-utils";
+import {
+  beginDrag,
+  endDrag,
+  getDrag,
+  isItemDraggable,
+} from "./calendar-drag";
 import { useCalendarPrefs } from "@/lib/hooks/useCalendarPrefs";
 import { DayNoteSlot } from "./DayNoteSlot";
 import { TaskCheckButton } from "./TaskCheckButton";
@@ -40,6 +47,9 @@ interface CalendarMonthViewProps {
   onDayClick: (day: Date) => void;
   /** Click on the empty area of a day cell — opens the create picker. */
   onCellClick?: (day: Date) => void;
+  /** Reposition by drag-drop. The month view only changes the date —
+   *  time-of-day is preserved. */
+  onItemDrop?: (item: CalendarItem, newStart: Date) => void;
   /** Lookup: per-date note body (yyyy-mm-dd → string). */
   notesByDate?: Map<string, string>;
 }
@@ -50,8 +60,25 @@ export function CalendarMonthView({
   onItemClick,
   onDayClick,
   onCellClick,
+  onItemDrop,
   notesByDate,
 }: CalendarMonthViewProps) {
+  /** Drop on a day cell: preserve time-of-day, change only date. */
+  const handleCellDrop = (day: Date, e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const drag = getDrag();
+    if (!drag || !onItemDrop) return;
+    const orig = drag.item.start;
+    const newStart = new Date(day);
+    newStart.setHours(
+      orig.getHours(),
+      orig.getMinutes(),
+      orig.getSeconds(),
+      orig.getMilliseconds()
+    );
+    onItemDrop(drag.item, newStart);
+    endDrag();
+  };
   const monthStart = startOfMonth(anchor);
   const monthEnd = endOfMonth(anchor);
   const gridStart = startOfWeek(monthStart);
@@ -169,6 +196,10 @@ export function CalendarMonthView({
                           onCellClick(day);
                         }
                       }}
+                      onDragOver={(e) => {
+                        if (getDrag()) e.preventDefault();
+                      }}
+                      onDrop={(e) => handleCellDrop(day, e)}
                       className={cn(
                         "min-h-[110px] p-1 relative flex flex-col",
                         colIdx > 0 && "border-s border-ink-200",
@@ -358,7 +389,7 @@ function MonthBand({
         lineHeight: `${BAND_HEIGHT - 3}px`,
         ...(isPhase ? phaseStyle : isTask ? taskStyle : eventStyle),
       }}
-      title={item.title}
+      title={itemTooltip(item)}
       type="button"
     >
       {isPhase ? `שלב · ${item.title}` : item.title}
@@ -381,14 +412,31 @@ function MonthItemChip({
   const past = isPast(item, now);
   const overdue = isOverdueTask(item, now);
   const accent = item.color ?? (isTask ? "#6b6b80" : "#f59e0b");
+  const draggable = isItemDraggable(item);
+  // Month view drops only change the date, so grabOffsetMin is irrelevant —
+  // pass 0 and let the cell drop preserve the original time-of-day.
+  const onDragStart = (e: React.DragEvent) => {
+    if (!draggable) return;
+    beginDrag(item, 0);
+    e.dataTransfer.effectAllowed = "move";
+    try {
+      e.dataTransfer.setData("text/plain", item.id);
+    } catch {
+      /* ignore */
+    }
+  };
 
   if (!isTask) {
     return (
       <button
         onClick={onClick}
+        draggable={draggable}
+        onDragStart={onDragStart}
+        onDragEnd={() => endDrag()}
         className={cn(
           "w-full text-start inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-[10px] font-medium border text-white truncate",
-          past && "opacity-55"
+          past && "opacity-55",
+          draggable && "cursor-grab active:cursor-grabbing"
         )}
         style={{
           backgroundColor: `${accent}D9`,
@@ -396,7 +444,7 @@ function MonthItemChip({
           // the resolved color (= calendar / default).
           borderColor: item.originalColor ?? accent,
         }}
-        title={`${item.title} · ${formatHour(item.start, tz)}`}
+        title={`${itemTooltip(item)}\n${formatHour(item.start, tz)}`}
         type="button"
       >
         <span className="shrink-0 text-white/85 font-normal">
@@ -410,16 +458,20 @@ function MonthItemChip({
   return (
     <button
       onClick={onClick}
+      draggable={draggable}
+      onDragStart={onDragStart}
+      onDragEnd={() => endDrag()}
       className={cn(
         "relative w-full text-start inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-[10px] font-medium border bg-white truncate",
-        item.completed && "opacity-60"
+        item.completed && "opacity-60",
+        draggable && "cursor-grab active:cursor-grabbing"
       )}
       style={{
         borderColor: accent,
         color: "#2d2d3a",
         backgroundColor: "white",
       }}
-      title={`${item.title} · ${formatHour(item.start, tz)}`}
+      title={`${itemTooltip(item)}\n${formatHour(item.start, tz)}`}
       type="button"
     >
       <TaskCheckButton

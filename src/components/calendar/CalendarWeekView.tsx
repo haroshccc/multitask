@@ -392,7 +392,7 @@ function MultiDayBand({
   const past = isPast(item, now);
   const overdue = isOverdueTask(item, now);
   const accent = item.color ?? (isTask ? "#6b6b80" : "#f59e0b");
-  const strokeColor = overdue ? "#ef4444" : accent;
+  const strokeColor = accent;
 
   const width = `calc(${(span / 7) * 100}% - 6px)`;
   const left = `calc(${(startCol / 7) * 100}% + 3px)`;
@@ -404,9 +404,9 @@ function MultiDayBand({
     color: "#fff",
   };
   const taskStyle: React.CSSProperties = {
-    backgroundColor: overdue ? "rgba(239, 68, 68, 0.08)" : "white",
+    backgroundColor: "white",
     borderColor: strokeColor,
-    color: overdue ? "#b91c1c" : "#2d2d3a",
+    color: "#2d2d3a",
   };
   // Phase: filled-shade background + white text, no stripes inside.
   const phaseStyle: React.CSSProperties = {
@@ -438,13 +438,19 @@ function MultiDayBand({
         <TaskCheckButton
           taskId={(item.source as { id: string }).id}
           completed={item.completed}
-          accent={overdue ? "#ef4444" : accent}
+          accent={accent}
           size="sm"
         />
       )}
       <span className={cn(item.completed && "line-through", "truncate flex-1")}>
         {isPhase ? `שלב · ${item.title}` : item.title}
       </span>
+      {isTask && overdue && !item.completed && (
+        <span
+          className="absolute -top-1 -end-1 w-1.5 h-1.5 rounded-full bg-danger-500 pointer-events-none"
+          title="באיחור"
+        />
+      )}
     </button>
   );
 }

@@ -315,7 +315,7 @@ function MonthBand({
   const past = isPast(item, now);
   const overdue = isOverdueTask(item, now);
   const accent = item.color ?? (isTask ? "#6b6b80" : "#f59e0b");
-  const strokeColor = overdue ? "#ef4444" : accent;
+  const strokeColor = accent;
 
   const width = `calc(${(span / 7) * 100}% - 4px)`;
   const left = `calc(${(startCol / 7) * 100}% + 2px)`;
@@ -327,9 +327,9 @@ function MonthBand({
     color: "#fff",
   };
   const taskStyle: React.CSSProperties = {
-    backgroundColor: overdue ? "rgba(239, 68, 68, 0.08)" : "white",
+    backgroundColor: "white",
     borderColor: strokeColor,
-    color: overdue ? "#b91c1c" : "#2d2d3a",
+    color: "#2d2d3a",
   };
   const phaseStyle: React.CSSProperties = {
     backgroundColor: accent,
@@ -344,7 +344,10 @@ function MonthBand({
         "absolute rounded-sm px-1.5 text-[10px] font-medium border-[1.5px] truncate text-start pointer-events-auto",
         past && "opacity-60",
         item.completed && "line-through opacity-55",
-        isPhase && "font-bold uppercase"
+        isPhase && "font-bold uppercase",
+        // Multi-day overdue task: tiny red dot at the start (= right in
+        // RTL) via a pseudo-element-style absolute span.
+        isTask && overdue && !item.completed && "before:absolute before:-top-0.5 before:start-0 before:w-1.5 before:h-1.5 before:rounded-full before:bg-danger-500"
       )}
       style={{
         top,
@@ -402,13 +405,13 @@ function MonthItemChip({
     <button
       onClick={onClick}
       className={cn(
-        "w-full text-start inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-[10px] font-medium border bg-white truncate",
+        "relative w-full text-start inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-[10px] font-medium border bg-white truncate",
         item.completed && "opacity-60"
       )}
       style={{
-        borderColor: overdue ? "#ef4444" : accent,
-        color: overdue ? "#b91c1c" : "#2d2d3a",
-        backgroundColor: overdue ? "rgba(239, 68, 68, 0.06)" : "white",
+        borderColor: accent,
+        color: "#2d2d3a",
+        backgroundColor: "white",
       }}
       title={`${item.title} · ${formatHour(item.start, tz)}`}
       type="button"
@@ -416,7 +419,7 @@ function MonthItemChip({
       <TaskCheckButton
         taskId={(item.source as { id: string }).id}
         completed={item.completed}
-        accent={overdue ? "#ef4444" : accent}
+        accent={accent}
         size="sm"
       />
       <span className="shrink-0 text-ink-500">
@@ -425,6 +428,12 @@ function MonthItemChip({
       <span className={cn("truncate", item.completed && "line-through")}>
         {item.title}
       </span>
+      {overdue && !item.completed && (
+        <span
+          className="absolute -top-0.5 -end-0.5 w-1.5 h-1.5 rounded-full bg-danger-500 pointer-events-none"
+          title="באיחור"
+        />
+      )}
     </button>
   );
 }

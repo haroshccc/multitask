@@ -244,12 +244,20 @@ function AgendaRow({
         {/* Task complete-checkbox — only for tasks. Stops propagation so
             it doesn't fire the row's edit-modal click. */}
         {isTask ? (
-          <TaskCheckButton
-            taskId={(item.source as { id: string }).id}
-            completed={item.completed}
-            accent={overdue ? "#ef4444" : accent}
-            size="md"
-          />
+          <div className="relative">
+            <TaskCheckButton
+              taskId={(item.source as { id: string }).id}
+              completed={item.completed}
+              accent={accent}
+              size="md"
+            />
+            {overdue && !item.completed && (
+              <span
+                className="absolute -top-0.5 -end-0.5 w-1.5 h-1.5 rounded-full bg-danger-500 pointer-events-none"
+                title="באיחור"
+              />
+            )}
+          </div>
         ) : (
           <span className="w-4 h-4 shrink-0" />
         )}
@@ -269,7 +277,7 @@ function AgendaRow({
         {/* Color accent bar */}
         <div
           className="w-1 self-stretch rounded-full shrink-0"
-          style={{ backgroundColor: overdue ? "#ef4444" : accent }}
+          style={{ backgroundColor: accent }}
         />
 
         {/* Title + meta */}

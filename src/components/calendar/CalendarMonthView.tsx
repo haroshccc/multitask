@@ -321,9 +321,10 @@ function MonthBand({
   const left = `calc(${(startCol / 7) * 100}% + 2px)`;
   const top = row * (BAND_HEIGHT + BAND_GAP) + BAND_GAP;
 
+  // Border = calendar color when an override is in effect; else accent.
   const eventStyle: React.CSSProperties = {
     backgroundColor: `${accent}D9`,
-    borderColor: accent,
+    borderColor: item.originalColor ?? accent,
     color: "#fff",
   };
   const taskStyle: React.CSSProperties = {
@@ -389,7 +390,12 @@ function MonthItemChip({
           "w-full text-start inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-[10px] font-medium border text-white truncate",
           past && "opacity-55"
         )}
-        style={{ backgroundColor: `${accent}D9`, borderColor: accent }}
+        style={{
+          backgroundColor: `${accent}D9`,
+          // Border = calendar color when an override is in effect; else
+          // the resolved color (= calendar / default).
+          borderColor: item.originalColor ?? accent,
+        }}
         title={`${item.title} · ${formatHour(item.start, tz)}`}
         type="button"
       >

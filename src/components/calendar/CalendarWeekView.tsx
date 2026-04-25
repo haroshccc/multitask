@@ -398,9 +398,11 @@ function MultiDayBand({
   const left = `calc(${(startCol / 7) * 100}% + 3px)`;
   const top = row * 26 + 3;
 
+  // Border = original calendar color when an override is in effect; else
+  // the resolved color. Fill = override (or calendar) color.
   const eventStyle: React.CSSProperties = {
     backgroundColor: `${accent}D9`,
-    borderColor: accent,
+    borderColor: item.originalColor ?? accent,
     color: "#fff",
   };
   const taskStyle: React.CSSProperties = {

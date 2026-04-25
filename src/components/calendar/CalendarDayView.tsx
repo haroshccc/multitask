@@ -285,10 +285,13 @@ export function CalendarBlock({
   // Color: list color for both (tasks borrow from list, events either list or primary).
   const accent = item.color ?? (isTask ? "#6b6b80" : "#f59e0b");
 
-  // Overdue is now signalled by a tiny red dot in the corner — the block
-  // itself stays neutral so the calendar isn't a sea of red whenever the
-  // user falls behind on a few tasks.
-  const strokeColor = accent;
+  // Override visualization (events only): when an event has its own color
+  // overriding its parent calendar's color, use the calendar color for the
+  // BORDER and the override for the FILL — so both colors stay visible at
+  // a glance. When there's no override, both are the same (= calendar
+  // color or default).
+  const strokeColor =
+    !isTask && item.originalColor ? item.originalColor : accent;
 
   let bg: string;
   let textColor = "#2d2d3a";
@@ -413,17 +416,9 @@ export function CalendarBlock({
         />
       )}
 
-      {/* Override-color indicator — when an event has its own color but
-          also belongs to a calendar with a different color, show a small
-          dot in the calendar's original color so the link is still
-          visible at a glance (per user-spec #5). */}
-      {!isTask && item.originalColor && (
-        <span
-          className="absolute bottom-1 end-1 w-1.5 h-1.5 rounded-full pointer-events-none"
-          style={{ backgroundColor: item.originalColor }}
-          title="צבע היומן המקורי"
-        />
-      )}
+      {/* (Override visualization is now expressed via the block's border
+          color = calendar color + fill = override color, set above. No
+          extra indicator needed.) */}
     </button>
   );
 }
@@ -446,21 +441,22 @@ function AllDayChip({
       <button
         onClick={onClick}
         className={cn(
-          "relative inline-flex items-center gap-1 rounded-sm px-2 py-0.5 text-xs font-medium border text-white",
-          past && "opacity-60"
+          "inline-flex items-center gap-1 rounded-sm px-2 py-0.5 text-xs font-medium border text-white",
+          past && "opacity-60",
+          // Override-bound chip: thicker border so the calendar-color
+          // ring reads at chip size.
+          item.originalColor && "border-[2px]"
         )}
-        style={{ backgroundColor: hexToRgba(accent, 0.85), borderColor: accent }}
+        style={{
+          backgroundColor: hexToRgba(accent, 0.85),
+          // Border = original calendar color when there's an override;
+          // otherwise the resolved color.
+          borderColor: item.originalColor ?? accent,
+        }}
         title={item.title}
         type="button"
       >
         <span className="truncate max-w-[140px]">{item.title}</span>
-        {item.originalColor && (
-          <span
-            className="absolute -bottom-0.5 -end-0.5 w-1.5 h-1.5 rounded-full ring-1 ring-white pointer-events-none"
-            style={{ backgroundColor: item.originalColor }}
-            title="צבע היומן המקורי"
-          />
-        )}
       </button>
     );
   }

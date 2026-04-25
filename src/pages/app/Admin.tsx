@@ -10,6 +10,7 @@ export function Admin() {
   }
   return (
     <ScreenScaffold
+      narrow
       title="ניהול מערכת (Super Admin)"
       subtitle="ניהול ארגונים, משתמשים, ואיפוס סיסמאות"
     >

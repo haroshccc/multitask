@@ -423,9 +423,31 @@ interface Scenario {
  * scenario name itself implies the work. Real Claude will replace this
  * with prompted reasoning; the *shape* of the output stays the same.
  */
+/**
+ * Build a Hebrew-aware "word boundary" regex from a list of trigger words.
+ *
+ * JavaScript's native `\b` is defined against `\w` = `[A-Za-z0-9_]`, which
+ * does NOT include Hebrew letters. So `/\b(מבחן)\b/.test("מבחן")` returns
+ * **false** — the Hebrew chars are treated as `\W`, and there's no W↔w
+ * transition at the start. This is a common gotcha that bit us in v1.
+ *
+ * The fix: lookarounds against the Unicode Hebrew block (U+0590..U+05FF).
+ * "Word boundary" becomes "the trigger is not glued to another Hebrew
+ * letter on either side", which is what we actually mean.
+ */
+function hebrewWordBoundaryRegex(words: string[], flags = ""): RegExp {
+  const escaped = words
+    .map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .join("|");
+  return new RegExp(
+    `(?<![\\u0590-\\u05FF])(${escaped})(?![\\u0590-\\u05FF])`,
+    flags
+  );
+}
+
 const SCENARIOS: Scenario[] = [
   {
-    trigger: /\b(מבחן|בחינה|מבדק)\b/,
+    trigger: hebrewWordBoundaryRegex(["מבחן", "בחינה", "מבדק"]),
     name: "מבחן/בחינה",
     hasEvent: true,
     listBucket: "study",
@@ -438,7 +460,7 @@ const SCENARIOS: Scenario[] = [
     ],
   },
   {
-    trigger: /\b(פגישה|שיחה עם|תיאום עם)\b/,
+    trigger: hebrewWordBoundaryRegex(["פגישה", "שיחה עם", "תיאום עם"]),
     name: "פגישה",
     hasEvent: true,
     listBucket: "work",
@@ -450,7 +472,7 @@ const SCENARIOS: Scenario[] = [
     ],
   },
   {
-    trigger: /\b(טיול|חופש|חופשה|נסיעה)\b/,
+    trigger: hebrewWordBoundaryRegex(["טיול", "חופש", "חופשה", "נסיעה"]),
     name: "טיול / נסיעה",
     hasEvent: true,
     listBucket: "errands",
@@ -463,7 +485,7 @@ const SCENARIOS: Scenario[] = [
     ],
   },
   {
-    trigger: /\b(יום הולדת|יומולדת|יומ הולדת)\b/,
+    trigger: hebrewWordBoundaryRegex(["יום הולדת", "יומולדת", "יומ הולדת"]),
     name: "יום הולדת",
     hasEvent: true,
     listBucket: "family",
@@ -474,7 +496,13 @@ const SCENARIOS: Scenario[] = [
     ],
   },
   {
-    trigger: /\b(חתונה|בר מצווה|בת מצווה|ברית|אירוסין)\b/,
+    trigger: hebrewWordBoundaryRegex([
+      "חתונה",
+      "בר מצווה",
+      "בת מצווה",
+      "ברית",
+      "אירוסין",
+    ]),
     name: "אירוע משפחתי",
     hasEvent: true,
     listBucket: "family",
@@ -486,7 +514,7 @@ const SCENARIOS: Scenario[] = [
     ],
   },
   {
-    trigger: /\b(תור|רופא|רופאה|בדיקה|בדיקות)\b/,
+    trigger: hebrewWordBoundaryRegex(["רופא", "רופאה", "בדיקה", "בדיקות"]),
     name: "תור רפואי",
     hasEvent: true,
     listBucket: "health",
@@ -498,7 +526,10 @@ const SCENARIOS: Scenario[] = [
     ],
   },
   {
-    trigger: /\b(הצעת מחיר|הצעה ללקוח|quote)\b/i,
+    trigger: hebrewWordBoundaryRegex(
+      ["הצעת מחיר", "הצעה ללקוח", "quote"],
+      "i"
+    ),
     name: "הצעת מחיר",
     hasEvent: false,
     listBucket: "work",
@@ -510,7 +541,7 @@ const SCENARIOS: Scenario[] = [
     ],
   },
   {
-    trigger: /\b(מאמר|פוסט|בלוג|כתבה|לכתוב)\b/,
+    trigger: hebrewWordBoundaryRegex(["מאמר", "פוסט", "בלוג", "כתבה"]),
     name: "כתיבה",
     hasEvent: false,
     tasks: [
@@ -521,7 +552,13 @@ const SCENARIOS: Scenario[] = [
     ],
   },
   {
-    trigger: /\b(אירוח|ארוחה|ארוחת ערב|ארוחת צהריים|מסיבה)\b/,
+    trigger: hebrewWordBoundaryRegex([
+      "אירוח",
+      "ארוחה",
+      "ארוחת ערב",
+      "ארוחת צהריים",
+      "מסיבה",
+    ]),
     name: "אירוח",
     hasEvent: true,
     listBucket: "shopping",
@@ -533,7 +570,12 @@ const SCENARIOS: Scenario[] = [
     ],
   },
   {
-    trigger: /\b(העברה|מעבר דירה|התקנה|תיקון)\b/,
+    trigger: hebrewWordBoundaryRegex([
+      "מעבר דירה",
+      "העברת דירה",
+      "התקנה",
+      "תיקון",
+    ]),
     name: "סידור הבית",
     hasEvent: false,
     tasks: [

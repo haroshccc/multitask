@@ -15,6 +15,7 @@ import { CalendarAgendaView } from "@/components/calendar/CalendarAgendaView";
 import { CalendarStatsStrip } from "@/components/calendar/CalendarStatsStrip";
 import { EventEditModal } from "@/components/calendar/EventEditModal";
 import { DayNoteDialog } from "@/components/calendar/DayNoteDialog";
+import { EventCalendarEditDialog } from "@/components/calendar/EventCalendarEditDialog";
 import {
   useCalendarDayNotes,
 } from "@/lib/hooks/useCalendarDayNotes";
@@ -34,6 +35,7 @@ import {
 } from "@/components/calendar/calendar-utils";
 import {
   useEvents,
+  useEventCalendars,
   useListVisibility,
   useSetListVisibility,
   useTaskLists,
@@ -122,6 +124,16 @@ export function Calendar() {
     to: range.toIso,
   });
 
+  const { data: eventCalendars = [] } = useEventCalendars();
+  const calendarColorById = useMemo(() => {
+    const m = new Map<string, string | null>();
+    for (const c of eventCalendars) m.set(c.id, c.color);
+    return m;
+  }, [eventCalendars]);
+  // Visibility for event calendars piggybacks on the same `hidden_list_ids`
+  // set as task lists — both are UUIDs and never collide. Toggling either
+  // pushes/pulls the id from the same array.
+
   const listColorById = useMemo(() => {
     const m = new Map<string, string | null>();
     for (const l of lists) m.set(l.id, l.color);
@@ -143,7 +155,10 @@ export function Calendar() {
     }
     if (layer !== "tasks") {
       for (const e of events) {
-        const base = eventToItem(e);
+        // Calendar visibility (via the same `hiddenLists` set, which holds
+        // both task_list_ids and event_calendar_ids).
+        if (e.calendar_id && hiddenLists.has(e.calendar_id)) continue;
+        const base = eventToItem(e, calendarColorById);
         // Recurring event → expand into concrete occurrences inside the window.
         // The server returns the master row (its own `starts_at` as the anchor).
         if (e.recurrence_rule) {
@@ -179,7 +194,7 @@ export function Calendar() {
       }
     }
     return out;
-  }, [tasks, events, layer, hiddenLists, listColorById, range]);
+  }, [tasks, events, layer, hiddenLists, listColorById, calendarColorById, range]);
 
   const actualStripes = useMemo(() => {
     const now = new Date();
@@ -298,6 +313,30 @@ export function Calendar() {
     [lists]
   );
 
+  const unifiedCalendars = useMemo(
+    () =>
+      eventCalendars.map((c) => ({
+        id: c.id,
+        name: c.name,
+        emoji: c.emoji,
+        color: c.color,
+      })),
+    [eventCalendars]
+  );
+
+  // Edit-state for event-calendar create / edit dialog.
+  const [calendarDialog, setCalendarDialog] = useState<{
+    open: boolean;
+    calendarId: string | null;
+  }>({ open: false, calendarId: null });
+  const editingCalendar = useMemo(
+    () =>
+      calendarDialog.calendarId
+        ? eventCalendars.find((c) => c.id === calendarDialog.calendarId) ?? null
+        : null,
+    [calendarDialog.calendarId, eventCalendars]
+  );
+
   // Agenda + week + month + day are all peers — agenda is NOT a replacement
   // for week. Same set on every breakpoint.
   const availableViews: CalendarView[] = ["day", "week", "month", "agenda"];
@@ -317,6 +356,14 @@ export function Calendar() {
           hiddenListIds={hiddenLists}
           onToggleListVisibility={toggleListVisibility}
           onCreateList={handleCreateList}
+          eventCalendars={unifiedCalendars}
+          onToggleCalendarVisibility={toggleListVisibility}
+          onCreateCalendar={() =>
+            setCalendarDialog({ open: true, calendarId: null })
+          }
+          onEditCalendar={(calId) =>
+            setCalendarDialog({ open: true, calendarId: calId })
+          }
           filtersActiveCount={filtersActiveCount}
           filtersOpen={filtersOpen}
           onToggleFilters={() => setFiltersOpen((v) => !v)}
@@ -457,6 +504,12 @@ export function Calendar() {
 
       {/* Per-day note editor — opens when the user clicks a date digit
           in any calendar view. */}
+      <EventCalendarEditDialog
+        open={calendarDialog.open}
+        calendar={editingCalendar}
+        onClose={() => setCalendarDialog({ open: false, calendarId: null })}
+      />
+
       <DayNoteDialog
         date={editingNoteDate}
         initialBody={

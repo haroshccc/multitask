@@ -76,9 +76,59 @@ export type Database = {
           },
         ]
       }
+      event_calendars: {
+        Row: {
+          archive_expires_at: string | null
+          archived_at: string | null
+          color: string | null
+          created_at: string
+          emoji: string | null
+          id: string
+          is_archived: boolean
+          linked_task_list_id: string | null
+          name: string
+          organization_id: string
+          owner_id: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          archive_expires_at?: string | null
+          archived_at?: string | null
+          color?: string | null
+          created_at?: string
+          emoji?: string | null
+          id?: string
+          is_archived?: boolean
+          linked_task_list_id?: string | null
+          name: string
+          organization_id: string
+          owner_id: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          archive_expires_at?: string | null
+          archived_at?: string | null
+          color?: string | null
+          created_at?: string
+          emoji?: string | null
+          id?: string
+          is_archived?: boolean
+          linked_task_list_id?: string | null
+          name?: string
+          organization_id?: string
+          owner_id?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       events: {
         Row: {
           all_day: boolean
+          calendar_id: string | null
+          color: string | null
           created_at: string
           description: string | null
           ends_at: string
@@ -104,6 +154,8 @@ export type Database = {
         }
         Insert: {
           all_day?: boolean
+          calendar_id?: string | null
+          color?: string | null
           created_at?: string
           description?: string | null
           ends_at: string
@@ -129,6 +181,8 @@ export type Database = {
         }
         Update: {
           all_day?: boolean
+          calendar_id?: string | null
+          color?: string | null
           created_at?: string
           description?: string | null
           ends_at?: string
@@ -1166,6 +1220,7 @@ export type Database = {
           is_archived: boolean
           is_pinned: boolean
           kind: Database["public"]["Enums"]["task_list_kind"]
+          linked_event_calendar_id: string | null
           name: string
           organization_id: string
           owner_id: string
@@ -1183,6 +1238,7 @@ export type Database = {
           is_archived?: boolean
           is_pinned?: boolean
           kind?: Database["public"]["Enums"]["task_list_kind"]
+          linked_event_calendar_id?: string | null
           name: string
           organization_id: string
           owner_id: string
@@ -1200,6 +1256,7 @@ export type Database = {
           is_archived?: boolean
           is_pinned?: boolean
           kind?: Database["public"]["Enums"]["task_list_kind"]
+          linked_event_calendar_id?: string | null
           name?: string
           organization_id?: string
           owner_id?: string

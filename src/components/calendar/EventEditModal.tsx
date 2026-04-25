@@ -19,6 +19,7 @@ import {
   useDeleteEvent,
 } from "@/lib/hooks/useEvents";
 import { useThought } from "@/lib/hooks/useThoughts";
+import { useEventCalendars } from "@/lib/hooks/useEventCalendars";
 import { DateTimePicker } from "@/components/ui/DateTimePicker";
 import { EventParticipantsSection } from "./EventParticipantsSection";
 import { RrulePicker } from "./RrulePicker";
@@ -58,6 +59,12 @@ interface EventEditModalProps {
 
 type Tab = "details" | "participants" | "recurrence";
 
+const EVENT_COLOR_PRESETS = [
+  "#ef4444", "#f97316", "#f59e0b", "#eab308",
+  "#22c55e", "#10b981", "#0ea5e9", "#3b82f6",
+  "#6366f1", "#8b5cf6", "#a855f7", "#ec4899",
+];
+
 export function EventEditModal({
   open,
   eventId,
@@ -87,6 +94,9 @@ export function EventEditModal({
   const [startsAt, setStartsAt] = useState<string | null>(null);
   const [endsAt, setEndsAt] = useState<string | null>(null);
   const [recurrenceRule, setRecurrenceRule] = useState<string | null>(null);
+  const [calendarId, setCalendarId] = useState<string | null>(null);
+  const [color, setColor] = useState<string | null>(null);
+  const { data: availableCalendars = [] } = useEventCalendars();
 
   useEffect(() => {
     if (!open) return;
@@ -99,6 +109,8 @@ export function EventEditModal({
       setStartsAt(existing.starts_at);
       setEndsAt(existing.ends_at);
       setRecurrenceRule(existing.recurrence_rule);
+      setCalendarId(existing.calendar_id ?? null);
+      setColor(existing.color ?? null);
       setTab("details");
     } else if (!isEdit) {
       const s = initialStart ?? new Date();
@@ -111,6 +123,8 @@ export function EventEditModal({
       setStartsAt(s.toISOString());
       setEndsAt(e.toISOString());
       setRecurrenceRule(null);
+      setCalendarId(null);
+      setColor(null);
       setTab("details");
     }
   }, [
@@ -138,7 +152,9 @@ export function EventEditModal({
         allDay !== existing.all_day ||
         startsAt !== existing.starts_at ||
         endsAt !== existing.ends_at ||
-        recurrenceRule !== existing.recurrence_rule
+        recurrenceRule !== existing.recurrence_rule ||
+        calendarId !== (existing.calendar_id ?? null) ||
+        color !== (existing.color ?? null)
       );
     }
     // Create mode: dirty only if user filled the title — every other field
@@ -156,6 +172,8 @@ export function EventEditModal({
     startsAt,
     endsAt,
     recurrenceRule,
+    calendarId,
+    color,
   ]);
 
   const save = async (): Promise<boolean> => {
@@ -170,6 +188,8 @@ export function EventEditModal({
       ends_at: endsAt,
       recurrence_rule: recurrenceRule,
       source_thought_id: initialSourceThoughtId ?? null,
+      calendar_id: calendarId,
+      color: color,
     };
     try {
       if (isEdit && eventId) {
@@ -310,6 +330,55 @@ export function EventEditModal({
                         onChange={setEndsAt}
                         dateOnly={allDay}
                       />
+                    </Field>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <Field label="יומן">
+                      <select
+                        value={calendarId ?? ""}
+                        onChange={(e) =>
+                          setCalendarId(e.target.value || null)
+                        }
+                        className="field"
+                      >
+                        <option value="">ללא שיוך</option>
+                        {availableCalendars.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+                    <Field label="צבע (דורס את צבע היומן)">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <button
+                          type="button"
+                          onClick={() => setColor(null)}
+                          className={cn(
+                            "h-7 px-2 rounded-md border text-[11px]",
+                            color === null
+                              ? "bg-ink-900 text-white border-ink-900"
+                              : "bg-white text-ink-700 border-ink-200 hover:bg-ink-50"
+                          )}
+                          title="השתמש בצבע היומן (או ברירת מחדל אם אין יומן)"
+                        >
+                          ברירת מחדל
+                        </button>
+                        {EVENT_COLOR_PRESETS.map((c) => (
+                          <button
+                            key={c}
+                            type="button"
+                            onClick={() => setColor(c)}
+                            className={cn(
+                              "w-6 h-6 rounded-full border border-ink-200 transition-transform",
+                              color === c && "ring-2 ring-ink-900 ring-offset-1"
+                            )}
+                            style={{ backgroundColor: c }}
+                            title={c}
+                          />
+                        ))}
+                      </div>
                     </Field>
                   </div>
 

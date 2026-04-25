@@ -50,6 +50,13 @@ interface CalendarChromeProps {
   onToggleListVisibility: (listId: string) => void;
   onCreateList: () => void;
 
+  // Event calendars (sit next to lists in the same popover; visibility
+  // shares the `hiddenListIds` set since UUIDs don't collide).
+  eventCalendars?: UnifiedList[];
+  onToggleCalendarVisibility?: (calendarId: string) => void;
+  onCreateCalendar?: () => void;
+  onEditCalendar?: (calendarId: string) => void;
+
   // Filter / stats panel toggles
   filtersActiveCount: number;
   filtersOpen: boolean;
@@ -94,6 +101,10 @@ export function CalendarChrome(props: CalendarChromeProps) {
     hiddenListIds,
     onToggleListVisibility,
     onCreateList,
+    eventCalendars = [],
+    onToggleCalendarVisibility,
+    onCreateCalendar,
+    onEditCalendar,
     filtersActiveCount,
     filtersOpen,
     onToggleFilters,
@@ -272,6 +283,86 @@ export function CalendarChrome(props: CalendarChromeProps) {
                     <Plus className="w-3.5 h-3.5" />
                     רשימה חדשה
                   </button>
+                </div>
+
+                {/* Event calendars — separate concept from task lists, but
+                    share the same hidden-IDs set on the calendar screen. */}
+                <div className="border-t border-ink-100 mt-1 pt-1">
+                  <div className="text-[10px] font-semibold text-ink-400 uppercase tracking-wider px-3 py-1">
+                    יומני אירועים
+                  </div>
+                  {eventCalendars.length === 0 ? (
+                    <p className="px-3 py-1.5 text-xs text-ink-500">
+                      עוד אין יומנים. צרי אחד למטה.
+                    </p>
+                  ) : (
+                    eventCalendars.map((c) => {
+                      const hidden = hiddenListIds.has(c.id);
+                      return (
+                        <div
+                          key={c.id}
+                          className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-ink-50"
+                        >
+                          <button
+                            onClick={() => onToggleCalendarVisibility?.(c.id)}
+                            className="flex items-center gap-2 flex-1 min-w-0 text-start"
+                            type="button"
+                          >
+                            <span
+                              className={cn(
+                                "w-3 h-3 rounded-sm border flex items-center justify-center shrink-0",
+                                hidden
+                                  ? "border-ink-300 bg-white"
+                                  : "border-transparent"
+                              )}
+                              style={
+                                hidden
+                                  ? undefined
+                                  : { backgroundColor: c.color ?? "#f59e0b" }
+                              }
+                            >
+                              {!hidden && (
+                                <Check className="w-2.5 h-2.5 text-white" />
+                              )}
+                            </span>
+                            {c.emoji && (
+                              <ListIcon
+                                emoji={c.emoji}
+                                className="w-3.5 h-3.5"
+                              />
+                            )}
+                            <span
+                              className={cn(
+                                "truncate flex-1",
+                                hidden ? "text-ink-500" : "text-ink-900"
+                              )}
+                            >
+                              {c.name}
+                            </span>
+                          </button>
+                          {onEditCalendar && (
+                            <button
+                              onClick={() => onEditCalendar(c.id)}
+                              className="text-ink-400 hover:text-ink-700 text-[10px] underline"
+                              type="button"
+                            >
+                              עריכה
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                  {onCreateCalendar && (
+                    <button
+                      onClick={onCreateCalendar}
+                      className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-start text-primary-600 hover:bg-ink-50"
+                      type="button"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      יומן אירועים חדש
+                    </button>
+                  )}
                 </div>
               </div>
             )}

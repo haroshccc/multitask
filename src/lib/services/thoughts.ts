@@ -195,3 +195,20 @@ export async function recordThoughtProcessing(input: {
   if (error) throw error;
   return data;
 }
+
+/** Bulk: count `thought_processings` per thought_id, in one round-trip. */
+export async function countProcessingsForThoughts(
+  thoughtIds: string[]
+): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  if (thoughtIds.length === 0) return out;
+  const { data, error } = await supabase
+    .from("thought_processings")
+    .select("thought_id")
+    .in("thought_id", thoughtIds);
+  if (error) throw error;
+  for (const row of data ?? []) {
+    out.set(row.thought_id, (out.get(row.thought_id) ?? 0) + 1);
+  }
+  return out;
+}

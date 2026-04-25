@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   X,
@@ -13,6 +13,7 @@ import {
   Calendar as CalendarIcon,
   FolderKanban,
   ExternalLink,
+  Save,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { useNavigate } from "react-router-dom";
@@ -27,6 +28,7 @@ import {
 } from "@/lib/hooks";
 import type { ThoughtSource } from "@/lib/types/domain";
 import { ListIcon } from "@/components/tasks/list-icons";
+import { UnsavedChangesGuard } from "@/components/ui/UnsavedChangesGuard";
 
 interface ThoughtEditModalProps {
   thoughtId: string | null;
@@ -59,6 +61,7 @@ export function ThoughtEditModal({
   const [text, setText] = useState("");
   const [tags, setTags] = useState<string[]>([]);
   const [tagDraft, setTagDraft] = useState("");
+  const [guardOpen, setGuardOpen] = useState(false);
 
   useEffect(() => {
     if (!thought) return;
@@ -67,16 +70,57 @@ export function ThoughtEditModal({
     setTags(thought.tags ?? []);
   }, [thought?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const saveOnBlur = () => {
-    if (!thought) return;
-    updateThought.mutate({
-      thoughtId: thought.id,
-      patch: {
-        ai_generated_title: title || null,
-        text_content: text || null,
-        tags,
-      },
-    });
+  // Dirty when any user-editable text/tags differ from the persisted row.
+  // List assignments are committed eagerly (their own service calls) and
+  // intentionally not part of the "dirty" form.
+  const dirty = useMemo(() => {
+    if (!thought) return false;
+    const tagsEqual =
+      tags.length === (thought.tags?.length ?? 0) &&
+      tags.every((t, i) => t === thought.tags?.[i]);
+    return (
+      title !== (thought.ai_generated_title ?? "") ||
+      text !== (thought.text_content ?? "") ||
+      !tagsEqual
+    );
+  }, [thought, title, text, tags]);
+
+  const saveDraft = async (): Promise<boolean> => {
+    if (!thought || !dirty) return true;
+    try {
+      await updateThought.mutateAsync({
+        thoughtId: thought.id,
+        patch: {
+          ai_generated_title: title || null,
+          text_content: text || null,
+          tags,
+        },
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const handleClose = () => {
+    if (dirty) {
+      setGuardOpen(true);
+      return;
+    }
+    onClose();
+  };
+
+  const handleSaveAndClose = async () => {
+    const ok = await saveDraft();
+    if (ok) {
+      setGuardOpen(false);
+      onClose();
+    }
+  };
+
+  const handleDiscardAndClose = () => {
+    setGuardOpen(false);
+    onClose();
   };
 
   const assignedIds = new Set(assignments.map((a) => a.list_id));
@@ -90,7 +134,7 @@ export function ThoughtEditModal({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          onClick={onClose}
+          onClick={handleClose}
           className="fixed inset-0 z-50 bg-ink-900/50 backdrop-blur-sm flex items-start md:items-center justify-center p-4 overflow-y-auto"
         >
           <motion.div
@@ -106,13 +150,12 @@ export function ThoughtEditModal({
                 <input
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  onBlur={saveOnBlur}
                   placeholder="כותרת (נוצרת ע״י AI)"
                   className="text-lg font-semibold text-ink-900 bg-transparent border-0 outline-none flex-1 min-w-0"
                 />
               </div>
               <button
-                onClick={onClose}
+                onClick={handleClose}
                 className="p-1.5 rounded-lg hover:bg-ink-100"
                 type="button"
               >
@@ -143,7 +186,6 @@ export function ThoughtEditModal({
                     <textarea
                       value={text}
                       onChange={(e) => setText(e.target.value)}
-                      onBlur={saveOnBlur}
                       className="field min-h-[140px] resize-y text-sm"
                       placeholder="הטקסט של המחשבה"
                     />
@@ -165,10 +207,6 @@ export function ThoughtEditModal({
                             onClick={() => {
                               const next = tags.filter((x) => x !== t);
                               setTags(next);
-                              updateThought.mutate({
-                                thoughtId: thought!.id,
-                                patch: { tags: next },
-                              });
                             }}
                             className="hover:text-danger-600"
                             type="button"
@@ -186,13 +224,8 @@ export function ThoughtEditModal({
                           e.preventDefault();
                           const v = tagDraft.trim();
                           if (!v || tags.includes(v)) return;
-                          const next = [...tags, v];
-                          setTags(next);
+                          setTags([...tags, v]);
                           setTagDraft("");
-                          updateThought.mutate({
-                            thoughtId: thought!.id,
-                            patch: { tags: next },
-                          });
                         }
                       }}
                       placeholder="הקלידי תג ולחצי Enter"
@@ -317,7 +350,48 @@ export function ThoughtEditModal({
                 </div>
               )}
             </div>
+
+            {/* Footer: explicit save. Closing X / outside-click route through
+                handleClose, which pops the unsaved-changes guard if dirty. */}
+            <div className="px-5 py-3 border-t border-ink-200 flex items-center justify-end gap-2">
+              {dirty && (
+                <span className="text-[11px] text-warning-600 me-auto">
+                  יש שינויים לא שמורים
+                </span>
+              )}
+              <button
+                onClick={handleClose}
+                className="btn-ghost text-sm"
+                type="button"
+              >
+                סגור
+              </button>
+              <button
+                onClick={async () => {
+                  const ok = await saveDraft();
+                  if (ok) onClose();
+                }}
+                disabled={!dirty || updateThought.isPending}
+                className={cn(
+                  "btn-primary text-sm",
+                  (!dirty || updateThought.isPending) &&
+                    "opacity-40 cursor-not-allowed"
+                )}
+                type="button"
+              >
+                <Save className="w-3.5 h-3.5" />
+                {updateThought.isPending ? "שומר..." : "שמור"}
+              </button>
+            </div>
           </motion.div>
+
+          <UnsavedChangesGuard
+            open={guardOpen}
+            saving={updateThought.isPending}
+            onSaveAndClose={handleSaveAndClose}
+            onDiscardAndClose={handleDiscardAndClose}
+            onCancel={() => setGuardOpen(false)}
+          />
         </motion.div>
       )}
     </AnimatePresence>

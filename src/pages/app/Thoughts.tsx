@@ -10,8 +10,8 @@ import {
   useThoughts,
   useThoughtLists,
   useCreateThought,
-  useCreateThoughtList,
   useBulkThoughtAssignments,
+  useBulkThoughtProcessingCounts,
   useListVisibility,
   useSetListVisibility,
 } from "@/lib/hooks";
@@ -27,6 +27,7 @@ import { ThoughtComposer } from "@/components/thoughts/ThoughtComposer";
 import { ThoughtCard } from "@/components/thoughts/ThoughtCard";
 import { ThoughtsListsView } from "@/components/thoughts/ThoughtsListsView";
 import { ThoughtEditModal } from "@/components/thoughts/ThoughtEditModal";
+import { ThoughtListEditDialog } from "@/components/thoughts/ThoughtListEditDialog";
 import { TaskEditModal } from "@/components/tasks/TaskEditModal";
 import { EventEditModal } from "@/components/calendar/EventEditModal";
 import { mockProvider } from "@/lib/ai/thought-suggestions";
@@ -85,10 +86,10 @@ export function Thoughts() {
   const { data: visibility } = useListVisibility("thoughts");
   const setListVisibility = useSetListVisibility();
   const createThought = useCreateThought();
-  const createThoughtList = useCreateThoughtList();
 
   const thoughtIds = useMemo(() => thoughts.map((t) => t.id), [thoughts]);
   const { data: assignments = [] } = useBulkThoughtAssignments(thoughtIds);
+  const { data: processingCounts } = useBulkThoughtProcessingCounts(thoughtIds);
 
   const hiddenLists = useMemo(
     () => new Set(visibility?.hidden_list_ids ?? []),
@@ -209,11 +210,15 @@ export function Thoughts() {
     setListVisibility.mutate({ screenKey: "thoughts", hiddenListIds: next });
   };
 
-  const handleCreateList = async () => {
-    const name = window.prompt("שם הרשימה החדשה:");
-    if (!name?.trim()) return;
-    await createThoughtList.mutateAsync({ name: name.trim() });
-  };
+  // List-edit dialog state. `null` = create mode; a list = edit mode.
+  const [listDialog, setListDialog] = useState<{
+    open: boolean;
+    list: ThoughtList | null;
+  }>({ open: false, list: null });
+  const openCreateListDialog = () => setListDialog({ open: true, list: null });
+  const openEditListDialog = (list: ThoughtList) =>
+    setListDialog({ open: true, list });
+  const closeListDialog = () => setListDialog((prev) => ({ ...prev, open: false }));
 
   const unifiedLists = useMemo(
     () =>
@@ -272,7 +277,7 @@ export function Thoughts() {
           lists={unifiedLists}
           hiddenListIds={hiddenLists}
           onToggleListVisibility={toggleListVisibility}
-          onCreateList={handleCreateList}
+          onCreateList={openCreateListDialog}
           filtersActiveCount={filtersActiveCount}
           filtersOpen={filtersOpen}
           onToggleFilters={() => setFiltersOpen((v) => !v)}
@@ -329,6 +334,7 @@ export function Thoughts() {
                   thought={t}
                   allLists={lists}
                   assignedLists={assignmentsByThought.get(t.id) ?? []}
+                  processedCount={processingCounts?.get(t.id) ?? 0}
                   compact={density === "compact"}
                   onOpen={() => setEditingThoughtId(t.id)}
                   onOpenTask={setEditingTaskId}
@@ -343,11 +349,13 @@ export function Thoughts() {
             lists={lists}
             hiddenLists={hiddenLists}
             assignmentsByThought={assignmentsByThought}
+            processingCounts={processingCounts}
             compact={density === "compact"}
             onOpenThought={setEditingThoughtId}
             onOpenTask={setEditingTaskId}
             onOpenEvent={setEditingEventId}
-            onCreateList={handleCreateList}
+            onCreateList={openCreateListDialog}
+            onEditList={openEditListDialog}
           />
         )}
       </div>
@@ -372,6 +380,11 @@ export function Thoughts() {
         open={!!editingEventId}
         eventId={editingEventId}
         onClose={() => setEditingEventId(null)}
+      />
+      <ThoughtListEditDialog
+        open={listDialog.open}
+        list={listDialog.list}
+        onClose={closeListDialog}
       />
     </ScreenScaffold>
   );

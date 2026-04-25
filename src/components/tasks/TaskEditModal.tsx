@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   X,
@@ -18,6 +18,7 @@ import {
   MapPin,
   Pencil,
   ExternalLink,
+  Save,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { useTask, useUpdateTask, useCompleteTask } from "@/lib/hooks/useTasks";
@@ -51,6 +52,7 @@ import {
 } from "@/components/ui/DurationInput";
 import { TaskDependenciesSection } from "@/components/tasks/TaskDependenciesSection";
 import { PlanVsActualBar } from "@/components/tasks/PlanVsActualBar";
+import { UnsavedChangesGuard } from "@/components/ui/UnsavedChangesGuard";
 
 interface TaskEditModalProps {
   taskId: string | null;
@@ -128,6 +130,58 @@ export function TaskEditModal({ taskId, onClose, defaultTab = "overview" }: Task
     });
   };
 
+  // Dirty when any free-text field has unblurred edits. The autosave-on-blur
+  // pattern means most changes commit immediately, but a user typing then
+  // hitting × without leaving the field still has unsaved work — this is
+  // exactly the case the close-with-changes guard catches.
+  const dirty = useMemo(() => {
+    if (!task) return false;
+    const tagsEqual =
+      tags.length === (task.tags?.length ?? 0) &&
+      tags.every((x, i) => x === task.tags?.[i]);
+    return (
+      (title.trim() || task.title) !== task.title ||
+      description !== (task.description ?? "") ||
+      notes !== (task.notes ?? "") ||
+      location !== (task.location ?? "") ||
+      externalUrl !== (task.external_url ?? "") ||
+      !tagsEqual
+    );
+  }, [task, title, description, notes, location, externalUrl, tags]);
+
+  const [guardOpen, setGuardOpen] = useState(false);
+
+  const saveAll = async (): Promise<boolean> => {
+    if (!task) return true;
+    try {
+      await updateTask.mutateAsync({
+        taskId: task.id,
+        patch: {
+          title: title.trim() || task.title,
+          description: description || null,
+          notes: notes || null,
+          urgency,
+          status,
+          task_list_id: listId,
+          tags,
+          location: location || null,
+          external_url: externalUrl || null,
+        },
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const handleClose = () => {
+    if (dirty) {
+      setGuardOpen(true);
+      return;
+    }
+    onClose();
+  };
+
   const saveSchedulePatch = (
     patch: Partial<{
       scheduled_at: string | null;
@@ -148,7 +202,7 @@ export function TaskEditModal({ taskId, onClose, defaultTab = "overview" }: Task
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          onClick={onClose}
+          onClick={handleClose}
           className="fixed inset-0 z-50 bg-ink-900/50 backdrop-blur-sm flex items-start md:items-center justify-center p-4 overflow-y-auto"
         >
           <motion.div
@@ -201,7 +255,7 @@ export function TaskEditModal({ taskId, onClose, defaultTab = "overview" }: Task
                 />
               </div>
               <button
-                onClick={onClose}
+                onClick={handleClose}
                 className="p-1.5 rounded-lg hover:bg-ink-100"
               >
                 <X className="w-4 h-4 text-ink-600" />
@@ -466,7 +520,59 @@ export function TaskEditModal({ taskId, onClose, defaultTab = "overview" }: Task
 
               {tab === "attachments" && <AttachmentsTab />}
             </div>
+
+            {/* Footer: explicit save. The autosave-on-blur in each field
+                still works (typing → blur → mutate), so this button is the
+                "commit unblurred edits" affordance + the visible save
+                indicator the user wants. */}
+            <div className="px-5 py-3 border-t border-ink-200 flex items-center justify-end gap-2">
+              {dirty && (
+                <span className="text-[11px] text-warning-600 me-auto">
+                  יש שינויים לא שמורים
+                </span>
+              )}
+              <button
+                onClick={handleClose}
+                className="btn-ghost text-sm"
+                type="button"
+              >
+                סגור
+              </button>
+              <button
+                onClick={async () => {
+                  const ok = await saveAll();
+                  if (ok) onClose();
+                }}
+                disabled={!dirty || updateTask.isPending}
+                className={cn(
+                  "btn-primary text-sm",
+                  (!dirty || updateTask.isPending) &&
+                    "opacity-40 cursor-not-allowed"
+                )}
+                type="button"
+              >
+                <Save className="w-3.5 h-3.5" />
+                {updateTask.isPending ? "שומר..." : "שמור"}
+              </button>
+            </div>
           </motion.div>
+
+          <UnsavedChangesGuard
+            open={guardOpen}
+            saving={updateTask.isPending}
+            onSaveAndClose={async () => {
+              const ok = await saveAll();
+              if (ok) {
+                setGuardOpen(false);
+                onClose();
+              }
+            }}
+            onDiscardAndClose={() => {
+              setGuardOpen(false);
+              onClose();
+            }}
+            onCancel={() => setGuardOpen(false)}
+          />
         </motion.div>
       )}
     </AnimatePresence>

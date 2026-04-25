@@ -5,6 +5,7 @@ import {
   addDays,
   endOfMonth,
   formatHour,
+  isHourless,
   isMultiDay,
   isOverdueTask,
   isPast,
@@ -78,11 +79,11 @@ export function CalendarMonthView({
     }
     for (const arr of m.values()) {
       arr.sort((a, b) => {
-        // Completed all-day tasks sink to the bottom; everything else
-        // keeps natural time order. Timed completed tasks stay at their
-        // hour by design (per spec).
-        const aSink = a.kind === "task" && a.completed && a.allDay ? 1 : 0;
-        const bSink = b.kind === "task" && b.completed && b.allDay ? 1 : 0;
+        // Completed task with no specific hour (midnight = floating todo)
+        // sinks to the bottom of the day. Timed completed tasks stay at
+        // their hour by design (per spec).
+        const aSink = a.kind === "task" && a.completed && isHourless(a) ? 1 : 0;
+        const bSink = b.kind === "task" && b.completed && isHourless(b) ? 1 : 0;
         if (aSink !== bSink) return aSink - bSink;
         return a.start.getTime() - b.start.getTime();
       });
@@ -178,16 +179,10 @@ export function CalendarMonthView({
                       )}
                       style={{ paddingTop: 4 + bandAreaHeight }}
                     >
-                      {/* Date number — kept in normal flow at the top of the
-                          cell so it can never be obscured by an event chip
-                          below it. The note slot sits to the LEFT of the
-                          digit (per spec: "באמצע כמו המספר אבל משמאל
-                          למספר"). */}
+                      {/* Date number first (= right edge in RTL) and note
+                          slot expands to its left. Per user spec:
+                          "משמאל למספר". */}
                       <div className="flex items-center justify-between gap-1 mb-0.5 min-w-0">
-                        <DayNoteSlot
-                          body={notesByDate?.get(monthDayKey(day))}
-                          className="flex-1 text-start"
-                        />
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -208,6 +203,10 @@ export function CalendarMonthView({
                         >
                           {day.getDate()}
                         </button>
+                        <DayNoteSlot
+                          body={notesByDate?.get(monthDayKey(day))}
+                          className="flex-1 text-end"
+                        />
                       </div>
                       <div className="space-y-0.5">
                         {visible.map((it) => (

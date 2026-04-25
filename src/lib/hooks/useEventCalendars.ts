@@ -95,3 +95,21 @@ export function useLinkCalendarToList() {
     },
   });
 }
+
+/** Same link, driven from the task-list side (used by Tasks → list edit). */
+export function useLinkListToCalendar() {
+  const qc = useQueryClient();
+  const scope = useOrgScope();
+  return useMutation({
+    mutationFn: (input: { taskListId: string; calendarId: string | null }) =>
+      service.linkListToCalendar(input.taskListId, input.calendarId),
+    onSuccess: () => {
+      if (scope.organizationId && scope.userId) {
+        qc.invalidateQueries({
+          queryKey: KEY(scope.organizationId, scope.userId),
+        });
+      }
+      qc.invalidateQueries({ queryKey: ["task-lists"] });
+    },
+  });
+}

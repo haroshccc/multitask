@@ -19,11 +19,13 @@ import type { FilterConfig, Thought, ThoughtList } from "@/lib/types/domain";
 import {
   ThoughtsChrome,
   type ThoughtsDensity,
+  type ThoughtsLayout,
   type ThoughtsSortMode,
   type ThoughtsViewMode,
 } from "@/components/thoughts/ThoughtsChrome";
 import { ThoughtComposer } from "@/components/thoughts/ThoughtComposer";
 import { ThoughtCard } from "@/components/thoughts/ThoughtCard";
+import { ThoughtsListsView } from "@/components/thoughts/ThoughtsListsView";
 import { ThoughtEditModal } from "@/components/thoughts/ThoughtEditModal";
 import { TaskEditModal } from "@/components/tasks/TaskEditModal";
 import { EventEditModal } from "@/components/calendar/EventEditModal";
@@ -32,6 +34,7 @@ import { mockProvider } from "@/lib/ai/thought-suggestions";
 const VIEW_KEY = "multitask:thoughts:view";
 const SORT_KEY = "multitask:thoughts:sort";
 const DENSITY_KEY = "multitask:thoughts:density";
+const LAYOUT_KEY = "multitask:thoughts:layout";
 
 function readLS<T extends string>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback;
@@ -57,6 +60,9 @@ export function Thoughts() {
   const [density, setDensityState] = useState<ThoughtsDensity>(() =>
     readLS<ThoughtsDensity>(DENSITY_KEY, "regular")
   );
+  const [layout, setLayoutState] = useState<ThoughtsLayout>(() =>
+    readLS<ThoughtsLayout>(LAYOUT_KEY, "feed")
+  );
   const setViewMode = (m: ThoughtsViewMode) => {
     setViewModeState(m);
     writeLS(VIEW_KEY, m);
@@ -68,6 +74,10 @@ export function Thoughts() {
   const setDensity = (d: ThoughtsDensity) => {
     setDensityState(d);
     writeLS(DENSITY_KEY, d);
+  };
+  const setLayout = (l: ThoughtsLayout) => {
+    setLayoutState(l);
+    writeLS(LAYOUT_KEY, l);
   };
 
   const { data: thoughts = [] } = useThoughts({ includeArchived: archiveOpen });
@@ -276,6 +286,8 @@ export function Thoughts() {
           onDensityChange={setDensity}
           archiveOpen={archiveOpen}
           onToggleArchive={() => setArchiveOpen((v) => !v)}
+          layout={layout}
+          onLayoutChange={setLayout}
         />
 
         {filtersOpen && (
@@ -302,27 +314,41 @@ export function Thoughts() {
 
         <ThoughtComposer onSubmit={handleCompose} />
 
-        {displayed.length === 0 ? (
-          <div className="card px-4 py-10 text-center text-sm text-ink-500">
-            {archiveOpen
-              ? "אין מחשבות בארכיון."
-              : "אין עדיין מחשבות. כתוב משהו למעלה ולחץ Enter."}
-          </div>
+        {layout === "feed" ? (
+          displayed.length === 0 ? (
+            <div className="card px-4 py-10 text-center text-sm text-ink-500">
+              {archiveOpen
+                ? "אין מחשבות בארכיון."
+                : "אין עדיין מחשבות. כתוב משהו למעלה ולחץ Enter."}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {displayed.map((t) => (
+                <ThoughtCard
+                  key={t.id}
+                  thought={t}
+                  allLists={lists}
+                  assignedLists={assignmentsByThought.get(t.id) ?? []}
+                  compact={density === "compact"}
+                  onOpen={() => setEditingThoughtId(t.id)}
+                  onOpenTask={setEditingTaskId}
+                  onOpenEvent={setEditingEventId}
+                />
+              ))}
+            </div>
+          )
         ) : (
-          <div className="space-y-2">
-            {displayed.map((t) => (
-              <ThoughtCard
-                key={t.id}
-                thought={t}
-                allLists={lists}
-                assignedLists={assignmentsByThought.get(t.id) ?? []}
-                compact={density === "compact"}
-                onOpen={() => setEditingThoughtId(t.id)}
-                onOpenTask={setEditingTaskId}
-                onOpenEvent={setEditingEventId}
-              />
-            ))}
-          </div>
+          <ThoughtsListsView
+            thoughts={displayed}
+            lists={lists}
+            hiddenLists={hiddenLists}
+            assignmentsByThought={assignmentsByThought}
+            compact={density === "compact"}
+            onOpenThought={setEditingThoughtId}
+            onOpenTask={setEditingTaskId}
+            onOpenEvent={setEditingEventId}
+            onCreateList={handleCreateList}
+          />
         )}
       </div>
 

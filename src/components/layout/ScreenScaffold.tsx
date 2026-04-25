@@ -7,6 +7,14 @@ interface ScreenScaffoldProps {
   actions?: ReactNode;
   children: ReactNode;
   className?: string;
+  /**
+   * When true, clamp the content to a comfortable reading width (~960px)
+   * and center it. Use this on form-heavy pages (Settings / Admin /
+   * Profile) where stretched-out fields look awkward. Work surfaces
+   * (Tasks / Calendar / Gantt / Thoughts / Recordings / Projects) leave
+   * this off and use the full viewport width.
+   */
+  narrow?: boolean;
 }
 
 export function ScreenScaffold({
@@ -15,9 +23,16 @@ export function ScreenScaffold({
   actions,
   children,
   className,
+  narrow,
 }: ScreenScaffoldProps) {
   return (
-    <div className={cn("p-4 sm:p-5 md:p-6 max-w-7xl mx-auto", className)}>
+    <div
+      className={cn(
+        "p-4 sm:p-5 md:p-6",
+        narrow && "max-w-4xl mx-auto",
+        className
+      )}
+    >
       <header className="flex items-start justify-between gap-4 mb-5">
         <div className="min-w-0">
           <h1 className="text-[22px] sm:text-2xl md:text-3xl font-bold text-ink-900 truncate">{title}</h1>

@@ -22,6 +22,7 @@ export function Settings() {
 
   return (
     <ScreenScaffold
+      narrow
       title="הגדרות"
       subtitle="פרופיל, ארגון, והתראות. הגדרות פר-מסך (כמו סטטוסים, ארכיון, תצוגת שורה) חיות בכפתור 'הגדרות הדף' שבמסכים עצמם."
     >

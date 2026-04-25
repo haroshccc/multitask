@@ -24,6 +24,9 @@ interface EventCalendarEditDialogProps {
   /** Non-null = edit mode. Null = create mode. */
   calendar: EventCalendar | null;
   onClose: () => void;
+  /** Fires after a successful save with the calendar's id. Lets the
+   *  caller (e.g. the event editor) auto-select the just-created calendar. */
+  onSaved?: (calendarId: string) => void;
 }
 
 /**
@@ -36,6 +39,7 @@ export function EventCalendarEditDialog({
   open,
   calendar,
   onClose,
+  onSaved,
 }: EventCalendarEditDialogProps) {
   const isEdit = !!calendar;
   const create = useCreateEventCalendar();
@@ -104,6 +108,7 @@ export function EventCalendarEditDialog({
             taskListId: linkedTaskListId,
           });
         }
+        onSaved?.(calendarId);
       }
       onClose();
     } catch (e) {

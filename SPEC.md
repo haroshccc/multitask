@@ -194,16 +194,17 @@ super_admin_audit_log
 Supabase Edge Function מוגבל ל-400 שניות. שיחה של 1.5 שעה = כמה דקות תמלול. חייבים webhooks.
 
 ```
-1. Client:   GET signed upload URL מ-Supabase Storage
-2. Client:   העלאה ישירה ל-bucket 'recordings'
-3. Client:   POST /recordings/:id/process
-4. EdgeFn:   שולח URL ל-Gladia עם webhook callback
-5. Client:   רואה status "מתמלל..." דרך Realtime
-6. Gladia:   webhook מחזיר transcript + speakers + timestamps
-7. EdgeFn:   Claude Haiku → {summary, my_tasks, their_tasks, speakers_hint}
-8. DB:       נשמר, Realtime מעדכן UI
-9. User:     רואה recording ready, מתייג "זה אני / זה דני לקוח"
-10. On tag:  משימות משויכות לדוברים הנכונים, נכנסות ל-tasks
+1. Client:   POST /functions/v1/storage-presign-multipart  → uploadId + part-URL לראשון
+2. Client:   PUT chunks ישירות ל-R2 (כל ~5MB) — מקביל להקלטה
+3. Client:   POST /functions/v1/storage-complete-multipart → publicUrl + DB row
+4. Client:   POST /recordings/:id/process
+5. EdgeFn:   שולח URL ל-Gladia עם webhook callback
+6. Client:   רואה status "מתמלל..." דרך Realtime
+7. Gladia:   webhook מחזיר transcript + speakers + timestamps
+8. EdgeFn:   Claude Haiku → {summary, my_tasks, their_tasks, speakers_hint}
+9. DB:       נשמר, Realtime מעדכן UI
+10. User:    רואה recording ready, מתייג "זה אני / זה דני לקוח"
+11. On tag:  משימות משויכות לדוברים הנכונים, נכנסות ל-tasks
 ```
 
 ### דוברים
@@ -218,6 +219,57 @@ Supabase Edge Function מוגבל ל-400 שניות. שיחה של 1.5 שעה = 
 | מקסימום אורך | 3 שעות קשיח |
 | רמז UI מעל 90 דק' | "הקלטה ארוכה — תמלול עשוי לקחת 5-10 דקות" (לא חוסם) |
 
+### ספק אחסון — Cloudflare R2 *(החלטה: 2026-04-24, פאזה 5)*
+
+**R2 משמש לכל הקבצים** (אודיו של הקלטות, אודיו/תמונות/קבצים של מחשבות
+מ-WhatsApp, צירופים למשימות). **Supabase Storage לא בשימוש.** הסיבה:
+egress חינם של R2 + תמחור צפוי לעומת ה-bandwidth bill של Supabase
+Storage שצומח עם streaming של אודיו ארוך.
+
+**עיקרון אבטחה קריטי (§28 #9):** סודות R2 **אף פעם לא נחשפים לדפדפן**.
+ה-AWS S3 SDK רץ אך ורק ב-Supabase Edge Functions. הדפדפן מקבל presigned
+URLs קצרי-טווח (5-15 דקות) ומעלה ישירות ל-R2 איתם. הסיבה: כל
+`VITE_*` env-var נחבט ל-bundle ונחשף לכל מבקר ב-DevTools — נסיון להשתמש
+ב-`VITE_R2_SECRET_ACCESS_KEY` הוא היכן שאיבדנו את הדלי.
+
+**ארכיטקטורה — ת"ב adapter (`StorageProvider` interface):**
+- ב-Edge Functions: `CloudflareR2Provider` (AWS SDK v3 + `@aws-sdk/s3-request-presigner`).
+- ב-Browser: thin client שקורא ל-Edge Functions (אין SDK).
+- 3 endpoints מוגנים-RLS (Edge Functions) שהדפדפן צורך:
+  - `storage-presign-upload` — קובץ קטן (PutObject חתום).
+  - `storage-presign-multipart` — קובץ גדול (CreateMultipartUpload + presign של החלק הבא).
+  - `storage-complete-multipart` — סוגר multipart, רושם row ב-DB.
+
+**משתני סביבה:**
+- **בדפדפן (`VITE_*`):** `VITE_R2_PUBLIC_URL` בלבד (CDN domain — ציבורי בכל מקרה).
+- **ב-Edge Function (Supabase secrets — *לא* `VITE_`):**
+  `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`.
+
+**הקלטות ארוכות (עד 3 שעות) — multipart מההתחלה + IndexedDB persistence:**
+- **לא** "in-memory עד 18 דק' ואז להעלות". הסיכון: סגירת tab בדקה 17 = הקלטה אבודה.
+- במקום זה: ברגע שמתחילים להקליט פותחים `MultipartUpload` ל-R2.
+  כל chunk של ~5MB (או כל 2 דקות, מה שקורה קודם) → presigned PUT
+  ישירות ל-R2 → אישור → drop מהזיכרון.
+- במקביל, כל chunk נשמר ב-IndexedDB עד שהוא ack'd מ-R2. tab crash =
+  ההקלטה משוחזרת בכניסה הבאה דרך IndexedDB; ה-multipart נמשך.
+- ה-UI ממשיך להקליט ללא הפסקה גם בהקלטה של שעה (XHR.upload.onprogress
+  ל-progress; ה-recorder לא יודע שיש העלאה ברקע).
+- אם המשתמש עוצר אחרי 30 שניות → לחיצה אחת מבטלת את ה-multipart
+  (`AbortMultipartUpload` ב-Edge Function) ו-R2 לא חורר GB. אם
+  המשתמש עוצר אחרי שעה → `CompleteMultipartUpload` סוגר את הקובץ.
+
+**CORS על ה-bucket** (חובה לקנפג ב-R2 Dashboard):
+- `AllowedOrigins`: domain של הפרודקשן + `localhost:5173` לפיתוח.
+- `AllowedMethods`: `PUT`, `POST`, `GET`, `HEAD`.
+- `AllowedHeaders`: `*` (או לפחות `Content-Type`).
+- `ExposeHeaders`: `ETag` (חובה — multipart דורש להחזיר ETag לכל חלק).
+- `MaxAgeSeconds`: `3600`.
+
+**Public access:** `Public Bucket = OFF`. הגישה היחידה היא דרך
+public URL של ה-CDN (`pub-<id>.r2.dev` או custom domain) — אבל גם
+זה דורש שהאובייקט יסומן כ-public בעת ההעלאה. למחשבות פרטיות / משימות
+פרטיות נשתמש ב-presigned-GET (5 דק' תוקף) במקום public URL.
+
 ### Retention ואחסון
 | Source | ברירת מחדל | הערה |
 |--------|-----------|------|
@@ -226,7 +278,9 @@ Supabase Edge Function מוגבל ל-400 שניות. שיחה של 1.5 שעה = 
 | `other` | לעולם | |
 
 - המשתמש יכול לדרוס ברירת מחדל **פר הקלטה** או בהגדרות.
-- Supabase Cron יומי: `DELETE audio WHERE now() > archive_audio_at` — רק האודיו נמחק, מטא־דאטה נשמר.
+- Cron יומי (Supabase): `DELETE audio WHERE now() > archive_audio_at` —
+  ה-DB מסמן את הרשומה, Edge Function נפרדת מבצעת `DeleteObject` ב-R2.
+  המטא־דאטה (transcript / summary / משימות) נשאר.
 
 ### מכסות אחסון
 - **ברירת מחדל: מאגר משותף לארגון.**
@@ -939,9 +993,12 @@ task_attachments
 recordings
   id, organization_id, owner_id,
   title, source enum ('thought'|'call'|'meeting'|'other'),
-  storage_path, size_bytes, duration_seconds,
-  status enum ('uploaded'|'transcribing'|'extracting'|'ready'|'error'),
-  transcript_text, transcript_json,         -- עם timestamps + speakers
+  storage_key text,                          -- R2 object key (bucket-relative)
+  storage_provider enum ('r2'|'supabase'),   -- 'r2' default; 'supabase' שמור לעבר/מיגרציה
+  size_bytes, duration_seconds,
+  status enum ('recording'|'uploaded'|'transcribing'|'extracting'|'ready'|'error'),
+  multipart_upload_id text,                  -- כל עוד ה-multipart פתוח (recording-in-progress)
+  transcript_text, transcript_json,          -- עם timestamps + speakers
   summary, language default 'he',
   retention_days,                            -- ברירת מחדל מהמנוי, ניתן לדריסה
   archive_audio_at, audio_archived boolean default false,
@@ -958,6 +1015,15 @@ recording_tasks                              -- קישור
   extracted_text,
   audio_start_seconds, audio_end_seconds     -- jump back to moment
 ```
+
+**הערות:**
+- `storage_key` (לא `storage_path`) — מסמן שזה key של object store (R2),
+  לא נתיב file-system. ה-public URL נבנה כ-`${VITE_R2_PUBLIC_URL}/${storage_key}`.
+- `multipart_upload_id` שונה מ-NULL רק בזמן הקלטה פעילה. בסיום
+  (`CompleteMultipartUpload`) נמחק. אם נתקע (crash, sigkill) — cron
+  ינקה את ה-multiparts הנטושים ב-R2 לאחר 24 שעות.
+- `status='recording'` סטטוס חדש לזמן ההקלטה הפעילה (לפני שהקובץ
+  סגור). `'uploaded'` = הקובץ ב-R2 מוכן לתמלול.
 
 ---
 
@@ -1437,8 +1503,16 @@ Hero: "החלל לחשוב. החלל לעשות."
 4. **Optimistic updates בכל mutation** — UX חייב להיות מיידי. rollback על שגיאה.
 5. **RTL בכל מקום** — אף טבלה / ווידג'ט / רכיב לא נבנה בלי בדיקת RTL.
 6. **Design tokens בלבד** — אין hardcoded colors / spacing / shadows. הכל מ-`design-language.html`.
-7. **Adapter pattern לאינטגרציות** — Gladia / Google / WhatsApp / OneSignal כולם מאחורי interface. החלפה = יום.
+7. **Adapter pattern לאינטגרציות** — Gladia / Google / WhatsApp / OneSignal / Cloudflare R2 כולם מאחורי interface. החלפה = יום.
 8. **אין מחיקה של tasks/recordings/projects** — רק ארכיון 60 יום → מחיקה אוטומטית ב-cron.
+9. **סודות שירותים חיצוניים אף פעם לא בדפדפן.** כל env var עם prefix
+   `VITE_*` מוטמע ב-bundle ונחשף לכל מבקר ב-DevTools. לכן: `R2_SECRET`,
+   `ANTHROPIC_API_KEY`, `GLADIA_API_KEY`, `RESEND_API_KEY` וכל
+   credentials של ספקים — **בלי `VITE_` prefix**, חיים אך ורק
+   ב-Supabase Edge Functions / Supabase secrets. הדפדפן מקבל
+   presigned URLs קצרי-טווח או JWTs חד-פעמיים, ולעולם לא את הסוד עצמו.
+   שכבת ה-`StorageProvider` / `TranscriptionProvider` בקוד client היא
+   thin client לקוראת ל-Edge Functions, לא ה-SDK עצמו.
 
 ---
 
@@ -1884,6 +1958,63 @@ Hero: "החלל לחשוב. החלל לעשות."
   - סינון לפי "מעובדת/לא מעובדת" הפך ל-view mode ב-chrome (popover
     "תצוגה") במקום boolean ב-FilterBar — כי זה החיתוך העיקרי של
     המסך ולא סינון משני. ה-FilterBar מחזיק רק `sources[]` + `tags[]`.
+
+- **2026-04-24 (החלטת ארכיטקטורה — אחסון קבצים)** —
+  Cloudflare R2 מחליף את Supabase Storage לכל הקבצים (אודיו של
+  הקלטות + מחשבות, תמונות מ-WhatsApp, צירופים). יושם בפאזה 6 (§18).
+
+  **למה R2:** egress חינם, עלות צפויה בקנה מידה של שעות הקלטה ארוכות,
+  S3-compatible כך שה-AWS SDK עובד as-is.
+
+  **עיקרון אבטחה (§28 #9 חדש):** סודות R2 (`R2_ACCESS_KEY_ID`,
+  `R2_SECRET_ACCESS_KEY`) **לעולם לא בדפדפן**. כל env var עם prefix
+  `VITE_*` נחבט ל-bundle הציבורי — נסיון להחביא שם secret = הדלק
+  משולח לכל מבקר ב-DevTools. הכלל מורחב לכל שירות חיצוני
+  (Anthropic, Gladia, Resend...).
+
+  **ארכיטקטורה — adapter pattern דו-שכבתי:**
+  - **Edge Function (Supabase, Deno):** `CloudflareR2Provider`
+    מחזיק את ה-AWS S3 SDK + `@aws-sdk/s3-request-presigner`. סודות
+    R2 חיים ב-Supabase secrets (לא `VITE_*`).
+  - **Browser:** `storageService` thin client קורא לשלוש Edge Function
+    endpoints — `presign-upload`, `presign-multipart`, `complete-multipart`.
+    אין SDK של AWS בדפדפן.
+
+  **הקלטות ארוכות (עד שעה+):**
+  - Multipart upload **מההתחלה** של ההקלטה, לא בקפיצה ב-18 דק'.
+  - כל chunk של ~5MB / ~2 דק' (מה שקורה קודם) → presigned PUT ישירות
+    ל-R2 → R2 מחזיר ETag → שומרים ETag לקוונטיפיקציה ב-CompleteMultipart.
+  - **IndexedDB persistence:** כל chunk נכתב ל-IndexedDB וה-row נמחק
+    רק אחרי ack מ-R2. tab crash → טעינה מחדש משחזרת את ה-multipart
+    הפתוח ומשלימה. אין איבוד הקלטה גם אחרי שעה.
+  - ההקלטה עצמה לא נעצרת בשום נקודה — `XHR.upload.onprogress` ל-
+    progress, ה-recorder לא יודע שיש העלאה ברקע.
+  - ביטול הקלטה → `AbortMultipartUpload` באדג' פאנקשן + ניקוי IndexedDB.
+
+  **משתני סביבה (לקבץ במחיצה ב-Supabase secrets):**
+  - **Browser (`VITE_*`):** `VITE_R2_PUBLIC_URL` בלבד.
+  - **Edge Function (Supabase secrets, *לא* `VITE_*`):**
+    `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`,
+    `R2_BUCKET_NAME`.
+
+  **שינויי סכמה לפאזה 6 (יוסף ב-`recordings`):**
+  - `storage_key text` (החליף את `storage_path` המתוכנן).
+  - `storage_provider enum ('r2'|'supabase') default 'r2'`.
+  - `multipart_upload_id text` — עוקב אחרי multiparts פעילים.
+  - `status` יצא בערך חדש `'recording'` (לפני `'uploaded'`).
+
+  **CORS על ה-bucket** (לקנפג ב-R2 Dashboard, לא בקוד):
+  AllowedOrigins = production domain + `localhost:5173`; AllowedMethods =
+  PUT/POST/GET/HEAD; ExposeHeaders חייב לכלול `ETag`.
+
+  **Public access:** `Public Bucket = OFF`. הקלטות פרטיות דרך
+  presigned-GET; בלבד הקלטות שהמשתמש שיתף מפורשות יקבלו public URL.
+
+  **למה דחיתי את ההמלצה הקודמת ("VITE_R2_SECRET_ACCESS_KEY"):**
+  זו הייתה טעות אבטחתית של הצ'אט הקודם. כל secret כזה ב-Vite
+  נטמע ב-bundle ה-public. הארכיטקטורה החדשה מקיימת את אותה
+  הפונקציונליות (browser-side `useFileUpload()` עם progress) בלי
+  לחשוף שום סוד.
 
 
 

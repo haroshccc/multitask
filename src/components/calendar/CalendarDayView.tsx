@@ -15,6 +15,7 @@ import {
   startOfDay,
 } from "./calendar-utils";
 import { useCalendarPrefs } from "@/lib/hooks/useCalendarPrefs";
+import { DayNoteSlot } from "./DayNoteSlot";
 
 interface CalendarDayViewProps {
   date: Date;
@@ -25,6 +26,10 @@ interface CalendarDayViewProps {
   hourHeight: number;
   onItemClick: (item: CalendarItem) => void;
   onCreateAt: (start: Date) => void;
+  /** Per-day note body — `undefined` means no note. */
+  dayNote?: string;
+  /** Click on the date digit → open the per-day note editor. */
+  onDateNoteClick?: (date: Date) => void;
 }
 
 export function CalendarDayView({
@@ -36,6 +41,8 @@ export function CalendarDayView({
   hourHeight,
   onItemClick,
   onCreateAt,
+  dayNote,
+  onDateNoteClick,
 }: CalendarDayViewProps) {
   const dayStart = startOfDay(date);
   const dayEnd = new Date(dayStart.getTime() + 24 * HOUR);
@@ -101,6 +108,23 @@ export function CalendarDayView({
 
   return (
     <div className="card overflow-hidden">
+      {/* Date header — date number on the start side, day note slot to its
+          left (per spec). Clicking the digit opens the note editor. */}
+      <div className="px-3 py-1.5 border-b border-ink-200 bg-white flex items-center gap-2">
+        <button
+          onClick={() => onDateNoteClick?.(date)}
+          className={cn(
+            "text-base font-bold tabular-nums px-1 rounded-md hover:bg-ink-100 shrink-0",
+            isToday ? "text-primary-700" : "text-ink-900"
+          )}
+          type="button"
+          title="לחצי לעריכת הערה ליום"
+        >
+          {date.getDate()}
+        </button>
+        <DayNoteSlot body={dayNote} />
+      </div>
+
       {/* All-day strip */}
       {allDay.length > 0 && (
         <div className="px-3 py-2 border-b border-ink-200 bg-ink-50/60">

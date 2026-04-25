@@ -12,12 +12,24 @@ import {
 } from "./calendar-utils";
 import { useCalendarPrefs } from "@/lib/hooks/useCalendarPrefs";
 
+/** yyyy-mm-dd in local time. */
+function agendaDayKey(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${dd}`;
+}
+
 interface CalendarAgendaViewProps {
   /** Anchor date — shows a 2-week window starting from `startOfWeek(anchor)`. */
   anchor: Date;
   items: CalendarItem[];
   onItemClick: (item: CalendarItem) => void;
   onCreateAt: (start: Date) => void;
+  /** Lookup: per-date note body (yyyy-mm-dd → string). */
+  notesByDate?: Map<string, string>;
+  /** Click on a section's date digit → open the per-day note editor. */
+  onDateNoteClick?: (date: Date) => void;
 }
 
 /**
@@ -32,6 +44,8 @@ export function CalendarAgendaView({
   items,
   onItemClick,
   onCreateAt,
+  notesByDate,
+  onDateNoteClick,
 }: CalendarAgendaViewProps) {
   const windowStart = startOfDay(startOfWeek(anchor));
   const windowDays = 14;
@@ -69,6 +83,8 @@ export function CalendarAgendaView({
             items={list}
             onItemClick={onItemClick}
             onCreateAt={onCreateAt}
+            noteBody={notesByDate?.get(agendaDayKey(day))}
+            onDateNoteClick={onDateNoteClick}
           />
         );
       })}
@@ -82,12 +98,16 @@ function DayGroup({
   items,
   onItemClick,
   onCreateAt,
+  noteBody,
+  onDateNoteClick,
 }: {
   day: Date;
   today: boolean;
   items: CalendarItem[];
   onItemClick: (item: CalendarItem) => void;
   onCreateAt: (start: Date) => void;
+  noteBody?: string;
+  onDateNoteClick?: (date: Date) => void;
 }) {
   const { prefs } = useCalendarPrefs();
   const tz = prefs.timezone;
@@ -105,37 +125,57 @@ function DayGroup({
         past && !today && "bg-ink-50/40"
       )}
     >
-      {/* Big date chip on the right (start in RTL) */}
+      {/* Big date chip on the right (start in RTL). The day-number is
+          clickable to open the note editor; the note slot lives BELOW the
+          number on the right side (per spec "מימין מתחת למספר תאריך"). */}
       <div
         className={cn(
-          "flex flex-col items-center justify-start py-3 w-20 shrink-0 border-e",
+          "flex flex-col items-stretch py-3 w-32 shrink-0 border-e px-2",
           today ? "border-primary-500 bg-primary-500" : "border-ink-200 bg-ink-50/60"
         )}
       >
-        <span
-          className={cn(
-            "text-[10px] font-semibold uppercase tracking-wider leading-none mb-1",
-            today ? "text-white/90" : past ? "text-ink-400" : "text-ink-500"
-          )}
+        <button
+          onClick={() => onDateNoteClick?.(day)}
+          className="flex flex-col items-center text-center rounded-md px-1 hover:bg-black/5"
+          title="לחצי לעריכת הערה ליום"
+          type="button"
         >
-          {today ? "היום" : dayName}
-        </span>
-        <span
-          className={cn(
-            "text-2xl font-bold leading-none tabular-nums",
-            today ? "text-white" : past ? "text-ink-500" : "text-ink-900"
-          )}
-        >
-          {dayNum}
-        </span>
-        <span
-          className={cn(
-            "text-[10px] mt-0.5 leading-none",
-            today ? "text-white/80" : past ? "text-ink-400" : "text-ink-500"
-          )}
-        >
-          {monthShort}
-        </span>
+          <span
+            className={cn(
+              "text-[10px] font-semibold uppercase tracking-wider leading-none mb-1",
+              today ? "text-white/90" : past ? "text-ink-400" : "text-ink-500"
+            )}
+          >
+            {today ? "היום" : dayName}
+          </span>
+          <span
+            className={cn(
+              "text-2xl font-bold leading-none tabular-nums",
+              today ? "text-white" : past ? "text-ink-500" : "text-ink-900"
+            )}
+          >
+            {dayNum}
+          </span>
+          <span
+            className={cn(
+              "text-[10px] mt-0.5 leading-none",
+              today ? "text-white/80" : past ? "text-ink-400" : "text-ink-500"
+            )}
+          >
+            {monthShort}
+          </span>
+        </button>
+        {noteBody && (
+          <div
+            className={cn(
+              "mt-1.5 text-[10px] leading-tight px-1 truncate",
+              today ? "text-white/90" : "text-ink-500"
+            )}
+            title={noteBody}
+          >
+            {noteBody}
+          </div>
+        )}
       </div>
 
       {/* Items column */}

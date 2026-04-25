@@ -14,6 +14,33 @@ export type Database = {
   }
   public: {
     Tables: {
+      calendar_day_notes: {
+        Row: {
+          body: string
+          created_at: string
+          date: string
+          organization_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          date: string
+          organization_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          date?: string
+          organization_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       event_participants: {
         Row: {
           added_at: string

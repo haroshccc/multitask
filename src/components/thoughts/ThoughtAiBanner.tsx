@@ -81,7 +81,9 @@ export function ThoughtAiBanner({
   // Collapsed state hides only the AI-suggestion list; the manual "פעולות
   // ידניות" buttons stay visible always so the user keeps a way to create
   // entities without scrolling through the AI proposals.
-  const [aiCollapsed, setAiCollapsed] = useState(false);
+  // Default = collapsed: most opens are quick "did the AI find anything?"
+  // glances; user clicks the chevron to expand the full proposal list.
+  const [aiCollapsed, setAiCollapsed] = useState(true);
 
   const { data: thoughtLists = [] } = useThoughtLists();
   const { data: taskLists = [] } = useTaskLists();

@@ -16,6 +16,8 @@ import { CalendarStatsStrip } from "@/components/calendar/CalendarStatsStrip";
 import { EventEditModal } from "@/components/calendar/EventEditModal";
 import { DayNoteDialog } from "@/components/calendar/DayNoteDialog";
 import { EventCalendarEditDialog } from "@/components/calendar/EventCalendarEditDialog";
+import { DragHoverPill } from "@/components/calendar/DragHoverPill";
+import type { DropAction } from "@/components/calendar/calendar-drag";
 import {
   useCalendarDayNotes,
 } from "@/lib/hooks/useCalendarDayNotes";
@@ -273,21 +275,41 @@ export function Calendar() {
   const updateEvent = useUpdateEvent();
 
   /**
-   * Persist a drag-drop reposition. Duration is preserved — the new end is
-   * derived from the original `(end - start)`. Tasks: patch `scheduled_at`
-   * (and `duration_minutes` so the cache stays consistent for views that
-   * read it). Events: patch `starts_at` + `ends_at`.
+   * Persist a drag-drop change. Three modes: pure move (preserve duration),
+   * resize-end (extend/shrink toward later — change end only), resize-start
+   * (drag the leading edge — change start only). For tasks, "end" is
+   * scheduled_at + duration_minutes, so resize-end updates duration; resize
+   * -start updates both scheduled_at and duration to keep the implicit end
+   * fixed.
    */
-  const handleItemDrop = (item: CalendarItem, newStart: Date) => {
-    const durationMs = item.end.getTime() - item.start.getTime();
-    const newEnd = new Date(newStart.getTime() + durationMs);
+  const handleItemDrop = (item: CalendarItem, action: DropAction) => {
+    let newStart = item.start;
+    let newEnd = item.end;
+    if (action.kind === "move") {
+      const durationMs = item.end.getTime() - item.start.getTime();
+      newStart = action.date;
+      newEnd = new Date(newStart.getTime() + durationMs);
+    } else if (action.kind === "resize-end") {
+      newEnd = action.date;
+      // Guard: never let end fall below start + 15min.
+      if (newEnd.getTime() <= newStart.getTime()) {
+        newEnd = new Date(newStart.getTime() + 15 * 60_000);
+      }
+    } else if (action.kind === "resize-start") {
+      newStart = action.date;
+      if (newStart.getTime() >= newEnd.getTime()) {
+        newStart = new Date(newEnd.getTime() - 15 * 60_000);
+      }
+    }
     if (item.kind === "task") {
       const taskId = (item.source as { id: string }).id;
       updateTask.mutate({
         taskId,
         patch: {
           scheduled_at: newStart.toISOString(),
-          duration_minutes: Math.round(durationMs / 60_000),
+          duration_minutes: Math.round(
+            (newEnd.getTime() - newStart.getTime()) / 60_000
+          ),
         },
       });
     } else {
@@ -378,6 +400,7 @@ export function Calendar() {
 
   return (
     <ScreenScaffold title="יומן" subtitle="">
+      <DragHoverPill />
       <div className="space-y-2">
         <CalendarChrome
           view={view}

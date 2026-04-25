@@ -60,34 +60,55 @@ export function EventCalendarEditDialog({
   }, [open, calendar?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const canSave = name.trim().length > 0;
+  const [error, setError] = useState<string | null>(null);
+
+  const friendlyError = (e: unknown): string => {
+    const msg =
+      typeof e === "object" && e && "message" in e
+        ? String((e as { message: unknown }).message)
+        : String(e);
+    if (
+      msg.includes("event_calendars") ||
+      msg.includes("does not exist") ||
+      msg.includes("relation")
+    ) {
+      return "טבלת יומני האירועים עוד לא נוצרה ב-DB. הריצי את המיגרציה supabase/migrations/20260425000002_event_calendars.sql דרך SQL Editor.";
+    }
+    return msg;
+  };
 
   const handleSave = async () => {
     if (!canSave) return;
-    let calendarId = calendar?.id;
-    if (isEdit && calendar) {
-      await update.mutateAsync({
-        calendarId: calendar.id,
-        patch: { name: name.trim(), color, emoji },
-      });
-    } else {
-      const created = await create.mutateAsync({
-        name: name.trim(),
-        color,
-        emoji: emoji ?? undefined,
-      });
-      calendarId = created.id;
-    }
-    if (calendarId) {
-      // Apply / clear the link if it changed.
-      const previousLink = calendar?.linked_task_list_id ?? null;
-      if (previousLink !== linkedTaskListId) {
-        await linkToList.mutateAsync({
-          calendarId,
-          taskListId: linkedTaskListId,
+    setError(null);
+    try {
+      let calendarId = calendar?.id;
+      if (isEdit && calendar) {
+        await update.mutateAsync({
+          calendarId: calendar.id,
+          patch: { name: name.trim(), color, emoji },
         });
+      } else {
+        const created = await create.mutateAsync({
+          name: name.trim(),
+          color,
+          emoji: emoji ?? undefined,
+        });
+        calendarId = created.id;
       }
+      if (calendarId) {
+        // Apply / clear the link if it changed.
+        const previousLink = calendar?.linked_task_list_id ?? null;
+        if (previousLink !== linkedTaskListId) {
+          await linkToList.mutateAsync({
+            calendarId,
+            taskListId: linkedTaskListId,
+          });
+        }
+      }
+      onClose();
+    } catch (e) {
+      setError(friendlyError(e));
     }
-    onClose();
   };
 
   const handleArchive = async () => {
@@ -236,6 +257,12 @@ export function EventCalendarEditDialog({
                   ))}
                 </select>
               </div>
+
+              {error && (
+                <div className="p-2 rounded-md bg-warning-500/10 border border-warning-500/30 text-warning-700 text-[11px] leading-relaxed">
+                  {error}
+                </div>
+              )}
             </div>
 
             <div className="px-5 py-3 border-t border-ink-200 flex items-center gap-2">

@@ -57,6 +57,70 @@ export async function archiveEventCalendar(
 }
 
 /**
+ * Symmetric counterpart to `linkCalendarToList` — same bidirectional
+ * link, driven from the task-list side. Picking a calendar clears any
+ * previous link on either side (the list's previous calendar AND that
+ * calendar's previous list) before setting the new pair, so we never
+ * leave a stale back-pointer behind.
+ */
+export async function linkListToCalendar(
+  taskListId: string,
+  calendarId: string | null
+): Promise<void> {
+  const { data: list } = await supabase
+    .from("task_lists")
+    .select("linked_event_calendar_id")
+    .eq("id", taskListId)
+    .single();
+
+  let targetCalColor: string | null = null;
+  let targetCalPreviousList: string | null = null;
+  if (calendarId) {
+    const { data: cal } = await supabase
+      .from("event_calendars")
+      .select("color, linked_task_list_id")
+      .eq("id", calendarId)
+      .single();
+    targetCalColor = cal?.color ?? null;
+    targetCalPreviousList = cal?.linked_task_list_id ?? null;
+  }
+
+  // Clear the list's previous calendar's back-pointer.
+  if (
+    list?.linked_event_calendar_id &&
+    list.linked_event_calendar_id !== calendarId
+  ) {
+    await supabase
+      .from("event_calendars")
+      .update({ linked_task_list_id: null })
+      .eq("id", list.linked_event_calendar_id);
+  }
+
+  // Clear the target calendar's previous list back-pointer.
+  if (targetCalPreviousList && targetCalPreviousList !== taskListId) {
+    await supabase
+      .from("task_lists")
+      .update({ linked_event_calendar_id: null })
+      .eq("id", targetCalPreviousList);
+  }
+
+  // Update the list, copying the calendar's color so they twin.
+  const listPatch: { linked_event_calendar_id: string | null; color?: string } = {
+    linked_event_calendar_id: calendarId,
+  };
+  if (calendarId && targetCalColor) listPatch.color = targetCalColor;
+  await supabase.from("task_lists").update(listPatch).eq("id", taskListId);
+
+  // Update the calendar.
+  if (calendarId) {
+    await supabase
+      .from("event_calendars")
+      .update({ linked_task_list_id: taskListId })
+      .eq("id", calendarId);
+  }
+}
+
+/**
  * Set or clear the bidirectional link between a task list and an event
  * calendar. Updates both sides in one logical step (best-effort — if the
  * second update fails the first is left in place; we accept that for MVP).

@@ -10,6 +10,7 @@ import {
   Palette,
   Smile,
   Type,
+  Link as LinkIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { useCreateTask } from "@/lib/hooks/useTasks";
@@ -17,6 +18,10 @@ import {
   useArchiveTaskList,
   useUpdateTaskList,
 } from "@/lib/hooks/useTaskLists";
+import {
+  useEventCalendars,
+  useLinkListToCalendar,
+} from "@/lib/hooks/useEventCalendars";
 import type { TaskList } from "@/lib/types/domain";
 import type { RowDisplayPrefs } from "@/lib/hooks/useRowDisplayPrefs";
 import { pushUndo } from "@/lib/undo/store";
@@ -85,6 +90,7 @@ export function TaskColumn({
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [colorOpen, setColorOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const [linkCalendarOpen, setLinkCalendarOpen] = useState(false);
   const [showCompleted, setShowCompleted] = useState(false);
 
   useEffect(() => {
@@ -366,6 +372,15 @@ export function TaskColumn({
                   >
                     שיתוף וסנכרון
                   </MenuItem>
+                  <MenuItem
+                    icon={<LinkIcon className="w-3.5 h-3.5" />}
+                    onClick={() => {
+                      setLinkCalendarOpen(true);
+                      setMenuOpen(false);
+                    }}
+                  >
+                    קישור ליומן אירועים
+                  </MenuItem>
                   <div className="h-px bg-ink-200 my-1" />
                   <MenuItem
                     danger
@@ -537,6 +552,115 @@ export function TaskColumn({
       {shareOpen && list && (
         <ShareListModal list={list} onClose={() => setShareOpen(false)} />
       )}
+      {linkCalendarOpen && list && (
+        <LinkCalendarPopover
+          list={list}
+          onClose={() => setLinkCalendarOpen(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Small modal popover for linking a task list to an event calendar (the
+ * inverse of the picker in `EventCalendarEditDialog`). Picking a calendar
+ * sets the bidirectional link and copies the calendar's color onto this
+ * list so the two visually twin (per user-spec #6 of the calendar set).
+ */
+function LinkCalendarPopover({
+  list,
+  onClose,
+}: {
+  list: TaskList;
+  onClose: () => void;
+}) {
+  const { data: calendars = [] } = useEventCalendars();
+  const linkMut = useLinkListToCalendar();
+  const [picked, setPicked] = useState<string | null>(
+    list.linked_event_calendar_id ?? null
+  );
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSave = async () => {
+    setError(null);
+    try {
+      await linkMut.mutateAsync({ taskListId: list.id, calendarId: picked });
+      onClose();
+    } catch (e) {
+      const msg =
+        typeof e === "object" && e && "message" in e
+          ? String((e as { message: unknown }).message)
+          : String(e);
+      if (
+        msg.includes("event_calendars") ||
+        msg.includes("does not exist") ||
+        msg.includes("relation")
+      ) {
+        setError(
+          "טבלת יומני האירועים עוד לא נוצרה ב-DB. הריצי את המיגרציה supabase/migrations/20260425000002_event_calendars.sql"
+        );
+      } else {
+        setError(msg);
+      }
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-ink-900/40 flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-2xl shadow-lift max-w-sm w-full overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="px-5 py-3 border-b border-ink-200">
+          <div className="text-base font-semibold text-ink-900">
+            קישור ליומן אירועים
+          </div>
+          <div className="text-[11px] text-ink-500 mt-0.5">
+            הצבעים יסתנכרנו והרשימה והיומן ייחשבו "צמודים" לעבודה משותפת.
+          </div>
+        </div>
+        <div className="p-5 space-y-3">
+          <select
+            value={picked ?? ""}
+            onChange={(e) => setPicked(e.target.value || null)}
+            className="field text-sm"
+          >
+            <option value="">ללא קישור</option>
+            {calendars.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+          {calendars.length === 0 && (
+            <p className="text-[11px] text-ink-500">
+              עוד אין יומני אירועים. צרי אחד דרך מסך היומן.
+            </p>
+          )}
+          {error && (
+            <div className="p-2 rounded-md bg-warning-500/10 border border-warning-500/30 text-warning-700 text-[11px] leading-relaxed">
+              {error}
+            </div>
+          )}
+        </div>
+        <div className="px-5 py-3 border-t border-ink-200 flex items-center justify-end gap-2">
+          <button onClick={onClose} className="btn-ghost text-sm" type="button">
+            ביטול
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={linkMut.isPending}
+            className="btn-primary text-sm"
+            type="button"
+          >
+            {linkMut.isPending ? "שומר..." : "שמור"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

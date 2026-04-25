@@ -176,8 +176,10 @@ export function EventEditModal({
     color,
   ]);
 
+  const [saveError, setSaveError] = useState<string | null>(null);
   const save = async (): Promise<boolean> => {
     if (!title.trim() || !startsAt || !endsAt) return false;
+    setSaveError(null);
     const payload = {
       title: title.trim(),
       description: description || null,
@@ -200,7 +202,26 @@ export function EventEditModal({
       }
       onClose();
       return true;
-    } catch {
+    } catch (e) {
+      const msg =
+        typeof e === "object" && e && "message" in e
+          ? String((e as { message: unknown }).message)
+          : String(e);
+      // Migration #39 adds `events.color` and `events.calendar_id`. If the
+      // user hasn't applied it yet, every save with one of those fields
+      // fails with "column ... does not exist". Tell them.
+      if (
+        msg.includes("calendar_id") ||
+        msg.includes("does not exist") ||
+        msg.includes("column") ||
+        msg.includes("event_calendars")
+      ) {
+        setSaveError(
+          "השמירה נכשלה: כנראה שהמיגרציה supabase/migrations/20260425000002_event_calendars.sql עוד לא הוחלה על ה-DB. הריצי אותה דרך SQL Editor."
+        );
+      } else {
+        setSaveError(`השמירה נכשלה: ${msg}`);
+      }
       return false;
     }
   };
@@ -459,11 +480,15 @@ export function EventEditModal({
                   מחק
                 </button>
               )}
-              {dirty && (
+              {saveError ? (
+                <span className="text-[11px] text-warning-700 me-auto truncate max-w-[60%]" title={saveError}>
+                  {saveError}
+                </span>
+              ) : dirty ? (
                 <span className="text-[11px] text-warning-600 me-auto">
                   יש שינויים לא שמורים
                 </span>
-              )}
+              ) : null}
               <div className={cn("flex items-center gap-2", !dirty && "ms-auto")}>
                 <button onClick={handleClose} className="btn-ghost text-sm" type="button">
                   בטל

@@ -29,6 +29,7 @@ import {
 import type { ThoughtSource } from "@/lib/types/domain";
 import { ListIcon } from "@/components/tasks/list-icons";
 import { UnsavedChangesGuard } from "@/components/ui/UnsavedChangesGuard";
+import { ThoughtAiBanner } from "./ThoughtAiBanner";
 
 interface ThoughtEditModalProps {
   thoughtId: string | null;
@@ -310,8 +311,26 @@ export function ThoughtEditModal({
                 </div>
               )}
 
-              {tab === "created" && (
-                <div className="space-y-2">
+              {tab === "created" && thought && (
+                <div className="space-y-3">
+                  {/* Embedded create-actions panel: AI suggestions + manual
+                      buttons. The host modal owns its own close-X, so the
+                      banner runs in `embedded` mode (no close button, no
+                      "what to do with the thought?" decision menu). */}
+                  <ThoughtAiBanner
+                    thought={thought}
+                    embedded
+                    onClose={() => {}}
+                    onOpenTask={onOpenTask}
+                    onOpenEvent={onOpenEvent}
+                    onOpenProject={(projectId) =>
+                      navigate(`/app/projects/${projectId}`)
+                    }
+                  />
+
+                  <div className="text-[10px] font-semibold text-ink-400 uppercase tracking-wider pt-1">
+                    ישויות שכבר נוצרו ({processings.length})
+                  </div>
                   {processings.length === 0 ? (
                     <p className="text-sm text-ink-500">
                       עוד לא נוצרו ישויות מהמחשבה הזו.

@@ -47,6 +47,12 @@ interface ThoughtAiBannerProps {
   onOpenTask?: (taskId: string) => void;
   onOpenEvent?: (eventId: string) => void;
   onOpenProject?: (projectId: string) => void;
+  /**
+   * When true: hides the banner's own close-X (the host modal already has
+   * its own close button) and skips the "what to do with the thought?"
+   * decision menu. Used inside `ThoughtEditModal`'s "נוצרו מזה" tab.
+   */
+  embedded?: boolean;
 }
 
 /**
@@ -62,6 +68,7 @@ export function ThoughtAiBanner({
   onOpenTask,
   onOpenEvent,
   onOpenProject,
+  embedded,
 }: ThoughtAiBannerProps) {
   const [plan, setPlan] = useState<AiPlan | null>(null);
   const [planLoading, setPlanLoading] = useState(true);
@@ -349,25 +356,27 @@ export function ThoughtAiBanner({
           )}
         </div>
         <div className="relative">
-          <button
-            onClick={() => {
-              // If the user opened the banner and applied nothing, the
-              // "what to do with the thought?" decision menu is friction —
-              // just close. The menu only matters once at least one action
-              // was applied (or the thought already had processings).
-              const hasWork = Object.keys(applied).length > 0;
-              if (!hasWork) {
-                onClose("leave");
-                return;
-              }
-              setShowCloseMenu((v) => !v);
-            }}
-            className="p-1 rounded hover:bg-ink-100"
-            title="סגור"
-            type="button"
-          >
-            <X className="w-3.5 h-3.5 text-ink-500" />
-          </button>
+          {!embedded && (
+            <button
+              onClick={() => {
+                // If the user opened the banner and applied nothing, the
+                // "what to do with the thought?" decision menu is friction —
+                // just close. The menu only matters once at least one action
+                // was applied (or the thought already had processings).
+                const hasWork = Object.keys(applied).length > 0;
+                if (!hasWork) {
+                  onClose("leave");
+                  return;
+                }
+                setShowCloseMenu((v) => !v);
+              }}
+              className="p-1 rounded hover:bg-ink-100"
+              title="סגור"
+              type="button"
+            >
+              <X className="w-3.5 h-3.5 text-ink-500" />
+            </button>
+          )}
           {showCloseMenu && (
             <div className="absolute end-0 top-full mt-1 z-30 bg-white border border-ink-200 rounded-lg shadow-lift w-56 py-1">
               <MenuItem

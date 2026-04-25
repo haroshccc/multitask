@@ -218,6 +218,31 @@ export function ThoughtCard({
               <div className="text-[10px] font-semibold text-ink-400 uppercase tracking-wider px-3 py-1">
                 בחר רשימה
               </div>
+              {/* "Unassign from all" — symmetric with the existing drag-to-
+                  unassigned column. Disabled when the thought has no current
+                  assignments. */}
+              <button
+                disabled={!hasAssignments}
+                onClick={() => {
+                  for (const l of assignedLists) {
+                    unassignFromList.mutate({
+                      thoughtId: thought.id,
+                      listId: l.id,
+                    });
+                  }
+                  setAssignMenuOpen(false);
+                }}
+                className={cn(
+                  "w-full flex items-center gap-2 px-3 py-1.5 text-sm text-start hover:bg-ink-50 border-b border-ink-100",
+                  !hasAssignments
+                    ? "text-ink-400 cursor-not-allowed"
+                    : "text-ink-600"
+                )}
+                type="button"
+              >
+                <span className="w-2.5 h-2.5 rounded-sm bg-ink-300" />
+                <span className="flex-1 truncate">לא משויכות</span>
+              </button>
               {allLists.length === 0 ? (
                 <p className="text-xs text-ink-500 px-3 py-2">
                   עוד אין רשימות מחשבות.

@@ -16,6 +16,7 @@ import {
 } from "./calendar-utils";
 import { useCalendarPrefs } from "@/lib/hooks/useCalendarPrefs";
 import { DayNoteSlot } from "./DayNoteSlot";
+import { TaskCheckButton } from "./TaskCheckButton";
 
 /** yyyy-mm-dd in local time. */
 function monthDayKey(d: Date): string {
@@ -76,7 +77,15 @@ export function CalendarMonthView({
       m.get(k)!.push(it);
     }
     for (const arr of m.values()) {
-      arr.sort((a, b) => a.start.getTime() - b.start.getTime());
+      arr.sort((a, b) => {
+        // Completed all-day tasks sink to the bottom; everything else
+        // keeps natural time order. Timed completed tasks stay at their
+        // hour by design (per spec).
+        const aSink = a.kind === "task" && a.completed && a.allDay ? 1 : 0;
+        const bSink = b.kind === "task" && b.completed && b.allDay ? 1 : 0;
+        if (aSink !== bSink) return aSink - bSink;
+        return a.start.getTime() - b.start.getTime();
+      });
     }
     return m;
   }, [items]);
@@ -395,7 +404,7 @@ function MonthItemChip({
       onClick={onClick}
       className={cn(
         "w-full text-start inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-[10px] font-medium border bg-white truncate",
-        item.completed && "line-through opacity-60"
+        item.completed && "opacity-60"
       )}
       style={{
         borderColor: overdue ? "#ef4444" : accent,
@@ -405,10 +414,18 @@ function MonthItemChip({
       title={`${item.title} · ${formatHour(item.start, tz)}`}
       type="button"
     >
+      <TaskCheckButton
+        taskId={(item.source as { id: string }).id}
+        completed={item.completed}
+        accent={overdue ? "#ef4444" : accent}
+        size="sm"
+      />
       <span className="shrink-0 text-ink-500">
         {item.allDay ? "" : formatHour(item.start, tz)}
       </span>
-      <span className="truncate">{item.title}</span>
+      <span className={cn("truncate", item.completed && "line-through")}>
+        {item.title}
+      </span>
     </button>
   );
 }

@@ -11,6 +11,7 @@ import {
   startOfWeek,
 } from "./calendar-utils";
 import { useCalendarPrefs } from "@/lib/hooks/useCalendarPrefs";
+import { TaskCheckButton } from "./TaskCheckButton";
 
 /** yyyy-mm-dd in local time. */
 function agendaDayKey(d: Date): string {
@@ -65,7 +66,14 @@ export function CalendarAgendaView({
       m.get(k)!.push(it);
     }
     for (const arr of m.values()) {
-      arr.sort((a, b) => a.start.getTime() - b.start.getTime());
+      arr.sort((a, b) => {
+        // Completed all-day tasks sink to the bottom of the day; timed
+        // completed tasks stay at their hour (per spec).
+        const aSink = a.kind === "task" && a.completed && a.allDay ? 1 : 0;
+        const bSink = b.kind === "task" && b.completed && b.allDay ? 1 : 0;
+        if (aSink !== bSink) return aSink - bSink;
+        return a.start.getTime() - b.start.getTime();
+      });
     }
     return m;
   }, [items]);
@@ -228,10 +236,23 @@ function AgendaRow({
         className={cn(
           "w-full px-3 py-2 flex items-center gap-3 text-start hover:bg-ink-50",
           past && "opacity-75",
-          item.completed && "line-through opacity-55"
+          item.completed && "opacity-60"
         )}
         type="button"
       >
+        {/* Task complete-checkbox — only for tasks. Stops propagation so
+            it doesn't fire the row's edit-modal click. */}
+        {isTask ? (
+          <TaskCheckButton
+            taskId={(item.source as { id: string }).id}
+            completed={item.completed}
+            accent={overdue ? "#ef4444" : accent}
+            size="md"
+          />
+        ) : (
+          <span className="w-4 h-4 shrink-0" />
+        )}
+
         {/* Time block — fixed width so titles align */}
         <div className="w-20 shrink-0 text-[11px] text-ink-500 tabular-nums leading-tight">
           {item.allDay ? (
@@ -252,7 +273,12 @@ function AgendaRow({
 
         {/* Title + meta */}
         <div className="flex-1 min-w-0">
-          <div className="text-[13px] font-medium text-ink-900 truncate">
+          <div
+            className={cn(
+              "text-[13px] font-medium text-ink-900 truncate",
+              item.completed && "line-through"
+            )}
+          >
             {item.title || <span className="italic text-ink-400">ללא כותרת</span>}
           </div>
           <div className="text-[10px] text-ink-500 mt-0.5 flex items-center gap-2">

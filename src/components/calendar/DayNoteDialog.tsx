@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Trash2, Save } from "lucide-react";
+import { X, Trash2, Save, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import {
   useUpsertDayNote,
@@ -27,11 +27,15 @@ export function DayNoteDialog({
   onClose,
 }: DayNoteDialogProps) {
   const [body, setBody] = useState(initialBody);
+  const [error, setError] = useState<string | null>(null);
   const upsert = useUpsertDayNote();
   const del = useDeleteDayNote();
 
   useEffect(() => {
-    if (date) setBody(initialBody);
+    if (date) {
+      setBody(initialBody);
+      setError(null);
+    }
   }, [date, initialBody]);
 
   if (!date) return null;
@@ -44,13 +48,44 @@ export function DayNoteDialog({
 
   const dirty = body.trim() !== initialBody.trim();
 
+  /**
+   * Save / delete catch the error and surface it inline instead of
+   * letting the rejected mutation bubble silently. The most likely cause
+   * is the migration not being applied yet — show the user what's wrong
+   * instead of leaving the dialog open with no feedback.
+   */
+  const friendlyError = (e: unknown): string => {
+    const msg =
+      typeof e === "object" && e && "message" in e
+        ? String((e as { message: unknown }).message)
+        : String(e);
+    if (
+      msg.includes("calendar_day_notes") ||
+      msg.includes("does not exist") ||
+      msg.includes("relation")
+    ) {
+      return "טבלת הערות יומיות עוד לא נוצרה ב-DB. הריצי את המיגרציה supabase/migrations/20260425000001_calendar_day_notes.sql";
+    }
+    return `השמירה נכשלה: ${msg}`;
+  };
+
   const handleSave = async () => {
-    await upsert.mutateAsync({ date: dateKey(date), body });
-    onClose();
+    setError(null);
+    try {
+      await upsert.mutateAsync({ date: dateKey(date), body });
+      onClose();
+    } catch (e) {
+      setError(friendlyError(e));
+    }
   };
   const handleDelete = async () => {
-    await del.mutateAsync(dateKey(date));
-    onClose();
+    setError(null);
+    try {
+      await del.mutateAsync(dateKey(date));
+      onClose();
+    } catch (e) {
+      setError(friendlyError(e));
+    }
   };
 
   return (
@@ -106,6 +141,12 @@ export function DayNoteDialog({
               <p className="text-[11px] text-ink-400 mt-1">
                 Ctrl/⌘+Enter לשמירה. השאר ריק כדי למחוק את ההערה.
               </p>
+              {error && (
+                <div className="mt-2 flex items-start gap-2 p-2 rounded-md bg-warning-500/10 border border-warning-500/30 text-warning-700 text-[11px]">
+                  <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                  <span className="leading-relaxed">{error}</span>
+                </div>
+              )}
             </div>
 
             <div className="px-5 py-3 border-t border-ink-200 flex items-center gap-2">

@@ -18,6 +18,7 @@ import {
 } from "./calendar-utils";
 import { CalendarBlock } from "./CalendarDayView";
 import { DayNoteSlot } from "./DayNoteSlot";
+import { TaskCheckButton } from "./TaskCheckButton";
 
 /** yyyy-mm-dd in local time — same shape as `dateKey()` in the service. */
 function dayNoteKey(d: Date): string {
@@ -418,9 +419,9 @@ function MultiDayBand({
     <button
       onClick={onClick}
       className={cn(
-        "absolute rounded-md px-2 py-1 text-xs font-medium border-[1.5px] truncate text-start shadow-soft",
+        "absolute rounded-md px-2 py-1 text-xs font-medium border-[1.5px] truncate text-start shadow-soft inline-flex items-center gap-1",
         past && "opacity-65",
-        item.completed && "line-through opacity-55",
+        item.completed && "opacity-55",
         isPhase && "font-bold uppercase tracking-wider"
       )}
       style={{
@@ -433,7 +434,17 @@ function MultiDayBand({
       title={item.title}
       type="button"
     >
-      {isPhase ? `שלב · ${item.title}` : item.title}
+      {isTask && !isPhase && (
+        <TaskCheckButton
+          taskId={(item.source as { id: string }).id}
+          completed={item.completed}
+          accent={overdue ? "#ef4444" : accent}
+          size="sm"
+        />
+      )}
+      <span className={cn(item.completed && "line-through", "truncate flex-1")}>
+        {isPhase ? `שלב · ${item.title}` : item.title}
+      </span>
     </button>
   );
 }

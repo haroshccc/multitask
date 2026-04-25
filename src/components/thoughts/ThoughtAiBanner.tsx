@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import type { Thought } from "@/lib/types/domain";
-import { useCreateTask, useTasks } from "@/lib/hooks/useTasks";
+import { useTasks } from "@/lib/hooks/useTasks";
 import { useCreateProject, useProjects } from "@/lib/hooks/useProjects";
 import {
   useAssignThoughtToList,
@@ -25,13 +25,14 @@ import {
   useCreateThoughtList,
   useTaskLists,
 } from "@/lib/hooks";
-import { useCreateEvent } from "@/lib/hooks/useEvents";
 import {
   mockProvider,
   type AiPlan,
   type SuggestedAction,
 } from "@/lib/ai/thought-suggestions";
 import { ListIcon } from "@/components/tasks/list-icons";
+import { TaskEditModal } from "@/components/tasks/TaskEditModal";
+import { EventEditModal } from "@/components/calendar/EventEditModal";
 import { SendMessagePopover } from "./SendMessagePopover";
 
 interface AppliedRecord {
@@ -75,8 +76,6 @@ export function ThoughtAiBanner({
   // Pull a sample of recent tasks so the AI can learn from history (which
   // lists the user typically dumps similar tasks into).
   const { data: recentTasks = [] } = useTasks({});
-  const createTask = useCreateTask();
-  const createEvent = useCreateEvent();
   const createProject = useCreateProject();
   const createThoughtList = useCreateThoughtList();
   const assignThoughtToList = useAssignThoughtToList();
@@ -87,6 +86,17 @@ export function ThoughtAiBanner({
   const [pendingProject, setPendingProject] = useState<{
     id: string;
     name: string;
+  } | null>(null);
+  /**
+   * Per user feedback: pressing "צור" on an AI suggestion should NOT
+   * immediately materialize the entity — only the user's explicit save
+   * inside the create-mode modal does. This state holds the suggestion
+   * being authored; the modal's `onCreated` callback flips the chip
+   * to ✓ "פתח" only after a successful save. Discard creates nothing.
+   */
+  const [pendingCreate, setPendingCreate] = useState<{
+    actionIndex: number;
+    action: SuggestedAction;
   } | null>(null);
 
   // Build the AI plan once per thought + once task lists / recent tasks
@@ -138,37 +148,18 @@ export function ThoughtAiBanner({
   const apply = async (actionIndex: number, action: SuggestedAction) => {
     if (applied[actionIndex]) return;
 
-    if (action.kind === "create_task") {
-      const t = await createTask.mutateAsync({
-        title: action.payload.title,
-        description: action.payload.description ?? null,
-        task_list_id: action.payload.task_list_id ?? null,
-        parent_task_id: null,
-        urgency: action.payload.urgency ?? 3,
-        status: "todo",
-        scheduled_at: action.payload.due_at ?? null,
-        source_thought_id: thought.id,
-      });
-      record(actionIndex, "task", t.id, t.title);
-      onOpenTask?.(t.id);
-      return;
-    }
-
-    if (action.kind === "create_event") {
-      const e = await createEvent.mutateAsync({
-        title: action.payload.title,
-        description: action.payload.description ?? null,
-        starts_at: action.payload.starts_at,
-        ends_at: action.payload.ends_at,
-        all_day: action.payload.all_day,
-        source_thought_id: thought.id,
-      });
-      record(actionIndex, "event", e.id, e.title);
-      onOpenEvent?.(e.id);
+    // For create_task / create_event we DEFER materialization until the
+    // user explicitly saves the modal. This is the spec: "don't mark
+    // applied if I clicked but didn't save."
+    if (action.kind === "create_task" || action.kind === "create_event") {
+      setPendingCreate({ actionIndex, action });
       return;
     }
 
     if (action.kind === "create_project") {
+      // Projects have no edit modal yet — keep the immediate-create flow
+      // and show the chip as applied right away. (TODO when ProjectEditModal
+      // ships: same deferred-create pattern as tasks/events.)
       const p = await createProject.mutateAsync({
         name: action.payload.name,
         description: action.payload.description ?? null,
@@ -294,18 +285,23 @@ export function ThoughtAiBanner({
     const idx = -3000 - Object.keys(applied).length;
 
     if (kind === "task") {
-      const t = await createTask.mutateAsync({
-        title,
-        description: text || null,
-        task_list_id: null,
-        parent_task_id: null,
-        urgency: 3,
-        status: "todo",
-        scheduled_at: null,
-        source_thought_id: thought.id,
+      // Defer materialization until the user explicitly saves the modal —
+      // same as AI-suggestion creates.
+      setPendingCreate({
+        actionIndex: idx,
+        action: {
+          kind: "create_task",
+          payload: {
+            title,
+            description: text || undefined,
+            task_list_id: null,
+            urgency: 3,
+            due_at: null,
+          },
+          reasoning: "יצירה ידנית",
+          confidence: 1,
+        },
       });
-      record(idx, "task", t.id, t.title, false);
-      onOpenTask?.(t.id);
       return;
     }
     if (kind === "event") {
@@ -313,19 +309,25 @@ export function ThoughtAiBanner({
       start.setMinutes(0, 0, 0);
       start.setHours(start.getHours() + 1);
       const end = new Date(start.getTime() + 60 * 60_000);
-      const e = await createEvent.mutateAsync({
-        title,
-        description: text || null,
-        starts_at: start.toISOString(),
-        ends_at: end.toISOString(),
-        all_day: false,
-        source_thought_id: thought.id,
+      setPendingCreate({
+        actionIndex: idx,
+        action: {
+          kind: "create_event",
+          payload: {
+            title,
+            description: text || undefined,
+            starts_at: start.toISOString(),
+            ends_at: end.toISOString(),
+            all_day: false,
+          },
+          reasoning: "יצירה ידנית",
+          confidence: 1,
+        },
       });
-      record(idx, "event", e.id, e.title, false);
-      onOpenEvent?.(e.id);
       return;
     }
     if (kind === "project") {
+      // No project edit modal — keep the immediate-create flow.
       const p = await createProject.mutateAsync({
         name: title,
         description: text || null,
@@ -626,6 +628,35 @@ export function ThoughtAiBanner({
           </div>
         )}
       </div>
+
+      {/* Deferred create-mode modals. Only an explicit save inside these
+          calls back to flip the suggestion chip to ✓ "פתח". Discard does
+          not record a processing — the user's "I clicked but didn't save,
+          don't mark anything" requirement. */}
+      {pendingCreate && pendingCreate.action.kind === "create_task" && (
+        <DeferredCreateTaskModal
+          action={pendingCreate.action}
+          thoughtId={thought.id}
+          onCreated={(taskId, title) => {
+            record(pendingCreate.actionIndex, "task", taskId, title);
+            setPendingCreate(null);
+            onOpenTask?.(taskId);
+          }}
+          onClose={() => setPendingCreate(null)}
+        />
+      )}
+      {pendingCreate && pendingCreate.action.kind === "create_event" && (
+        <DeferredCreateEventModal
+          action={pendingCreate.action}
+          thoughtId={thought.id}
+          onCreated={(eventId, title) => {
+            record(pendingCreate.actionIndex, "event", eventId, title);
+            setPendingCreate(null);
+            onOpenEvent?.(eventId);
+          }}
+          onClose={() => setPendingCreate(null)}
+        />
+      )}
     </div>
   );
 }
@@ -852,5 +883,71 @@ function MenuItem({
     >
       {children}
     </button>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// Deferred create-mode wrappers — render the entity modal in create mode
+// with the AI's pre-filled payload. They route a successful save back to
+// the banner so the suggestion chip flips to ✓ "פתח". Closing without
+// saving leaves the chip un-applied (the spec).
+// -----------------------------------------------------------------------------
+
+function DeferredCreateTaskModal({
+  action,
+  thoughtId,
+  onCreated,
+  onClose,
+}: {
+  action: Extract<SuggestedAction, { kind: "create_task" }>;
+  thoughtId: string;
+  onCreated: (taskId: string, title: string) => void;
+  onClose: () => void;
+}) {
+  const Modal = TaskEditModal;
+  return (
+    <Modal
+      taskId={null}
+      onClose={onClose}
+      defaultTab="overview"
+      createDraft={{
+        title: action.payload.title,
+        description: action.payload.description ?? null,
+        task_list_id: action.payload.task_list_id ?? null,
+        scheduled_at: action.payload.due_at ?? null,
+        urgency: action.payload.urgency,
+        tags: action.payload.tags,
+        source_thought_id: thoughtId,
+      }}
+      onCreated={(id) => onCreated(id, action.payload.title)}
+    />
+  );
+}
+
+function DeferredCreateEventModal({
+  action,
+  thoughtId,
+  onCreated,
+  onClose,
+}: {
+  action: Extract<SuggestedAction, { kind: "create_event" }>;
+  thoughtId: string;
+  onCreated: (eventId: string, title: string) => void;
+  onClose: () => void;
+}) {
+  const Modal = EventEditModal;
+  return (
+    <Modal
+      open
+      eventId={null}
+      initialStart={new Date(action.payload.starts_at)}
+      initialEnd={new Date(action.payload.ends_at)}
+      initialTitle={action.payload.title}
+      initialDescription={action.payload.description}
+      initialAllDay={action.payload.all_day}
+      initialSourceThoughtId={thoughtId}
+      onCreated={(id) => onCreated(id, action.payload.title)}
+      onClose={onClose}
+    />
   );
 }

@@ -35,7 +35,6 @@ import {
   useCreateTaskList,
   useTasks,
   useTimeEntriesByRange,
-  useCreateTask,
 } from "@/lib/hooks";
 import { useCalendarPrefs } from "@/lib/hooks/useCalendarPrefs";
 import type { FilterConfig } from "@/lib/types/domain";
@@ -176,26 +175,24 @@ export function Calendar() {
 
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
-  const [creatingEvent, setCreatingEvent] = useState<{
+  /**
+   * Single "create" state shared by event and task. The user can flip
+   * between the two via the picker rendered inside the modal's `topSlot`.
+   * The actual create only happens on save — discarding never persists.
+   */
+  const [creating, setCreating] = useState<{
     start: Date;
     end: Date;
+    kind: "event" | "task";
   } | null>(null);
 
-  const createTask = useCreateTask();
-  const handleCreateTask = async () => {
+  const handleCreateTask = () => {
     const now = new Date();
     const start = new Date(now);
     start.setMinutes(0, 0, 0);
-    const task = await createTask.mutateAsync({
-      title: "",
-      task_list_id: null,
-      parent_task_id: null,
-      scheduled_at: start.toISOString(),
-      duration_minutes: 60,
-      urgency: 3,
-      status: "todo",
-    });
-    setEditingTaskId(task.id);
+    start.setHours(start.getHours() + 1);
+    const end = new Date(start.getTime() + 60 * 60_000);
+    setCreating({ start, end, kind: "task" });
   };
 
   const handleCreateEvent = () => {
@@ -203,7 +200,7 @@ export function Calendar() {
     const start = new Date(now);
     start.setMinutes(0, 0, 0);
     const end = new Date(start.getTime() + 60 * 60_000);
-    setCreatingEvent({ start, end });
+    setCreating({ start, end, kind: "event" });
   };
 
   const handleItemClick = (item: CalendarItem) => {
@@ -211,14 +208,27 @@ export function Calendar() {
     else setEditingEventId((item.source as { id: string }).id);
   };
 
+  /** Click on an empty time-slot in any view → open the picker (defaults
+   *  to event since that's the most common create). The user can flip to
+   *  task via the toggle inside the modal. */
   const handleCreateAt = (start: Date) => {
     const end = new Date(start.getTime() + 60 * 60_000);
-    setCreatingEvent({ start, end });
+    setCreating({ start, end, kind: "event" });
   };
 
+  /** Month-view: click on a day cell area (not the date digit) opens the
+   *  picker pinned to 9:00 of that day. Clicking the digit still navigates
+   *  to day view (the existing affordance). */
   const handleMonthDayClick = (day: Date) => {
     setAnchor(day);
     setView("day");
+  };
+
+  const handleMonthCellClick = (day: Date) => {
+    const start = new Date(day);
+    start.setHours(9, 0, 0, 0);
+    const end = new Date(start.getTime() + 60 * 60_000);
+    setCreating({ start, end, kind: "event" });
   };
 
   const toggleListVisibility = (listId: string) => {
@@ -325,6 +335,7 @@ export function Calendar() {
             items={items}
             onItemClick={handleItemClick}
             onDayClick={handleMonthDayClick}
+            onCellClick={handleMonthCellClick}
           />
         )}
         {view === "agenda" && (
@@ -337,22 +348,106 @@ export function Calendar() {
         )}
       </div>
 
+      {/* Edit-existing-task modal */}
       <TaskEditModal
         taskId={editingTaskId}
         onClose={() => setEditingTaskId(null)}
         defaultTab="schedule"
       />
+
+      {/* Edit-existing-event modal */}
       <EventEditModal
-        open={!!editingEventId || !!creatingEvent}
+        open={!!editingEventId}
         eventId={editingEventId}
-        initialStart={creatingEvent?.start}
-        initialEnd={creatingEvent?.end}
-        onClose={() => {
-          setEditingEventId(null);
-          setCreatingEvent(null);
-        }}
+        onClose={() => setEditingEventId(null)}
       />
+
+      {/* Create-flow: a single picker drives either a new event or a new
+          task, with the toggle living in the modal's top slot so the user
+          can flip without losing the time/date context. The entity is only
+          persisted on save — discarding the modal creates nothing. */}
+      {creating?.kind === "event" && (
+        <EventEditModal
+          open
+          eventId={null}
+          initialStart={creating.start}
+          initialEnd={creating.end}
+          onClose={() => setCreating(null)}
+          topSlot={
+            <CreateKindToggle
+              kind="event"
+              onChange={(k) =>
+                setCreating((c) => (c ? { ...c, kind: k } : c))
+              }
+            />
+          }
+        />
+      )}
+      {creating?.kind === "task" && (
+        <TaskEditModal
+          taskId={null}
+          onClose={() => setCreating(null)}
+          createDraft={{
+            title: "",
+            scheduled_at: creating.start.toISOString(),
+            duration_minutes: Math.round(
+              (creating.end.getTime() - creating.start.getTime()) / 60000
+            ),
+          }}
+          defaultTab="schedule"
+          topSlot={
+            <CreateKindToggle
+              kind="task"
+              onChange={(k) =>
+                setCreating((c) => (c ? { ...c, kind: k } : c))
+              }
+            />
+          }
+        />
+      )}
     </ScreenScaffold>
+  );
+}
+
+/**
+ * Two-button toggle for the "create event vs create task" picker. Lives
+ * inside both modals' `topSlot` and lifts state to the parent so flipping
+ * preserves the time/date context.
+ */
+function CreateKindToggle({
+  kind,
+  onChange,
+}: {
+  kind: "event" | "task";
+  onChange: (k: "event" | "task") => void;
+}) {
+  return (
+    <div className="inline-flex rounded-md border border-ink-200 overflow-hidden text-xs mt-1">
+      <button
+        onClick={() => onChange("event")}
+        className={
+          "px-3 py-1 font-medium border-e border-ink-200 transition-colors " +
+          (kind === "event"
+            ? "bg-ink-900 text-white"
+            : "bg-white text-ink-700 hover:bg-ink-50")
+        }
+        type="button"
+      >
+        אירוע
+      </button>
+      <button
+        onClick={() => onChange("task")}
+        className={
+          "px-3 py-1 font-medium transition-colors " +
+          (kind === "task"
+            ? "bg-ink-900 text-white"
+            : "bg-white text-ink-700 hover:bg-ink-50")
+        }
+        type="button"
+      >
+        משימה
+      </button>
+    </div>
   );
 }
 

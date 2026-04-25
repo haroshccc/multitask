@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
@@ -32,6 +33,17 @@ export function UnsavedChangesGuard({
   onCancel,
   saving,
 }: UnsavedChangesGuardProps) {
+  // Esc dismisses the guard the same way "אל תסגור" does — returns the user
+  // to the editor with their dirty draft intact.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onCancel();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onCancel]);
+
   return (
     <AnimatePresence>
       {open && (
@@ -39,6 +51,9 @@ export function UnsavedChangesGuard({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
+          // Backdrop click = same as "אל תסגור": dismiss the guard. The
+          // dirty draft stays in the parent editor.
+          onClick={onCancel}
           className="fixed inset-0 z-[60] bg-ink-900/40 flex items-center justify-center p-4"
         >
           <motion.div
@@ -46,6 +61,7 @@ export function UnsavedChangesGuard({
             animate={{ y: 0, opacity: 1, scale: 1 }}
             exit={{ y: 20, opacity: 0, scale: 0.95 }}
             transition={{ type: "spring", stiffness: 400, damping: 30 }}
+            onClick={(e) => e.stopPropagation()}
             className="bg-white rounded-2xl shadow-lift max-w-sm w-full p-5"
           >
             <div className="flex items-start gap-3">

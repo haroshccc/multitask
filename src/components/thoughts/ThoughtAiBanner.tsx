@@ -82,6 +82,12 @@ export function ThoughtAiBanner({
   const assignThoughtToList = useAssignThoughtToList();
   const recordProcessing = useRecordThoughtProcessing();
   const [showProjectPicker, setShowProjectPicker] = useState(false);
+  // After picking a project, ask the user whether to also create a
+  // dedicated thought-list for that project (per user-spec #2).
+  const [pendingProject, setPendingProject] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
 
   // Build the AI plan once per thought + once task lists / recent tasks
   // load (history-aware list ranking depends on them).
@@ -212,25 +218,47 @@ export function ThoughtAiBanner({
   };
 
   /**
-   * Manual project link (user-spec #5). Records `thought_processings` of
-   * type 'project', then ensures a "מחשבות על פרויקטים" thought-list exists
-   * and assigns the thought there. Once thought_lists gain a `project_id`
-   * column (deferred migration), we'll switch to per-project lists; for now
-   * everything pools into the single auto-list.
+   * Step 1 of the link-to-project flow: user picked a project, now choose
+   * which thought-list to attach the thought to. Two options surface:
+   *   (a) Create / reuse a thought-list named like the project (per-project).
+   *   (b) Use the general "מחשבות על פרויקטים" auto-list (the catch-all).
+   *
+   * The provenance record (`thought_processings` target_type='project') is
+   * written once, after the chosen list assignment completes. Until
+   * `thought_lists` gain a `project_id` column (deferred migration), the
+   * "per-project" list is just a freestanding list whose name matches the
+   * project — searchable but not enforced as a hard link.
    */
-  const handleLinkProject = async (
-    projectId: string,
-    projectName: string
-  ) => {
+  const handleProjectPicked = (projectId: string, projectName: string) => {
     setShowProjectPicker(false);
-    let bucket = thoughtLists.find((l) => l.name === "מחשבות על פרויקטים");
-    if (!bucket) {
-      bucket = await createThoughtList.mutateAsync({
-        name: "מחשבות על פרויקטים",
-        emoji: "icon:projects",
-        color: "#6366f1",
-      });
+    setPendingProject({ id: projectId, name: projectName });
+  };
+
+  const completeProjectLink = async (mode: "per_project" | "general") => {
+    if (!pendingProject) return;
+    const { id: projectId, name: projectName } = pendingProject;
+    let bucket: typeof thoughtLists[number] | undefined;
+
+    if (mode === "per_project") {
+      bucket = thoughtLists.find((l) => l.name === projectName);
+      if (!bucket) {
+        bucket = await createThoughtList.mutateAsync({
+          name: projectName,
+          emoji: "icon:projects",
+          color: "#6366f1",
+        });
+      }
+    } else {
+      bucket = thoughtLists.find((l) => l.name === "מחשבות על פרויקטים");
+      if (!bucket) {
+        bucket = await createThoughtList.mutateAsync({
+          name: "מחשבות על פרויקטים",
+          emoji: "icon:projects",
+          color: "#6366f1",
+        });
+      }
     }
+
     if (bucket) {
       await assignThoughtToList.mutateAsync({
         thoughtId: thought.id,
@@ -245,6 +273,7 @@ export function ThoughtAiBanner({
       `פרויקט: ${projectName}`,
       false
     );
+    setPendingProject(null);
     onOpenProject?.(projectId);
   };
 
@@ -319,7 +348,18 @@ export function ThoughtAiBanner({
         </div>
         <div className="relative">
           <button
-            onClick={() => setShowCloseMenu((v) => !v)}
+            onClick={() => {
+              // If the user opened the banner and applied nothing, the
+              // "what to do with the thought?" decision menu is friction —
+              // just close. The menu only matters once at least one action
+              // was applied (or the thought already had processings).
+              const hasWork = Object.keys(applied).length > 0;
+              if (!hasWork) {
+                onClose("leave");
+                return;
+              }
+              setShowCloseMenu((v) => !v);
+            }}
             className="p-1 rounded hover:bg-ink-100"
             title="סגור"
             type="button"
@@ -492,8 +532,7 @@ export function ThoughtAiBanner({
         {showProjectPicker && (
           <div className="border border-ink-200 rounded-lg bg-white p-2 max-h-48 overflow-y-auto">
             <div className="text-[10px] text-ink-500 px-1 pb-1">
-              שיוך מוסיף את המחשבה לרשימה "מחשבות על פרויקטים" ומקשר אותה
-              לפרויקט שתבחרי.
+              בחרי פרויקט לקישור.
             </div>
             {projects.length === 0 ? (
               <p className="text-xs text-ink-500 px-2 py-2">
@@ -505,7 +544,7 @@ export function ThoughtAiBanner({
                 .map((p) => (
                   <button
                     key={p.id}
-                    onClick={() => handleLinkProject(p.id, p.name)}
+                    onClick={() => handleProjectPicked(p.id, p.name)}
                     className="w-full flex items-center gap-2 px-2 py-1.5 text-sm text-start hover:bg-ink-50 rounded"
                     type="button"
                   >
@@ -514,6 +553,50 @@ export function ThoughtAiBanner({
                   </button>
                 ))
             )}
+          </div>
+        )}
+
+        {pendingProject && (
+          <div className="border border-ink-200 rounded-lg bg-white p-3 space-y-2">
+            <div className="text-xs font-medium text-ink-900">
+              אל איזו רשימת מחשבות לשייך?
+            </div>
+            <div className="text-[11px] text-ink-500">
+              פרויקט: <span className="font-medium">{pendingProject.name}</span>
+            </div>
+            <div className="flex flex-col gap-1.5 pt-1">
+              <button
+                onClick={() => completeProjectLink("per_project")}
+                className="text-start text-sm px-2 py-1.5 rounded-md border border-primary-300 bg-primary-50 hover:bg-primary-100"
+                type="button"
+              >
+                <div className="font-medium text-primary-700">
+                  צור רשימה ספציפית לפרויקט
+                </div>
+                <div className="text-[11px] text-primary-600/80">
+                  רשימה חדשה בשם "{pendingProject.name}".
+                </div>
+              </button>
+              <button
+                onClick={() => completeProjectLink("general")}
+                className="text-start text-sm px-2 py-1.5 rounded-md border border-ink-200 hover:bg-ink-50"
+                type="button"
+              >
+                <div className="font-medium text-ink-900">
+                  שייך לרשימה הכללית
+                </div>
+                <div className="text-[11px] text-ink-500">
+                  "מחשבות על פרויקטים" — קולטת מחשבות מכל הפרויקטים.
+                </div>
+              </button>
+              <button
+                onClick={() => setPendingProject(null)}
+                className="text-xs text-ink-500 hover:text-ink-700 px-2 py-1"
+                type="button"
+              >
+                ביטול
+              </button>
+            </div>
           </div>
         )}
 

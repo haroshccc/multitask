@@ -20,6 +20,9 @@ interface UnassignedBannerProps {
   totalCount: number;
   display: RowDisplayPrefs;
   onOpenEdit: (taskId: string) => void;
+  /** When true, override the "side-banner" width clamp and span the full
+   *  parent width. Used by the vertical-stack layout. */
+  fullWidth?: boolean;
 }
 
 /**
@@ -35,6 +38,7 @@ export function UnassignedBanner({
   totalCount,
   display,
   onOpenEdit,
+  fullWidth,
 }: UnassignedBannerProps) {
   const createTask = useCreateTask();
   const [newTitle, setNewTitle] = useState("");
@@ -122,9 +126,11 @@ export function UnassignedBanner({
       ref={setNodeRef}
       className={cn(
         "self-start flex flex-col bg-ink-50/95 border border-ink-200 rounded-xl shadow-soft transition-colors",
-        // Mobile: full width stacks below the main area.
-        // md+: equivalent to clamp(260px, 22vw, 320px) via min/w/max.
-        "w-full md:flex-shrink-0 md:w-[22vw] md:min-w-[260px] md:max-w-[320px]",
+        fullWidth
+          ? "w-full"
+          // Mobile: full width stacks below the main area.
+          // md+: equivalent to clamp(260px, 22vw, 320px) via min/w/max.
+          : "w-full md:flex-shrink-0 md:w-[22vw] md:min-w-[260px] md:max-w-[320px]",
         isOver && "ring-2 ring-primary-400 border-primary-300"
       )}
     >

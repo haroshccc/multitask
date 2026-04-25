@@ -7,6 +7,7 @@ import {
   MIN,
   addDays,
   clipItem,
+  formatHour,
   isMultiDay,
   isOverdueTask,
   isPast,
@@ -17,7 +18,14 @@ import {
   startOfDay,
   startOfWeek,
 } from "./calendar-utils";
-import { endDrag, getDrag } from "./calendar-drag";
+import {
+  type ItemDropHandler,
+  beginDrag,
+  emitHover,
+  endDrag,
+  getDrag,
+  isItemDraggable,
+} from "./calendar-drag";
 import { CalendarBlock } from "./CalendarDayView";
 import { DayNoteSlot } from "./DayNoteSlot";
 import { TaskCheckButton } from "./TaskCheckButton";
@@ -41,8 +49,8 @@ interface CalendarWeekViewProps {
   hourHeight: number;
   onItemClick: (item: CalendarItem) => void;
   onCreateAt: (start: Date) => void;
-  /** Reposition by drag. New start is already snapped to 15-min. */
-  onItemDrop?: (item: CalendarItem, newStart: Date) => void;
+  /** Reposition or resize by drag. */
+  onItemDrop?: ItemDropHandler;
   /** Lookup: per-date note body (yyyy-mm-dd → string). */
   notesByDate?: Map<string, string>;
   /** Click on a column's date digit → open the per-day note editor. */
@@ -120,25 +128,116 @@ export function CalendarWeekView({
     onCreateAt(slotStart);
   };
 
-  /** Drop handler for one day-column. Translates Y→time identically to the
-   *  day view's column drop, but uses the column's specific dayStart so a
-   *  drop on a different column also moves the item to that day. */
+  /** Translate column-relative Y → snapped Date for one day-column. */
+  const yToSnappedDate = (
+    dayStart: Date,
+    y: number,
+    grabOffsetMin: number
+  ): Date => {
+    const minutesFromWindowStart = (y / hourHeight) * 60 - grabOffsetMin;
+    const snapped = Math.round(minutesFromWindowStart / 15) * 15;
+    return new Date(dayStart.getTime() + hourStart * HOUR + snapped * MIN);
+  };
+
   const handleColDrop = (
     dayStart: Date,
+    e: React.DragEvent<HTMLDivElement>
+  ) => {
+    const drag = getDrag();
+    if (!drag || !onItemDrop) return;
+    if (drag.item.allDay) return;
+    e.preventDefault();
+    const rect = e.currentTarget.getBoundingClientRect();
+    const date = yToSnappedDate(
+      dayStart,
+      e.clientY - rect.top,
+      drag.mode === "move" ? drag.grabOffsetMin : 0
+    );
+    onItemDrop(drag.item, { kind: drag.mode, date });
+    endDrag();
+  };
+
+  const handleColDragOver = (
+    dayStart: Date,
+    e: React.DragEvent<HTMLDivElement>
+  ) => {
+    const drag = getDrag();
+    if (!drag) return;
+    // All-day items can only drop on the all-day band — dropping on the
+    // timed grid would silently strip the all-day flag.
+    if (drag.item.allDay) return;
+    e.preventDefault();
+    const rect = e.currentTarget.getBoundingClientRect();
+    const date = yToSnappedDate(
+      dayStart,
+      e.clientY - rect.top,
+      drag.mode === "move" ? drag.grabOffsetMin : 0
+    );
+    let labelStart: Date;
+    let labelEnd: Date;
+    if (drag.mode === "resize-end") {
+      labelStart = drag.item.start;
+      labelEnd = date;
+    } else if (drag.mode === "resize-start") {
+      labelStart = date;
+      labelEnd = drag.item.end;
+    } else {
+      const dur = drag.item.end.getTime() - drag.item.start.getTime();
+      labelStart = date;
+      labelEnd = new Date(date.getTime() + dur);
+    }
+    emitHover({
+      x: e.clientX,
+      y: e.clientY,
+      label: `${formatHour(labelStart)} עד ${formatHour(labelEnd)}`,
+    });
+  };
+
+  /**
+   * All-day band-row drop target. Each of 7 columns above the timed grid
+   * accepts drops as "this day became the new anchor". For all-day items
+   * we keep the whole-day semantics (no time component); for timed items
+   * dropped here we keep their original time-of-day, just changing the
+   * date. Resize modes change the corresponding edge to that day.
+   */
+  const handleAllDayCellDrop = (
+    day: Date,
     e: React.DragEvent<HTMLDivElement>
   ) => {
     e.preventDefault();
     const drag = getDrag();
     if (!drag || !onItemDrop) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const y = e.clientY - rect.top;
-    const minutesFromWindowStart = (y / hourHeight) * 60 - drag.grabOffsetMin;
-    const snapped = Math.round(minutesFromWindowStart / 15) * 15;
-    const newStart = new Date(
-      dayStart.getTime() + hourStart * HOUR + snapped * MIN
-    );
-    onItemDrop(drag.item, newStart);
+    const date = dateAtDay(day, drag.item, drag.mode);
+    onItemDrop(drag.item, { kind: drag.mode, date });
     endDrag();
+  };
+
+  const handleAllDayCellDragOver = (
+    day: Date,
+    e: React.DragEvent<HTMLDivElement>
+  ) => {
+    const drag = getDrag();
+    if (!drag) return;
+    e.preventDefault();
+    const date = dateAtDay(day, drag.item, drag.mode);
+    let labelStart: Date;
+    let labelEnd: Date;
+    if (drag.mode === "resize-end") {
+      labelStart = drag.item.start;
+      labelEnd = date;
+    } else if (drag.mode === "resize-start") {
+      labelStart = date;
+      labelEnd = drag.item.end;
+    } else {
+      const dur = drag.item.end.getTime() - drag.item.start.getTime();
+      labelStart = date;
+      labelEnd = new Date(date.getTime() + dur);
+    }
+    emitHover({
+      x: e.clientX,
+      y: e.clientY,
+      label: `${shortDate(labelStart)} עד ${shortDate(labelEnd)}`,
+    });
   };
 
   const percentFor = (date: Date, dayStart: Date) => {
@@ -194,32 +293,51 @@ export function CalendarWeekView({
 
       {/* Multi-day / all-day band row — items that span 2+ days render as a
           continuous horizontal bar across the days they cover. */}
-      {multiDayBands.length > 0 && (
+      {/* All-day band row. Always rendered so it can serve as a drop
+          target even when empty (drag a multi-day item from one row to
+          another). When `multiDayBands` is empty the row collapses to
+          a thin strip — keeps drop targets without taking real estate. */}
+      <div
+        className="grid border-b border-ink-200 bg-ink-50/40"
+        style={headerGrid()}
+      >
+        <div className="text-[10px] text-ink-500 px-2 py-1 self-start">
+          כל היום
+        </div>
         <div
-          className="grid border-b border-ink-200 bg-ink-50/40"
-          style={headerGrid()}
+          className="col-span-7 relative"
+          style={{
+            minHeight: Math.max(
+              22,
+              bandRowsNeeded(multiDayBands) * 26 + 6
+            ),
+          }}
         >
-          <div className="text-[10px] text-ink-500 px-2 py-1 self-start">
-            כל היום
-          </div>
-          <div
-            className="col-span-7 relative"
-            style={{ minHeight: bandRowsNeeded(multiDayBands) * 26 + 6 }}
-          >
-            {multiDayBands.map(({ item, startCol, span, row }) => (
-              <MultiDayBand
-                key={item.id}
-                item={item}
-                now={now}
-                startCol={startCol}
-                span={span}
-                row={row}
-                onClick={() => onItemClick(item)}
+          {/* Sub-grid of 7 transparent drop cells so dropping anywhere
+              in the band row resolves to a specific day-column. */}
+          <div className="absolute inset-0 grid grid-cols-7 pointer-events-auto">
+            {perDay.map(({ day }) => (
+              <div
+                key={day.toISOString() + "-allday-drop"}
+                onDragOver={(e) => handleAllDayCellDragOver(day, e)}
+                onDrop={(e) => handleAllDayCellDrop(day, e)}
+                className="border-s border-ink-100/60"
               />
             ))}
           </div>
+          {multiDayBands.map(({ item, startCol, span, row }) => (
+            <MultiDayBand
+              key={item.id}
+              item={item}
+              now={now}
+              startCol={startCol}
+              span={span}
+              row={row}
+              onClick={() => onItemClick(item)}
+            />
+          ))}
         </div>
-      )}
+      </div>
 
       {/* Body */}
       <div className="grid" style={{ ...headerGrid(), height: gridHeight }}>
@@ -260,9 +378,7 @@ export function CalendarWeekView({
                 past && !today && "bg-ink-100/30"
               )}
               onClick={(e) => handleColClick(dayStart, e)}
-              onDragOver={(e) => {
-                if (getDrag()) e.preventDefault();
-              }}
+              onDragOver={(e) => handleColDragOver(dayStart, e)}
               onDrop={(e) => handleColDrop(dayStart, e)}
             >
               {/* Past-time tint (today only) */}
@@ -423,13 +539,13 @@ function MultiDayBand({
   const overdue = isOverdueTask(item, now);
   const accent = item.color ?? (isTask ? "#6b6b80" : "#f59e0b");
   const strokeColor = accent;
+  // Phases stay un-draggable (visualize phase lifetimes, not movable).
+  const draggable = !isPhase && isItemDraggable(item);
 
   const width = `calc(${(span / 7) * 100}% - 6px)`;
   const left = `calc(${(startCol / 7) * 100}% + 3px)`;
   const top = row * 26 + 3;
 
-  // Border = original calendar color when an override is in effect; else
-  // the resolved color. Fill = override (or calendar) color.
   const eventStyle: React.CSSProperties = {
     backgroundColor: `${accent}D9`,
     borderColor: item.originalColor ?? accent,
@@ -440,7 +556,6 @@ function MultiDayBand({
     borderColor: strokeColor,
     color: "#2d2d3a",
   };
-  // Phase: filled-shade background + white text, no stripes inside.
   const phaseStyle: React.CSSProperties = {
     backgroundColor: accent,
     borderColor: accent,
@@ -448,13 +563,34 @@ function MultiDayBand({
   };
 
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick();
+        }
+      }}
+      draggable={draggable}
+      onDragStart={(e) => {
+        if (!draggable) return;
+        beginDrag(item, 0, "move");
+        e.dataTransfer.effectAllowed = "move";
+        try {
+          e.dataTransfer.setData("text/plain", item.id);
+        } catch {
+          /* ignore */
+        }
+      }}
+      onDragEnd={() => endDrag()}
       className={cn(
         "absolute rounded-md px-2 py-1 text-xs font-medium border-[1.5px] truncate text-start shadow-soft inline-flex items-center gap-1",
         past && "opacity-65",
         item.completed && "opacity-55",
-        isPhase && "font-bold uppercase tracking-wider"
+        isPhase && "font-bold uppercase tracking-wider",
+        draggable && "cursor-grab active:cursor-grabbing"
       )}
       style={{
         top,
@@ -464,7 +600,6 @@ function MultiDayBand({
         ...(isPhase ? phaseStyle : isTask ? taskStyle : eventStyle),
       }}
       title={itemTooltip(item)}
-      type="button"
     >
       {isTask && !isPhase && (
         <TaskCheckButton
@@ -483,7 +618,52 @@ function MultiDayBand({
           title="באיחור"
         />
       )}
-    </button>
+      {/* Edge resize handles — left and right grab strips. The drop target
+          decides which date the user landed on; this just begins a drag in
+          the right mode. */}
+      {draggable && (
+        <>
+          <ResizeHandle item={item} edge="start" />
+          <ResizeHandle item={item} edge="end" />
+        </>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Tiny edge handle on a band — drag begins in resize mode. The visual is
+ * a 6px-wide grab strip flush with the band's edge, only visible on hover
+ * to keep the band's main appearance unchanged when you're not editing.
+ */
+function ResizeHandle({
+  item,
+  edge,
+}: {
+  item: CalendarItem;
+  edge: "start" | "end";
+}) {
+  return (
+    <div
+      draggable
+      onDragStart={(e) => {
+        e.stopPropagation();
+        beginDrag(item, 0, edge === "start" ? "resize-start" : "resize-end");
+        e.dataTransfer.effectAllowed = "move";
+        try {
+          e.dataTransfer.setData("text/plain", item.id);
+        } catch {
+          /* ignore */
+        }
+      }}
+      onDragEnd={() => endDrag()}
+      onClick={(e) => e.stopPropagation()}
+      className={cn(
+        "absolute top-0 bottom-0 w-1.5 cursor-ew-resize opacity-0 hover:opacity-100 transition-opacity bg-white/80 rounded-sm",
+        edge === "start" ? "start-0" : "end-0"
+      )}
+      title={edge === "start" ? "גרור כדי לשנות התחלה" : "גרור כדי לשנות סיום"}
+    />
   );
 }
 
@@ -493,4 +673,42 @@ function headerGrid(): React.CSSProperties {
 
 function pad(n: number): string {
   return String(n).padStart(2, "0");
+}
+
+/**
+ * Compute the target Date when a drag is dropped on `day`'s all-day cell.
+ *   - all-day items: drop at midnight of `day`.
+ *   - timed items: keep the original time-of-day, swap the date to `day`.
+ * Resize modes use the corresponding edge of the item to source the
+ * time-of-day so a resize on a timed multi-day item doesn't lose its hour.
+ */
+function dateAtDay(
+  day: Date,
+  item: CalendarItem,
+  mode: "move" | "resize-start" | "resize-end"
+): Date {
+  const out = new Date(day);
+  if (item.allDay) {
+    out.setHours(0, 0, 0, 0);
+    // All-day end is stored as start-of-NEXT-day (exclusive). When the
+    // user drops the end-handle on "Friday", they mean "Friday is the
+    // last inclusive day" → ends_at = Saturday 00:00.
+    if (mode === "resize-end") {
+      out.setDate(out.getDate() + 1);
+    }
+    return out;
+  }
+  const sourceTime =
+    mode === "resize-end" ? item.end : mode === "resize-start" ? item.start : item.start;
+  out.setHours(
+    sourceTime.getHours(),
+    sourceTime.getMinutes(),
+    sourceTime.getSeconds(),
+    sourceTime.getMilliseconds()
+  );
+  return out;
+}
+
+function shortDate(d: Date): string {
+  return d.toLocaleDateString("he-IL", { day: "numeric", month: "numeric" });
 }

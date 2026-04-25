@@ -17,7 +17,9 @@ import {
   startOfWeek,
 } from "./calendar-utils";
 import {
+  type ItemDropHandler,
   beginDrag,
+  emitHover,
   endDrag,
   getDrag,
   isItemDraggable,
@@ -47,9 +49,8 @@ interface CalendarMonthViewProps {
   onDayClick: (day: Date) => void;
   /** Click on the empty area of a day cell — opens the create picker. */
   onCellClick?: (day: Date) => void;
-  /** Reposition by drag-drop. The month view only changes the date —
-   *  time-of-day is preserved. */
-  onItemDrop?: (item: CalendarItem, newStart: Date) => void;
+  /** Reposition or resize by drag-drop. */
+  onItemDrop?: ItemDropHandler;
   /** Lookup: per-date note body (yyyy-mm-dd → string). */
   notesByDate?: Map<string, string>;
 }
@@ -63,21 +64,68 @@ export function CalendarMonthView({
   onItemDrop,
   notesByDate,
 }: CalendarMonthViewProps) {
-  /** Drop on a day cell: preserve time-of-day, change only date. */
+  /**
+   * Compute the target Date for a drop on `day`. For "move" we keep the
+   * item's original time-of-day; for resize-end/start we copy the time
+   * from the corresponding edge so the band keeps its hour even after
+   * a Gantt-style edge drag.
+   */
+  const dateForDrop = (
+    day: Date,
+    item: CalendarItem,
+    mode: "move" | "resize-start" | "resize-end"
+  ): Date => {
+    const out = new Date(day);
+    if (item.allDay) {
+      out.setHours(0, 0, 0, 0);
+      // ends_at on an all-day event is stored as the next-day midnight
+      // (exclusive). Dropping the end handle on "Friday" should set
+      // ends_at to Saturday 00:00 so Friday remains inclusive.
+      if (mode === "resize-end") {
+        out.setDate(out.getDate() + 1);
+      }
+      return out;
+    }
+    const t =
+      mode === "resize-end" ? item.end : mode === "resize-start" ? item.start : item.start;
+    out.setHours(t.getHours(), t.getMinutes(), t.getSeconds(), t.getMilliseconds());
+    return out;
+  };
+
   const handleCellDrop = (day: Date, e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     const drag = getDrag();
     if (!drag || !onItemDrop) return;
-    const orig = drag.item.start;
-    const newStart = new Date(day);
-    newStart.setHours(
-      orig.getHours(),
-      orig.getMinutes(),
-      orig.getSeconds(),
-      orig.getMilliseconds()
-    );
-    onItemDrop(drag.item, newStart);
+    const date = dateForDrop(day, drag.item, drag.mode);
+    onItemDrop(drag.item, { kind: drag.mode, date });
     endDrag();
+  };
+
+  const handleCellDragOver = (day: Date, e: React.DragEvent<HTMLDivElement>) => {
+    const drag = getDrag();
+    if (!drag) return;
+    e.preventDefault();
+    const date = dateForDrop(day, drag.item, drag.mode);
+    let labelStart: Date;
+    let labelEnd: Date;
+    if (drag.mode === "resize-end") {
+      labelStart = drag.item.start;
+      labelEnd = date;
+    } else if (drag.mode === "resize-start") {
+      labelStart = date;
+      labelEnd = drag.item.end;
+    } else {
+      const dur = drag.item.end.getTime() - drag.item.start.getTime();
+      labelStart = date;
+      labelEnd = new Date(date.getTime() + dur);
+    }
+    const fmt = (d: Date) =>
+      d.toLocaleDateString("he-IL", { day: "numeric", month: "numeric" });
+    emitHover({
+      x: e.clientX,
+      y: e.clientY,
+      label: `${fmt(labelStart)} עד ${fmt(labelEnd)}`,
+    });
   };
   const monthStart = startOfMonth(anchor);
   const monthEnd = endOfMonth(anchor);
@@ -196,9 +244,7 @@ export function CalendarMonthView({
                           onCellClick(day);
                         }
                       }}
-                      onDragOver={(e) => {
-                        if (getDrag()) e.preventDefault();
-                      }}
+                      onDragOver={(e) => handleCellDragOver(day, e)}
                       onDrop={(e) => handleCellDrop(day, e)}
                       className={cn(
                         "min-h-[110px] p-1 relative flex flex-col",
@@ -347,12 +393,12 @@ function MonthBand({
   const overdue = isOverdueTask(item, now);
   const accent = item.color ?? (isTask ? "#6b6b80" : "#f59e0b");
   const strokeColor = accent;
+  const draggable = !isPhase && isItemDraggable(item);
 
   const width = `calc(${(span / 7) * 100}% - 4px)`;
   const left = `calc(${(startCol / 7) * 100}% + 2px)`;
   const top = row * (BAND_HEIGHT + BAND_GAP) + BAND_GAP;
 
-  // Border = calendar color when an override is in effect; else accent.
   const eventStyle: React.CSSProperties = {
     backgroundColor: `${accent}D9`,
     borderColor: item.originalColor ?? accent,
@@ -370,15 +416,36 @@ function MonthBand({
   };
 
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick();
+        }
+      }}
+      draggable={draggable}
+      onDragStart={(e) => {
+        if (!draggable) return;
+        beginDrag(item, 0, "move");
+        e.dataTransfer.effectAllowed = "move";
+        try {
+          e.dataTransfer.setData("text/plain", item.id);
+        } catch {
+          /* ignore */
+        }
+      }}
+      onDragEnd={() => endDrag()}
       className={cn(
         "absolute rounded-sm px-1.5 text-[10px] font-medium border-[1.5px] truncate text-start pointer-events-auto",
         past && "opacity-60",
         item.completed && "line-through opacity-55",
         isPhase && "font-bold uppercase",
+        draggable && "cursor-grab active:cursor-grabbing",
         // Multi-day overdue task: tiny red dot at the start (= right in
-        // RTL) via a pseudo-element-style absolute span.
+        // RTL).
         isTask && overdue && !item.completed && "before:absolute before:-top-0.5 before:start-0 before:w-1.5 before:h-1.5 before:rounded-full before:bg-danger-500"
       )}
       style={{
@@ -390,10 +457,46 @@ function MonthBand({
         ...(isPhase ? phaseStyle : isTask ? taskStyle : eventStyle),
       }}
       title={itemTooltip(item)}
-      type="button"
     >
       {isPhase ? `שלב · ${item.title}` : item.title}
-    </button>
+      {draggable && (
+        <>
+          <BandResizeHandle item={item} edge="start" />
+          <BandResizeHandle item={item} edge="end" />
+        </>
+      )}
+    </div>
+  );
+}
+
+function BandResizeHandle({
+  item,
+  edge,
+}: {
+  item: CalendarItem;
+  edge: "start" | "end";
+}) {
+  return (
+    <div
+      draggable
+      onDragStart={(e) => {
+        e.stopPropagation();
+        beginDrag(item, 0, edge === "start" ? "resize-start" : "resize-end");
+        e.dataTransfer.effectAllowed = "move";
+        try {
+          e.dataTransfer.setData("text/plain", item.id);
+        } catch {
+          /* ignore */
+        }
+      }}
+      onDragEnd={() => endDrag()}
+      onClick={(e) => e.stopPropagation()}
+      className={cn(
+        "absolute top-0 bottom-0 w-1.5 cursor-ew-resize opacity-0 hover:opacity-100 transition-opacity bg-white/80 rounded-sm",
+        edge === "start" ? "start-0" : "end-0"
+      )}
+      title={edge === "start" ? "גרור כדי לשנות התחלה" : "גרור כדי לשנות סיום"}
+    />
   );
 }
 
@@ -426,10 +529,24 @@ function MonthItemChip({
     }
   };
 
+  // We render the chip as a `<div role="button">` instead of a `<button>` so
+  // we can host the inner `<TaskCheckButton>` (which is itself a `<button>`)
+  // without producing invalid nested-button HTML — that nesting was
+  // breaking the dragstart event in month view in some browsers.
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      onClick();
+    }
+  };
+
   if (!isTask) {
     return (
-      <button
+      <div
+        role="button"
+        tabIndex={0}
         onClick={onClick}
+        onKeyDown={handleKeyDown}
         draggable={draggable}
         onDragStart={onDragStart}
         onDragEnd={() => endDrag()}
@@ -440,24 +557,26 @@ function MonthItemChip({
         )}
         style={{
           backgroundColor: `${accent}D9`,
-          // Border = calendar color when an override is in effect; else
-          // the resolved color (= calendar / default).
           borderColor: item.originalColor ?? accent,
         }}
-        title={`${itemTooltip(item)}\n${formatHour(item.start, tz)}`}
-        type="button"
+        title={`${itemTooltip(item)}\n${formatHour(item.start, tz)} עד ${formatHour(item.end, tz)}`}
       >
-        <span className="shrink-0 text-white/85 font-normal">
-          {item.allDay ? "" : formatHour(item.start, tz)}
+        <span className="shrink-0 text-white/85 font-normal tabular-nums">
+          {item.allDay
+            ? ""
+            : `${formatHour(item.start, tz)}–${formatHour(item.end, tz)}`}
         </span>
         <span className="truncate">{item.title}</span>
-      </button>
+      </div>
     );
   }
 
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onClick}
+      onKeyDown={handleKeyDown}
       draggable={draggable}
       onDragStart={onDragStart}
       onDragEnd={() => endDrag()}
@@ -471,8 +590,7 @@ function MonthItemChip({
         color: "#2d2d3a",
         backgroundColor: "white",
       }}
-      title={`${itemTooltip(item)}\n${formatHour(item.start, tz)}`}
-      type="button"
+      title={`${itemTooltip(item)}\n${formatHour(item.start, tz)} עד ${formatHour(item.end, tz)}`}
     >
       <TaskCheckButton
         taskId={(item.source as { id: string }).id}
@@ -480,8 +598,10 @@ function MonthItemChip({
         accent={accent}
         size="sm"
       />
-      <span className="shrink-0 text-ink-500">
-        {item.allDay ? "" : formatHour(item.start, tz)}
+      <span className="shrink-0 text-ink-500 tabular-nums">
+        {item.allDay
+          ? ""
+          : `${formatHour(item.start, tz)}–${formatHour(item.end, tz)}`}
       </span>
       <span className={cn("truncate", item.completed && "line-through")}>
         {item.title}
@@ -492,7 +612,7 @@ function MonthItemChip({
           title="באיחור"
         />
       )}
-    </button>
+    </div>
   );
 }
 

@@ -16,8 +16,11 @@ import {
   startOfDay,
 } from "./calendar-utils";
 import {
+  type DropAction,
+  type ItemDropHandler,
   beginDrag,
   durationMin,
+  emitHover,
   endDrag,
   getDrag,
   isItemDraggable,
@@ -35,10 +38,9 @@ interface CalendarDayViewProps {
   hourHeight: number;
   onItemClick: (item: CalendarItem) => void;
   onCreateAt: (start: Date) => void;
-  /** Reposition an item by drag-drop. The new start is already snapped
-   *  to the 15-minute grid; the page is responsible for preserving the
-   *  duration when patching the entity. */
-  onItemDrop?: (item: CalendarItem, newStart: Date) => void;
+  /** Reposition or resize an item by drag-drop. The page is responsible
+   *  for translating the action into the right entity patch. */
+  onItemDrop?: ItemDropHandler;
   /** Per-day note body — `undefined` means no note. */
   dayNote?: string;
   /** Click on the date digit → open the per-day note editor. */
@@ -112,21 +114,65 @@ export function CalendarDayView({
     onCreateAt(start);
   };
 
-  /** Drop handler for the day column — translates the cursor's Y back to
-   *  a snapped time, accounting for the offset between the cursor and the
-   *  block's top so the user feels they're moving the block "from where
-   *  they grabbed it" rather than snapping its head to the cursor. */
+  /**
+   * Translate a column-relative pointer Y to a snapped, dragOffset-adjusted
+   * Date. Shared by the drop handler and the live hover-pill updater so
+   * both agree on the time the user is targeting.
+   */
+  const yToSnappedDate = (y: number, grabOffsetMin: number): Date => {
+    const minutesFromWindowStart = (y / hourHeight) * 60 - grabOffsetMin;
+    const snapped = Math.round(minutesFromWindowStart / 15) * 15;
+    return new Date(windowStart + snapped * MIN);
+  };
+
   const handleColumnDrop = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
     const drag = getDrag();
     if (!drag || !onItemDrop) return;
+    if (drag.item.allDay) return;
+    e.preventDefault();
     const rect = e.currentTarget.getBoundingClientRect();
-    const y = e.clientY - rect.top;
-    const minutesFromWindowStart = (y / hourHeight) * 60 - drag.grabOffsetMin;
-    const snapped = Math.round(minutesFromWindowStart / 15) * 15;
-    const newStart = new Date(windowStart + snapped * MIN);
-    onItemDrop(drag.item, newStart);
+    const date = yToSnappedDate(
+      e.clientY - rect.top,
+      drag.mode === "move" ? drag.grabOffsetMin : 0
+    );
+    const action: DropAction = { kind: drag.mode, date };
+    onItemDrop(drag.item, action);
     endDrag();
+  };
+
+  /**
+   * Live hover-pill updater — computes the would-be new start/end
+   * (accounting for the drag mode) and emits a "08:00 עד 09:00" label
+   * that follows the cursor.
+   */
+  const handleColumnDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    const drag = getDrag();
+    if (!drag) return;
+    if (drag.item.allDay) return;
+    e.preventDefault();
+    const rect = e.currentTarget.getBoundingClientRect();
+    const date = yToSnappedDate(
+      e.clientY - rect.top,
+      drag.mode === "move" ? drag.grabOffsetMin : 0
+    );
+    let labelStart: Date;
+    let labelEnd: Date;
+    if (drag.mode === "resize-end") {
+      labelStart = drag.item.start;
+      labelEnd = date;
+    } else if (drag.mode === "resize-start") {
+      labelStart = date;
+      labelEnd = drag.item.end;
+    } else {
+      const dur = drag.item.end.getTime() - drag.item.start.getTime();
+      labelStart = date;
+      labelEnd = new Date(date.getTime() + dur);
+    }
+    emitHover({
+      x: e.clientX,
+      y: e.clientY,
+      label: `${formatHour(labelStart)} עד ${formatHour(labelEnd)}`,
+    });
   };
 
   const toPercent = (d: Date): number => {
@@ -196,11 +242,7 @@ export function CalendarDayView({
           className="relative flex-1 cursor-pointer"
           style={{ height: gridHeight }}
           onClick={handleGridClick}
-          onDragOver={(e) => {
-            // Without preventDefault HTML5 will not fire `drop`. We only
-            // accept drops while a calendar item is being dragged.
-            if (getDrag()) e.preventDefault();
-          }}
+          onDragOver={handleColumnDragOver}
           onDrop={handleColumnDrop}
         >
           {/* Past-time tint — subtle gray over elapsed portion of today. */}
@@ -355,11 +397,22 @@ export function CalendarBlock({
 
   const draggable = isItemDraggable(item);
 
+  // Render as a `<div role="button">` rather than a `<button>` because the
+  // block hosts a nested `<button>` (the TaskCheckButton) — nested buttons
+  // are invalid HTML and break dragstart in some browsers.
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
       onClick={(e) => {
         e.stopPropagation();
         onClick();
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick();
+        }
       }}
       draggable={draggable}
       onDragStart={(e) => {
@@ -373,7 +426,6 @@ export function CalendarBlock({
         const grabMinFromStart =
           (grabPxFromTop / Math.max(rect.height, 1)) * blockMin;
         beginDrag(item, grabMinFromStart);
-        // Required for Firefox to actually start a drag.
         e.dataTransfer.effectAllowed = "move";
         try {
           e.dataTransfer.setData("text/plain", item.id);
@@ -396,7 +448,6 @@ export function CalendarBlock({
         color: textColor,
         opacity,
       }}
-      type="button"
       title={itemTooltip(item)}
     >
       {/* Actual time overlay — a solid-filled band in the task's list color
@@ -423,16 +474,18 @@ export function CalendarBlock({
       )}
 
       <div className="relative">
-        {!compact && (
-          <div
-            className={cn(
-              "text-[10px] font-medium leading-tight",
-              isTask ? "text-ink-500" : "text-white/90"
-            )}
-          >
-            {formatHour(item.start, tz)}
-          </div>
-        )}
+        {/* Time range — always shown so the user can read "from-to" at a
+            glance and during drag. In compact mode (week view) the digits
+            shrink to fit but the range stays visible. */}
+        <div
+          className={cn(
+            "font-medium leading-tight tabular-nums",
+            compact ? "text-[9px]" : "text-[10px]",
+            isTask ? "text-ink-500" : "text-white/90"
+          )}
+        >
+          {formatHour(item.start, tz)} עד {formatHour(item.end, tz)}
+        </div>
         <div className="flex items-start gap-1">
           {isTask && (
             <TaskCheckButton
@@ -479,7 +532,7 @@ export function CalendarBlock({
       {/* (Override visualization is now expressed via the block's border
           color = calendar color + fill = override color, set above. No
           extra indicator needed.) */}
-    </button>
+    </div>
   );
 }
 

@@ -28,6 +28,13 @@ interface ThoughtCardProps {
   assignedLists: ThoughtList[];
   /** All thought lists (for the "assign to list" popover). */
   allLists: ThoughtList[];
+  /**
+   * How many entities (tasks/events/projects/messages) have been spawned
+   * from this thought already — drives the small "✓N" badge that signals
+   * "you already did some processing here", which is independent of the
+   * binary `processed_at` flag.
+   */
+  processedCount?: number;
   compact?: boolean;
   onOpen: () => void;
   onOpenTask: (taskId: string) => void;
@@ -50,6 +57,7 @@ export function ThoughtCard({
   thought,
   assignedLists,
   allLists,
+  processedCount = 0,
   compact,
   onOpen,
   onOpenTask,
@@ -157,10 +165,19 @@ export function ThoughtCard({
         </div>
       </div>
 
-      {/* Source + timestamp */}
+      {/* Source + timestamp + partial-processing badge */}
       <div className="flex items-center gap-2 text-[11px] text-ink-500 mb-1">
         <SourceBadge source={thought.source} />
         <span>{formatRelativeTime(thought.created_at)}</span>
+        {processedCount > 0 && (
+          <span
+            className="inline-flex items-center gap-0.5 rounded-full bg-success-500/10 text-success-700 text-[10px] font-medium px-1.5 py-0.5 ms-auto"
+            title={`נוצרו ${processedCount} ישויות מהמחשבה הזו`}
+          >
+            <Check className="w-2.5 h-2.5" />
+            {processedCount}
+          </span>
+        )}
       </div>
 
       {/* Title + body */}

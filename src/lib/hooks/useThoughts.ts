@@ -210,6 +210,7 @@ export function useThoughtProcessings(thoughtId: string | null | undefined) {
 
 export function useRecordThoughtProcessing() {
   const qc = useQueryClient();
+  const scope = useOrgScope();
   return useMutation({
     mutationFn: (input: {
       thought_id: string;
@@ -220,6 +221,26 @@ export function useRecordThoughtProcessing() {
     }) => service.recordThoughtProcessing(input),
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: queryKeys.thoughtProcessings(vars.thought_id) });
+      // Also invalidate any bulk-count queries so the per-card badge refreshes.
+      if (scope.organizationId) {
+        qc.invalidateQueries({ queryKey: ["thought-processing-counts", scope.organizationId] });
+      }
     },
+  });
+}
+
+/** Bulk processing counts — one query for many thoughts; powers the
+ *  per-card "have I done anything from this thought yet?" badge. */
+export function useBulkThoughtProcessingCounts(thoughtIds: string[]) {
+  const scope = useOrgScope();
+  const key = thoughtIds.slice().sort().join(",");
+  return useQuery<Map<string, number>>({
+    queryKey: [
+      "thought-processing-counts",
+      scope.organizationId ?? "",
+      key,
+    ] as const,
+    queryFn: () => service.countProcessingsForThoughts(thoughtIds),
+    enabled: scope.enabled && thoughtIds.length > 0,
   });
 }

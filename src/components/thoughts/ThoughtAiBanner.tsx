@@ -17,11 +17,12 @@ import {
 import { cn } from "@/lib/utils/cn";
 import type { Thought } from "@/lib/types/domain";
 import { useCreateTask, useTasks } from "@/lib/hooks/useTasks";
-import { useCreateProject } from "@/lib/hooks/useProjects";
+import { useCreateProject, useProjects } from "@/lib/hooks/useProjects";
 import {
   useAssignThoughtToList,
   useRecordThoughtProcessing,
   useThoughtLists,
+  useCreateThoughtList,
   useTaskLists,
 } from "@/lib/hooks";
 import { useCreateEvent } from "@/lib/hooks/useEvents";
@@ -70,14 +71,17 @@ export function ThoughtAiBanner({
 
   const { data: thoughtLists = [] } = useThoughtLists();
   const { data: taskLists = [] } = useTaskLists();
+  const { data: projects = [] } = useProjects();
   // Pull a sample of recent tasks so the AI can learn from history (which
   // lists the user typically dumps similar tasks into).
   const { data: recentTasks = [] } = useTasks({});
   const createTask = useCreateTask();
   const createEvent = useCreateEvent();
   const createProject = useCreateProject();
+  const createThoughtList = useCreateThoughtList();
   const assignThoughtToList = useAssignThoughtToList();
   const recordProcessing = useRecordThoughtProcessing();
+  const [showProjectPicker, setShowProjectPicker] = useState(false);
 
   // Build the AI plan once per thought + once task lists / recent tasks
   // load (history-aware list ranking depends on them).
@@ -207,6 +211,101 @@ export function ThoughtAiBanner({
     record(syntheticIdx, "task", listId, `רשימת מחשבות: ${listName}`, false);
   };
 
+  /**
+   * Manual project link (user-spec #5). Records `thought_processings` of
+   * type 'project', then ensures a "מחשבות על פרויקטים" thought-list exists
+   * and assigns the thought there. Once thought_lists gain a `project_id`
+   * column (deferred migration), we'll switch to per-project lists; for now
+   * everything pools into the single auto-list.
+   */
+  const handleLinkProject = async (
+    projectId: string,
+    projectName: string
+  ) => {
+    setShowProjectPicker(false);
+    let bucket = thoughtLists.find((l) => l.name === "מחשבות על פרויקטים");
+    if (!bucket) {
+      bucket = await createThoughtList.mutateAsync({
+        name: "מחשבות על פרויקטים",
+        emoji: "icon:projects",
+        color: "#6366f1",
+      });
+    }
+    if (bucket) {
+      await assignThoughtToList.mutateAsync({
+        thoughtId: thought.id,
+        listId: bucket.id,
+      });
+    }
+    const syntheticIdx = -2000 - Object.keys(applied).length;
+    record(
+      syntheticIdx,
+      "project",
+      projectId,
+      `פרויקט: ${projectName}`,
+      false
+    );
+    onOpenProject?.(projectId);
+  };
+
+  /**
+   * Manual fallback creators (user-spec #2). Even when the AI returned
+   * no actions, the user wants the option to spawn a task / event /
+   * project from the thought directly. We construct a minimal payload
+   * pre-filled from the thought text and reuse the same `apply()`
+   * pipeline so the recording trail and "פתח" link work identically.
+   */
+  const manualCreate = async (kind: "task" | "event" | "project") => {
+    const text = thought.text_content ?? "";
+    const title = (
+      thought.ai_generated_title ??
+      text.split(/\r?\n/)[0] ??
+      "מחשבה"
+    ).slice(0, 60);
+    const idx = -3000 - Object.keys(applied).length;
+
+    if (kind === "task") {
+      const t = await createTask.mutateAsync({
+        title,
+        description: text || null,
+        task_list_id: null,
+        parent_task_id: null,
+        urgency: 3,
+        status: "todo",
+        scheduled_at: null,
+        source_thought_id: thought.id,
+      });
+      record(idx, "task", t.id, t.title, false);
+      onOpenTask?.(t.id);
+      return;
+    }
+    if (kind === "event") {
+      const start = new Date();
+      start.setMinutes(0, 0, 0);
+      start.setHours(start.getHours() + 1);
+      const end = new Date(start.getTime() + 60 * 60_000);
+      const e = await createEvent.mutateAsync({
+        title,
+        description: text || null,
+        starts_at: start.toISOString(),
+        ends_at: end.toISOString(),
+        all_day: false,
+        source_thought_id: thought.id,
+      });
+      record(idx, "event", e.id, e.title, false);
+      onOpenEvent?.(e.id);
+      return;
+    }
+    if (kind === "project") {
+      const p = await createProject.mutateAsync({
+        name: title,
+        description: text || null,
+      });
+      record(idx, "project", p.id, p.name, false);
+      onOpenProject?.(p.id);
+    }
+  };
+
   return (
     <div className="border border-ink-200 rounded-xl bg-ink-50/60 p-3 space-y-3">
       {/* Header */}
@@ -321,12 +420,45 @@ export function ThoughtAiBanner({
         </div>
       )}
 
-      {/* Always-available manual fallbacks (assign-to-thought-list, summarize, transcribe) */}
+      {/* Always-available manual fallbacks. Even when the AI proposed nothing,
+          the user can still create entities directly from the thought. */}
       <div className="border-t border-ink-200 pt-2 space-y-2">
         <div className="text-[10px] font-semibold text-ink-400 uppercase tracking-wider">
-          פעולות נוספות
+          פעולות ידניות
         </div>
         <div className="flex flex-wrap gap-1.5">
+          <button
+            onClick={() => manualCreate("task")}
+            className="inline-flex items-center gap-1 rounded-full border border-ink-300 bg-white text-ink-700 text-[11px] font-medium px-2 py-1 hover:bg-ink-100"
+            type="button"
+          >
+            <CheckSquare className="w-3.5 h-3.5" />
+            צור משימה
+          </button>
+          <button
+            onClick={() => manualCreate("event")}
+            className="inline-flex items-center gap-1 rounded-full border border-ink-300 bg-white text-ink-700 text-[11px] font-medium px-2 py-1 hover:bg-ink-100"
+            type="button"
+          >
+            <Calendar className="w-3.5 h-3.5" />
+            צור אירוע
+          </button>
+          <button
+            onClick={() => manualCreate("project")}
+            className="inline-flex items-center gap-1 rounded-full border border-ink-300 bg-white text-ink-700 text-[11px] font-medium px-2 py-1 hover:bg-ink-100"
+            type="button"
+          >
+            <FolderKanban className="w-3.5 h-3.5" />
+            צור פרויקט
+          </button>
+          <button
+            onClick={() => setShowProjectPicker((v) => !v)}
+            className="inline-flex items-center gap-1 rounded-full border border-ink-300 bg-white text-ink-700 text-[11px] font-medium px-2 py-1 hover:bg-ink-100"
+            type="button"
+          >
+            <FolderKanban className="w-3.5 h-3.5" />
+            שייך לפרויקט
+          </button>
           <button
             onClick={() => setShowAssign((v) => !v)}
             className="inline-flex items-center gap-1 rounded-full border border-ink-300 bg-white text-ink-700 text-[11px] font-medium px-2 py-1 hover:bg-ink-100"
@@ -356,6 +488,34 @@ export function ThoughtAiBanner({
             סכם
           </button>
         </div>
+
+        {showProjectPicker && (
+          <div className="border border-ink-200 rounded-lg bg-white p-2 max-h-48 overflow-y-auto">
+            <div className="text-[10px] text-ink-500 px-1 pb-1">
+              שיוך מוסיף את המחשבה לרשימה "מחשבות על פרויקטים" ומקשר אותה
+              לפרויקט שתבחרי.
+            </div>
+            {projects.length === 0 ? (
+              <p className="text-xs text-ink-500 px-2 py-2">
+                עוד אין פרויקטים. צרי אחד במסך הפרויקטים.
+              </p>
+            ) : (
+              projects
+                .filter((p) => !p.is_archived)
+                .map((p) => (
+                  <button
+                    key={p.id}
+                    onClick={() => handleLinkProject(p.id, p.name)}
+                    className="w-full flex items-center gap-2 px-2 py-1.5 text-sm text-start hover:bg-ink-50 rounded"
+                    type="button"
+                  >
+                    <FolderKanban className="w-3.5 h-3.5 text-ink-500" />
+                    <span className="truncate">{p.name}</span>
+                  </button>
+                ))
+            )}
+          </div>
+        )}
 
         {showAssign && (
           <div className="border border-ink-200 rounded-lg bg-white p-2 max-h-40 overflow-y-auto">

@@ -9,7 +9,7 @@ import {
   pointerWithin,
   type DragEndEvent,
 } from "@dnd-kit/core";
-import { Inbox, Plus } from "lucide-react";
+import { Inbox, Pencil, Plus } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import type { Thought, ThoughtList } from "@/lib/types/domain";
 import {
@@ -24,11 +24,14 @@ interface ThoughtsListsViewProps {
   hiddenLists: Set<string>;
   /** Map: thought.id → ThoughtList[] (assignments). */
   assignmentsByThought: Map<string, ThoughtList[]>;
+  /** Map: thought.id → count of `thought_processings` rows (drives the badge). */
+  processingCounts?: Map<string, number>;
   compact?: boolean;
   onOpenThought: (id: string) => void;
   onOpenTask: (id: string) => void;
   onOpenEvent: (id: string) => void;
   onCreateList: () => void;
+  onEditList?: (list: ThoughtList) => void;
 }
 
 /**
@@ -43,11 +46,13 @@ export function ThoughtsListsView({
   lists,
   hiddenLists,
   assignmentsByThought,
+  processingCounts,
   compact,
   onOpenThought,
   onOpenTask,
   onOpenEvent,
   onCreateList,
+  onEditList,
 }: ThoughtsListsViewProps) {
   const visibleLists = useMemo(
     () => lists.filter((l) => !hiddenLists.has(l.id)),
@@ -104,6 +109,7 @@ export function ThoughtsListsView({
           thoughts={unassigned}
           assignmentsByThought={assignmentsByThought}
           allLists={lists}
+          processingCounts={processingCounts}
           compact={compact}
           onOpenThought={onOpenThought}
           onOpenTask={onOpenTask}
@@ -120,10 +126,12 @@ export function ThoughtsListsView({
                 thoughts={byList.get(l.id) ?? []}
                 assignmentsByThought={assignmentsByThought}
                 allLists={lists}
+                processingCounts={processingCounts}
                 compact={compact}
                 onOpenThought={onOpenThought}
                 onOpenTask={onOpenTask}
                 onOpenEvent={onOpenEvent}
+                onEditList={onEditList}
               />
             ))}
             {visibleLists.length === 0 && (
@@ -142,6 +150,7 @@ function UnassignedColumn({
   thoughts,
   assignmentsByThought,
   allLists,
+  processingCounts,
   compact,
   onOpenThought,
   onOpenTask,
@@ -150,6 +159,7 @@ function UnassignedColumn({
   thoughts: Thought[];
   assignmentsByThought: Map<string, ThoughtList[]>;
   allLists: ThoughtList[];
+  processingCounts?: Map<string, number>;
   compact?: boolean;
   onOpenThought: (id: string) => void;
   onOpenTask: (id: string) => void;
@@ -189,6 +199,7 @@ function UnassignedColumn({
               thought={t}
               assignedLists={assignmentsByThought.get(t.id) ?? []}
               allLists={allLists}
+              processedCount={processingCounts?.get(t.id) ?? 0}
               compact={compact}
               onOpen={() => onOpenThought(t.id)}
               onOpenTask={onOpenTask}
@@ -206,19 +217,23 @@ function ListColumn({
   thoughts,
   assignmentsByThought,
   allLists,
+  processingCounts,
   compact,
   onOpenThought,
   onOpenTask,
   onOpenEvent,
+  onEditList,
 }: {
   list: ThoughtList;
   thoughts: Thought[];
   assignmentsByThought: Map<string, ThoughtList[]>;
   allLists: ThoughtList[];
+  processingCounts?: Map<string, number>;
   compact?: boolean;
   onOpenThought: (id: string) => void;
   onOpenTask: (id: string) => void;
   onOpenEvent: (id: string) => void;
+  onEditList?: (list: ThoughtList) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({
     id: `list:${list.id}`,
@@ -243,13 +258,28 @@ function ListColumn({
           className="w-2.5 h-2.5 rounded-sm shrink-0"
           style={{ backgroundColor: accent }}
         />
-        {list.emoji && <ListIcon emoji={list.emoji} className="w-3.5 h-3.5" />}
+        {list.emoji && (
+          <ListIcon
+            emoji={list.emoji}
+            className="w-3.5 h-3.5 text-ink-900"
+          />
+        )}
         <span className="text-sm font-semibold text-ink-900 truncate">
           {list.name}
         </span>
-        <span className="text-xs text-ink-500 tabular-nums ms-auto">
+        <span className="text-xs text-ink-500 tabular-nums">
           ({thoughts.length})
         </span>
+        {onEditList && (
+          <button
+            onClick={() => onEditList(list)}
+            className="ms-auto p-1 rounded-md text-ink-500 hover:text-ink-900 hover:bg-ink-100"
+            title="עריכת רשימה"
+            type="button"
+          >
+            <Pencil className="w-3.5 h-3.5" />
+          </button>
+        )}
       </div>
       <div className="p-2 space-y-2 max-h-[calc(100vh-220px)] overflow-y-auto">
         {thoughts.length === 0 ? (
@@ -263,6 +293,7 @@ function ListColumn({
               thought={t}
               assignedLists={assignmentsByThought.get(t.id) ?? []}
               allLists={allLists}
+              processedCount={processingCounts?.get(t.id) ?? 0}
               compact={compact}
               onOpen={() => onOpenThought(t.id)}
               onOpenTask={onOpenTask}
@@ -281,6 +312,7 @@ function DraggableThoughtCard(props: {
   thought: Thought;
   assignedLists: ThoughtList[];
   allLists: ThoughtList[];
+  processedCount?: number;
   compact?: boolean;
   onOpen: () => void;
   onOpenTask: (id: string) => void;
@@ -304,6 +336,7 @@ function DraggableThoughtCard(props: {
         thought={props.thought}
         assignedLists={props.assignedLists}
         allLists={props.allLists}
+        processedCount={props.processedCount}
         compact={props.compact}
         onOpen={props.onOpen}
         onOpenTask={props.onOpenTask}

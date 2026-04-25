@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   X,
@@ -23,6 +23,7 @@ import { DateTimePicker } from "@/components/ui/DateTimePicker";
 import { EventParticipantsSection } from "./EventParticipantsSection";
 import { RrulePicker } from "./RrulePicker";
 import { ThoughtEditModal } from "@/components/thoughts/ThoughtEditModal";
+import { UnsavedChangesGuard } from "@/components/ui/UnsavedChangesGuard";
 
 /**
  * Event edit modal — SPEC §16. Three tabs: details / participants / recurrence.
@@ -92,8 +93,42 @@ export function EventEditModal({
     }
   }, [open, isEdit, existing, initialStart, initialEnd]);
 
-  const save = async () => {
-    if (!title.trim() || !startsAt || !endsAt) return;
+  const [guardOpen, setGuardOpen] = useState(false);
+
+  // Dirty when any field differs from the persisted row (edit mode) or
+  // from the empty/initial defaults (create mode).
+  const dirty = useMemo(() => {
+    if (isEdit && existing) {
+      return (
+        title !== existing.title ||
+        description !== (existing.description ?? "") ||
+        location !== (existing.location ?? "") ||
+        videoCallUrl !== (existing.video_call_url ?? "") ||
+        allDay !== existing.all_day ||
+        startsAt !== existing.starts_at ||
+        endsAt !== existing.ends_at ||
+        recurrenceRule !== existing.recurrence_rule
+      );
+    }
+    // Create mode: dirty only if user filled the title — every other field
+    // has a default that came from the create context, so changes there
+    // don't constitute a "real" edit until the title says so.
+    return title.trim().length > 0;
+  }, [
+    isEdit,
+    existing,
+    title,
+    description,
+    location,
+    videoCallUrl,
+    allDay,
+    startsAt,
+    endsAt,
+    recurrenceRule,
+  ]);
+
+  const save = async (): Promise<boolean> => {
+    if (!title.trim() || !startsAt || !endsAt) return false;
     const payload = {
       title: title.trim(),
       description: description || null,
@@ -104,10 +139,23 @@ export function EventEditModal({
       ends_at: endsAt,
       recurrence_rule: recurrenceRule,
     };
-    if (isEdit && eventId) {
-      await updateEvent.mutateAsync({ eventId, patch: payload });
-    } else {
-      await createEvent.mutateAsync(payload);
+    try {
+      if (isEdit && eventId) {
+        await updateEvent.mutateAsync({ eventId, patch: payload });
+      } else {
+        await createEvent.mutateAsync(payload);
+      }
+      onClose();
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const handleClose = () => {
+    if (dirty) {
+      setGuardOpen(true);
+      return;
     }
     onClose();
   };
@@ -125,7 +173,7 @@ export function EventEditModal({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          onClick={onClose}
+          onClick={handleClose}
           className="fixed inset-0 z-50 bg-ink-900/50 backdrop-blur-sm flex items-start md:items-center justify-center p-4 overflow-y-auto"
         >
           <motion.div
@@ -141,7 +189,7 @@ export function EventEditModal({
                 {isEdit ? "עריכת אירוע" : "אירוע חדש"}
               </h3>
               <button
-                onClick={onClose}
+                onClick={handleClose}
                 className="p-1.5 rounded-lg hover:bg-ink-100"
                 type="button"
               >
@@ -306,8 +354,13 @@ export function EventEditModal({
                   מחק
                 </button>
               )}
-              <div className="ms-auto flex items-center gap-2">
-                <button onClick={onClose} className="btn-ghost text-sm" type="button">
+              {dirty && (
+                <span className="text-[11px] text-warning-600 me-auto">
+                  יש שינויים לא שמורים
+                </span>
+              )}
+              <div className={cn("flex items-center gap-2", !dirty && "ms-auto")}>
+                <button onClick={handleClose} className="btn-ghost text-sm" type="button">
                   בטל
                 </button>
                 <button
@@ -321,6 +374,20 @@ export function EventEditModal({
               </div>
             </div>
           </motion.div>
+
+          <UnsavedChangesGuard
+            open={guardOpen}
+            saving={updateEvent.isPending || createEvent.isPending}
+            onSaveAndClose={async () => {
+              const ok = await save();
+              if (ok) setGuardOpen(false);
+            }}
+            onDiscardAndClose={() => {
+              setGuardOpen(false);
+              onClose();
+            }}
+            onCancel={() => setGuardOpen(false)}
+          />
         </motion.div>
       )}
     </AnimatePresence>

@@ -17,6 +17,15 @@ import {
   startOfWeek,
 } from "./calendar-utils";
 import { CalendarBlock } from "./CalendarDayView";
+import { DayNoteSlot } from "./DayNoteSlot";
+
+/** yyyy-mm-dd in local time — same shape as `dateKey()` in the service. */
+function dayNoteKey(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${dd}`;
+}
 
 const DAY_NAMES = ["א", "ב", "ג", "ד", "ה", "ו", "ש"];
 
@@ -29,6 +38,10 @@ interface CalendarWeekViewProps {
   hourHeight: number;
   onItemClick: (item: CalendarItem) => void;
   onCreateAt: (start: Date) => void;
+  /** Lookup: per-date note body (yyyy-mm-dd → string). */
+  notesByDate?: Map<string, string>;
+  /** Click on a column's date digit → open the per-day note editor. */
+  onDateNoteClick?: (date: Date) => void;
 }
 
 export function CalendarWeekView({
@@ -40,6 +53,8 @@ export function CalendarWeekView({
   hourHeight,
   onItemClick,
   onCreateAt,
+  notesByDate,
+  onDateNoteClick,
 }: CalendarWeekViewProps) {
   const weekStart = startOfWeek(anchor);
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
@@ -120,23 +135,30 @@ export function CalendarWeekView({
         {perDay.map(({ day }) => {
           const today = isSameDay(day, now);
           const past = isPastDay(day, now);
+          const noteBody = notesByDate?.get(dayNoteKey(day));
           return (
             <div
               key={day.toISOString()}
               className={cn(
-                "px-2 py-2 text-center border-s border-ink-200",
+                "px-2 py-2 border-s border-ink-200",
                 today && "bg-primary-50",
                 past && !today && "bg-ink-100/60"
               )}
             >
-              <div className="text-[10px] text-ink-500">{DAY_NAMES[day.getDay()]}</div>
-              <div
-                className={cn(
-                  "text-sm font-semibold",
-                  today ? "text-primary-700" : past ? "text-ink-500" : "text-ink-900"
-                )}
-              >
-                {day.getDate()}
+              <div className="flex items-start justify-between gap-1 min-w-0">
+                <DayNoteSlot body={noteBody} className="flex-1 text-start" />
+                <button
+                  onClick={() => onDateNoteClick?.(day)}
+                  className={cn(
+                    "text-end shrink-0 rounded-md px-1 hover:bg-ink-100",
+                    today ? "text-primary-700" : past ? "text-ink-500" : "text-ink-900"
+                  )}
+                  title="לחצי לעריכת הערה ליום"
+                  type="button"
+                >
+                  <div className="text-[10px] text-ink-500">{DAY_NAMES[day.getDay()]}</div>
+                  <div className="text-sm font-semibold">{day.getDate()}</div>
+                </button>
               </div>
             </div>
           );

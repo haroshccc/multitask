@@ -15,6 +15,15 @@ import {
   startOfWeek,
 } from "./calendar-utils";
 import { useCalendarPrefs } from "@/lib/hooks/useCalendarPrefs";
+import { DayNoteSlot } from "./DayNoteSlot";
+
+/** yyyy-mm-dd in local time. */
+function monthDayKey(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${dd}`;
+}
 
 const BAND_HEIGHT = 20;
 const BAND_GAP = 2;
@@ -25,10 +34,12 @@ interface CalendarMonthViewProps {
   anchor: Date;
   items: CalendarItem[];
   onItemClick: (item: CalendarItem) => void;
-  /** Click on the date digit — usually navigates to day view. */
+  /** Click on the date digit — opens the per-day note editor. */
   onDayClick: (day: Date) => void;
   /** Click on the empty area of a day cell — opens the create picker. */
   onCellClick?: (day: Date) => void;
+  /** Lookup: per-date note body (yyyy-mm-dd → string). */
+  notesByDate?: Map<string, string>;
 }
 
 export function CalendarMonthView({
@@ -37,6 +48,7 @@ export function CalendarMonthView({
   onItemClick,
   onDayClick,
   onCellClick,
+  notesByDate,
 }: CalendarMonthViewProps) {
   const monthStart = startOfMonth(anchor);
   const monthEnd = endOfMonth(anchor);
@@ -159,14 +171,21 @@ export function CalendarMonthView({
                     >
                       {/* Date number — kept in normal flow at the top of the
                           cell so it can never be obscured by an event chip
-                          below it. (Earlier `position: absolute + z-20`
-                          version had subtle stacking-context issues that let
-                          chips paint over the digits.) */}
-                      <div className="flex items-center justify-start mb-0.5">
+                          below it. The note slot sits to the LEFT of the
+                          digit (per spec: "באמצע כמו המספר אבל משמאל
+                          למספר"). */}
+                      <div className="flex items-center justify-between gap-1 mb-0.5 min-w-0">
+                        <DayNoteSlot
+                          body={notesByDate?.get(monthDayKey(day))}
+                          className="flex-1 text-start"
+                        />
                         <button
-                          onClick={() => onDayClick(day)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onDayClick(day);
+                          }}
                           className={cn(
-                            "text-[11px] font-semibold px-1 py-0.5 rounded-sm hover:bg-ink-100 transition-colors",
+                            "text-[11px] font-semibold px-1 py-0.5 rounded-sm hover:bg-ink-100 transition-colors shrink-0",
                             today
                               ? "text-primary-700"
                               : past
@@ -175,6 +194,7 @@ export function CalendarMonthView({
                               ? "text-ink-900"
                               : "text-ink-400"
                           )}
+                          title="לחצי לעריכת הערה ליום"
                           type="button"
                         >
                           {day.getDate()}

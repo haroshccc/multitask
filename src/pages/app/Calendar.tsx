@@ -14,6 +14,11 @@ import { CalendarMonthView } from "@/components/calendar/CalendarMonthView";
 import { CalendarAgendaView } from "@/components/calendar/CalendarAgendaView";
 import { CalendarStatsStrip } from "@/components/calendar/CalendarStatsStrip";
 import { EventEditModal } from "@/components/calendar/EventEditModal";
+import { DayNoteDialog } from "@/components/calendar/DayNoteDialog";
+import {
+  useCalendarDayNotes,
+} from "@/lib/hooks/useCalendarDayNotes";
+import { dateKey } from "@/lib/services/calendar-day-notes";
 import {
   type CalendarItem,
   type LayerMode,
@@ -93,6 +98,15 @@ export function Calendar() {
   );
 
   const range = useMemo(() => rangeFor(view, anchor), [view, anchor]);
+
+  // Per-day notes for the visible window. Empty `notesByDate` is fine —
+  // the views just render the date digit without a note next to it.
+  const { notesByDate } = useCalendarDayNotes(
+    dateKey(range.from),
+    dateKey(range.to)
+  );
+  // Open the per-day note editor when the user clicks a date digit.
+  const [editingNoteDate, setEditingNoteDate] = useState<Date | null>(null);
 
   const { data: tasks = [] } = useTasks({
     ...filters,
@@ -246,12 +260,10 @@ export function Calendar() {
     setCreating({ start, end, kind: "event" });
   };
 
-  /** Month-view: click on a day cell area (not the date digit) opens the
-   *  picker pinned to 9:00 of that day. Clicking the digit still navigates
-   *  to day view (the existing affordance). */
+  /** Month-view: click on the date digit → open the per-day note editor
+   *  (consistent with the other views). Cell-area click → create picker. */
   const handleMonthDayClick = (day: Date) => {
-    setAnchor(day);
-    setView("day");
+    setEditingNoteDate(day);
   };
 
   const handleMonthCellClick = (day: Date) => {
@@ -345,6 +357,8 @@ export function Calendar() {
             hourHeight={dynamicHourHeightDay}
             onItemClick={handleItemClick}
             onCreateAt={handleCreateAt}
+            dayNote={notesByDate.get(dateKey(anchor))}
+            onDateNoteClick={setEditingNoteDate}
           />
         )}
         {view === "week" && (
@@ -357,6 +371,8 @@ export function Calendar() {
             hourHeight={dynamicHourHeightWeek}
             onItemClick={handleItemClick}
             onCreateAt={handleCreateAt}
+            notesByDate={notesByDate}
+            onDateNoteClick={setEditingNoteDate}
           />
         )}
         {view === "month" && (
@@ -366,6 +382,7 @@ export function Calendar() {
             onItemClick={handleItemClick}
             onDayClick={handleMonthDayClick}
             onCellClick={handleMonthCellClick}
+            notesByDate={notesByDate}
           />
         )}
         {view === "agenda" && (
@@ -374,6 +391,8 @@ export function Calendar() {
             items={items}
             onItemClick={handleItemClick}
             onCreateAt={handleCreateAt}
+            notesByDate={notesByDate}
+            onDateNoteClick={setEditingNoteDate}
           />
         )}
       </div>
@@ -435,6 +454,16 @@ export function Calendar() {
           }
         />
       )}
+
+      {/* Per-day note editor — opens when the user clicks a date digit
+          in any calendar view. */}
+      <DayNoteDialog
+        date={editingNoteDate}
+        initialBody={
+          editingNoteDate ? notesByDate.get(dateKey(editingNoteDate)) ?? "" : ""
+        }
+        onClose={() => setEditingNoteDate(null)}
+      />
     </ScreenScaffold>
   );
 }

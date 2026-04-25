@@ -147,7 +147,6 @@ export function CalendarWeekView({
               )}
             >
               <div className="flex items-start justify-between gap-1 min-w-0">
-                <DayNoteSlot body={noteBody} className="flex-1 text-start" />
                 <button
                   onClick={() => onDateNoteClick?.(day)}
                   className={cn(
@@ -160,6 +159,7 @@ export function CalendarWeekView({
                   <div className="text-[10px] text-ink-500">{DAY_NAMES[day.getDay()]}</div>
                   <div className="text-sm font-semibold">{day.getDate()}</div>
                 </button>
+                <DayNoteSlot body={noteBody} className="flex-1 text-end" />
               </div>
             </div>
           );

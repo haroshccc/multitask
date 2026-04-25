@@ -4,6 +4,7 @@ import {
   type CalendarItem,
   addDays,
   formatHour,
+  isHourless,
   isOverdueTask,
   isPast,
   isSameDay,
@@ -67,10 +68,10 @@ export function CalendarAgendaView({
     }
     for (const arr of m.values()) {
       arr.sort((a, b) => {
-        // Completed all-day tasks sink to the bottom of the day; timed
-        // completed tasks stay at their hour (per spec).
-        const aSink = a.kind === "task" && a.completed && a.allDay ? 1 : 0;
-        const bSink = b.kind === "task" && b.completed && b.allDay ? 1 : 0;
+        // Completed task with no specific hour sinks; timed completed
+        // tasks stay at their hour (per spec).
+        const aSink = a.kind === "task" && a.completed && isHourless(a) ? 1 : 0;
+        const bSink = b.kind === "task" && b.completed && isHourless(b) ? 1 : 0;
         if (aSink !== bSink) return aSink - bSink;
         return a.start.getTime() - b.start.getTime();
       });

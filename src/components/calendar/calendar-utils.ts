@@ -321,6 +321,19 @@ export function isPastDay(day: Date, now: Date): boolean {
   return dayEnd.getTime() < now.getTime();
 }
 
+/**
+ * "No specific hour" — used to decide whether a completed task should
+ * sink to the bottom of its day's list. Tasks whose `scheduled_at`
+ * falls exactly on midnight are treated as floating todos for the day
+ * (no time-of-day pin); tasks with any other hour stay at their hour
+ * even when completed. Events: never hourless (they always have a
+ * concrete starts_at).
+ */
+export function isHourless(item: CalendarItem): boolean {
+  if (item.kind !== "task") return item.allDay;
+  return item.start.getHours() === 0 && item.start.getMinutes() === 0;
+}
+
 // RRULE expansion ------------------------------------------------------------
 //
 // Minimal RFC-5545 expander: given an RRULE string, an anchor datetime (the

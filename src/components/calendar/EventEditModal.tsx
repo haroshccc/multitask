@@ -8,6 +8,8 @@ import {
   Users,
   Repeat,
   ListTodo,
+  Lightbulb,
+  ExternalLink,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import {
@@ -16,9 +18,11 @@ import {
   useUpdateEvent,
   useDeleteEvent,
 } from "@/lib/hooks/useEvents";
+import { useThought } from "@/lib/hooks/useThoughts";
 import { DateTimePicker } from "@/components/ui/DateTimePicker";
 import { EventParticipantsSection } from "./EventParticipantsSection";
 import { RrulePicker } from "./RrulePicker";
+import { ThoughtEditModal } from "@/components/thoughts/ThoughtEditModal";
 
 /**
  * Event edit modal — SPEC §16. Three tabs: details / participants / recurrence.
@@ -281,6 +285,14 @@ export function EventEditModal({
                   anchorDate={startsAt ? new Date(startsAt) : null}
                 />
               )}
+
+              {tab === "details" && existing?.source_thought_id && (
+                <div className="mt-4">
+                  <EventSourceThoughtRow
+                    thoughtId={existing.source_thought_id}
+                  />
+                </div>
+              )}
             </div>
 
             <div className="px-5 py-3 border-t border-ink-200 flex items-center gap-2">
@@ -352,5 +364,38 @@ function Field({
       <label className="eyebrow mb-1 block">{label}</label>
       {children}
     </div>
+  );
+}
+
+/** Banner shown in the details tab when the event was created from a thought. */
+function EventSourceThoughtRow({ thoughtId }: { thoughtId: string }) {
+  const { data: thought } = useThought(thoughtId);
+  const [open, setOpen] = useState(false);
+  if (!thought) return null;
+  const label =
+    thought.ai_generated_title ??
+    (thought.text_content ?? "מחשבה").slice(0, 80);
+  return (
+    <>
+      <div className="p-2 rounded-md border border-ink-200 bg-ink-50/40 flex items-center gap-2">
+        <Lightbulb className="w-4 h-4 text-accent-500 shrink-0" />
+        <div className="flex-1 min-w-0">
+          <div className="text-[11px] text-ink-500">נוצר מהמחשבה</div>
+          <div className="text-sm text-ink-900 truncate">{label}</div>
+        </div>
+        <button
+          onClick={() => setOpen(true)}
+          className="inline-flex items-center gap-1 text-xs font-medium text-primary-600 hover:underline"
+          type="button"
+        >
+          <ExternalLink className="w-3.5 h-3.5" />
+          פתח
+        </button>
+      </div>
+      <ThoughtEditModal
+        thoughtId={open ? thoughtId : null}
+        onClose={() => setOpen(false)}
+      />
+    </>
   );
 }

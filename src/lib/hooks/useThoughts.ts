@@ -5,6 +5,7 @@ import type {
   Thought,
   ThoughtInsert,
   ThoughtUpdate,
+  ThoughtListAssignment,
   ThoughtProcessing,
   ThoughtProcessingTarget,
 } from "@/lib/types/domain";
@@ -138,6 +139,32 @@ export function useRestoreThought() {
 }
 
 // Assignments ---------------------------------------------------------------
+
+export function useThoughtAssignments(thoughtId: string | null | undefined) {
+  return useQuery<ThoughtListAssignment[]>({
+    queryKey: ["thought", thoughtId ?? "", "assignments"] as const,
+    queryFn: () => service.listThoughtAssignments(thoughtId!),
+    enabled: !!thoughtId,
+  });
+}
+
+/**
+ * Bulk assignments for many thoughts in one round-trip — feeds the cards
+ * grid without issuing N queries.
+ */
+export function useBulkThoughtAssignments(thoughtIds: string[]) {
+  const scope = useOrgScope();
+  const key = thoughtIds.slice().sort().join(",");
+  return useQuery<ThoughtListAssignment[]>({
+    queryKey: [
+      "thought-assignments",
+      scope.organizationId ?? "",
+      key,
+    ] as const,
+    queryFn: () => service.listAssignmentsForThoughts(thoughtIds),
+    enabled: scope.enabled && thoughtIds.length > 0,
+  });
+}
 
 export function useAssignThoughtToList() {
   const qc = useQueryClient();

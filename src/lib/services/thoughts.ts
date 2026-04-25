@@ -128,6 +128,19 @@ export async function listThoughtAssignments(
   return data ?? [];
 }
 
+/** Bulk: fetch all assignments for a set of thoughts in a single query. */
+export async function listAssignmentsForThoughts(
+  thoughtIds: string[]
+): Promise<ThoughtListAssignment[]> {
+  if (thoughtIds.length === 0) return [];
+  const { data, error } = await supabase
+    .from("thought_list_assignments")
+    .select("*")
+    .in("thought_id", thoughtIds);
+  if (error) throw error;
+  return data ?? [];
+}
+
 export async function assignThoughtToList(
   thoughtId: string,
   listId: string

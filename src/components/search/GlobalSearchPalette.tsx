@@ -19,11 +19,11 @@ const ENTITY_ICONS: Record<string, typeof FileText> = {
 };
 
 const ENTITY_ROUTES: Record<string, (id: string) => string> = {
-  task: () => `/app/tasks`,
+  task: (id) => `/app/tasks?task=${id}`,
   project: (id) => `/app/projects/${id}`,
-  recording: () => `/app/recordings`,
-  thought: () => `/app/thoughts`,
-  event: () => `/app/calendar`,
+  recording: (id) => `/app/recordings?recording=${id}`,
+  thought: (id) => `/app/thoughts?thought=${id}`,
+  event: (id) => `/app/calendar?event=${id}`,
 };
 
 export function GlobalSearchPalette({ open, onClose }: GlobalSearchPaletteProps) {

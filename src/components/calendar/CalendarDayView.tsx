@@ -14,6 +14,7 @@ import {
   layoutDayOverlaps,
   startOfDay,
 } from "./calendar-utils";
+import { useCalendarPrefs } from "@/lib/hooks/useCalendarPrefs";
 
 interface CalendarDayViewProps {
   date: Date;
@@ -241,6 +242,8 @@ export function CalendarBlock({
   onClick: () => void;
   compact?: boolean;
 }) {
+  const { prefs } = useCalendarPrefs();
+  const tz = prefs.timezone;
   const isTask = item.kind === "task";
   const past = isPast(item, now);
   const overdue = isOverdueTask(item, now);
@@ -331,7 +334,7 @@ export function CalendarBlock({
               isTask ? "text-ink-500" : "text-white/90"
             )}
           >
-            {formatHour(item.start)}
+            {formatHour(item.start, tz)}
           </div>
         )}
         <div

@@ -1,7 +1,10 @@
-import { useState, useRef, useEffect } from "react";
-import { Settings, Clock } from "lucide-react";
+import { useState, useRef, useEffect, useMemo } from "react";
+import { Settings, Clock, Globe } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
-import { useCalendarPrefs } from "@/lib/hooks/useCalendarPrefs";
+import {
+  useCalendarPrefs,
+  listAvailableTimezones,
+} from "@/lib/hooks/useCalendarPrefs";
 
 /**
  * Gear + "24h" quick toggle. The gear opens a popover where the user sets
@@ -9,9 +12,17 @@ import { useCalendarPrefs } from "@/lib/hooks/useCalendarPrefs";
  * click once to show 24 hours, click again to go back to the saved default.
  */
 export function HourRangeSettings() {
-  const { prefs, setPrefs, toggle24h } = useCalendarPrefs();
+  const { prefs, setPrefs, toggle24h, resetTimezone } = useCalendarPrefs();
   const [open, setOpen] = useState(false);
+  const [tzQuery, setTzQuery] = useState("");
   const ref = useRef<HTMLDivElement>(null);
+
+  const timezones = useMemo(() => listAvailableTimezones(), []);
+  const filteredTimezones = useMemo(() => {
+    const q = tzQuery.trim().toLowerCase();
+    if (!q) return timezones.slice(0, 80);
+    return timezones.filter((tz) => tz.toLowerCase().includes(q)).slice(0, 200);
+  }, [tzQuery, timezones]);
 
   useEffect(() => {
     if (!open) return;
@@ -97,6 +108,50 @@ export function HourRangeSettings() {
             >
               אפס לברירת מחדל
             </button>
+          </div>
+
+          <div className="border-t border-ink-200 pt-3">
+            <label className="eyebrow block mb-1 flex items-center gap-1">
+              <Globe className="w-3 h-3" />
+              אזור זמן
+            </label>
+            <p className="text-[11px] text-ink-500 mb-2">
+              התאריכים והשעות ביומן מוצגים לפי אזור הזמן הזה.
+            </p>
+            <input
+              type="text"
+              value={tzQuery}
+              onChange={(e) => setTzQuery(e.target.value)}
+              placeholder="חיפוש... (למשל Jerusalem)"
+              className="field text-sm mb-1"
+            />
+            <select
+              value={prefs.timezone}
+              onChange={(e) => setPrefs({ timezone: e.target.value })}
+              className="field text-sm"
+              size={6}
+            >
+              {filteredTimezones.includes(prefs.timezone) ? null : (
+                <option value={prefs.timezone}>{prefs.timezone}</option>
+              )}
+              {filteredTimezones.map((tz) => (
+                <option key={tz} value={tz}>
+                  {tz}
+                </option>
+              ))}
+            </select>
+            <div className="flex justify-between items-center mt-2">
+              <span className="text-[10px] text-ink-500">
+                נוכחי: <code className="text-ink-700">{prefs.timezone}</code>
+              </span>
+              <button
+                onClick={resetTimezone}
+                className="btn-ghost text-xs"
+                type="button"
+              >
+                זיהוי אוטומטי
+              </button>
+            </div>
           </div>
         </div>
       )}

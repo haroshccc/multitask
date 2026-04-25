@@ -19,6 +19,7 @@ import {
   type LayerMode,
   addDays,
   eventToItem,
+  expandRrule,
   startOfDay,
   startOfMonth,
   endOfMonth,
@@ -98,10 +99,44 @@ export function Calendar() {
       }
     }
     if (layer !== "tasks") {
-      for (const e of events) out.push(eventToItem(e));
+      for (const e of events) {
+        const base = eventToItem(e);
+        // Recurring event → expand into concrete occurrences inside the window.
+        // The server returns the master row (its own `starts_at` as the anchor).
+        if (e.recurrence_rule) {
+          const anchorStart = base.start;
+          const duration = base.end.getTime() - anchorStart.getTime();
+          const occurrences = expandRrule(
+            e.recurrence_rule,
+            anchorStart,
+            range.from,
+            range.to
+          );
+          for (const occStart of occurrences) {
+            out.push({
+              ...base,
+              id: `${base.id}:${occStart.getTime()}`,
+              start: occStart,
+              end: new Date(occStart.getTime() + duration),
+            });
+          }
+          // If the master itself falls inside the window but `expandRrule`
+          // didn't emit it (edge case: rules like "weekly on TU" anchored on a
+          // MON), still show it so the user can edit the series.
+          if (
+            occurrences.length === 0 &&
+            anchorStart >= range.from &&
+            anchorStart < range.to
+          ) {
+            out.push(base);
+          }
+        } else {
+          out.push(base);
+        }
+      }
     }
     return out;
-  }, [tasks, events, layer, hiddenLists, listColorById]);
+  }, [tasks, events, layer, hiddenLists, listColorById, range]);
 
   const actualStripes = useMemo(() => {
     const now = new Date();

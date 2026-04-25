@@ -23,14 +23,25 @@ export interface CalendarPrefs {
   hourEnd: number;
   /** When true, override the default range and show 0..24. */
   show24h: boolean;
+  /** IANA timezone (e.g. "Asia/Jerusalem"). Default = browser's resolved zone. */
+  timezone: string;
 }
 
 const STORAGE_KEY = "multitask:calendar-prefs";
+
+function detectTimezone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  } catch {
+    return "UTC";
+  }
+}
 
 const DEFAULT_PREFS: CalendarPrefs = {
   hourStart: 7,
   hourEnd: 22,
   show24h: false,
+  timezone: detectTimezone(),
 };
 
 function clampHour(h: number, min: number, max: number): number {
@@ -48,6 +59,10 @@ function readFromStorage(): CalendarPrefs {
       hourStart: clampHour(parsed.hourStart ?? DEFAULT_PREFS.hourStart, 0, 23),
       hourEnd: clampHour(parsed.hourEnd ?? DEFAULT_PREFS.hourEnd, 1, 24),
       show24h: Boolean(parsed.show24h),
+      timezone:
+        typeof parsed.timezone === "string" && parsed.timezone
+          ? parsed.timezone
+          : DEFAULT_PREFS.timezone,
     };
   } catch {
     return DEFAULT_PREFS;
@@ -110,13 +125,47 @@ export function useCalendarPrefs() {
     setPrefs({ show24h: !cachedSnapshot.show24h });
   }, [setPrefs]);
 
+  const resetTimezone = useCallback(() => {
+    setPrefs({ timezone: detectTimezone() });
+  }, [setPrefs]);
+
   // Effective range derives from the snapshot — no new object unless we have
   // to (`show24h` flip changes the values, otherwise return prefs).
   const effectiveRange: { hourStart: number; hourEnd: number } = prefs.show24h
     ? FULL_DAY_RANGE
     : prefs;
 
-  return { prefs, setPrefs, toggle24h, effectiveRange };
+  return { prefs, setPrefs, toggle24h, resetTimezone, effectiveRange };
 }
+
+/** List of IANA timezones supported by the browser, pre-sorted. */
+export function listAvailableTimezones(): string[] {
+  try {
+    const intlAny = Intl as unknown as {
+      supportedValuesOf?: (key: string) => string[];
+    };
+    const list = intlAny.supportedValuesOf?.("timeZone");
+    if (list && list.length > 0) return list;
+  } catch {
+    /* ignore */
+  }
+  return FALLBACK_TIMEZONES;
+}
+
+const FALLBACK_TIMEZONES = [
+  "UTC",
+  "Asia/Jerusalem",
+  "Europe/London",
+  "Europe/Paris",
+  "Europe/Berlin",
+  "America/New_York",
+  "America/Los_Angeles",
+  "America/Chicago",
+  "Asia/Tokyo",
+  "Asia/Shanghai",
+  "Asia/Dubai",
+  "Asia/Kolkata",
+  "Australia/Sydney",
+];
 
 const FULL_DAY_RANGE = { hourStart: 0, hourEnd: 24 } as const;

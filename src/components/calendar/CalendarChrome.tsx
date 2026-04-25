@@ -24,6 +24,7 @@ import {
 import type { CalendarView } from "./CalendarToolbar";
 import type { LayerMode } from "./calendar-utils";
 import { HourRangeSettings } from "./HourRangeSettings";
+import { useCalendarPrefs } from "@/lib/hooks/useCalendarPrefs";
 
 interface UnifiedList {
   id: string;
@@ -109,12 +110,14 @@ export function CalendarChrome(props: CalendarChromeProps) {
     else onAnchorChange(addMonths(anchor, n));
   };
 
+  const { prefs } = useCalendarPrefs();
+  const tz = prefs.timezone;
   const dateLabel =
     view === "day"
-      ? formatDayLong(anchor)
+      ? formatDayLong(anchor, tz)
       : view === "week" || view === "agenda"
-      ? formatWeekRange(anchor)
-      : formatMonthYear(anchor);
+      ? formatWeekRange(anchor, tz)
+      : formatMonthYear(anchor, tz);
 
   const visibleListCount = lists.length - hiddenListIds.size;
 

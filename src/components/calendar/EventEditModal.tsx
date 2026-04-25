@@ -25,6 +25,7 @@ import { EventParticipantsSection } from "./EventParticipantsSection";
 import { RrulePicker } from "./RrulePicker";
 import { ThoughtEditModal } from "@/components/thoughts/ThoughtEditModal";
 import { UnsavedChangesGuard } from "@/components/ui/UnsavedChangesGuard";
+import { EventCalendarEditDialog } from "./EventCalendarEditDialog";
 
 /**
  * Event edit modal — SPEC §16. Three tabs: details / participants / recurrence.
@@ -97,6 +98,10 @@ export function EventEditModal({
   const [calendarId, setCalendarId] = useState<string | null>(null);
   const [color, setColor] = useState<string | null>(null);
   const { data: availableCalendars = [] } = useEventCalendars();
+  // Inline-create flow — opens `EventCalendarEditDialog` and auto-selects
+  // the new calendar once it's saved (per user request: "let me create a
+  // new calendar from inside the event editor too").
+  const [showCalendarCreate, setShowCalendarCreate] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -356,20 +361,30 @@ export function EventEditModal({
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <Field label="יומן">
-                      <select
-                        value={calendarId ?? ""}
-                        onChange={(e) =>
-                          setCalendarId(e.target.value || null)
-                        }
-                        className="field"
-                      >
-                        <option value="">ללא שיוך</option>
-                        {availableCalendars.map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {c.name}
-                          </option>
-                        ))}
-                      </select>
+                      <div className="flex items-center gap-1">
+                        <select
+                          value={calendarId ?? ""}
+                          onChange={(e) =>
+                            setCalendarId(e.target.value || null)
+                          }
+                          className="field flex-1"
+                        >
+                          <option value="">ללא שיוך</option>
+                          {availableCalendars.map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.name}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => setShowCalendarCreate(true)}
+                          className="shrink-0 px-2 py-1 rounded-md border border-ink-200 text-ink-700 hover:bg-ink-50 text-xs"
+                          title="צור יומן חדש"
+                        >
+                          +
+                        </button>
+                      </div>
                     </Field>
                     <Field label="צבע (דורס את צבע היומן)">
                       <div className="flex items-center gap-1.5 flex-wrap">
@@ -517,6 +532,13 @@ export function EventEditModal({
               onClose();
             }}
             onCancel={() => setGuardOpen(false)}
+          />
+
+          <EventCalendarEditDialog
+            open={showCalendarCreate}
+            calendar={null}
+            onClose={() => setShowCalendarCreate(false)}
+            onSaved={(newId) => setCalendarId(newId)}
           />
         </motion.div>
       )}

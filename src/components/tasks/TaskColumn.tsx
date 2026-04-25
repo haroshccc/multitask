@@ -22,6 +22,7 @@ import {
   useEventCalendars,
   useLinkListToCalendar,
 } from "@/lib/hooks/useEventCalendars";
+import { EventCalendarEditDialog } from "@/components/calendar/EventCalendarEditDialog";
 import type { TaskList } from "@/lib/types/domain";
 import type { RowDisplayPrefs } from "@/lib/hooks/useRowDisplayPrefs";
 import { pushUndo } from "@/lib/undo/store";
@@ -581,6 +582,7 @@ function LinkCalendarPopover({
     list.linked_event_calendar_id ?? null
   );
   const [error, setError] = useState<string | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
 
   const handleSave = async () => {
     setError(null);
@@ -624,21 +626,31 @@ function LinkCalendarPopover({
           </div>
         </div>
         <div className="p-5 space-y-3">
-          <select
-            value={picked ?? ""}
-            onChange={(e) => setPicked(e.target.value || null)}
-            className="field text-sm"
-          >
-            <option value="">ללא קישור</option>
-            {calendars.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
+          <div className="flex items-center gap-1">
+            <select
+              value={picked ?? ""}
+              onChange={(e) => setPicked(e.target.value || null)}
+              className="field text-sm flex-1"
+            >
+              <option value="">ללא קישור</option>
+              {calendars.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={() => setShowCreate(true)}
+              className="shrink-0 px-2 py-1 rounded-md border border-ink-200 text-ink-700 hover:bg-ink-50 text-xs"
+              title="צור יומן חדש"
+            >
+              +
+            </button>
+          </div>
           {calendars.length === 0 && (
             <p className="text-[11px] text-ink-500">
-              עוד אין יומני אירועים. צרי אחד דרך מסך היומן.
+              עוד אין יומני אירועים. לחצי על "+" כדי ליצור אחד.
             </p>
           )}
           {error && (
@@ -661,6 +673,15 @@ function LinkCalendarPopover({
           </button>
         </div>
       </div>
+
+      {/* Inline-create — opens the calendar editor and auto-selects the
+          newly-created calendar in the picker once it saves. */}
+      <EventCalendarEditDialog
+        open={showCreate}
+        calendar={null}
+        onClose={() => setShowCreate(false)}
+        onSaved={(newId) => setPicked(newId)}
+      />
     </div>
   );
 }

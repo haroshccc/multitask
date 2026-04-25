@@ -26,3 +26,4 @@ export * from "./useTimeUnit";
 export * from "./useMaxVisibleColumns";
 export * from "./useRowDisplayPrefs";
 export * from "./useCalendarDayNotes";
+export * from "./useEventCalendars";

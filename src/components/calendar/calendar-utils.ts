@@ -17,8 +17,18 @@ export interface CalendarItem {
   end: Date;
   allDay: boolean;
   color: string | null;
+  /**
+   * The "underlying" color before a per-event override is applied. When
+   * present and different from `color`, the rendering can show a small
+   * indicator (the original calendar color) so the override stays
+   * visible. Null when there's no override or no parent calendar.
+   */
+  originalColor?: string | null;
   /** list_id for tasks, null for events. Used by Lists Banner visibility. */
   listId: string | null;
+  /** event_calendar_id for events, null for tasks. Drives the calendar
+   *  visibility filter. */
+  calendarId?: string | null;
   /** For tasks: true if completed_at is set. */
   completed: boolean;
   /** Raw source (for click → open modal). */
@@ -203,7 +213,21 @@ export function taskToItem(t: Task, listColor: string | null): CalendarItem | nu
   };
 }
 
-export function eventToItem(e: EventRow): CalendarItem {
+export function eventToItem(
+  e: EventRow,
+  calendarColorById?: Map<string, string | null>
+): CalendarItem {
+  // Color resolution: per-event override (`e.color`) wins, then the
+  // event_calendar's color, then null (the renderer falls back to the
+  // default amber). `originalColor` exposes the calendar's color when
+  // it's been overridden so the UI can paint a small indicator dot.
+  const calColor = e.calendar_id
+    ? calendarColorById?.get(e.calendar_id) ?? null
+    : null;
+  const eventColor = e.color ?? null;
+  const finalColor = eventColor ?? calColor ?? null;
+  const originalColor =
+    eventColor && calColor && eventColor !== calColor ? calColor : null;
   return {
     id: `event:${e.id}`,
     kind: "event",
@@ -211,7 +235,9 @@ export function eventToItem(e: EventRow): CalendarItem {
     start: new Date(e.starts_at),
     end: new Date(e.ends_at),
     allDay: e.all_day,
-    color: null,
+    color: finalColor,
+    originalColor,
+    calendarId: e.calendar_id ?? null,
     listId: null,
     completed: false,
     source: e,

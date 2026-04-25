@@ -52,6 +52,10 @@ export type RecordingUpdate = Tables["recordings"]["Update"];
 export type RecordingSpeaker = Tables["recording_speakers"]["Row"];
 export type RecordingTask = Tables["recording_tasks"]["Row"];
 
+export type EventCalendar = Tables["event_calendars"]["Row"];
+export type EventCalendarInsert = Tables["event_calendars"]["Insert"];
+export type EventCalendarUpdate = Tables["event_calendars"]["Update"];
+
 export type CalendarDayNote = Tables["calendar_day_notes"]["Row"];
 export type CalendarDayNoteInsert = Tables["calendar_day_notes"]["Insert"];
 export type CalendarDayNoteUpdate = Tables["calendar_day_notes"]["Update"];

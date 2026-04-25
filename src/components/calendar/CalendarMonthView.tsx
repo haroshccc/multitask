@@ -136,7 +136,7 @@ export function CalendarMonthView({
                     <div
                       key={day.toISOString()}
                       className={cn(
-                        "min-h-[110px] p-1 relative",
+                        "min-h-[110px] p-1 relative flex flex-col",
                         colIdx > 0 && "border-s border-ink-200",
                         !inMonth && "bg-ink-50/50 text-ink-400",
                         past && inMonth && !today && "bg-ink-100/40",
@@ -144,23 +144,29 @@ export function CalendarMonthView({
                       )}
                       style={{ paddingTop: 4 + bandAreaHeight }}
                     >
-                      <button
-                        onClick={() => onDayClick(day)}
-                        className={cn(
-                          "absolute start-1 text-[11px] font-semibold px-1 py-0.5 rounded-sm hover:bg-ink-100 transition-colors z-20",
-                          today
-                            ? "text-primary-700"
-                            : past
-                            ? "text-ink-500"
-                            : inMonth
-                            ? "text-ink-900"
-                            : "text-ink-400"
-                        )}
-                        style={{ top: bandAreaHeight + 2 }}
-                        type="button"
-                      >
-                        {day.getDate()}
-                      </button>
+                      {/* Date number — kept in normal flow at the top of the
+                          cell so it can never be obscured by an event chip
+                          below it. (Earlier `position: absolute + z-20`
+                          version had subtle stacking-context issues that let
+                          chips paint over the digits.) */}
+                      <div className="flex items-center justify-start mb-0.5">
+                        <button
+                          onClick={() => onDayClick(day)}
+                          className={cn(
+                            "text-[11px] font-semibold px-1 py-0.5 rounded-sm hover:bg-ink-100 transition-colors",
+                            today
+                              ? "text-primary-700"
+                              : past
+                              ? "text-ink-500"
+                              : inMonth
+                              ? "text-ink-900"
+                              : "text-ink-400"
+                          )}
+                          type="button"
+                        >
+                          {day.getDate()}
+                        </button>
+                      </div>
                       <div className="space-y-0.5">
                         {visible.map((it) => (
                           <MonthItemChip

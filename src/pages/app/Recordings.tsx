@@ -13,6 +13,7 @@ import {
   type RecordingsFilterState,
 } from "@/components/recordings/RecordingFilters";
 import { useRecordings } from "@/lib/hooks/useRecordings";
+import { useAllRecordingAssignments } from "@/lib/hooks/useRecordingLists";
 
 export function Recordings() {
   const [filters, setFilters] = useState<RecordingsFilterState>(
@@ -22,10 +23,24 @@ export function Recordings() {
   const { data: allRecordings = [], isLoading } = useRecordings({
     includeArchived: true,
   });
+  const { data: assignments = [] } = useAllRecordingAssignments();
+
+  const listsByRecording = useMemo(() => {
+    const m = new Map<string, Set<string>>();
+    for (const a of assignments) {
+      let s = m.get(a.recording_id);
+      if (!s) {
+        s = new Set();
+        m.set(a.recording_id, s);
+      }
+      s.add(a.list_id);
+    }
+    return m;
+  }, [assignments]);
 
   const recordings = useMemo(
-    () => filterRecordings(allRecordings, filters),
-    [allRecordings, filters]
+    () => filterRecordings(allRecordings, filters, listsByRecording),
+    [allRecordings, filters, listsByRecording]
   );
 
   const [selectedId, setSelectedId] = useState<string | null>(null);

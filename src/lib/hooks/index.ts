@@ -11,6 +11,7 @@ export * from "./useTaskLists";
 export * from "./useProjects";
 export * from "./useEvents";
 export * from "./useRecordings";
+export * from "./useRecordingLists";
 export * from "./useThoughts";
 export * from "./useThoughtLists";
 export * from "./useQuestions";

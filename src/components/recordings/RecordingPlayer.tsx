@@ -1,9 +1,9 @@
-import { AlertCircle, Sparkles, FolderKanban } from "lucide-react";
+import { AlertCircle, Sparkles } from "lucide-react";
 import { format } from "date-fns";
 import { he } from "date-fns/locale";
-import { useRecordingAudioUrl, useUpdateRecording } from "@/lib/hooks/useRecordings";
-import { useProjects } from "@/lib/hooks/useProjects";
+import { useRecordingAudioUrl } from "@/lib/hooks/useRecordings";
 import { AudioPlayer } from "@/components/recordings/AudioPlayer";
+import { RecordingLinkagePanel } from "@/components/recordings/RecordingLinkagePanel";
 import type { Recording } from "@/lib/types/domain";
 
 interface Props {
@@ -12,8 +12,6 @@ interface Props {
 
 export function RecordingPlayer({ recording }: Props) {
   const { data: url, isLoading, error } = useRecordingAudioUrl(recording);
-  const { data: projects = [] } = useProjects();
-  const updateRecording = useUpdateRecording();
 
   const downloadFilename = buildDownloadFilename(recording);
 
@@ -44,29 +42,8 @@ export function RecordingPlayer({ recording }: Props) {
         )}
       </div>
 
-      {/* Project assignment */}
-      <div className="flex items-center gap-2 text-xs">
-        <FolderKanban className="w-3.5 h-3.5 text-ink-500" />
-        <label className="text-ink-600">פרויקט:</label>
-        <select
-          className="field !py-1 !px-2 !text-xs flex-1 min-w-0 max-w-xs"
-          value={recording.project_id ?? ""}
-          onChange={(e) => {
-            const value = e.target.value || null;
-            updateRecording.mutate({
-              recordingId: recording.id,
-              patch: { project_id: value },
-            });
-          }}
-        >
-          <option value="">— ללא פרויקט —</option>
-          {projects.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
-        </select>
-      </div>
+      {/* Linkage: project, task list, event calendar, recording lists */}
+      <RecordingLinkagePanel recording={recording} />
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
         <Meta label="סטטוס" value={statusLabel(recording.status)} />

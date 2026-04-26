@@ -54,6 +54,9 @@ export const queryKeys = {
     ["recording", recordingId, "speakers"] as const,
   recordingTasks: (recordingId: string) =>
     ["recording", recordingId, "tasks"] as const,
+  recordingLists: (orgId: string) => ["recording-lists", orgId] as const,
+  recordingListAssignments: (recordingId: string) =>
+    ["recording", recordingId, "lists"] as const,
 
   // Thoughts
   thoughts: (orgId: string, filters?: Record<string, unknown>) =>
@@ -105,6 +108,7 @@ export const queryFamilies = {
   allThoughts: (orgId: string) => ["thoughts", orgId] as const,
   allTaskLists: (orgId: string) => ["task-lists", orgId] as const,
   allThoughtLists: (orgId: string) => ["thought-lists", orgId] as const,
+  allRecordingLists: (orgId: string) => ["recording-lists", orgId] as const,
   allProjectTemplates: (orgId: string) => ["project-templates", orgId] as const,
   taskFamily: (taskId: string) => ["task", taskId] as const,
   projectFamily: (projectId: string) => ["project", projectId] as const,

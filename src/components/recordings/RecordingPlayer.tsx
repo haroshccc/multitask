@@ -1,7 +1,9 @@
-import { AlertCircle, Loader2, Sparkles } from "lucide-react";
+import { AlertCircle, Sparkles, FolderKanban } from "lucide-react";
 import { format } from "date-fns";
 import { he } from "date-fns/locale";
-import { useRecordingAudioUrl } from "@/lib/hooks/useRecordings";
+import { useRecordingAudioUrl, useUpdateRecording } from "@/lib/hooks/useRecordings";
+import { useProjects } from "@/lib/hooks/useProjects";
+import { AudioPlayer } from "@/components/recordings/AudioPlayer";
 import type { Recording } from "@/lib/types/domain";
 
 interface Props {
@@ -10,6 +12,10 @@ interface Props {
 
 export function RecordingPlayer({ recording }: Props) {
   const { data: url, isLoading, error } = useRecordingAudioUrl(recording);
+  const { data: projects = [] } = useProjects();
+  const updateRecording = useUpdateRecording();
+
+  const downloadFilename = buildDownloadFilename(recording);
 
   return (
     <div className="card p-5 space-y-4">
@@ -28,26 +34,47 @@ export function RecordingPlayer({ recording }: Props) {
             <AlertCircle className="w-4 h-4 text-ink-400" />
             האודיו של הקלטה זו נמחק לפי מדיניות retention. המטא-דאטה נשמר.
           </div>
-        ) : isLoading ? (
-          <div className="rounded-md bg-ink-50 px-3 py-3 text-sm text-ink-500 inline-flex items-center gap-2">
-            <Loader2 className="w-4 h-4 animate-spin" />
-            מביאה את הלינק…
-          </div>
-        ) : error || !url ? (
-          <div className="rounded-md border border-danger-200 bg-danger-50 px-3 py-3 text-sm text-danger-700 inline-flex items-center gap-2">
-            <AlertCircle className="w-4 h-4" />
-            לא הצלחתי להביא את האודיו. נסי לבחור שוב.
-          </div>
         ) : (
-          /* Native audio element — RTL-safe and a11y-friendly */
-          <audio controls preload="metadata" src={url} className="w-full" />
+          <AudioPlayer
+            src={url}
+            isLoading={isLoading}
+            hasError={!!error}
+            downloadFilename={downloadFilename}
+          />
         )}
+      </div>
+
+      {/* Project assignment */}
+      <div className="flex items-center gap-2 text-xs">
+        <FolderKanban className="w-3.5 h-3.5 text-ink-500" />
+        <label className="text-ink-600">פרויקט:</label>
+        <select
+          className="field !py-1 !px-2 !text-xs flex-1 min-w-0 max-w-xs"
+          value={recording.project_id ?? ""}
+          onChange={(e) => {
+            const value = e.target.value || null;
+            updateRecording.mutate({
+              recordingId: recording.id,
+              patch: { project_id: value },
+            });
+          }}
+        >
+          <option value="">— ללא פרויקט —</option>
+          {projects.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))}
+        </select>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
         <Meta label="סטטוס" value={statusLabel(recording.status)} />
         <Meta label="מקור" value={sourceLabel(recording.source)} />
-        <Meta label="אחסון" value={recording.storage_provider === "r2" ? "Cloudflare R2" : "Supabase Storage"} />
+        <Meta
+          label="אחסון"
+          value={recording.storage_provider === "r2" ? "Cloudflare R2" : "Supabase Storage"}
+        />
         <Meta label="MIME" value={recording.mime_type} />
       </div>
 
@@ -104,4 +131,26 @@ function sourceLabel(source: Recording["source"]): string {
     default:
       return "אחר";
   }
+}
+
+function buildDownloadFilename(recording: Recording): string {
+  // Take the extension from storage_key tail, fallback by mime.
+  const keyTail = recording.storage_key.split("/").pop() ?? "";
+  const ext =
+    keyTail.match(/\.([a-z0-9]+)$/i)?.[1]?.toLowerCase() ??
+    extFromMime(recording.mime_type);
+  const stem = (recording.title?.trim() || "recording")
+    .replace(/[\\/:*?"<>|]/g, "-")
+    .slice(0, 80);
+  return `${stem}.${ext}`;
+}
+
+function extFromMime(t: string): string {
+  const s = (t ?? "").toLowerCase();
+  if (s.includes("mpeg") || s.includes("mp3")) return "mp3";
+  if (s.includes("mp4") || s.includes("m4a") || s.includes("aac")) return "m4a";
+  if (s.includes("webm")) return "webm";
+  if (s.includes("ogg") || s.includes("opus")) return "ogg";
+  if (s.includes("wav")) return "wav";
+  return "audio";
 }

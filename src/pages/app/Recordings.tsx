@@ -5,10 +5,29 @@ import { RecordingDropZone } from "@/components/recordings/RecordingDropZone";
 import { RecordingCard } from "@/components/recordings/RecordingCard";
 import { RecordingPlayer } from "@/components/recordings/RecordingPlayer";
 import { RecorderModal } from "@/components/recordings/RecorderModal";
+import { QuickRecordCard } from "@/components/recordings/QuickRecordCard";
+import {
+  RecordingFilters,
+  DEFAULT_RECORDING_FILTERS,
+  filterRecordings,
+  type RecordingsFilterState,
+} from "@/components/recordings/RecordingFilters";
 import { useRecordings } from "@/lib/hooks/useRecordings";
 
 export function Recordings() {
-  const { data: recordings = [], isLoading } = useRecordings();
+  const [filters, setFilters] = useState<RecordingsFilterState>(
+    DEFAULT_RECORDING_FILTERS
+  );
+  // Always fetch with archived included; client-side filter then narrows.
+  const { data: allRecordings = [], isLoading } = useRecordings({
+    includeArchived: true,
+  });
+
+  const recordings = useMemo(
+    () => filterRecordings(allRecordings, filters),
+    [allRecordings, filters]
+  );
+
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [recorderOpen, setRecorderOpen] = useState(false);
 
@@ -29,26 +48,22 @@ export function Recordings() {
   );
 
   const totalSeconds = useMemo(
-    () => recordings.reduce((sum, r) => sum + (r.duration_seconds ?? 0), 0),
-    [recordings]
+    () => allRecordings.reduce((sum, r) => sum + (r.duration_seconds ?? 0), 0),
+    [allRecordings]
   );
+
+  const filteredOutCount = allRecordings.length - recordings.length;
 
   return (
     <ScreenScaffold
       title="הקלטות"
-      subtitle="הקלטה ישירה, גרירת קובץ, ניגון ותיוג. תמלול עברית — בפאזה הבאה."
+      subtitle="הקלטה ישירה, גרירת קובץ, ניגון, הורדה ושיוך לפרויקט. תמלול עברית בפאזה הבאה."
       actions={
-        <div className="flex items-center gap-2">
-          {recordings.length > 0 && (
-            <span className="chip">
-              {recordings.length} הקלטות · {formatTotal(totalSeconds)}
-            </span>
-          )}
-          <button onClick={() => setRecorderOpen(true)} className="btn-primary">
-            <Mic className="w-4 h-4" />
-            הקליטי עכשיו
-          </button>
-        </div>
+        allRecordings.length > 0 ? (
+          <span className="chip">
+            {allRecordings.length} הקלטות · {formatTotal(totalSeconds)}
+          </span>
+        ) : null
       }
     >
       <RecorderModal
@@ -59,15 +74,28 @@ export function Recordings() {
       />
 
       <div className="space-y-5">
-        <RecordingDropZone
-          source="other"
-          onUploaded={(id) => setSelectedId(id)}
-        />
+        {/* 3-column banner: drop-zone | quick record | filters */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+          <RecordingDropZone
+            source="other"
+            onUploaded={(id) => setSelectedId(id)}
+          />
+          <QuickRecordCard onStart={() => setRecorderOpen(true)} />
+          <RecordingFilters value={filters} onChange={setFilters} />
+        </div>
 
         {isLoading ? (
           <div className="card p-8 text-center text-sm text-ink-500">טוענת…</div>
         ) : recordings.length === 0 ? (
-          <EmptyState />
+          allRecordings.length === 0 ? (
+            <EmptyState />
+          ) : (
+            <FilteredEmpty
+              total={allRecordings.length}
+              hidden={filteredOutCount}
+              onClear={() => setFilters(DEFAULT_RECORDING_FILTERS)}
+            />
+          )
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,360px)_1fr] gap-4">
             {/* List sits on the leading (right) edge in RTL */}
@@ -106,13 +134,31 @@ function EmptyState() {
       </div>
       <h2 className="text-lg font-semibold text-ink-900">עוד אין הקלטות</h2>
       <p className="text-sm text-ink-600 mt-1 max-w-md mx-auto leading-relaxed">
-        גררי קובץ אודיו לאזור למעלה, או הקליטי ישירות מכפתור היצירה המהירה
-        בפינה.
+        גררי קובץ אודיו לאזור למעלה, או הקליטי ישירות מ"הקלטה מהירה".
       </p>
       <p className="mt-3 text-[11px] text-ink-400 inline-flex items-center gap-1">
         <ArrowLeft className="w-3 h-3" />
         אפשר גם דרך המיקרופון ב-Topbar
       </p>
+    </div>
+  );
+}
+
+function FilteredEmpty({
+  total,
+  hidden,
+  onClear,
+}: {
+  total: number;
+  hidden: number;
+  onClear: () => void;
+}) {
+  return (
+    <div className="card p-6 text-center text-sm text-ink-600">
+      {hidden} מתוך {total} הקלטות הוסתרו על ידי הסינון.
+      <button onClick={onClear} className="btn-ghost ms-2 !py-1 !px-2 text-xs">
+        נקי סינון
+      </button>
     </div>
   );
 }

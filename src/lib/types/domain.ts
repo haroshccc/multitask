@@ -52,6 +52,11 @@ export type RecordingUpdate = Tables["recordings"]["Update"];
 export type RecordingSpeaker = Tables["recording_speakers"]["Row"];
 export type RecordingTask = Tables["recording_tasks"]["Row"];
 
+export type RecordingList = Tables["recording_lists"]["Row"];
+export type RecordingListInsert = Tables["recording_lists"]["Insert"];
+export type RecordingListUpdate = Tables["recording_lists"]["Update"];
+export type RecordingListAssignment = Tables["recording_list_assignments"]["Row"];
+
 export type EventCalendar = Tables["event_calendars"]["Row"];
 export type EventCalendarInsert = Tables["event_calendars"]["Insert"];
 export type EventCalendarUpdate = Tables["event_calendars"]["Update"];

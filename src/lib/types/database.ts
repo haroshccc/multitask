@@ -861,6 +861,7 @@ export type Database = {
           created_at: string
           duration_seconds: number | null
           error_message: string | null
+          event_calendar_id: string | null
           id: string
           language: string
           mime_type: string
@@ -880,6 +881,7 @@ export type Database = {
           multipart_upload_id: string | null
           summary: string | null
           tags: string[]
+          task_list_id: string | null
           title: string | null
           transcript_json: Json | null
           transcript_text: string | null
@@ -891,6 +893,7 @@ export type Database = {
           created_at?: string
           duration_seconds?: number | null
           error_message?: string | null
+          event_calendar_id?: string | null
           id?: string
           language?: string
           mime_type?: string
@@ -910,6 +913,7 @@ export type Database = {
           multipart_upload_id?: string | null
           summary?: string | null
           tags?: string[]
+          task_list_id?: string | null
           title?: string | null
           transcript_json?: Json | null
           transcript_text?: string | null
@@ -921,6 +925,7 @@ export type Database = {
           created_at?: string
           duration_seconds?: number | null
           error_message?: string | null
+          event_calendar_id?: string | null
           id?: string
           language?: string
           mime_type?: string
@@ -940,6 +945,7 @@ export type Database = {
           multipart_upload_id?: string | null
           summary?: string | null
           tags?: string[]
+          task_list_id?: string | null
           title?: string | null
           transcript_json?: Json | null
           transcript_text?: string | null
@@ -958,6 +964,109 @@ export type Database = {
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recordings_task_list_id_fkey"
+            columns: ["task_list_id"]
+            isOneToOne: false
+            referencedRelation: "task_lists"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recordings_event_calendar_id_fkey"
+            columns: ["event_calendar_id"]
+            isOneToOne: false
+            referencedRelation: "event_calendars"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      recording_lists: {
+        Row: {
+          archive_expires_at: string | null
+          archived_at: string | null
+          color: string | null
+          created_at: string
+          emoji: string | null
+          id: string
+          is_archived: boolean
+          name: string
+          organization_id: string
+          owner_id: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          archive_expires_at?: string | null
+          archived_at?: string | null
+          color?: string | null
+          created_at?: string
+          emoji?: string | null
+          id?: string
+          is_archived?: boolean
+          name: string
+          organization_id: string
+          owner_id: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          archive_expires_at?: string | null
+          archived_at?: string | null
+          color?: string | null
+          created_at?: string
+          emoji?: string | null
+          id?: string
+          is_archived?: boolean
+          name?: string
+          organization_id?: string
+          owner_id?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recording_lists_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      recording_list_assignments: {
+        Row: {
+          assigned_at: string
+          list_id: string
+          recording_id: string
+          sort_order_in_list: number
+        }
+        Insert: {
+          assigned_at?: string
+          list_id: string
+          recording_id: string
+          sort_order_in_list?: number
+        }
+        Update: {
+          assigned_at?: string
+          list_id?: string
+          recording_id?: string
+          sort_order_in_list?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recording_list_assignments_list_id_fkey"
+            columns: ["list_id"]
+            isOneToOne: false
+            referencedRelation: "recording_lists"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recording_list_assignments_recording_id_fkey"
+            columns: ["recording_id"]
+            isOneToOne: false
+            referencedRelation: "recordings"
             referencedColumns: ["id"]
           },
         ]

@@ -68,17 +68,17 @@ export function RecordingFilters({
       case "task_list":
         return taskLists.map((l) => ({
           value: l.id,
-          label: `${l.emoji ? l.emoji + " " : ""}${l.name}`,
+          label: `${visibleEmojiPrefix(l.emoji)}${l.name}`,
         }));
       case "event_calendar":
         return calendars.map((c) => ({
           value: c.id,
-          label: `${c.emoji ? c.emoji + " " : ""}${c.name}`,
+          label: `${visibleEmojiPrefix(c.emoji)}${c.name}`,
         }));
       case "recording_list":
         return recordingLists.map((l) => ({
           value: l.id,
-          label: `${l.emoji ? l.emoji + " " : ""}${l.name}`,
+          label: `${visibleEmojiPrefix(l.emoji)}${l.name}`,
         }));
     }
   })();
@@ -287,4 +287,16 @@ export function filterRecordings<T extends {
     if (q && !(r.title ?? "").toLowerCase().includes(q)) return false;
     return true;
   });
+}
+
+/**
+ * `task_lists.emoji` (and the matching column on event_calendars /
+ * recording_lists) stores either a real emoji character or an internal token
+ * like "icon:work" pointing at a Lucide preset. Plain HTML `<option>` can't
+ * render a Lucide component, so we hide the token and just render the name.
+ */
+function visibleEmojiPrefix(emoji: string | null | undefined): string {
+  if (!emoji) return "";
+  if (emoji.startsWith("icon:")) return "";
+  return emoji + " ";
 }

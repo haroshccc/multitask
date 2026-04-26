@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { AlertCircle, Sparkles, Link2, Tag } from "lucide-react";
 import { format } from "date-fns";
 import { he } from "date-fns/locale";
@@ -9,6 +10,7 @@ import {
 import { useProjects } from "@/lib/hooks/useProjects";
 import { useTaskLists } from "@/lib/hooks/useTaskLists";
 import { useEventCalendars } from "@/lib/hooks/useEventCalendars";
+import { ListIcon } from "@/components/tasks/list-icons";
 import { AudioPlayer } from "@/components/recordings/AudioPlayer";
 import { RecordingLinkagePanel } from "@/components/recordings/RecordingLinkagePanel";
 import type { Recording } from "@/lib/types/domain";
@@ -88,21 +90,27 @@ export function RecordingPlayer({ recording }: Props) {
           <Meta label="פרויקט" value={project?.name ?? null} />
           <Meta
             label="יומן"
-            value={
-              calendar
-                ? `${calendar.emoji ? calendar.emoji + " " : ""}${calendar.name}`
-                : null
+            value={calendar?.name ?? null}
+            valueIcon={
+              calendar ? <ListIcon emoji={calendar.emoji} className="w-3 h-3" /> : null
             }
           />
           <Meta
             label="משימות"
-            value={
-              taskList
-                ? `${taskList.emoji ? taskList.emoji + " " : ""}${taskList.name}`
-                : null
+            value={taskList?.name ?? null}
+            valueIcon={
+              taskList ? <ListIcon emoji={taskList.emoji} className="w-3 h-3" /> : null
             }
           />
-          <Meta label="רשימות" value={listsSummary} />
+          <Meta
+            label="רשימות"
+            value={listsSummary}
+            valueIcon={
+              myLists.length === 1 ? (
+                <ListIcon emoji={myLists[0].emoji} className="w-3 h-3" />
+              ) : null
+            }
+          />
         </div>
       </section>
 
@@ -122,11 +130,22 @@ export function RecordingPlayer({ recording }: Props) {
   );
 }
 
-function Meta({ label, value }: { label: string; value: string | null | undefined }) {
+function Meta({
+  label,
+  value,
+  valueIcon,
+}: {
+  label: string;
+  value: string | null | undefined;
+  valueIcon?: ReactNode;
+}) {
   return (
     <div className="rounded-md bg-ink-50 px-2.5 py-2">
       <div className="text-[10px] uppercase tracking-wider text-ink-400">{label}</div>
-      <div className="text-xs text-ink-800 mt-0.5 truncate">{value ?? "—"}</div>
+      <div className="text-xs text-ink-800 mt-0.5 inline-flex items-center gap-1 max-w-full">
+        {valueIcon}
+        <span className="truncate">{value ?? "—"}</span>
+      </div>
     </div>
   );
 }

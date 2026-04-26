@@ -54,6 +54,11 @@ export function AudioPlayer({
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [speedOpen, setSpeedOpen] = useState(false);
+  // True while we're seeking past the end on purpose to coax the browser
+  // into computing the real duration of an Opus/WebM stream that reported
+  // `Infinity` on metadata. Time-update events during this window are
+  // ignored so the seek bar doesn't jump to ~3 hours.
+  const probingDurationRef = useRef(false);
 
   // Web Audio nodes for the live waveform visualizer.
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -123,11 +128,6 @@ export function AudioPlayer({
     const binCount = analyser.frequencyBinCount;
     const data = new Uint8Array(binCount);
 
-    // Vertical-bar EQ visualizer (like a music player). Reads frequency
-    // amplitude per bin and draws one bar per bucket of bins.
-    const BAR_COUNT = 48;
-    const binsPerBar = Math.max(1, Math.floor(binCount / BAR_COUNT));
-
     const draw = () => {
       const audio = audioRef.current;
       if (!audio || audio.paused) {
@@ -139,7 +139,14 @@ export function AudioPlayer({
       const cssHeight = canvas.clientHeight;
       ctx2d.clearRect(0, 0, cssWidth, cssHeight);
 
-      const gap = 2;
+      // Auto-size the bar count by canvas width so the visualizer feels
+      // dense on desktop (~1 bar per 6 px) without smearing on mobile.
+      const BAR_COUNT = Math.max(
+        32,
+        Math.min(160, Math.floor(cssWidth / 6))
+      );
+      const binsPerBar = Math.max(1, Math.floor(binCount / BAR_COUNT));
+      const gap = cssWidth >= 600 ? 1 : 2;
       const barWidth = (cssWidth - gap * (BAR_COUNT - 1)) / BAR_COUNT;
 
       for (let i = 0; i < BAR_COUNT; i++) {
@@ -270,10 +277,37 @@ export function AudioPlayer({
           stopVisualizer();
         }}
         onLoadedMetadata={(e) => {
-          const d = (e.currentTarget as HTMLAudioElement).duration;
-          if (isFinite(d)) setDuration(d);
+          const a = e.currentTarget as HTMLAudioElement;
+          if (isFinite(a.duration)) {
+            setDuration(a.duration);
+          } else {
+            // WebM/Opus typically reports Infinity until the stream finishes
+            // downloading. Seek past the end so the browser computes the real
+            // duration; we'll clamp the cursor and snap back to 0 in
+            // onDurationChange.
+            probingDurationRef.current = true;
+            try {
+              a.currentTime = 1e10;
+            } catch {
+              /* some browsers throw if seeking on an unseekable stream */
+            }
+          }
         }}
-        onTimeUpdate={(e) => setCurrentTime((e.currentTarget as HTMLAudioElement).currentTime)}
+        onDurationChange={(e) => {
+          const a = e.currentTarget as HTMLAudioElement;
+          if (isFinite(a.duration)) {
+            setDuration(a.duration);
+            if (probingDurationRef.current) {
+              probingDurationRef.current = false;
+              a.currentTime = 0;
+              setCurrentTime(0);
+            }
+          }
+        }}
+        onTimeUpdate={(e) => {
+          if (probingDurationRef.current) return;
+          setCurrentTime((e.currentTarget as HTMLAudioElement).currentTime);
+        }}
       />
 
       {/* Waveform visualizer — drawn while playing, blank while paused */}

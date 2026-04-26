@@ -6,6 +6,7 @@ import { RecordingCard } from "@/components/recordings/RecordingCard";
 import { RecordingPlayer } from "@/components/recordings/RecordingPlayer";
 import { RecorderModal } from "@/components/recordings/RecorderModal";
 import { QuickRecordCard } from "@/components/recordings/QuickRecordCard";
+import { RecordingsMobileDropdown } from "@/components/recordings/RecordingsMobileDropdown";
 import {
   RecordingFilters,
   DEFAULT_RECORDING_FILTERS,
@@ -19,7 +20,6 @@ import {
 } from "@/components/recordings/RecordingsListBanner";
 import { useRecordings } from "@/lib/hooks/useRecordings";
 import { useAllRecordingAssignments } from "@/lib/hooks/useRecordingLists";
-import { cn } from "@/lib/utils/cn";
 
 export function Recordings() {
   const [filters, setFilters] = useState<RecordingsFilterState>(
@@ -100,27 +100,13 @@ export function Recordings() {
         source="other"
       />
 
-      <div className="space-y-5">
-        {/* 3-column banner (RTL leading edge → right):
-            Filters | QuickRecord | DropZone
-            All three are sized to match (compact, centered content). */}
-        {/* Top row — filters grow to fill the leading edge; the other two
-            stay at a fixed width so the grouping tabs in the filters card
-            spread sideways instead of wrapping to a new line. */}
-        <div className="flex flex-col lg:flex-row gap-3">
-          <RecordingFilters
-            className="flex-1 min-w-0"
-            filters={filters}
-            onFiltersChange={setFilters}
-            grouping={grouping}
-            onGroupingChange={setGrouping}
-          />
-          <QuickRecordCard
-            className="lg:w-[220px] lg:shrink-0"
-            onStart={() => setRecorderOpen(true)}
-          />
+      {/* Mobile / tablet (< lg) — completely separate layout the user signed
+          off on: top row of QuickRecord + DropZone side by side, then the
+          recordings dropdown, then the player, then the filters card. */}
+      <div className="lg:hidden space-y-3">
+        <div className="grid grid-cols-2 gap-3">
+          <QuickRecordCard onStart={() => setRecorderOpen(true)} />
           <RecordingDropZone
-            className="lg:w-[220px] lg:shrink-0"
             source="other"
             onUploaded={(id) => setSelectedId(id)}
           />
@@ -131,18 +117,67 @@ export function Recordings() {
         ) : allRecordings.length === 0 ? (
           <EmptyState />
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,360px)_1fr] gap-4">
-            {/* List sits on the leading (right) edge in RTL.
-                On mobile/tablet (below lg) the list is capped at ~40vh with
-                internal scroll, so the player stays close to the top of the
-                viewport. On desktop the list flows naturally. */}
-            <aside
-              className={cn(
-                "space-y-2",
-                "max-h-[40vh] overflow-y-auto scrollbar-thin",
-                "lg:max-h-none lg:overflow-visible"
-              )}
-            >
+          <>
+            <RecordingsMobileDropdown
+              recordings={recordings}
+              selectedId={selectedId}
+              onSelect={setSelectedId}
+              totalCount={allRecordings.length}
+            />
+
+            {recordings.length === 0 ? (
+              <FilteredEmpty
+                total={allRecordings.length}
+                hidden={filteredOutCount}
+                onClear={clearFiltersAndGrouping}
+              />
+            ) : selected ? (
+              <RecordingPlayer key={selected.id} recording={selected} />
+            ) : (
+              <div className="card p-6 text-center text-sm text-ink-500">
+                בחרי הקלטה מהרשימה
+              </div>
+            )}
+          </>
+        )}
+
+        <RecordingFilters
+          filters={filters}
+          onFiltersChange={setFilters}
+          grouping={grouping}
+          onGroupingChange={setGrouping}
+        />
+      </div>
+
+      {/* Desktop (lg+) — original layout: filters + 2 cards on top, list +
+          player below. */}
+      <div className="hidden lg:flex lg:flex-col gap-5">
+        <div className="flex gap-3">
+          <RecordingFilters
+            className="flex-1 min-w-0"
+            filters={filters}
+            onFiltersChange={setFilters}
+            grouping={grouping}
+            onGroupingChange={setGrouping}
+          />
+          <QuickRecordCard
+            className="w-[220px] shrink-0"
+            onStart={() => setRecorderOpen(true)}
+          />
+          <RecordingDropZone
+            className="w-[220px] shrink-0"
+            source="other"
+            onUploaded={(id) => setSelectedId(id)}
+          />
+        </div>
+
+        {isLoading ? (
+          <div className="card p-8 text-center text-sm text-ink-500">טוענת…</div>
+        ) : allRecordings.length === 0 ? (
+          <EmptyState />
+        ) : (
+          <div className="grid grid-cols-[minmax(0,360px)_1fr] gap-4">
+            <aside className="space-y-2">
               {recordings.length === 0 ? (
                 <FilteredEmpty
                   total={allRecordings.length}

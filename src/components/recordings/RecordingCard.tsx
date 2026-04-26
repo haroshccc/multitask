@@ -17,14 +17,23 @@ export function RecordingCard({ recording, isActive, onSelect }: Props) {
       type="button"
       onClick={onSelect}
       className={cn(
-        "w-full text-start rounded-lg border bg-white px-3 py-3 transition-all",
+        "w-full text-start rounded-lg border bg-white transition-all",
+        "px-3 py-2 lg:py-3",
         "hover:border-ink-400 hover:shadow-soft",
         isActive
           ? "border-primary-500 bg-primary-50 shadow-soft"
           : "border-ink-300"
       )}
     >
-      <div className="flex items-start gap-3">
+      {/* Mobile / tablet — title only, single compact row.
+          The aside above shrinks the list to ~40vh with internal scroll, so
+          keeping each row tiny is what gets the user to the player faster. */}
+      <p className="lg:hidden text-sm text-ink-900 truncate">
+        {recording.title || "ללא כותרת"}
+      </p>
+
+      {/* Desktop — full card with source icon + status + meta row. */}
+      <div className="hidden lg:flex items-start gap-3">
         <div
           className={cn(
             "shrink-0 w-9 h-9 rounded-md flex items-center justify-center",

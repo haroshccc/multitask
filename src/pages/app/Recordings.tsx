@@ -4,11 +4,13 @@ import { ScreenScaffold } from "@/components/layout/ScreenScaffold";
 import { RecordingDropZone } from "@/components/recordings/RecordingDropZone";
 import { RecordingCard } from "@/components/recordings/RecordingCard";
 import { RecordingPlayer } from "@/components/recordings/RecordingPlayer";
+import { RecorderModal } from "@/components/recordings/RecorderModal";
 import { useRecordings } from "@/lib/hooks/useRecordings";
 
 export function Recordings() {
   const { data: recordings = [], isLoading } = useRecordings();
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [recorderOpen, setRecorderOpen] = useState(false);
 
   // Auto-select most recent on first load + keep a valid selection on the list.
   useEffect(() => {
@@ -34,15 +36,28 @@ export function Recordings() {
   return (
     <ScreenScaffold
       title="הקלטות"
-      subtitle="העלאה ל-Cloudflare R2, ניגון ותיוג. תמלול עברית והפרדת דוברים — בפאזה הבאה."
+      subtitle="הקלטה ישירה, גרירת קובץ, ניגון ותיוג. תמלול עברית — בפאזה הבאה."
       actions={
-        recordings.length > 0 ? (
-          <span className="chip">
-            {recordings.length} הקלטות · {formatTotal(totalSeconds)}
-          </span>
-        ) : null
+        <div className="flex items-center gap-2">
+          {recordings.length > 0 && (
+            <span className="chip">
+              {recordings.length} הקלטות · {formatTotal(totalSeconds)}
+            </span>
+          )}
+          <button onClick={() => setRecorderOpen(true)} className="btn-primary">
+            <Mic className="w-4 h-4" />
+            הקליטי עכשיו
+          </button>
+        </div>
       }
     >
+      <RecorderModal
+        open={recorderOpen}
+        onClose={() => setRecorderOpen(false)}
+        onSaved={(id) => setSelectedId(id)}
+        source="other"
+      />
+
       <div className="space-y-5">
         <RecordingDropZone
           source="other"

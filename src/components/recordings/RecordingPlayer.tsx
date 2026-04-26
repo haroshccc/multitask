@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { AlertCircle, Sparkles, Link2, Tag } from "lucide-react";
+import { AlertCircle, Sparkles, Link2 } from "lucide-react";
 import { format } from "date-fns";
 import { he } from "date-fns/locale";
 import { useRecordingAudioUrl } from "@/lib/hooks/useRecordings";
@@ -78,15 +78,10 @@ export function RecordingPlayer({ recording }: Props) {
         <RecordingLinkagePanel recording={recording} />
       </section>
 
-      {/* משויך — read-only summary grid showing the values currently linked
-          to this recording. Restored after the user explicitly asked for it
-          back: the chips above are for editing; this row is for at-a-glance
-          read of where the recording lives. */}
+      {/* Read-only summary grid showing the values currently linked to this
+          recording. The header was removed because it duplicated the שיוך
+          label visually; the grid alone is enough at-a-glance read. */}
       <section className="space-y-2">
-        <div className="flex items-center gap-1.5 text-xs font-medium text-ink-700">
-          <Tag className="w-3.5 h-3.5 text-ink-500" />
-          משויך
-        </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-xs">
           <Meta label="סטטוס" value={statusLabel(recording.status)} />
           <Meta label="מקור" value={sourceLabel(recording.source)} />

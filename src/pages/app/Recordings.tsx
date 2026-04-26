@@ -76,6 +76,11 @@ export function Recordings() {
 
   const filteredOutCount = allRecordings.length - recordings.length;
 
+  const clearFiltersAndGrouping = () => {
+    setFilters(DEFAULT_RECORDING_FILTERS);
+    setGrouping(DEFAULT_GROUPING);
+  };
+
   return (
     <ScreenScaffold
       title="הקלטות"
@@ -110,29 +115,29 @@ export function Recordings() {
 
         {isLoading ? (
           <div className="card p-8 text-center text-sm text-ink-500">טוענת…</div>
-        ) : recordings.length === 0 ? (
-          allRecordings.length === 0 ? (
-            <EmptyState />
-          ) : (
-            <FilteredEmpty
-              total={allRecordings.length}
-              hidden={filteredOutCount}
-              onClear={() => setFilters(DEFAULT_RECORDING_FILTERS)}
-            />
-          )
+        ) : allRecordings.length === 0 ? (
+          <EmptyState />
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,360px)_1fr] gap-4">
             {/* List sits on the leading (right) edge in RTL */}
             <aside className="space-y-2">
               <RecordingsListBanner value={grouping} onChange={setGrouping} />
-              {recordings.map((r) => (
-                <RecordingCard
-                  key={r.id}
-                  recording={r}
-                  isActive={r.id === selectedId}
-                  onSelect={() => setSelectedId(r.id)}
+              {recordings.length === 0 ? (
+                <FilteredEmpty
+                  total={allRecordings.length}
+                  hidden={filteredOutCount}
+                  onClear={clearFiltersAndGrouping}
                 />
-              ))}
+              ) : (
+                recordings.map((r) => (
+                  <RecordingCard
+                    key={r.id}
+                    recording={r}
+                    isActive={r.id === selectedId}
+                    onSelect={() => setSelectedId(r.id)}
+                  />
+                ))
+              )}
             </aside>
 
             <section>
@@ -179,9 +184,16 @@ function FilteredEmpty({
   onClear: () => void;
 }) {
   return (
-    <div className="card p-6 text-center text-sm text-ink-600">
-      {hidden} מתוך {total} הקלטות הוסתרו על ידי הסינון.
-      <button onClick={onClear} className="btn-ghost ms-2 !py-1 !px-2 text-xs">
+    <div className="card p-5 text-center space-y-2">
+      <p className="text-sm font-medium text-ink-800">אין הקלטות בסינון זה</p>
+      <p className="text-xs text-ink-500">
+        {hidden} מתוך {total} הקלטות מוסתרות.
+      </p>
+      <button
+        type="button"
+        onClick={onClear}
+        className="btn-outline !py-1.5 !px-3 !text-xs"
+      >
         נקי סינון
       </button>
     </div>

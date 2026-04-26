@@ -120,8 +120,13 @@ export function AudioPlayer({
     const ctx2d = canvas.getContext("2d");
     if (!ctx2d) return;
 
-    const bufferLen = analyser.fftSize;
-    const data = new Uint8Array(bufferLen);
+    const binCount = analyser.frequencyBinCount;
+    const data = new Uint8Array(binCount);
+
+    // Vertical-bar EQ visualizer (like a music player). Reads frequency
+    // amplitude per bin and draws one bar per bucket of bins.
+    const BAR_COUNT = 48;
+    const binsPerBar = Math.max(1, Math.floor(binCount / BAR_COUNT));
 
     const draw = () => {
       const audio = audioRef.current;
@@ -129,27 +134,33 @@ export function AudioPlayer({
         rafRef.current = null;
         return;
       }
-      analyser.getByteTimeDomainData(data);
-      const w = canvas.width;
-      const h = canvas.height;
-      ctx2d.clearRect(0, 0, w, h);
-      // Subtle baseline
-      ctx2d.fillStyle = "rgba(229, 231, 235, 0.4)";
-      ctx2d.fillRect(0, h / 2 - 0.5, w, 1);
-      ctx2d.lineWidth = 2;
-      ctx2d.strokeStyle = "#f59e0b";
-      ctx2d.beginPath();
-      const slice = w / bufferLen;
-      let x = 0;
-      for (let i = 0; i < bufferLen; i++) {
-        const v = data[i] / 128.0; // 0..2, centered around 1
-        const y = (v * h) / 2;
-        if (i === 0) ctx2d.moveTo(x, y);
-        else ctx2d.lineTo(x, y);
-        x += slice;
+      analyser.getByteFrequencyData(data);
+      const cssWidth = canvas.clientWidth;
+      const cssHeight = canvas.clientHeight;
+      ctx2d.clearRect(0, 0, cssWidth, cssHeight);
+
+      const gap = 2;
+      const barWidth = (cssWidth - gap * (BAR_COUNT - 1)) / BAR_COUNT;
+
+      for (let i = 0; i < BAR_COUNT; i++) {
+        // Average a few neighboring bins so the bars feel chunky rather than spiky.
+        let sum = 0;
+        for (let j = 0; j < binsPerBar; j++) {
+          sum += data[i * binsPerBar + j] ?? 0;
+        }
+        const avg = sum / binsPerBar / 255; // 0..1
+        const minHeight = 2;
+        const barHeight = Math.max(minHeight, avg * cssHeight);
+        const x = i * (barWidth + gap);
+        const y = cssHeight - barHeight;
+
+        // Vertical gradient: brand yellow at the top, deeper amber at the base.
+        const grad = ctx2d.createLinearGradient(0, y, 0, cssHeight);
+        grad.addColorStop(0, "#facc15");
+        grad.addColorStop(1, "#f59e0b");
+        ctx2d.fillStyle = grad;
+        ctx2d.fillRect(x, y, barWidth, barHeight);
       }
-      ctx2d.lineTo(w, h / 2);
-      ctx2d.stroke();
       rafRef.current = requestAnimationFrame(draw);
     };
     rafRef.current = requestAnimationFrame(draw);
@@ -215,8 +226,18 @@ export function AudioPlayer({
 
   const skipBy = (deltaSeconds: number) => {
     const a = audioRef.current;
-    if (!a || !isFinite(a.duration)) return;
-    a.currentTime = clamp(a.currentTime + deltaSeconds, 0, a.duration);
+    if (!a) return;
+    // Some recordings (Opus in WebM) report `duration === Infinity` until the
+    // stream finishes downloading, so we can't gate seek on isFinite. Just
+    // clamp the floor and let the browser handle the upper bound.
+    const target = a.currentTime + deltaSeconds;
+    if (target < 0) {
+      a.currentTime = 0;
+    } else if (isFinite(a.duration)) {
+      a.currentTime = Math.min(target, a.duration);
+    } else {
+      a.currentTime = target;
+    }
   };
 
   const onSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -400,10 +421,6 @@ export function AudioPlayer({
       )}
     </div>
   );
-}
-
-function clamp(v: number, lo: number, hi: number) {
-  return Math.max(lo, Math.min(hi, v));
 }
 
 function formatTime(seconds: number) {

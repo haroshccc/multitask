@@ -1,5 +1,17 @@
 import { useEffect, useRef, useState } from "react";
-import { FolderKanban, ListChecks, CalendarDays, Mic, Plus, X, ChevronDown } from "lucide-react";
+import {
+  FolderKanban,
+  ListChecks,
+  CalendarDays,
+  Mic,
+  Plus,
+  X,
+  ChevronDown,
+  Activity,
+  Phone,
+  Users,
+  FileAudio,
+} from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { useUpdateRecording } from "@/lib/hooks/useRecordings";
 import { useProjects } from "@/lib/hooks/useProjects";
@@ -12,16 +24,22 @@ import {
   useUnassignRecordingFromList,
   useCreateRecordingList,
 } from "@/lib/hooks/useRecordingLists";
-import type { Recording } from "@/lib/types/domain";
+import type {
+  Recording,
+  RecordingSource,
+  RecordingStatus,
+} from "@/lib/types/domain";
 
 interface Props {
   recording: Recording;
 }
 
 /**
- * Compact linkage row. One small pill per linkage type — click to open a
- * dropdown picker. The recording-lists pill expands into a multi-select with
- * an "add new list" inline form.
+ * Single chip-bar that summarises the recording: status + source as
+ * read-only display chips, then linkage chips (project / task list / event
+ * calendar / recording lists) — but only for linkages the user has actually
+ * assigned. A trailing "+ שייך" pill toggles the unassigned pills into view
+ * so the user can add new linkages without permanently bloating the bar.
  */
 export function RecordingLinkagePanel({ recording }: Props) {
   const updateRecording = useUpdateRecording();
@@ -42,6 +60,9 @@ export function RecordingLinkagePanel({ recording }: Props) {
     .map((a) => recordingLists.find((l) => l.id === a.list_id))
     .filter((l): l is NonNullable<typeof l> => Boolean(l));
 
+  // Edit mode reveals unassigned chips; default keeps the bar minimal.
+  const [showAll, setShowAll] = useState(false);
+
   const setSingle = (
     field: "project_id" | "task_list_id" | "event_calendar_id",
     value: string | null
@@ -52,52 +73,141 @@ export function RecordingLinkagePanel({ recording }: Props) {
     });
   };
 
+  // Each linkage chip has either a value (always show) or is empty (only
+  // shown in edit mode). The recording-lists chip counts as "assigned" if
+  // there's at least one assignment.
+  const projectAssigned = !!project;
+  const taskListAssigned = !!taskList;
+  const calendarAssigned = !!calendar;
+  const recordingListsAssigned = myLists.length > 0;
+  const hasUnassigned =
+    !projectAssigned ||
+    !taskListAssigned ||
+    !calendarAssigned ||
+    !recordingListsAssigned;
+
   return (
     <div className="flex flex-wrap items-center gap-1.5 text-xs">
-      <SingleLinkPill
-        icon={FolderKanban}
-        label="פרויקט"
-        current={project ? project.name : null}
-        options={projects.map((p) => ({ id: p.id, label: p.name }))}
-        onChange={(id) => setSingle("project_id", id)}
-      />
-      <SingleLinkPill
-        icon={ListChecks}
-        label="משימות"
-        current={taskList ? `${taskList.emoji ? taskList.emoji + " " : ""}${taskList.name}` : null}
-        options={taskLists.map((l) => ({
-          id: l.id,
-          label: `${l.emoji ? l.emoji + " " : ""}${l.name}`,
-        }))}
-        onChange={(id) => setSingle("task_list_id", id)}
-      />
-      <SingleLinkPill
-        icon={CalendarDays}
-        label="יומן"
-        current={calendar ? `${calendar.emoji ? calendar.emoji + " " : ""}${calendar.name}` : null}
-        options={calendars.map((c) => ({
-          id: c.id,
-          label: `${c.emoji ? c.emoji + " " : ""}${c.name}`,
-        }))}
-        onChange={(id) => setSingle("event_calendar_id", id)}
+      {/* Status — read-only display */}
+      <DisplayChip
+        icon={Activity}
+        label="סטטוס"
+        value={statusLabel(recording.status)}
       />
 
-      <RecordingListsPill
-        icon={Mic}
-        myLists={myLists}
-        availableLists={recordingLists.filter((l) => !myLists.some((m) => m.id === l.id))}
-        onAssign={(listId) =>
-          assignList.mutate({ recordingId: recording.id, listId })
-        }
-        onUnassign={(listId) =>
-          unassignList.mutate({ recordingId: recording.id, listId })
-        }
-        onCreate={async (name) => {
-          const list = await createList.mutateAsync({ name, sort_order: 0 });
-          await assignList.mutateAsync({ recordingId: recording.id, listId: list.id });
-        }}
+      {/* Source — read-only display */}
+      <DisplayChip
+        icon={sourceIcon(recording.source)}
+        label="מקור"
+        value={sourceLabel(recording.source)}
       />
+
+      {/* Project chip — always shown if assigned, only in edit mode otherwise */}
+      {(projectAssigned || showAll) && (
+        <SingleLinkPill
+          icon={FolderKanban}
+          label="פרויקט"
+          current={project ? project.name : null}
+          options={projects.map((p) => ({ id: p.id, label: p.name }))}
+          onChange={(id) => setSingle("project_id", id)}
+        />
+      )}
+
+      {(taskListAssigned || showAll) && (
+        <SingleLinkPill
+          icon={ListChecks}
+          label="משימות"
+          current={
+            taskList
+              ? `${taskList.emoji ? taskList.emoji + " " : ""}${taskList.name}`
+              : null
+          }
+          options={taskLists.map((l) => ({
+            id: l.id,
+            label: `${l.emoji ? l.emoji + " " : ""}${l.name}`,
+          }))}
+          onChange={(id) => setSingle("task_list_id", id)}
+        />
+      )}
+
+      {(calendarAssigned || showAll) && (
+        <SingleLinkPill
+          icon={CalendarDays}
+          label="יומן"
+          current={
+            calendar
+              ? `${calendar.emoji ? calendar.emoji + " " : ""}${calendar.name}`
+              : null
+          }
+          options={calendars.map((c) => ({
+            id: c.id,
+            label: `${c.emoji ? c.emoji + " " : ""}${c.name}`,
+          }))}
+          onChange={(id) => setSingle("event_calendar_id", id)}
+        />
+      )}
+
+      {(recordingListsAssigned || showAll) && (
+        <RecordingListsPill
+          icon={Mic}
+          myLists={myLists}
+          availableLists={recordingLists.filter(
+            (l) => !myLists.some((m) => m.id === l.id)
+          )}
+          onAssign={(listId) =>
+            assignList.mutate({ recordingId: recording.id, listId })
+          }
+          onUnassign={(listId) =>
+            unassignList.mutate({ recordingId: recording.id, listId })
+          }
+          onCreate={async (name) => {
+            const list = await createList.mutateAsync({ name, sort_order: 0 });
+            await assignList.mutateAsync({
+              recordingId: recording.id,
+              listId: list.id,
+            });
+          }}
+        />
+      )}
+
+      {hasUnassigned && (
+        <button
+          type="button"
+          onClick={() => setShowAll((v) => !v)}
+          className={cn(
+            "inline-flex items-center gap-1 rounded-md border border-dashed px-2 py-1 transition-colors",
+            showAll
+              ? "border-ink-400 text-ink-700 bg-ink-50"
+              : "border-ink-300 text-ink-500 hover:bg-ink-50"
+          )}
+        >
+          <Plus className="w-3 h-3" />
+          {showAll ? "סיום" : "שייך"}
+        </button>
+      )}
     </div>
+  );
+}
+
+// =============================================================================
+// Read-only display chip (status / source)
+// =============================================================================
+
+function DisplayChip({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: typeof FolderKanban;
+  label: string;
+  value: string;
+}) {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-md border border-ink-300 bg-white px-2 py-1 text-ink-700">
+      <Icon className="w-3.5 h-3.5 text-ink-500" />
+      <span className="font-medium">{label}:</span>
+      <span className="truncate max-w-[120px]">{value}</span>
+    </span>
   );
 }
 
@@ -314,6 +424,49 @@ function RecordingListsPill({
 // =============================================================================
 // Helpers
 // =============================================================================
+
+function statusLabel(status: RecordingStatus): string {
+  switch (status) {
+    case "recording":
+      return "מקליטה";
+    case "uploaded":
+      return "הועלתה";
+    case "transcribing":
+      return "מתמללת";
+    case "extracting":
+      return "מחלצת משימות";
+    case "ready":
+      return "מוכנה";
+    case "error":
+      return "שגיאה";
+  }
+}
+
+function sourceLabel(source: RecordingSource): string {
+  switch (source) {
+    case "thought":
+      return "מחשבה";
+    case "call":
+      return "שיחה";
+    case "meeting":
+      return "פגישה";
+    default:
+      return "אחר";
+  }
+}
+
+function sourceIcon(source: RecordingSource) {
+  switch (source) {
+    case "thought":
+      return Mic;
+    case "call":
+      return Phone;
+    case "meeting":
+      return Users;
+    default:
+      return FileAudio;
+  }
+}
 
 function useClickAway(ref: React.RefObject<HTMLElement | null>, handler: () => void) {
   useEffect(() => {

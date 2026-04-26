@@ -4,7 +4,7 @@ import { Mic, Square, Send, X, Plus, CheckSquare, Calendar, FolderKanban } from 
 import { cn } from "@/lib/utils/cn";
 import { useNavigate } from "react-router-dom";
 import { useCreateThought } from "@/lib/hooks/useThoughts";
-import { useCreateRecording, useUploadRecordingBlob, useTriggerRecordingProcessing } from "@/lib/hooks/useRecordings";
+import { useCreateRecording, useUploadRecordingBlobLegacy, useTriggerRecordingProcessing } from "@/lib/hooks/useRecordings";
 import { useCreateTask } from "@/lib/hooks/useTasks";
 import { useOrgScope } from "@/lib/hooks/useOrgScope";
 
@@ -21,7 +21,7 @@ export function QuickCapture({ open, onClose }: QuickCaptureProps) {
   const scope = useOrgScope();
   const createThought = useCreateThought();
   const createRecording = useCreateRecording();
-  const uploadBlob = useUploadRecordingBlob();
+  const uploadBlob = useUploadRecordingBlobLegacy();
   const triggerProcessing = useTriggerRecordingProcessing();
   const createTask = useCreateTask();
 
@@ -131,23 +131,27 @@ export function QuickCapture({ open, onClose }: QuickCaptureProps) {
     setSaving(true);
     setError(null);
     try {
-      // Build a stable storage path under the org/user.
+      // Build a stable storage key under the org/user.
       const ext = audioBlobRef.current.type.includes("mp4") ? "mp4" : "webm";
-      const storagePath = `${scope.organizationId}/${scope.userId}/${Date.now()}.${ext}`;
+      const storageKey = `${scope.organizationId}/${scope.userId}/${Date.now()}.${ext}`;
 
-      // Create recording row first (status='uploaded').
+      // Create recording row first (status='uploaded'). storage_provider is
+      // pinned to 'supabase' here because QuickCapture still uses the legacy
+      // Supabase Storage flow; the R2 path comes online with the recordings
+      // screen in phase 6ב.
       const recording = await createRecording.mutateAsync({
         source: "thought",
-        storage_path: storagePath,
+        storage_key: storageKey,
+        storage_provider: "supabase",
         size_bytes: audioBlobRef.current.size,
         duration_seconds: seconds,
         mime_type: audioBlobRef.current.type,
         status: "uploaded",
       });
 
-      // Upload the blob to Storage.
+      // Upload the blob to Supabase Storage.
       await uploadBlob.mutateAsync({
-        storagePath,
+        storageKey,
         blob: audioBlobRef.current,
       });
 

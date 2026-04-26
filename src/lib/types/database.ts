@@ -875,7 +875,9 @@ export type Database = {
           source: Database["public"]["Enums"]["recording_source"]
           speakers_count: number | null
           status: Database["public"]["Enums"]["recording_status"]
-          storage_path: string
+          storage_key: string
+          storage_provider: Database["public"]["Enums"]["storage_provider"]
+          multipart_upload_id: string | null
           summary: string | null
           tags: string[]
           title: string | null
@@ -903,7 +905,9 @@ export type Database = {
           source?: Database["public"]["Enums"]["recording_source"]
           speakers_count?: number | null
           status?: Database["public"]["Enums"]["recording_status"]
-          storage_path: string
+          storage_key: string
+          storage_provider?: Database["public"]["Enums"]["storage_provider"]
+          multipart_upload_id?: string | null
           summary?: string | null
           tags?: string[]
           title?: string | null
@@ -931,7 +935,9 @@ export type Database = {
           source?: Database["public"]["Enums"]["recording_source"]
           speakers_count?: number | null
           status?: Database["public"]["Enums"]["recording_status"]
-          storage_path?: string
+          storage_key?: string
+          storage_provider?: Database["public"]["Enums"]["storage_provider"]
+          multipart_upload_id?: string | null
           summary?: string | null
           tags?: string[]
           title?: string | null
@@ -1045,7 +1051,8 @@ export type Database = {
           organization_id: string
           recording_id: string | null
           size_bytes: number | null
-          storage_path: string | null
+          storage_key: string | null
+          storage_provider: Database["public"]["Enums"]["storage_provider"] | null
           task_id: string
           thought_id: string | null
           url: string | null
@@ -1061,7 +1068,8 @@ export type Database = {
           organization_id: string
           recording_id?: string | null
           size_bytes?: number | null
-          storage_path?: string | null
+          storage_key?: string | null
+          storage_provider?: Database["public"]["Enums"]["storage_provider"] | null
           task_id: string
           thought_id?: string | null
           url?: string | null
@@ -1077,7 +1085,8 @@ export type Database = {
           organization_id?: string
           recording_id?: string | null
           size_bytes?: number | null
-          storage_path?: string | null
+          storage_key?: string | null
+          storage_provider?: Database["public"]["Enums"]["storage_provider"] | null
           task_id?: string
           thought_id?: string | null
           url?: string | null
@@ -2117,6 +2126,7 @@ export type Database = {
       push_platform: "web" | "ios" | "android"
       recording_source: "thought" | "call" | "meeting" | "other"
       recording_status:
+        | "recording"
         | "uploaded"
         | "transcribing"
         | "extracting"
@@ -2131,6 +2141,7 @@ export type Database = {
         | "event"
       share_permission: "read" | "write"
       speaker_role: "owner" | "contact" | "other"
+      storage_provider: "supabase" | "r2"
       subscription_status:
         | "trialing"
         | "active"
@@ -2346,6 +2357,7 @@ export const Constants = {
       push_platform: ["web", "ios", "android"],
       recording_source: ["thought", "call", "meeting", "other"],
       recording_status: [
+        "recording",
         "uploaded",
         "transcribing",
         "extracting",
@@ -2362,6 +2374,7 @@ export const Constants = {
       ],
       share_permission: ["read", "write"],
       speaker_role: ["owner", "contact", "other"],
+      storage_provider: ["supabase", "r2"],
       subscription_status: [
         "trialing",
         "active",

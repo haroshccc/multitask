@@ -1,12 +1,26 @@
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Mic, Square, Send, X, Plus, CheckSquare, Calendar, FolderKanban } from "lucide-react";
+import {
+  Mic,
+  Send,
+  X,
+  Plus,
+  CheckSquare,
+  Calendar,
+  FolderKanban,
+  AlertTriangle,
+} from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { useNavigate } from "react-router-dom";
 import { useCreateThought } from "@/lib/hooks/useThoughts";
-import { useCreateRecording, useUploadRecordingBlobLegacy, useTriggerRecordingProcessing } from "@/lib/hooks/useRecordings";
+import { useCreateRecording } from "@/lib/hooks/useRecordings";
 import { useCreateTask } from "@/lib/hooks/useTasks";
+import { useFileUpload } from "@/lib/hooks/useFileUpload";
 import { useOrgScope } from "@/lib/hooks/useOrgScope";
+import {
+  RecorderPanel,
+  type RecorderPanelHandle,
+} from "@/components/recordings/RecorderPanel";
 
 interface QuickCaptureProps {
   open: boolean;
@@ -21,21 +35,16 @@ export function QuickCapture({ open, onClose }: QuickCaptureProps) {
   const scope = useOrgScope();
   const createThought = useCreateThought();
   const createRecording = useCreateRecording();
-  const uploadBlob = useUploadRecordingBlobLegacy();
-  const triggerProcessing = useTriggerRecordingProcessing();
   const createTask = useCreateTask();
+  const upload = useFileUpload();
+  const recorderRef = useRef<RecorderPanelHandle>(null);
 
   const [mode, setMode] = useState<Mode>("menu");
   const [text, setText] = useState("");
-  const [isRecording, setIsRecording] = useState(false);
-  const [seconds, setSeconds] = useState(0);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const timerRef = useRef<number | null>(null);
+  const [confirmingClose, setConfirmingClose] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
-  const audioBlobRef = useRef<Blob | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -44,68 +53,39 @@ export function QuickCapture({ open, onClose }: QuickCaptureProps) {
     }
   }, [open, mode]);
 
+  // Reset everything when the modal closes.
   useEffect(() => {
     if (!open) {
       setMode("menu");
       setText("");
-      setIsRecording(false);
-      setSeconds(0);
       setSaving(false);
       setError(null);
-      audioChunksRef.current = [];
-      audioBlobRef.current = null;
-      if (timerRef.current) window.clearInterval(timerRef.current);
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
-        mediaRecorderRef.current.stop();
-      }
+      setConfirmingClose(false);
+      upload.reset();
     }
-  }, [open]);
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const requestClose = () => {
+    if (saving) return;
+    if (mode === "recording" && recorderRef.current?.hasUnsaved()) {
+      setConfirmingClose(true);
+      return;
+    }
+    onClose();
+  };
+
+  // Esc closes (with confirmation if dirty)
   useEffect(() => {
+    if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && open) onClose();
+      if (e.key === "Escape") {
+        e.preventDefault();
+        requestClose();
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
-
-  const startRecording = async () => {
-    setError(null);
-    setMode("recording");
-    setSeconds(0);
-    audioChunksRef.current = [];
-    audioBlobRef.current = null;
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mime = MediaRecorder.isTypeSupported("audio/webm")
-        ? "audio/webm"
-        : "audio/mp4";
-      const recorder = new MediaRecorder(stream, { mimeType: mime });
-      mediaRecorderRef.current = recorder;
-      recorder.addEventListener("dataavailable", (e) => {
-        if (e.data.size > 0) audioChunksRef.current.push(e.data);
-      });
-      recorder.addEventListener("stop", () => {
-        audioBlobRef.current = new Blob(audioChunksRef.current, { type: mime });
-        stream.getTracks().forEach((t) => t.stop());
-      });
-      recorder.start();
-      setIsRecording(true);
-      timerRef.current = window.setInterval(() => setSeconds((s) => s + 1), 1000);
-    } catch (err) {
-      console.error("Microphone access denied:", err);
-      setError("לא ניתן לגשת למיקרופון. אנא אשרי גישה ונסי שוב.");
-      setMode("menu");
-    }
-  };
-
-  const stopRecording = () => {
-    setIsRecording(false);
-    if (timerRef.current) window.clearInterval(timerRef.current);
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
-      mediaRecorderRef.current.stop();
-    }
-  };
+  }, [open, mode, saving]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const saveThought = async () => {
     if (!text.trim() || !scope.enabled) return;
@@ -126,53 +106,72 @@ export function QuickCapture({ open, onClose }: QuickCaptureProps) {
     }
   };
 
-  const saveRecording = async () => {
-    if (!audioBlobRef.current || !scope.enabled) return;
-    setSaving(true);
+  const persistRecording = async (blob: Blob, durationSeconds: number) => {
+    if (!scope.enabled) return;
     setError(null);
+    setSaving(true);
     try {
-      // Build a stable storage key under the org/user.
-      const ext = audioBlobRef.current.type.includes("mp4") ? "mp4" : "webm";
-      const storageKey = `${scope.organizationId}/${scope.userId}/${Date.now()}.${ext}`;
+      const ext = inferExtension(blob);
+      const keySuffix = `recordings/${stamp()}-${rand()}.${ext}`;
 
-      // Create recording row first (status='uploaded'). storage_provider is
-      // pinned to 'supabase' here because QuickCapture still uses the legacy
-      // Supabase Storage flow; the R2 path comes online with the recordings
-      // screen in phase 6ב.
+      // Upload to R2 (single-PUT or multipart automatically based on size).
+      const { key } = await upload.upload(blob, {
+        keySuffix,
+        contentType: blob.type || `audio/${ext}`,
+      });
+
+      // Persist the recording row.
       const recording = await createRecording.mutateAsync({
         source: "thought",
-        storage_key: storageKey,
-        storage_provider: "supabase",
-        size_bytes: audioBlobRef.current.size,
-        duration_seconds: seconds,
-        mime_type: audioBlobRef.current.type,
+        title: defaultRecordingTitle(durationSeconds),
+        storage_key: key,
+        storage_provider: "r2",
+        size_bytes: blob.size,
+        duration_seconds: durationSeconds,
+        mime_type: blob.type || `audio/${ext}`,
         status: "uploaded",
       });
 
-      // Upload the blob to Supabase Storage.
-      await uploadBlob.mutateAsync({
-        storageKey,
-        blob: audioBlobRef.current,
-      });
-
-      // Create a linked thought so it lands on the Thoughts screen immediately.
+      // Mirror it as an audio thought so it lands on the Thoughts screen too.
       await createThought.mutateAsync({
         source: "app_audio",
         recording_id: recording.id,
         text_content: null,
       });
 
-      // Kick off processing (transcription + extraction). Currently a stub.
-      await triggerProcessing.mutateAsync(recording.id);
-
+      recorderRef.current?.discard();
       onClose();
     } catch (err) {
       console.error("Failed to save recording:", err);
-      setError("שמירת ההקלטה נכשלה. נסי שוב.");
+      setError(humanizeError(err));
     } finally {
       setSaving(false);
     }
   };
+
+  const handleSaveAndClose = async () => {
+    const current = recorderRef.current?.getCurrent();
+    if (!current) {
+      setError("עצרי את ההקלטה לפני שמירה (כפתור 'סיום').");
+      setConfirmingClose(false);
+      return;
+    }
+    setConfirmingClose(false);
+    await persistRecording(current.blob, current.durationSeconds);
+  };
+
+  const handleDiscardAndClose = () => {
+    recorderRef.current?.discard();
+    setConfirmingClose(false);
+    onClose();
+  };
+
+  const uploadProgress =
+    upload.state.status === "single-upload" ||
+    upload.state.status === "multipart-uploading" ||
+    upload.state.status === "completing"
+      ? upload.state.progress
+      : null;
 
   return (
     <AnimatePresence>
@@ -181,7 +180,9 @@ export function QuickCapture({ open, onClose }: QuickCaptureProps) {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          onClick={onClose}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) requestClose();
+          }}
           className="fixed inset-0 z-50 bg-ink-900/50 backdrop-blur-sm flex items-end md:items-center justify-center p-4"
         >
           <motion.div
@@ -196,21 +197,32 @@ export function QuickCapture({ open, onClose }: QuickCaptureProps) {
               <h3 className="font-semibold text-ink-900">
                 {mode === "menu" && "יצירה מהירה"}
                 {mode === "thought" && "מחשבה מהירה"}
-                {mode === "recording" && (isRecording ? "מקליטה..." : "הקלטה")}
+                {mode === "recording" && "הקלטה מהירה"}
               </h3>
-              <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-ink-100">
+              <button
+                onClick={requestClose}
+                disabled={saving}
+                className="p-1.5 rounded-lg hover:bg-ink-100 disabled:opacity-50"
+                aria-label="סגור"
+              >
                 <X className="w-4 h-4 text-ink-600" />
               </button>
             </div>
 
             <div className="p-5">
-              {mode === "menu" && (
+              {confirmingClose ? (
+                <CloseConfirmation
+                  onSaveAndClose={handleSaveAndClose}
+                  onDiscardAndClose={handleDiscardAndClose}
+                  onCancel={() => setConfirmingClose(false)}
+                />
+              ) : mode === "menu" ? (
                 <div className="grid grid-cols-2 gap-3">
                   <MenuAction
                     icon={Mic}
                     label="הקלטה מהירה"
                     accent
-                    onClick={startRecording}
+                    onClick={() => setMode("recording")}
                   />
                   <MenuAction
                     icon={Plus}
@@ -224,15 +236,12 @@ export function QuickCapture({ open, onClose }: QuickCaptureProps) {
                       try {
                         const t = await createTask.mutateAsync({
                           title: "",
-                          task_list_id: null, // defaults to "לא משויכות"
+                          task_list_id: null,
                           parent_task_id: null,
                           status: "todo",
                           urgency: 3,
                         });
                         onClose();
-                        // Take the user to the Tasks screen with the new task
-                        // pre-opened in the edit modal; there they can set
-                        // title, pick a list, etc.
                         navigate(`/app/tasks?edit=${t.id}`);
                       } catch (err) {
                         console.error("quick task create failed:", err);
@@ -257,9 +266,7 @@ export function QuickCapture({ open, onClose }: QuickCaptureProps) {
                     }}
                   />
                 </div>
-              )}
-
-              {mode === "thought" && (
+              ) : mode === "thought" ? (
                 <div className="space-y-3">
                   <textarea
                     ref={textareaRef}
@@ -294,55 +301,15 @@ export function QuickCapture({ open, onClose }: QuickCaptureProps) {
                     </button>
                   </div>
                 </div>
-              )}
-
-              {mode === "recording" && (
-                <div className="flex flex-col items-center gap-6 py-6">
-                  <div
-                    className={cn(
-                      "w-24 h-24 rounded-full flex items-center justify-center transition-all",
-                      isRecording
-                        ? "bg-gradient-to-br from-danger-500 to-danger-600 animate-pulse shadow-lift"
-                        : "bg-ink-100"
-                    )}
-                  >
-                    <Mic className={cn("w-10 h-10", isRecording ? "text-white" : "text-ink-500")} />
-                  </div>
-                  <div className="font-mono text-3xl text-ink-900 tabular-nums">
-                    {formatTime(seconds)}
-                  </div>
-                  {isRecording ? (
-                    <button onClick={stopRecording} className="btn-primary">
-                      <Square className="w-4 h-4" />
-                      סיום הקלטה
-                    </button>
-                  ) : (
-                    <div className="flex gap-2">
-                      <button onClick={() => setMode("menu")} className="btn-ghost" disabled={saving}>
-                        בטל
-                      </button>
-                      <button onClick={startRecording} className="btn-accent" disabled={saving}>
-                        <Mic className="w-4 h-4" />
-                        הקלטה חדשה
-                      </button>
-                      <button
-                        onClick={saveRecording}
-                        disabled={!audioBlobRef.current || saving}
-                        className="btn-primary"
-                      >
-                        <Send className="w-4 h-4" />
-                        {saving ? "מעלה..." : "שמרי"}
-                      </button>
-                    </div>
-                  )}
-                  {error && <p className="text-xs text-danger-600 text-center">{error}</p>}
-                  {!isRecording && (
-                    <p className="text-xs text-ink-500 text-center max-w-xs">
-                      האודיו יעלה ל-Supabase Storage ויישמר כמחשבה. תמלול וחילוץ משימות יופעלו
-                      כשה-AI יחובר.
-                    </p>
-                  )}
-                </div>
+              ) : (
+                /* mode === "recording" */
+                <RecorderPanel
+                  ref={recorderRef}
+                  onSave={persistRecording}
+                  saving={saving}
+                  uploadProgress={uploadProgress}
+                  errorText={error}
+                />
               )}
             </div>
           </motion.div>
@@ -379,8 +346,76 @@ function MenuAction({
   );
 }
 
-function formatTime(seconds: number) {
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+function CloseConfirmation({
+  onSaveAndClose,
+  onDiscardAndClose,
+  onCancel,
+}: {
+  onSaveAndClose: () => void;
+  onDiscardAndClose: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="flex flex-col items-center gap-4 py-4">
+      <div className="w-12 h-12 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center">
+        <AlertTriangle className="w-6 h-6" />
+      </div>
+      <div className="text-center">
+        <h4 className="font-semibold text-ink-900">יש הקלטה שלא נשמרה</h4>
+        <p className="text-sm text-ink-600 mt-1">מה תרצי לעשות לפני סגירה?</p>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 w-full">
+        <button onClick={onSaveAndClose} className="btn-primary">
+          שמרי וסגרי
+        </button>
+        <button
+          onClick={onDiscardAndClose}
+          className="btn-outline text-danger-700 border-danger-300 hover:bg-danger-50"
+        >
+          צאי בלי לשמור
+        </button>
+        <button onClick={onCancel} className="btn-ghost">
+          המשיכי
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function stamp() {
+  return new Date().toISOString().replace(/[:.]/g, "-");
+}
+
+function rand() {
+  return Math.random().toString(36).slice(2, 8);
+}
+
+function inferExtension(blob: Blob): string {
+  const t = blob.type.toLowerCase();
+  if (t.includes("mp4") || t.includes("m4a") || t.includes("aac")) return "m4a";
+  if (t.includes("webm")) return "webm";
+  if (t.includes("ogg") || t.includes("opus")) return "ogg";
+  if (t.includes("wav")) return "wav";
+  if (t.includes("mpeg") || t.includes("mp3")) return "mp3";
+  return "webm";
+}
+
+function defaultRecordingTitle(durationSeconds: number): string {
+  const now = new Date();
+  const date = now.toLocaleDateString("he-IL", { day: "numeric", month: "long" });
+  const time = now.toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" });
+  const m = Math.floor(durationSeconds / 60);
+  const s = durationSeconds % 60;
+  const dur = m > 0 ? `${m}:${String(s).padStart(2, "0")} דק׳` : `${s} שנ׳`;
+  return `הקלטה ${date} ${time} (${dur})`;
+}
+
+function humanizeError(err: unknown): string {
+  const msg = err instanceof Error ? err.message : String(err);
+  if (msg.includes("no_active_org")) return "אין לך ארגון פעיל. צרי או הצטרפי לאחד.";
+  if (msg.includes("not_authenticated") || msg.includes("invalid_jwt")) {
+    return "ההתחברות פגה. רעני את הדף ונסי שוב.";
+  }
+  if (msg.toLowerCase().includes("network")) return "תקלת רשת. בדקי חיבור.";
+  return msg || "שגיאה לא צפויה בעת השמירה.";
 }

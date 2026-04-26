@@ -13,7 +13,6 @@ import {
   type RecordingsFilterState,
 } from "@/components/recordings/RecordingFilters";
 import {
-  RecordingsListBanner,
   DEFAULT_GROUPING,
   applyGrouping,
   type ListGroupingState,
@@ -46,7 +45,7 @@ export function Recordings() {
   }, [assignments]);
 
   const recordings = useMemo(() => {
-    const filtered = filterRecordings(allRecordings, filters, listsByRecording);
+    const filtered = filterRecordings(allRecordings, filters);
     return applyGrouping(filtered, grouping, listsByRecording);
   }, [allRecordings, filters, listsByRecording, grouping]);
 
@@ -105,7 +104,12 @@ export function Recordings() {
             Filters | QuickRecord | DropZone
             All three are sized to match (compact, centered content). */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-          <RecordingFilters value={filters} onChange={setFilters} />
+          <RecordingFilters
+            filters={filters}
+            onFiltersChange={setFilters}
+            grouping={grouping}
+            onGroupingChange={setGrouping}
+          />
           <QuickRecordCard onStart={() => setRecorderOpen(true)} />
           <RecordingDropZone
             source="other"
@@ -121,7 +125,6 @@ export function Recordings() {
           <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,360px)_1fr] gap-4">
             {/* List sits on the leading (right) edge in RTL */}
             <aside className="space-y-2">
-              <RecordingsListBanner value={grouping} onChange={setGrouping} />
               {recordings.length === 0 ? (
                 <FilteredEmpty
                   total={allRecordings.length}

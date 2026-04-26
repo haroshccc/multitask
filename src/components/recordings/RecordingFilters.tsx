@@ -1,101 +1,114 @@
-import { useState } from "react";
-import { Filter, Search, X, ChevronDown, ChevronUp } from "lucide-react";
+import { Activity, Calendar, Filter, Link2, Search, X } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { useProjects } from "@/lib/hooks/useProjects";
 import { useTaskLists } from "@/lib/hooks/useTaskLists";
 import { useEventCalendars } from "@/lib/hooks/useEventCalendars";
 import { useRecordingLists } from "@/lib/hooks/useRecordingLists";
-import type { RecordingSource } from "@/lib/types/domain";
-
-export type RecordingsSort =
-  | "created_desc"
-  | "created_asc"
-  | "duration_desc"
-  | "duration_asc";
+import {
+  type ListGroupingState,
+  type GroupMode,
+  type LinkageType,
+  DEFAULT_GROUPING,
+} from "@/components/recordings/RecordingsListBanner";
+import type { RecordingStatus } from "@/lib/types/domain";
 
 export type RecordingsFilterState = {
   search: string;
-  source: RecordingSource | "all";
-  projectId: string | "all" | "none";
-  taskListId: string | "all" | "none";
-  eventCalendarId: string | "all" | "none";
-  recordingListId: string | "all" | "none";
   includeArchived: boolean;
-  sort: RecordingsSort;
 };
 
 export const DEFAULT_RECORDING_FILTERS: RecordingsFilterState = {
   search: "",
-  source: "all",
-  projectId: "all",
-  taskListId: "all",
-  eventCalendarId: "all",
-  recordingListId: "all",
   includeArchived: false,
-  sort: "created_desc",
 };
 
 interface Props {
-  value: RecordingsFilterState;
-  onChange: (next: RecordingsFilterState) => void;
+  filters: RecordingsFilterState;
+  onFiltersChange: (next: RecordingsFilterState) => void;
+  grouping: ListGroupingState;
+  onGroupingChange: (next: ListGroupingState) => void;
   className?: string;
 }
 
-const SOURCES: { value: RecordingsFilterState["source"]; label: string }[] = [
-  { value: "all", label: "הכל" },
-  { value: "thought", label: "מחשבות" },
-  { value: "call", label: "שיחות" },
-  { value: "meeting", label: "פגישות" },
-  { value: "other", label: "אחר" },
+const STATUSES: { value: RecordingStatus | "all"; label: string }[] = [
+  { value: "all", label: "כל הסטטוסים" },
+  { value: "recording", label: "מקליטה" },
+  { value: "uploaded", label: "הועלתה" },
+  { value: "transcribing", label: "מתמללת" },
+  { value: "extracting", label: "מחלצת" },
+  { value: "ready", label: "מוכנה" },
+  { value: "error", label: "שגיאה" },
 ];
 
-const SORTS: { value: RecordingsSort; label: string }[] = [
-  { value: "created_desc", label: "חדשות → ישנות" },
-  { value: "created_asc", label: "ישנות → חדשות" },
-  { value: "duration_desc", label: "ארוכות תחילה" },
-  { value: "duration_asc", label: "קצרות תחילה" },
+const LINKAGE_TYPES: { value: LinkageType; label: string }[] = [
+  { value: "project", label: "פרויקט" },
+  { value: "task_list", label: "רשימת משימות" },
+  { value: "event_calendar", label: "יומן אירועים" },
+  { value: "recording_list", label: "רשימת הקלטות" },
 ];
 
-export function RecordingFilters({ value, onChange, className }: Props) {
+export function RecordingFilters({
+  filters,
+  onFiltersChange,
+  grouping,
+  onGroupingChange,
+  className,
+}: Props) {
   const { data: projects = [] } = useProjects();
   const { data: taskLists = [] } = useTaskLists();
   const { data: calendars = [] } = useEventCalendars();
   const { data: recordingLists = [] } = useRecordingLists();
 
-  const [expanded, setExpanded] = useState(false);
+  const setMode = (m: GroupMode) => onGroupingChange({ ...grouping, mode: m });
 
-  const set = <K extends keyof RecordingsFilterState>(
-    key: K,
-    v: RecordingsFilterState[K]
-  ) => onChange({ ...value, [key]: v });
+  const linkageOptions = (() => {
+    switch (grouping.linkageType) {
+      case "project":
+        return projects.map((p) => ({ value: p.id, label: p.name }));
+      case "task_list":
+        return taskLists.map((l) => ({
+          value: l.id,
+          label: `${l.emoji ? l.emoji + " " : ""}${l.name}`,
+        }));
+      case "event_calendar":
+        return calendars.map((c) => ({
+          value: c.id,
+          label: `${c.emoji ? c.emoji + " " : ""}${c.name}`,
+        }));
+      case "recording_list":
+        return recordingLists.map((l) => ({
+          value: l.id,
+          label: `${l.emoji ? l.emoji + " " : ""}${l.name}`,
+        }));
+    }
+  })();
 
   const hasAny =
-    value.search.trim() !== "" ||
-    value.source !== "all" ||
-    value.projectId !== "all" ||
-    value.taskListId !== "all" ||
-    value.eventCalendarId !== "all" ||
-    value.recordingListId !== "all" ||
-    value.includeArchived ||
-    value.sort !== "created_desc";
+    filters.search.trim() !== "" ||
+    filters.includeArchived ||
+    grouping.mode !== DEFAULT_GROUPING.mode ||
+    grouping.status !== DEFAULT_GROUPING.status ||
+    grouping.dateOrder !== DEFAULT_GROUPING.dateOrder ||
+    grouping.linkageType !== DEFAULT_GROUPING.linkageType ||
+    grouping.linkageId !== DEFAULT_GROUPING.linkageId;
+
+  const clearAll = () => {
+    onFiltersChange(DEFAULT_RECORDING_FILTERS);
+    onGroupingChange(DEFAULT_GROUPING);
+  };
 
   return (
     <div className={cn("card p-4 space-y-3", className)}>
       <header className="flex items-center justify-between gap-2">
-        <button
-          type="button"
-          onClick={() => setExpanded((v) => !v)}
-          className="inline-flex items-center gap-1.5 text-sm font-medium text-ink-700 hover:text-ink-900"
-        >
+        <div className="inline-flex items-center gap-1.5 text-sm font-medium text-ink-700">
           <Filter className="w-4 h-4" />
           סינון והגדרות
-          {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-        </button>
+        </div>
         {hasAny && (
           <button
-            onClick={() => onChange(DEFAULT_RECORDING_FILTERS)}
+            onClick={clearAll}
             className="text-xs text-ink-500 hover:text-ink-900 inline-flex items-center gap-1"
-            title="נקה סינון"
+            title="נקי סינון וקיבוץ"
           >
             <X className="w-3 h-3" />
             נקי
@@ -109,196 +122,169 @@ export function RecordingFilters({ value, onChange, className }: Props) {
         <input
           type="search"
           placeholder="חיפוש לפי כותרת..."
-          value={value.search}
-          onChange={(e) => set("search", e.target.value)}
+          value={filters.search}
+          onChange={(e) =>
+            onFiltersChange({ ...filters, search: e.target.value })
+          }
           className="field !py-1.5 !text-xs pe-7"
         />
       </div>
 
-      {!expanded ? null : <>
-
-      {/* Source */}
-      <div>
-        <span className="text-[10px] uppercase tracking-wider text-ink-400">מקור</span>
-        <div className="mt-1 flex flex-wrap gap-1">
-          {SOURCES.map((s) => (
-            <button
-              key={s.value}
-              onClick={() => set("source", s.value)}
-              className={cn(
-                "px-2 py-1 rounded-xs text-xs transition-colors",
-                value.source === s.value
-                  ? "bg-ink-900 text-white"
-                  : "bg-ink-100 text-ink-700 hover:bg-ink-200"
-              )}
-            >
-              {s.label}
-            </button>
-          ))}
+      {/* Grouping tabs + sub-pickers — moved here from a separate banner */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="inline-flex rounded-md bg-ink-100 p-0.5">
+          <ModeTab
+            icon={Activity}
+            label="לפי סטטוס"
+            active={grouping.mode === "status"}
+            onClick={() => setMode("status")}
+          />
+          <ModeTab
+            icon={Calendar}
+            label="לפי תאריך"
+            active={grouping.mode === "date"}
+            onClick={() => setMode("date")}
+          />
+          <ModeTab
+            icon={Link2}
+            label="לפי שיוך"
+            active={grouping.mode === "linkage"}
+            onClick={() => setMode("linkage")}
+          />
         </div>
+
+        {grouping.mode === "status" && (
+          <select
+            value={grouping.status}
+            onChange={(e) =>
+              onGroupingChange({
+                ...grouping,
+                status: e.target.value as ListGroupingState["status"],
+              })
+            }
+            className="field !py-1.5 !text-xs !w-auto"
+          >
+            {STATUSES.map((s) => (
+              <option key={s.value} value={s.value}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+        )}
+
+        {grouping.mode === "date" && (
+          <div className="inline-flex rounded-md bg-ink-100 p-0.5">
+            <ModeTab
+              label="חדשות → ישנות"
+              active={grouping.dateOrder === "desc"}
+              onClick={() => onGroupingChange({ ...grouping, dateOrder: "desc" })}
+            />
+            <ModeTab
+              label="ישנות → חדשות"
+              active={grouping.dateOrder === "asc"}
+              onClick={() => onGroupingChange({ ...grouping, dateOrder: "asc" })}
+            />
+          </div>
+        )}
+
+        {grouping.mode === "linkage" && (
+          <>
+            <select
+              value={grouping.linkageType}
+              onChange={(e) =>
+                onGroupingChange({
+                  ...grouping,
+                  linkageType: e.target.value as LinkageType,
+                  linkageId: "all",
+                })
+              }
+              className="field !py-1.5 !text-xs !w-auto"
+            >
+              {LINKAGE_TYPES.map((t) => (
+                <option key={t.value} value={t.value}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+            <select
+              value={grouping.linkageId}
+              onChange={(e) =>
+                onGroupingChange({
+                  ...grouping,
+                  linkageId: e.target
+                    .value as ListGroupingState["linkageId"],
+                })
+              }
+              className="field !py-1.5 !text-xs !w-auto"
+            >
+              <option value="all">הכל</option>
+              <option value="none">ללא שיוך</option>
+              {linkageOptions.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </>
+        )}
       </div>
-
-      {/* Project */}
-      <SelectFilter
-        label="פרויקט"
-        value={value.projectId}
-        onChange={(v) => set("projectId", v as RecordingsFilterState["projectId"])}
-        options={projects.map((p) => ({ value: p.id, label: p.name }))}
-      />
-
-      {/* Task list */}
-      <SelectFilter
-        label="רשימת משימות"
-        value={value.taskListId}
-        onChange={(v) => set("taskListId", v as RecordingsFilterState["taskListId"])}
-        options={taskLists.map((l) => ({
-          value: l.id,
-          label: `${l.emoji ? `${l.emoji} ` : ""}${l.name}`,
-        }))}
-      />
-
-      {/* Event calendar */}
-      <SelectFilter
-        label="יומן אירועים"
-        value={value.eventCalendarId}
-        onChange={(v) => set("eventCalendarId", v as RecordingsFilterState["eventCalendarId"])}
-        options={calendars.map((c) => ({
-          value: c.id,
-          label: `${c.emoji ? `${c.emoji} ` : ""}${c.name}`,
-        }))}
-      />
-
-      {/* Recording list */}
-      <SelectFilter
-        label="רשימת הקלטות"
-        value={value.recordingListId}
-        onChange={(v) => set("recordingListId", v as RecordingsFilterState["recordingListId"])}
-        options={recordingLists.map((l) => ({
-          value: l.id,
-          label: `${l.emoji ? `${l.emoji} ` : ""}${l.name}`,
-        }))}
-      />
-
-      {/* Sort */}
-      <label className="block">
-        <span className="text-[10px] uppercase tracking-wider text-ink-400">מיון</span>
-        <select
-          value={value.sort}
-          onChange={(e) => set("sort", e.target.value as RecordingsSort)}
-          className="field !py-1.5 !text-xs mt-1"
-        >
-          {SORTS.map((s) => (
-            <option key={s.value} value={s.value}>
-              {s.label}
-            </option>
-          ))}
-        </select>
-      </label>
 
       {/* Archived toggle */}
       <label className="flex items-center justify-between gap-2 cursor-pointer text-xs text-ink-700">
         <span>כלולות בארכיון</span>
         <input
           type="checkbox"
-          checked={value.includeArchived}
-          onChange={(e) => set("includeArchived", e.target.checked)}
+          checked={filters.includeArchived}
+          onChange={(e) =>
+            onFiltersChange({ ...filters, includeArchived: e.target.checked })
+          }
           className="accent-primary-500"
         />
       </label>
-      </>}
     </div>
   );
 }
 
-function SelectFilter({
+function ModeTab({
+  icon: Icon,
   label,
-  value,
-  onChange,
-  options,
+  active,
+  onClick,
 }: {
+  icon?: typeof Activity;
   label: string;
-  value: string;
-  onChange: (v: string) => void;
-  options: { value: string; label: string }[];
+  active: boolean;
+  onClick: () => void;
 }) {
   return (
-    <label className="block">
-      <span className="text-[10px] uppercase tracking-wider text-ink-400">{label}</span>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="field !py-1.5 !text-xs mt-1"
-      >
-        <option value="all">הכל</option>
-        <option value="none">ללא שיוך</option>
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </select>
-    </label>
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "inline-flex items-center gap-1 rounded px-2.5 py-1 text-xs transition-colors",
+        active
+          ? "bg-white text-ink-900 shadow-soft font-medium"
+          : "text-ink-600 hover:text-ink-900"
+      )}
+    >
+      {Icon && <Icon className="w-3.5 h-3.5" />}
+      {label}
+    </button>
   );
 }
 
 /**
- * Apply the filter state on the client. `listAssignments` lets us filter by
- * recording_list_id, which is many-to-many and isn't a column on `recordings`.
+ * Apply the simplified filter state on the rows: search + archived only.
+ * Grouping (status / date / linkage) is applied separately by `applyGrouping`.
  */
 export function filterRecordings<T extends {
-  id: string;
   title: string | null;
-  source: RecordingSource;
-  project_id: string | null;
-  task_list_id: string | null;
-  event_calendar_id: string | null;
   audio_archived: boolean;
-  created_at: string;
-  duration_seconds: number | null;
-}>(
-  rows: T[],
-  filters: RecordingsFilterState,
-  listAssignmentsByRecording?: Map<string, Set<string>>
-): T[] {
+}>(rows: T[], filters: RecordingsFilterState): T[] {
   const q = filters.search.trim().toLowerCase();
-  let out = rows.filter((r) => {
+  return rows.filter((r) => {
     if (!filters.includeArchived && r.audio_archived) return false;
-    if (filters.source !== "all" && r.source !== filters.source) return false;
-
-    if (!matchesSingleId(filters.projectId, r.project_id)) return false;
-    if (!matchesSingleId(filters.taskListId, r.task_list_id)) return false;
-    if (!matchesSingleId(filters.eventCalendarId, r.event_calendar_id)) return false;
-
-    if (filters.recordingListId !== "all") {
-      const lists = listAssignmentsByRecording?.get(r.id);
-      if (filters.recordingListId === "none") {
-        if (lists && lists.size > 0) return false;
-      } else if (!lists || !lists.has(filters.recordingListId)) {
-        return false;
-      }
-    }
-
     if (q && !(r.title ?? "").toLowerCase().includes(q)) return false;
     return true;
   });
-  out = [...out].sort((a, b) => {
-    switch (filters.sort) {
-      case "created_asc":
-        return a.created_at.localeCompare(b.created_at);
-      case "duration_desc":
-        return (b.duration_seconds ?? 0) - (a.duration_seconds ?? 0);
-      case "duration_asc":
-        return (a.duration_seconds ?? 0) - (b.duration_seconds ?? 0);
-      case "created_desc":
-      default:
-        return b.created_at.localeCompare(a.created_at);
-    }
-  });
-  return out;
-}
-
-function matchesSingleId(filter: string, value: string | null): boolean {
-  if (filter === "all") return true;
-  if (filter === "none") return !value;
-  return value === filter;
 }

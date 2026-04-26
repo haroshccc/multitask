@@ -1,4 +1,4 @@
-import { AlertCircle, Sparkles, Link2 } from "lucide-react";
+import { AlertCircle, Sparkles } from "lucide-react";
 import { format } from "date-fns";
 import { he } from "date-fns/locale";
 import { useRecordingAudioUrl } from "@/lib/hooks/useRecordings";
@@ -42,14 +42,8 @@ export function RecordingPlayer({ recording }: Props) {
         )}
       </div>
 
-      {/* Linkage section — replaces the old meta grid */}
-      <section className="rounded-md bg-ink-50 px-3 py-3 space-y-2">
-        <div className="flex items-center gap-1.5 text-xs font-medium text-ink-700">
-          <Link2 className="w-3.5 h-3.5 text-ink-500" />
-          שיוך
-        </div>
-        <RecordingLinkagePanel recording={recording} />
-      </section>
+      {/* Status + source + assigned linkages — single chip row */}
+      <RecordingLinkagePanel recording={recording} />
 
       {/* Phase 6ג placeholder — transcription + speaker tagging + extracted tasks */}
       <section className="rounded-md border border-dashed border-ink-300 bg-ink-50 px-3 py-3">

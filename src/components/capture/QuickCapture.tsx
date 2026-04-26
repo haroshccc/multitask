@@ -209,14 +209,8 @@ export function QuickCapture({ open, onClose }: QuickCaptureProps) {
               </button>
             </div>
 
-            <div className="p-5">
-              {confirmingClose ? (
-                <CloseConfirmation
-                  onSaveAndClose={handleSaveAndClose}
-                  onDiscardAndClose={handleDiscardAndClose}
-                  onCancel={() => setConfirmingClose(false)}
-                />
-              ) : mode === "menu" ? (
+            <div className="p-5 relative">
+              {mode === "menu" ? (
                 <div className="grid grid-cols-2 gap-3">
                   <MenuAction
                     icon={Mic}
@@ -310,6 +304,16 @@ export function QuickCapture({ open, onClose }: QuickCaptureProps) {
                   uploadProgress={uploadProgress}
                   errorText={error}
                 />
+              )}
+
+              {confirmingClose && mode === "recording" && (
+                <div className="absolute inset-0 bg-white/95 backdrop-blur-sm flex items-center justify-center p-5">
+                  <CloseConfirmation
+                    onSaveAndClose={handleSaveAndClose}
+                    onDiscardAndClose={handleDiscardAndClose}
+                    onCancel={() => setConfirmingClose(false)}
+                  />
+                </div>
               )}
             </div>
           </motion.div>

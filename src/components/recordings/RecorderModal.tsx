@@ -156,22 +156,24 @@ export function RecorderModal({
               </button>
             </div>
 
-            <div className="p-5">
-              {confirmingClose ? (
-                <CloseConfirmation
-                  onSaveAndClose={handleSaveAndClose}
-                  onDiscardAndClose={handleDiscardAndClose}
-                  onCancel={() => setConfirmingClose(false)}
-                />
-              ) : (
-                <RecorderPanel
-                  ref={recorderRef}
-                  onSave={persist}
-                  onDirtyChange={(d) => (isDirtyRef.current = d)}
-                  saving={saving}
-                  uploadProgress={uploadProgress}
-                  errorText={errorText}
-                />
+            <div className="p-5 relative">
+              <RecorderPanel
+                ref={recorderRef}
+                onSave={persist}
+                onDirtyChange={(d) => (isDirtyRef.current = d)}
+                saving={saving}
+                uploadProgress={uploadProgress}
+                errorText={errorText}
+              />
+
+              {confirmingClose && (
+                <div className="absolute inset-0 bg-white/95 backdrop-blur-sm flex items-center justify-center p-5">
+                  <CloseConfirmation
+                    onSaveAndClose={handleSaveAndClose}
+                    onDiscardAndClose={handleDiscardAndClose}
+                    onCancel={() => setConfirmingClose(false)}
+                  />
+                </div>
               )}
             </div>
           </motion.div>

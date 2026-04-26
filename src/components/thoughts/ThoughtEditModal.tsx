@@ -26,8 +26,10 @@ import {
   useAssignThoughtToList,
   useUnassignThoughtFromList,
 } from "@/lib/hooks";
+import { useRecording, useRecordingAudioUrl } from "@/lib/hooks/useRecordings";
 import type { ThoughtSource } from "@/lib/types/domain";
 import { ListIcon } from "@/components/tasks/list-icons";
+import { AudioPlayer } from "@/components/recordings/AudioPlayer";
 import { UnsavedChangesGuard } from "@/components/ui/UnsavedChangesGuard";
 import { ThoughtAiBanner } from "./ThoughtAiBanner";
 
@@ -182,6 +184,10 @@ export function ThoughtEditModal({
             <div className="p-5 max-h-[calc(100vh-16rem)] overflow-y-auto">
               {tab === "overview" && (
                 <div className="space-y-4">
+                  {thought?.recording_id && (
+                    <ThoughtRecordingPlayer recordingId={thought.recording_id} />
+                  )}
+
                   <label className="block">
                     <div className="eyebrow mb-1">תוכן</div>
                     <textarea
@@ -492,3 +498,46 @@ const TARGET_LABEL: Record<string, string> = {
   recording: "הקלטה",
   message: "הודעה",
 };
+
+/**
+ * Inline audio player shown at the top of the thought-edit overview when
+ * the thought was created from a recording (audio quick-capture or
+ * WhatsApp voice). Uses the same AudioPlayer the Recordings page renders,
+ * including the EQ visualizer, skip / speed / download.
+ */
+function ThoughtRecordingPlayer({ recordingId }: { recordingId: string }) {
+  const { data: recording } = useRecording(recordingId);
+  const { data: url, isLoading, error } = useRecordingAudioUrl(recording);
+
+  const downloadFilename = (() => {
+    if (!recording) return "recording";
+    const keyTail = recording.storage_key.split("/").pop() ?? "";
+    const ext =
+      keyTail.match(/\.([a-z0-9]+)$/i)?.[1]?.toLowerCase() ?? "audio";
+    const stem = (recording.title?.trim() || "recording")
+      .replace(/[\\/:*?"<>|]/g, "-")
+      .slice(0, 80);
+    return `${stem}.${ext}`;
+  })();
+
+  return (
+    <section className="rounded-md border border-ink-200 bg-ink-50 px-3 py-3 space-y-2">
+      <div className="flex items-center gap-1.5 text-xs font-medium text-ink-700">
+        <Mic className="w-3.5 h-3.5 text-primary-600" />
+        ההקלטה שעליה מבוססת המחשבה
+      </div>
+      {recording?.audio_archived ? (
+        <p className="text-xs text-ink-500">
+          האודיו נמחק לפי מדיניות retention. הטקסט והמטא-דאטה נשארו.
+        </p>
+      ) : (
+        <AudioPlayer
+          src={url}
+          isLoading={isLoading}
+          hasError={!!error}
+          downloadFilename={downloadFilename}
+        />
+      )}
+    </section>
+  );
+}

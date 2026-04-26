@@ -155,8 +155,10 @@ export function Recordings() {
         {/* Top row — filters card sized to its content (grows leftward only
             when the active grouping mode actually needs more horizontal
             room). QuickRecord + DropZone stay at 220 px each so the upload
-            and recording entry points are always reachable. */}
-        <div className="flex flex-wrap gap-3 items-start">
+            and recording entry points are always reachable. items-stretch
+            keeps all three cards the same height, with QuickRecord and
+            DropZone centering their content vertically. */}
+        <div className="flex flex-wrap gap-3 items-stretch">
           <RecordingFilters
             filters={filters}
             onFiltersChange={setFilters}

@@ -1,4 +1,9 @@
 import { supabase } from "@/lib/supabase/client";
+import {
+  presignDownload,
+  uploadBlobToR2,
+  type UploadProgress,
+} from "@/lib/storage/r2";
 import type {
   Recording,
   RecordingInsert,
@@ -6,8 +11,6 @@ import type {
   RecordingSpeaker,
   RecordingSource,
 } from "@/lib/types/domain";
-
-const STORAGE_BUCKET = "recordings";
 
 export async function listRecordings(
   organizationId: string,
@@ -38,13 +41,12 @@ export async function getRecording(
 }
 
 /**
- * Upload flow:
- * 1. client calls createRecording to get a row with status='uploaded'
- * 2. client uploads MP3 to Storage at the returned storage_path
- * 3. client calls triggerProcessing which kicks off transcription via edge fn
+ * Upload flow (Phase 6א — R2 only):
+ *   1. uploadRecordingBlob → presign + PUT to R2; returns the R2 key
+ *   2. createRecording → DB row with status='uploaded' and storage_path=key
  *
- * In MVP, transcription/extraction are stubbed — row stays status='ready'
- * with placeholder transcript until integrations wired.
+ * Transcription / extraction (Phase 6ב/6ג) will pick up rows with
+ * status='uploaded' via a future `process-recording` Edge Function.
  */
 export async function createRecording(
   payload: RecordingInsert
@@ -58,25 +60,25 @@ export async function createRecording(
   return data;
 }
 
-export async function uploadRecordingBlob(
-  storagePath: string,
-  blob: Blob
-): Promise<void> {
-  const { error } = await supabase.storage
-    .from(STORAGE_BUCKET)
-    .upload(storagePath, blob, { upsert: true });
-  if (error) throw error;
+export async function uploadRecordingBlob(opts: {
+  blob: Blob;
+  extension: string;
+  onProgress?: (progress: UploadProgress) => void;
+  signal?: AbortSignal;
+}): Promise<{ key: string }> {
+  return uploadBlobToR2({
+    blob: opts.blob,
+    extension: opts.extension,
+    category: "recordings",
+    onProgress: opts.onProgress,
+    signal: opts.signal,
+  });
 }
 
 export async function getRecordingAudioUrl(
-  storagePath: string,
-  expiresInSeconds = 60 * 60
+  storagePath: string
 ): Promise<string> {
-  const { data, error } = await supabase.storage
-    .from(STORAGE_BUCKET)
-    .createSignedUrl(storagePath, expiresInSeconds);
-  if (error) throw error;
-  return data.signedUrl;
+  return presignDownload(storagePath);
 }
 
 export async function updateRecording(
@@ -96,10 +98,8 @@ export async function updateRecording(
 export async function archiveRecordingAudio(
   recordingId: string
 ): Promise<void> {
-  // Delete audio file from storage, keep metadata.
-  const rec = await getRecording(recordingId);
-  if (!rec) return;
-  await supabase.storage.from(STORAGE_BUCKET).remove([rec.storage_path]);
+  // R2 deletion will move to a dedicated Edge Function action in Phase 6ב.
+  // For now, just flag the row — a periodic job can sweep R2 by key prefix.
   await updateRecording(recordingId, { audio_archived: true });
 }
 
@@ -132,11 +132,9 @@ export async function updateRecordingSpeaker(
 }
 
 /**
- * Placeholder for "process recording" — kicks off transcription + extraction.
- * In MVP this is a no-op; will call an edge function once integrations wired.
+ * Marks a recording as queued for transcription. Wiring to the actual
+ * `process-recording` Edge Function arrives in Phase 6ב.
  */
 export async function triggerProcessing(recordingId: string): Promise<void> {
-  // TODO: invoke edge function `recordings-process` with recording_id.
-  // For now, just mark status so UI reflects work queued.
   await updateRecording(recordingId, { status: "transcribing" });
 }

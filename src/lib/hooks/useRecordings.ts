@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { queryKeys, queryFamilies } from "@/lib/query-keys";
 import * as service from "@/lib/services/recordings";
+import { inferExtension, type UploadProgress } from "@/lib/storage/r2";
 import type {
   Recording,
   RecordingInsert,
@@ -90,11 +92,92 @@ export function useUpdateRecording() {
   });
 }
 
-export function useUploadRecordingBlob() {
+export type UploadRecordingInput = {
+  blob: Blob;
+  source: RecordingSource;
+  title?: string | null;
+  durationSeconds?: number | null;
+  filename?: string | null;
+  onProgress?: (progress: UploadProgress) => void;
+  signal?: AbortSignal;
+};
+
+/**
+ * High-level upload: presigns + PUTs to R2, then inserts the DB row with the
+ * R2-chosen key and status='uploaded'. Returns the persisted Recording.
+ */
+export function useUploadRecording() {
+  const qc = useQueryClient();
+  const scope = useOrgScope();
   return useMutation({
-    mutationFn: ({ storagePath, blob }: { storagePath: string; blob: Blob }) =>
-      service.uploadRecordingBlob(storagePath, blob),
+    mutationFn: async (input: UploadRecordingInput): Promise<Recording> => {
+      const { organizationId, userId } = assertOrgScope(scope);
+      const ext = inferExtension({
+        mimeType: input.blob.type,
+        filename: input.filename ?? undefined,
+      });
+      const { key } = await service.uploadRecordingBlob({
+        blob: input.blob,
+        extension: ext,
+        onProgress: input.onProgress,
+        signal: input.signal,
+      });
+      return service.createRecording({
+        organization_id: organizationId,
+        owner_id: userId,
+        source: input.source,
+        title: input.title ?? null,
+        storage_path: key,
+        size_bytes: input.blob.size,
+        duration_seconds: input.durationSeconds ?? null,
+        mime_type: input.blob.type || `audio/${ext}`,
+        status: "uploaded",
+      });
+    },
+    onSuccess: () => {
+      if (scope.organizationId) {
+        qc.invalidateQueries({
+          queryKey: queryFamilies.allRecordings(scope.organizationId),
+        });
+      }
+    },
   });
+}
+
+/**
+ * Stateful wrapper around `useUploadRecording` that tracks per-upload progress
+ * (0..1). Progress resets on the next call.
+ */
+export function useUploadRecordingWithProgress() {
+  const upload = useUploadRecording();
+  const [progress, setProgress] = useState<number | null>(null);
+
+  const start = async (
+    input: Omit<UploadRecordingInput, "onProgress">
+  ): Promise<Recording> => {
+    setProgress(0);
+    try {
+      return await upload.mutateAsync({
+        ...input,
+        onProgress: ({ loaded, total }) => {
+          setProgress(total > 0 ? loaded / total : 0);
+        },
+      });
+    } finally {
+      setProgress(null);
+    }
+  };
+
+  return {
+    start,
+    progress,
+    isUploading: upload.isPending,
+    error: upload.error,
+    reset: () => {
+      upload.reset();
+      setProgress(null);
+    },
+  };
 }
 
 export function useRecordingAudioUrl(
@@ -104,7 +187,7 @@ export function useRecordingAudioUrl(
     queryKey: ["recording-audio-url", storagePath],
     queryFn: () => service.getRecordingAudioUrl(storagePath!),
     enabled: !!storagePath,
-    staleTime: 50 * 60 * 1000, // slightly under the default 60m signed-url lifetime
+    staleTime: 50 * 60 * 1000, // R2 GET is presigned for 60m
   });
 }
 

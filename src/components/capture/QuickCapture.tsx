@@ -4,7 +4,7 @@ import { Mic, Square, Send, X, Plus, CheckSquare, Calendar, FolderKanban } from 
 import { cn } from "@/lib/utils/cn";
 import { useNavigate } from "react-router-dom";
 import { useCreateThought } from "@/lib/hooks/useThoughts";
-import { useCreateRecording, useUploadRecordingBlob, useTriggerRecordingProcessing } from "@/lib/hooks/useRecordings";
+import { useUploadRecording } from "@/lib/hooks/useRecordings";
 import { useOrgScope } from "@/lib/hooks/useOrgScope";
 
 interface QuickCaptureProps {
@@ -19,9 +19,7 @@ export function QuickCapture({ open, onClose }: QuickCaptureProps) {
   const navigate = useNavigate();
   const scope = useOrgScope();
   const createThought = useCreateThought();
-  const createRecording = useCreateRecording();
-  const uploadBlob = useUploadRecordingBlob();
-  const triggerProcessing = useTriggerRecordingProcessing();
+  const uploadRecording = useUploadRecording();
 
   const [mode, setMode] = useState<Mode>("menu");
   const [text, setText] = useState("");
@@ -129,24 +127,11 @@ export function QuickCapture({ open, onClose }: QuickCaptureProps) {
     setSaving(true);
     setError(null);
     try {
-      // Build a stable storage path under the org/user.
-      const ext = audioBlobRef.current.type.includes("mp4") ? "mp4" : "webm";
-      const storagePath = `${scope.organizationId}/${scope.userId}/${Date.now()}.${ext}`;
-
-      // Create recording row first (status='uploaded').
-      const recording = await createRecording.mutateAsync({
-        source: "thought",
-        storage_path: storagePath,
-        size_bytes: audioBlobRef.current.size,
-        duration_seconds: seconds,
-        mime_type: audioBlobRef.current.type,
-        status: "uploaded",
-      });
-
-      // Upload the blob to Storage.
-      await uploadBlob.mutateAsync({
-        storagePath,
+      // R2 upload (presign + PUT) and DB row insert in one shot.
+      const recording = await uploadRecording.mutateAsync({
         blob: audioBlobRef.current,
+        source: "thought",
+        durationSeconds: seconds,
       });
 
       // Create a linked thought so it lands on the Thoughts screen immediately.
@@ -155,9 +140,6 @@ export function QuickCapture({ open, onClose }: QuickCaptureProps) {
         recording_id: recording.id,
         text_content: null,
       });
-
-      // Kick off processing (transcription + extraction). Currently a stub.
-      await triggerProcessing.mutateAsync(recording.id);
 
       onClose();
     } catch (err) {
@@ -317,7 +299,7 @@ export function QuickCapture({ open, onClose }: QuickCaptureProps) {
                   {error && <p className="text-xs text-danger-600 text-center">{error}</p>}
                   {!isRecording && (
                     <p className="text-xs text-ink-500 text-center max-w-xs">
-                      האודיו יעלה ל-Supabase Storage ויישמר כמחשבה. תמלול וחילוץ משימות יופעלו
+                      האודיו יעלה ל-Cloudflare R2 ויישמר כמחשבה. תמלול וחילוץ משימות יופעלו
                       כשה-AI יחובר.
                     </p>
                   )}

@@ -103,15 +103,23 @@ export function Recordings() {
         {/* 3-column banner (RTL leading edge → right):
             Filters | QuickRecord | DropZone
             All three are sized to match (compact, centered content). */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+        {/* Top row — filters grow to fill the leading edge; the other two
+            stay at a fixed width so the grouping tabs in the filters card
+            spread sideways instead of wrapping to a new line. */}
+        <div className="flex flex-col lg:flex-row gap-3">
           <RecordingFilters
+            className="flex-1 min-w-0"
             filters={filters}
             onFiltersChange={setFilters}
             grouping={grouping}
             onGroupingChange={setGrouping}
           />
-          <QuickRecordCard onStart={() => setRecorderOpen(true)} />
+          <QuickRecordCard
+            className="lg:w-[220px] lg:shrink-0"
+            onStart={() => setRecorderOpen(true)}
+          />
           <RecordingDropZone
+            className="lg:w-[220px] lg:shrink-0"
             source="other"
             onUploaded={(id) => setSelectedId(id)}
           />

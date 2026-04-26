@@ -398,7 +398,7 @@ export function AudioPlayer({
             <button
               onClick={() => setSpeedOpen((v) => !v)}
               className={cn(
-                "p-2 rounded-xl transition-colors",
+                "inline-flex items-center gap-0.5 px-2 py-2 rounded-xl transition-colors",
                 speedOpen
                   ? "bg-ink-900 text-white"
                   : "text-ink-600 hover:bg-ink-100"
@@ -406,9 +406,12 @@ export function AudioPlayer({
               title={`מהירות ${speed}×`}
               aria-label="מהירות השמעה"
             >
-              {/* In RTL flex-row, the first DOM child renders rightmost — so
-                  the speed label sits visually to the right of the gauge icon. */}
-              <span className="text-[10px] tabular-nums me-0.5">{speed}×</span>
+              {/* `inline-flex` is required: without it the <span> and <svg>
+                  stack vertically in some browsers (the user reported the
+                  ×1 floating above the gauge). With flex-row + RTL, the
+                  first DOM child renders rightmost, so the label sits
+                  visually to the right of the gauge icon. */}
+              <span className="text-[10px] tabular-nums">{speed}×</span>
               <Gauge className="w-4 h-4" />
             </button>
             {speedOpen && (

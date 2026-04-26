@@ -1,4 +1,5 @@
-import { Filter, Search, X } from "lucide-react";
+import { useState } from "react";
+import { Filter, Search, X, ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { useProjects } from "@/lib/hooks/useProjects";
 import { useTaskLists } from "@/lib/hooks/useTaskLists";
@@ -61,6 +62,8 @@ export function RecordingFilters({ value, onChange, className }: Props) {
   const { data: calendars = [] } = useEventCalendars();
   const { data: recordingLists = [] } = useRecordingLists();
 
+  const [expanded, setExpanded] = useState(false);
+
   const set = <K extends keyof RecordingsFilterState>(
     key: K,
     v: RecordingsFilterState[K]
@@ -79,10 +82,15 @@ export function RecordingFilters({ value, onChange, className }: Props) {
   return (
     <div className={cn("card p-4 space-y-3", className)}>
       <header className="flex items-center justify-between gap-2">
-        <div className="inline-flex items-center gap-1.5 text-sm font-medium text-ink-700">
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="inline-flex items-center gap-1.5 text-sm font-medium text-ink-700 hover:text-ink-900"
+        >
           <Filter className="w-4 h-4" />
           סינון והגדרות
-        </div>
+          {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+        </button>
         {hasAny && (
           <button
             onClick={() => onChange(DEFAULT_RECORDING_FILTERS)}
@@ -95,20 +103,19 @@ export function RecordingFilters({ value, onChange, className }: Props) {
         )}
       </header>
 
-      {/* Search */}
-      <label className="block">
-        <span className="text-[10px] uppercase tracking-wider text-ink-400">חיפוש</span>
-        <div className="relative mt-1">
-          <Search className="w-3.5 h-3.5 text-ink-400 absolute end-2 top-1/2 -translate-y-1/2" />
-          <input
-            type="search"
-            placeholder="כותרת..."
-            value={value.search}
-            onChange={(e) => set("search", e.target.value)}
-            className="field !py-1.5 !text-xs pe-7"
-          />
-        </div>
-      </label>
+      {/* Search — always visible */}
+      <div className="relative">
+        <Search className="w-3.5 h-3.5 text-ink-400 absolute end-2 top-1/2 -translate-y-1/2" />
+        <input
+          type="search"
+          placeholder="חיפוש לפי כותרת..."
+          value={value.search}
+          onChange={(e) => set("search", e.target.value)}
+          className="field !py-1.5 !text-xs pe-7"
+        />
+      </div>
+
+      {!expanded ? null : <>
 
       {/* Source */}
       <div>
@@ -198,6 +205,7 @@ export function RecordingFilters({ value, onChange, className }: Props) {
           className="accent-primary-500"
         />
       </label>
+      </>}
     </div>
   );
 }

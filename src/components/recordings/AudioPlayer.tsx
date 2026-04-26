@@ -7,6 +7,7 @@ import {
   Download,
   AlertCircle,
   Loader2,
+  Gauge,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
@@ -21,9 +22,6 @@ interface Props {
 }
 
 async function downloadFromUrl(url: string, suggestedName: string) {
-  // Cross-origin presigned URLs ignore the <a download> filename and the
-  // browser plays the media instead of saving it. Pull the bytes ourselves and
-  // anchor a blob URL so the download dialog respects the suggested name.
   const res = await fetch(url);
   if (!res.ok) throw new Error(`download_failed_${res.status}`);
   const blob = await res.blob();
@@ -34,7 +32,6 @@ async function downloadFromUrl(url: string, suggestedName: string) {
   document.body.appendChild(a);
   a.click();
   a.remove();
-  // Free the blob URL after the click handler runs.
   setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
 }
 
@@ -49,24 +46,136 @@ export function AudioPlayer({
   className,
 }: Props) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [speed, setSpeed] = useState<number>(1);
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [speedOpen, setSpeedOpen] = useState(false);
+
+  // Web Audio nodes for the live waveform visualizer.
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const sourceNodeRef = useRef<MediaElementAudioSourceNode | null>(null);
+  const rafRef = useRef<number | null>(null);
 
   // Keep playbackRate in sync with the speed state.
   useEffect(() => {
     if (audioRef.current) audioRef.current.playbackRate = speed;
   }, [speed]);
 
-  // When the src changes, reset everything.
+  // When the src changes, reset everything (and tear down audio graph).
   useEffect(() => {
     setPlaying(false);
     setCurrentTime(0);
     setDuration(0);
+    // The MediaElementSource is bound to the <audio> element 1:1 — once
+    // attached, switching src is fine; we don't recreate the graph here.
   }, [src]);
+
+  // Tear down on unmount.
+  useEffect(() => {
+    return () => {
+      if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+      try {
+        sourceNodeRef.current?.disconnect();
+        analyserRef.current?.disconnect();
+        audioCtxRef.current?.close();
+      } catch {
+        /* already torn down */
+      }
+    };
+  }, []);
+
+  /** Lazily build the AudioContext + AnalyserNode on first play. */
+  function ensureAudioGraph() {
+    if (audioCtxRef.current || !audioRef.current) return;
+    const Ctor = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!Ctor) return;
+    try {
+      const ctx = new Ctor();
+      const source = ctx.createMediaElementSource(audioRef.current);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 1024;
+      source.connect(analyser);
+      analyser.connect(ctx.destination);
+      audioCtxRef.current = ctx;
+      sourceNodeRef.current = source;
+      analyserRef.current = analyser;
+    } catch (err) {
+      // Likely a CORS issue (presigned URL without `crossOrigin="anonymous"`
+      // or R2 not returning Access-Control-Allow-Origin on the GET). The audio
+      // still plays through the <audio> element — just no waveform.
+      console.warn("audio analyser unavailable:", err);
+    }
+  }
+
+  function startVisualizer() {
+    const analyser = analyserRef.current;
+    const canvas = canvasRef.current;
+    if (!analyser || !canvas) return;
+
+    const ctx2d = canvas.getContext("2d");
+    if (!ctx2d) return;
+
+    const bufferLen = analyser.fftSize;
+    const data = new Uint8Array(bufferLen);
+
+    const draw = () => {
+      const audio = audioRef.current;
+      if (!audio || audio.paused) {
+        rafRef.current = null;
+        return;
+      }
+      analyser.getByteTimeDomainData(data);
+      const w = canvas.width;
+      const h = canvas.height;
+      ctx2d.clearRect(0, 0, w, h);
+      // Subtle baseline
+      ctx2d.fillStyle = "rgba(229, 231, 235, 0.4)";
+      ctx2d.fillRect(0, h / 2 - 0.5, w, 1);
+      ctx2d.lineWidth = 2;
+      ctx2d.strokeStyle = "#f59e0b";
+      ctx2d.beginPath();
+      const slice = w / bufferLen;
+      let x = 0;
+      for (let i = 0; i < bufferLen; i++) {
+        const v = data[i] / 128.0; // 0..2, centered around 1
+        const y = (v * h) / 2;
+        if (i === 0) ctx2d.moveTo(x, y);
+        else ctx2d.lineTo(x, y);
+        x += slice;
+      }
+      ctx2d.lineTo(w, h / 2);
+      ctx2d.stroke();
+      rafRef.current = requestAnimationFrame(draw);
+    };
+    rafRef.current = requestAnimationFrame(draw);
+  }
+
+  function stopVisualizer() {
+    if (rafRef.current != null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+    const canvas = canvasRef.current;
+    const ctx2d = canvas?.getContext("2d");
+    if (canvas && ctx2d) ctx2d.clearRect(0, 0, canvas.width, canvas.height);
+  }
+
+  // Resize the canvas on first mount to its CSS size.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+    const ctx2d = canvas.getContext("2d");
+    if (ctx2d) ctx2d.scale(dpr, dpr);
+  }, []);
 
   if (isLoading) {
     return (
@@ -85,11 +194,23 @@ export function AudioPlayer({
     );
   }
 
-  const togglePlay = () => {
+  const togglePlay = async () => {
     const a = audioRef.current;
     if (!a) return;
-    if (a.paused) a.play();
-    else a.pause();
+    if (a.paused) {
+      // Build the audio graph + resume the context on first user gesture.
+      ensureAudioGraph();
+      try {
+        if (audioCtxRef.current?.state === "suspended") {
+          await audioCtxRef.current.resume();
+        }
+      } catch {
+        /* ignore */
+      }
+      await a.play();
+    } else {
+      a.pause();
+    }
   };
 
   const skipBy = (deltaSeconds: number) => {
@@ -108,18 +229,37 @@ export function AudioPlayer({
 
   return (
     <div className={cn("space-y-3", className)}>
+      {/* crossOrigin lets the AnalyserNode read the buffer; if the response
+          doesn't allow it, the audio still plays — only the waveform is blank */}
       <audio
         ref={audioRef}
         src={src}
+        crossOrigin="anonymous"
         preload="metadata"
-        onPlay={() => setPlaying(true)}
-        onPause={() => setPlaying(false)}
-        onEnded={() => setPlaying(false)}
+        onPlay={() => {
+          setPlaying(true);
+          startVisualizer();
+        }}
+        onPause={() => {
+          setPlaying(false);
+          stopVisualizer();
+        }}
+        onEnded={() => {
+          setPlaying(false);
+          stopVisualizer();
+        }}
         onLoadedMetadata={(e) => {
           const d = (e.currentTarget as HTMLAudioElement).duration;
           if (isFinite(d)) setDuration(d);
         }}
         onTimeUpdate={(e) => setCurrentTime((e.currentTarget as HTMLAudioElement).currentTime)}
+      />
+
+      {/* Waveform visualizer — drawn while playing, blank while paused */}
+      <canvas
+        ref={canvasRef}
+        className="w-full h-12 rounded-md bg-ink-50 block"
+        aria-hidden
       />
 
       {/* Seek bar */}
@@ -138,7 +278,7 @@ export function AudioPlayer({
           aria-label="מיקום בהקלטה"
           className="flex-1 accent-primary-500"
           style={{
-            background: `linear-gradient(to left, var(--tw-gradient-from, #f59e0b) 0%, var(--tw-gradient-from, #f59e0b) ${progressPct}%, #e5e7eb ${progressPct}%, #e5e7eb 100%)`,
+            background: `linear-gradient(to left, #f59e0b 0%, #f59e0b ${progressPct}%, #e5e7eb ${progressPct}%, #e5e7eb 100%)`,
           }}
         />
         <span className="text-xs text-ink-600 tabular-nums w-10">
@@ -146,8 +286,8 @@ export function AudioPlayer({
         </span>
       </div>
 
-      {/* Transport controls */}
-      <div className="flex items-center justify-center gap-2">
+      {/* Single transport row: skip / play / skip — with speed + download icons on the right */}
+      <div className="flex items-center justify-center gap-2 relative">
         <button
           onClick={() => skipBy(-SKIP_SECONDS)}
           className="btn-ghost"
@@ -175,41 +315,56 @@ export function AudioPlayer({
           <span className="text-xs">10</span>
           <RotateCw className="w-4 h-4" />
         </button>
-      </div>
 
-      {/* Speed + download row */}
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="flex items-center gap-1.5">
-          <span className="text-[10px] uppercase tracking-wider text-ink-400 ms-1">
-            מהירות
-          </span>
-          <div className="flex items-center gap-1 rounded-md bg-ink-50 p-1">
-            {SPEEDS.map((s) => (
-              <button
-                key={s}
-                onClick={() => setSpeed(s)}
-                className={cn(
-                  "px-2 py-0.5 text-[11px] rounded transition-colors tabular-nums",
-                  speed === s
-                    ? "bg-white text-ink-900 shadow-soft font-medium"
-                    : "text-ink-600 hover:text-ink-900"
-                )}
-                title={`מהירות ${s}×`}
-              >
-                {s}×
-              </button>
-            ))}
+        {/* Speed icon + popup, and download icon — anchored to the row's leading edge */}
+        <div className="absolute end-0 top-1/2 -translate-y-1/2 flex items-center gap-1">
+          {/* Speed */}
+          <div className="relative">
+            <button
+              onClick={() => setSpeedOpen((v) => !v)}
+              className={cn(
+                "p-2 rounded-xl transition-colors",
+                speedOpen
+                  ? "bg-ink-900 text-white"
+                  : "text-ink-600 hover:bg-ink-100"
+              )}
+              title={`מהירות ${speed}×`}
+              aria-label="מהירות השמעה"
+            >
+              <Gauge className="w-4 h-4" />
+              <span className="text-[10px] tabular-nums ms-0.5">{speed}×</span>
+            </button>
+            {speedOpen && (
+              <>
+                {/* Click-away backdrop */}
+                <div
+                  className="fixed inset-0 z-10"
+                  onClick={() => setSpeedOpen(false)}
+                />
+                <div className="absolute z-20 top-full mt-1 end-0 bg-white border border-ink-200 rounded-md shadow-lift p-1 flex flex-col gap-0.5 min-w-[64px]">
+                  {SPEEDS.map((s) => (
+                    <button
+                      key={s}
+                      onClick={() => {
+                        setSpeed(s);
+                        setSpeedOpen(false);
+                      }}
+                      className={cn(
+                        "px-2 py-1 text-xs rounded text-start tabular-nums transition-colors",
+                        speed === s
+                          ? "bg-primary-100 text-primary-700 font-medium"
+                          : "text-ink-700 hover:bg-ink-100"
+                      )}
+                    >
+                      {s}×
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
-        </div>
 
-        {/* Download — fetches the bytes and saves with the suggested filename */}
-        <div className="flex items-center gap-2">
-          {downloadError && (
-            <span className="text-[11px] text-danger-600 inline-flex items-center gap-1">
-              <AlertCircle className="w-3 h-3" />
-              {downloadError}
-            </span>
-          )}
+          {/* Download — fetches the bytes and saves with the suggested filename */}
           <button
             onClick={async () => {
               setDownloadError(null);
@@ -224,18 +379,25 @@ export function AudioPlayer({
               }
             }}
             disabled={downloading}
-            className="btn-outline !py-1.5 !px-3"
-            title="הורד את ההקלטה"
+            className="p-2 rounded-xl text-ink-600 hover:bg-ink-100 disabled:opacity-50"
+            title="הורידי הקלטה"
+            aria-label="הורידי הקלטה"
           >
             {downloading ? (
               <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
               <Download className="w-4 h-4" />
             )}
-            <span className="text-xs">{downloading ? "מורידה…" : "הורידי"}</span>
           </button>
         </div>
       </div>
+
+      {downloadError && (
+        <div className="text-[11px] text-danger-600 inline-flex items-center gap-1 justify-center w-full">
+          <AlertCircle className="w-3 h-3" />
+          {downloadError}
+        </div>
+      )}
     </div>
   );
 }

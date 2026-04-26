@@ -83,7 +83,7 @@ export function RecordingDropZone({ source = "other", onUploaded, className }: P
   return (
     <div
       className={cn(
-        "card p-5 sm:p-6 text-center transition-colors",
+        "card p-4 flex flex-col items-center justify-center text-center transition-colors",
         isDragging && "border-primary-500 bg-primary-50",
         isUploading && "opacity-90",
         className
@@ -101,44 +101,35 @@ export function RecordingDropZone({ source = "other", onUploaded, className }: P
       />
 
       {isUploading ? (
-        <div className="flex flex-col items-center gap-3">
-          <FileAudio className="w-10 h-10 text-primary-600" />
-          <div className="text-sm text-ink-700">
+        <div className="flex flex-col items-center gap-2 w-full">
+          <FileAudio className="w-8 h-8 text-primary-600" />
+          <div className="text-xs text-ink-700">
             {labelForUploadStatus(upload.state.status)}
             {pct > 0 ? ` ${Math.round(pct)}%` : ""}
           </div>
-          <div className="w-full max-w-md h-2 bg-ink-150 rounded-full overflow-hidden">
+          <div className="w-full max-w-md h-1.5 bg-ink-150 rounded-full overflow-hidden">
             <div
               className="h-full bg-primary-500 transition-all duration-150"
               style={{ width: `${pct}%` }}
             />
           </div>
-          {upload.state.uploadId && (
-            <p className="text-[11px] text-ink-400">
-              העלאה מתבצעת ב-chunks וניתנת להמשך אוטומטי גם אם הדפדפן ייסגר.
-            </p>
-          )}
         </div>
       ) : (
-        <div className="flex flex-col items-center gap-3">
+        <div className="flex flex-col items-center justify-center gap-2.5">
           <div
             className={cn(
-              "w-12 h-12 rounded-full flex items-center justify-center",
+              "w-10 h-10 rounded-full flex items-center justify-center",
               isDragging ? "bg-primary-500 text-white" : "bg-ink-100 text-ink-600"
             )}
           >
-            <Upload className="w-6 h-6" />
+            <Upload className="w-5 h-5" />
           </div>
-          <div>
-            <p className="text-sm font-medium text-ink-900">גררי קובץ אודיו לכאן</p>
-            <p className="text-xs text-ink-500 mt-1">
-              MP3 · M4A · WebM · WAV · עד 500MB
-            </p>
-          </div>
+          <p className="text-sm font-semibold text-ink-900">גררי קובץ אודיו</p>
+          <p className="text-xs text-ink-500 -mt-1">MP3 · M4A · WebM · WAV · עד 500MB</p>
           <button
             type="button"
             onClick={() => inputRef.current?.click()}
-            className="btn-outline"
+            className="btn-outline !py-1.5 !px-3"
           >
             בחירה מהמחשב
           </button>

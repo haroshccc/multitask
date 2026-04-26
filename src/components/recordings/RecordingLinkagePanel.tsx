@@ -1,9 +1,7 @@
-import { useState } from "react";
-import { FolderKanban, ListChecks, CalendarDays, Mic, Plus, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { FolderKanban, ListChecks, CalendarDays, Mic, Plus, X, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
-import {
-  useUpdateRecording,
-} from "@/lib/hooks/useRecordings";
+import { useUpdateRecording } from "@/lib/hooks/useRecordings";
 import { useProjects } from "@/lib/hooks/useProjects";
 import { useTaskLists } from "@/lib/hooks/useTaskLists";
 import { useEventCalendars } from "@/lib/hooks/useEventCalendars";
@@ -21,11 +19,9 @@ interface Props {
 }
 
 /**
- * Linkage controls inside the player. Lets the user attach a recording to:
- *   - one project              (recordings.project_id)
- *   - one task list            (recordings.task_list_id)
- *   - one event calendar       (recordings.event_calendar_id)
- *   - many recording lists     (recording_list_assignments)
+ * Compact linkage row. One small pill per linkage type — click to open a
+ * dropdown picker. The recording-lists pill expands into a multi-select with
+ * an "add new list" inline form.
  */
 export function RecordingLinkagePanel({ recording }: Props) {
   const updateRecording = useUpdateRecording();
@@ -39,10 +35,14 @@ export function RecordingLinkagePanel({ recording }: Props) {
   const unassignList = useUnassignRecordingFromList();
   const createList = useCreateRecordingList();
 
-  const [newListName, setNewListName] = useState("");
-  const [creating, setCreating] = useState(false);
+  const project = projects.find((p) => p.id === recording.project_id) ?? null;
+  const taskList = taskLists.find((l) => l.id === recording.task_list_id) ?? null;
+  const calendar = calendars.find((c) => c.id === recording.event_calendar_id) ?? null;
+  const myLists = assignments
+    .map((a) => recordingLists.find((l) => l.id === a.list_id))
+    .filter((l): l is NonNullable<typeof l> => Boolean(l));
 
-  const setSingleField = (
+  const setSingle = (
     field: "project_id" | "task_list_id" | "event_calendar_id",
     value: string | null
   ) => {
@@ -52,183 +52,277 @@ export function RecordingLinkagePanel({ recording }: Props) {
     });
   };
 
-  const assignedIds = new Set(assignments.map((a) => a.list_id));
-  const availableLists = recordingLists.filter((l) => !assignedIds.has(l.id));
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 text-xs">
+      <SingleLinkPill
+        icon={FolderKanban}
+        label="פרויקט"
+        current={project ? project.name : null}
+        options={projects.map((p) => ({ id: p.id, label: p.name }))}
+        onChange={(id) => setSingle("project_id", id)}
+      />
+      <SingleLinkPill
+        icon={ListChecks}
+        label="משימות"
+        current={taskList ? `${taskList.emoji ? taskList.emoji + " " : ""}${taskList.name}` : null}
+        options={taskLists.map((l) => ({
+          id: l.id,
+          label: `${l.emoji ? l.emoji + " " : ""}${l.name}`,
+        }))}
+        onChange={(id) => setSingle("task_list_id", id)}
+      />
+      <SingleLinkPill
+        icon={CalendarDays}
+        label="יומן"
+        current={calendar ? `${calendar.emoji ? calendar.emoji + " " : ""}${calendar.name}` : null}
+        options={calendars.map((c) => ({
+          id: c.id,
+          label: `${c.emoji ? c.emoji + " " : ""}${c.name}`,
+        }))}
+        onChange={(id) => setSingle("event_calendar_id", id)}
+      />
 
-  const handleCreateAndAssign = async () => {
-    const name = newListName.trim();
-    if (!name) return;
+      <RecordingListsPill
+        icon={Mic}
+        myLists={myLists}
+        availableLists={recordingLists.filter((l) => !myLists.some((m) => m.id === l.id))}
+        onAssign={(listId) =>
+          assignList.mutate({ recordingId: recording.id, listId })
+        }
+        onUnassign={(listId) =>
+          unassignList.mutate({ recordingId: recording.id, listId })
+        }
+        onCreate={async (name) => {
+          const list = await createList.mutateAsync({ name, sort_order: 0 });
+          await assignList.mutateAsync({ recordingId: recording.id, listId: list.id });
+        }}
+      />
+    </div>
+  );
+}
+
+// =============================================================================
+// Single linkage pill — small chip that opens a dropdown to pick one option
+// =============================================================================
+
+function SingleLinkPill({
+  icon: Icon,
+  label,
+  current,
+  options,
+  onChange,
+}: {
+  icon: typeof FolderKanban;
+  label: string;
+  current: string | null;
+  options: { id: string; label: string }[];
+  onChange: (id: string | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useClickAway(ref, () => setOpen(false));
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={cn(
+          "inline-flex items-center gap-1 rounded-md border px-2 py-1 transition-colors",
+          current
+            ? "border-primary-300 bg-primary-50 text-primary-800"
+            : "border-ink-300 bg-white text-ink-600 hover:bg-ink-50"
+        )}
+      >
+        <Icon className="w-3.5 h-3.5" />
+        <span className="font-medium">{label}:</span>
+        <span className="truncate max-w-[120px]">{current ?? "—"}</span>
+        <ChevronDown className="w-3 h-3 opacity-60" />
+      </button>
+      {open && (
+        <div className="absolute z-30 top-full mt-1 start-0 w-56 max-h-64 overflow-y-auto bg-white border border-ink-200 rounded-md shadow-lift p-1">
+          <button
+            onClick={() => {
+              onChange(null);
+              setOpen(false);
+            }}
+            className={cn(
+              "w-full text-start px-2 py-1.5 text-xs rounded hover:bg-ink-100",
+              !current && "bg-ink-100"
+            )}
+          >
+            — ללא —
+          </button>
+          {options.length === 0 ? (
+            <div className="px-2 py-1.5 text-[11px] text-ink-400">אין אפשרויות</div>
+          ) : (
+            options.map((o) => (
+              <button
+                key={o.id}
+                onClick={() => {
+                  onChange(o.id);
+                  setOpen(false);
+                }}
+                className={cn(
+                  "w-full text-start px-2 py-1.5 text-xs rounded hover:bg-ink-100 truncate",
+                  current === o.label && "bg-primary-50 text-primary-800"
+                )}
+              >
+                {o.label}
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// =============================================================================
+// Recording-lists pill — multi-select with inline create
+// =============================================================================
+
+function RecordingListsPill({
+  icon: Icon,
+  myLists,
+  availableLists,
+  onAssign,
+  onUnassign,
+  onCreate,
+}: {
+  icon: typeof Mic;
+  myLists: { id: string; name: string; emoji: string | null }[];
+  availableLists: { id: string; name: string; emoji: string | null }[];
+  onAssign: (listId: string) => void;
+  onUnassign: (listId: string) => void;
+  onCreate: (name: string) => Promise<void>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [creating, setCreating] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useClickAway(ref, () => setOpen(false));
+
+  const summary =
+    myLists.length === 0
+      ? "—"
+      : myLists.length === 1
+      ? `${myLists[0].emoji ? myLists[0].emoji + " " : ""}${myLists[0].name}`
+      : `${myLists.length} רשימות`;
+
+  const handleCreate = async () => {
+    const n = newName.trim();
+    if (!n) return;
     setCreating(true);
     try {
-      const list = await createList.mutateAsync({ name, sort_order: 0 });
-      await assignList.mutateAsync({ recordingId: recording.id, listId: list.id });
-      setNewListName("");
+      await onCreate(n);
+      setNewName("");
     } finally {
       setCreating(false);
     }
   };
 
   return (
-    <div className="space-y-2.5 text-xs">
-      <Row icon={FolderKanban} label="פרויקט">
-        <select
-          className="field !py-1 !px-2 !text-xs flex-1 min-w-0"
-          value={recording.project_id ?? ""}
-          onChange={(e) => setSingleField("project_id", e.target.value || null)}
-        >
-          <option value="">— ללא —</option>
-          {projects.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
-        </select>
-      </Row>
-
-      <Row icon={ListChecks} label="רשימת משימות">
-        <select
-          className="field !py-1 !px-2 !text-xs flex-1 min-w-0"
-          value={recording.task_list_id ?? ""}
-          onChange={(e) => setSingleField("task_list_id", e.target.value || null)}
-        >
-          <option value="">— ללא —</option>
-          {taskLists.map((l) => (
-            <option key={l.id} value={l.id}>
-              {l.emoji ? `${l.emoji} ` : ""}
-              {l.name}
-            </option>
-          ))}
-        </select>
-      </Row>
-
-      <Row icon={CalendarDays} label="יומן אירועים">
-        <select
-          className="field !py-1 !px-2 !text-xs flex-1 min-w-0"
-          value={recording.event_calendar_id ?? ""}
-          onChange={(e) => setSingleField("event_calendar_id", e.target.value || null)}
-        >
-          <option value="">— ללא —</option>
-          {calendars.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.emoji ? `${c.emoji} ` : ""}
-              {c.name}
-            </option>
-          ))}
-        </select>
-      </Row>
-
-      <Row icon={Mic} label="רשימות הקלטות" align="start">
-        <div className="flex-1 min-w-0 space-y-2">
-          {/* Assigned chips */}
-          {assignments.length > 0 ? (
-            <div className="flex flex-wrap gap-1">
-              {assignments.map((a) => {
-                const list = recordingLists.find((l) => l.id === a.list_id);
-                return (
-                  <span
-                    key={a.list_id}
-                    className="chip-accent inline-flex items-center gap-1"
-                  >
-                    {list?.emoji ? `${list.emoji} ` : ""}
-                    {list?.name ?? "(רשימה ארוכבה)"}
-                    <button
-                      onClick={() =>
-                        unassignList.mutate({
-                          recordingId: recording.id,
-                          listId: a.list_id,
-                        })
-                      }
-                      className="hover:text-danger-700"
-                      aria-label="הסר מרשימה"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={cn(
+          "inline-flex items-center gap-1 rounded-md border px-2 py-1 transition-colors",
+          myLists.length > 0
+            ? "border-primary-300 bg-primary-50 text-primary-800"
+            : "border-ink-300 bg-white text-ink-600 hover:bg-ink-50"
+        )}
+      >
+        <Icon className="w-3.5 h-3.5" />
+        <span className="font-medium">רשימות:</span>
+        <span className="truncate max-w-[120px]">{summary}</span>
+        <ChevronDown className="w-3 h-3 opacity-60" />
+      </button>
+      {open && (
+        <div className="absolute z-30 top-full mt-1 start-0 w-64 max-h-80 overflow-y-auto bg-white border border-ink-200 rounded-md shadow-lift p-2 space-y-2">
+          {myLists.length > 0 && (
+            <div className="space-y-1">
+              <div className="text-[10px] uppercase tracking-wider text-ink-400">משויכות</div>
+              {myLists.map((l) => (
+                <div
+                  key={l.id}
+                  className="flex items-center justify-between gap-1 rounded bg-primary-50 px-2 py-1 text-xs text-primary-800"
+                >
+                  <span className="truncate">
+                    {l.emoji ? l.emoji + " " : ""}
+                    {l.name}
                   </span>
-                );
-              })}
-            </div>
-          ) : (
-            <p className="text-ink-500 text-[11px]">לא משויך לאף רשימה</p>
-          )}
-
-          {/* Add to existing list */}
-          {availableLists.length > 0 && (
-            <select
-              className="field !py-1 !px-2 !text-xs"
-              value=""
-              onChange={(e) => {
-                const id = e.target.value;
-                if (!id) return;
-                assignList.mutate({ recordingId: recording.id, listId: id });
-              }}
-            >
-              <option value="">+ הוספה לרשימה קיימת…</option>
-              {availableLists.map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.emoji ? `${l.emoji} ` : ""}
-                  {l.name}
-                </option>
+                  <button
+                    onClick={() => onUnassign(l.id)}
+                    className="hover:text-danger-700"
+                    aria-label="הסר"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
               ))}
-            </select>
+            </div>
           )}
 
-          {/* Create new list inline */}
+          {availableLists.length > 0 && (
+            <div className="space-y-1">
+              <div className="text-[10px] uppercase tracking-wider text-ink-400">הוסיפי לרשימה</div>
+              {availableLists.map((l) => (
+                <button
+                  key={l.id}
+                  onClick={() => onAssign(l.id)}
+                  className="w-full text-start px-2 py-1 text-xs rounded hover:bg-ink-100 truncate"
+                >
+                  {l.emoji ? l.emoji + " " : ""}
+                  {l.name}
+                </button>
+              ))}
+            </div>
+          )}
+
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              handleCreateAndAssign();
+              handleCreate();
             }}
-            className="flex items-center gap-1"
+            className="flex items-center gap-1 pt-1 border-t border-ink-200"
           >
             <input
               type="text"
               placeholder="רשימה חדשה…"
-              value={newListName}
-              onChange={(e) => setNewListName(e.target.value)}
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
               className="field !py-1 !px-2 !text-xs flex-1 min-w-0"
               disabled={creating}
             />
             <button
               type="submit"
-              disabled={!newListName.trim() || creating}
-              className={cn(
-                "btn-ghost !py-1 !px-2",
-                "disabled:opacity-50 disabled:cursor-not-allowed"
-              )}
-              title="צרי רשימה ושייכי"
+              disabled={!newName.trim() || creating}
+              className="btn-ghost !py-1 !px-2 disabled:opacity-50"
+              title="צרי וחברי"
             >
               <Plus className="w-3 h-3" />
             </button>
           </form>
         </div>
-      </Row>
+      )}
     </div>
   );
 }
 
-function Row({
-  icon: Icon,
-  label,
-  align = "center",
-  children,
-}: {
-  icon: typeof FolderKanban;
-  label: string;
-  align?: "center" | "start";
-  children: React.ReactNode;
-}) {
-  return (
-    <div
-      className={cn(
-        "flex gap-2",
-        align === "start" ? "items-start pt-1" : "items-center"
-      )}
-    >
-      <div className="inline-flex items-center gap-1 text-ink-600 shrink-0 w-32">
-        <Icon className="w-3.5 h-3.5 text-ink-500" />
-        <span>{label}:</span>
-      </div>
-      {children}
-    </div>
-  );
+// =============================================================================
+// Helpers
+// =============================================================================
+
+function useClickAway(ref: React.RefObject<HTMLElement | null>, handler: () => void) {
+  useEffect(() => {
+    const onDoc = (e: MouseEvent) => {
+      if (!ref.current) return;
+      if (ref.current.contains(e.target as Node)) return;
+      handler();
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [ref, handler]);
 }

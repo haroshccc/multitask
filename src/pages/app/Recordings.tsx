@@ -12,6 +12,12 @@ import {
   filterRecordings,
   type RecordingsFilterState,
 } from "@/components/recordings/RecordingFilters";
+import {
+  RecordingsListBanner,
+  DEFAULT_GROUPING,
+  applyGrouping,
+  type ListGroupingState,
+} from "@/components/recordings/RecordingsListBanner";
 import { useRecordings } from "@/lib/hooks/useRecordings";
 import { useAllRecordingAssignments } from "@/lib/hooks/useRecordingLists";
 
@@ -19,6 +25,7 @@ export function Recordings() {
   const [filters, setFilters] = useState<RecordingsFilterState>(
     DEFAULT_RECORDING_FILTERS
   );
+  const [grouping, setGrouping] = useState<ListGroupingState>(DEFAULT_GROUPING);
   // Always fetch with archived included; client-side filter then narrows.
   const { data: allRecordings = [], isLoading } = useRecordings({
     includeArchived: true,
@@ -38,10 +45,10 @@ export function Recordings() {
     return m;
   }, [assignments]);
 
-  const recordings = useMemo(
-    () => filterRecordings(allRecordings, filters, listsByRecording),
-    [allRecordings, filters, listsByRecording]
-  );
+  const recordings = useMemo(() => {
+    const filtered = filterRecordings(allRecordings, filters, listsByRecording);
+    return applyGrouping(filtered, grouping, listsByRecording);
+  }, [allRecordings, filters, listsByRecording, grouping]);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [recorderOpen, setRecorderOpen] = useState(false);
@@ -89,14 +96,16 @@ export function Recordings() {
       />
 
       <div className="space-y-5">
-        {/* 3-column banner: drop-zone | quick record | filters */}
+        {/* 3-column banner (RTL leading edge → right):
+            Filters | QuickRecord | DropZone
+            All three are sized to match (compact, centered content). */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+          <RecordingFilters value={filters} onChange={setFilters} />
+          <QuickRecordCard onStart={() => setRecorderOpen(true)} />
           <RecordingDropZone
             source="other"
             onUploaded={(id) => setSelectedId(id)}
           />
-          <QuickRecordCard onStart={() => setRecorderOpen(true)} />
-          <RecordingFilters value={filters} onChange={setFilters} />
         </div>
 
         {isLoading ? (
@@ -115,6 +124,7 @@ export function Recordings() {
           <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,360px)_1fr] gap-4">
             {/* List sits on the leading (right) edge in RTL */}
             <aside className="space-y-2">
+              <RecordingsListBanner value={grouping} onChange={setGrouping} />
               {recordings.map((r) => (
                 <RecordingCard
                   key={r.id}

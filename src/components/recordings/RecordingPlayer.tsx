@@ -1,4 +1,4 @@
-import { AlertCircle, Sparkles } from "lucide-react";
+import { AlertCircle, Sparkles, Link2 } from "lucide-react";
 import { format } from "date-fns";
 import { he } from "date-fns/locale";
 import { useRecordingAudioUrl } from "@/lib/hooks/useRecordings";
@@ -42,18 +42,14 @@ export function RecordingPlayer({ recording }: Props) {
         )}
       </div>
 
-      {/* Linkage: project, task list, event calendar, recording lists */}
-      <RecordingLinkagePanel recording={recording} />
-
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-        <Meta label="סטטוס" value={statusLabel(recording.status)} />
-        <Meta label="מקור" value={sourceLabel(recording.source)} />
-        <Meta
-          label="אחסון"
-          value={recording.storage_provider === "r2" ? "Cloudflare R2" : "Supabase Storage"}
-        />
-        <Meta label="MIME" value={recording.mime_type} />
-      </div>
+      {/* Linkage section — replaces the old meta grid */}
+      <section className="rounded-md bg-ink-50 px-3 py-3 space-y-2">
+        <div className="flex items-center gap-1.5 text-xs font-medium text-ink-700">
+          <Link2 className="w-3.5 h-3.5 text-ink-500" />
+          שיוך
+        </div>
+        <RecordingLinkagePanel recording={recording} />
+      </section>
 
       {/* Phase 6ג placeholder — transcription + speaker tagging + extracted tasks */}
       <section className="rounded-md border border-dashed border-ink-300 bg-ink-50 px-3 py-3">
@@ -69,45 +65,6 @@ export function RecordingPlayer({ recording }: Props) {
       </section>
     </div>
   );
-}
-
-function Meta({ label, value }: { label: string; value: string | null | undefined }) {
-  return (
-    <div className="rounded-md bg-ink-50 px-2.5 py-2">
-      <div className="text-[10px] uppercase tracking-wider text-ink-400">{label}</div>
-      <div className="text-xs text-ink-800 mt-0.5 truncate">{value ?? "—"}</div>
-    </div>
-  );
-}
-
-function statusLabel(status: Recording["status"]): string {
-  switch (status) {
-    case "recording":
-      return "מקליטה";
-    case "uploaded":
-      return "הועלתה";
-    case "transcribing":
-      return "מתמללת";
-    case "extracting":
-      return "מחלצת משימות";
-    case "ready":
-      return "מוכנה";
-    case "error":
-      return "שגיאה";
-  }
-}
-
-function sourceLabel(source: Recording["source"]): string {
-  switch (source) {
-    case "thought":
-      return "מחשבה";
-    case "call":
-      return "שיחה";
-    case "meeting":
-      return "פגישה";
-    default:
-      return "אחר";
-  }
 }
 
 function buildDownloadFilename(recording: Recording): string {

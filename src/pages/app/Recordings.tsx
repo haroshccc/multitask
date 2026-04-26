@@ -19,6 +19,7 @@ import {
 } from "@/components/recordings/RecordingsListBanner";
 import { useRecordings } from "@/lib/hooks/useRecordings";
 import { useAllRecordingAssignments } from "@/lib/hooks/useRecordingLists";
+import { cn } from "@/lib/utils/cn";
 
 export function Recordings() {
   const [filters, setFilters] = useState<RecordingsFilterState>(
@@ -123,8 +124,17 @@ export function Recordings() {
           <EmptyState />
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,360px)_1fr] gap-4">
-            {/* List sits on the leading (right) edge in RTL */}
-            <aside className="space-y-2">
+            {/* List sits on the leading (right) edge in RTL.
+                On mobile/tablet (below lg) the list is capped at ~40vh with
+                internal scroll, so the player stays close to the top of the
+                viewport. On desktop the list flows naturally. */}
+            <aside
+              className={cn(
+                "space-y-2",
+                "max-h-[40vh] overflow-y-auto scrollbar-thin",
+                "lg:max-h-none lg:overflow-visible"
+              )}
+            >
               {recordings.length === 0 ? (
                 <FilteredEmpty
                   total={allRecordings.length}

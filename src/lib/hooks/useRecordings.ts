@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { queryKeys, queryFamilies } from "@/lib/query-keys";
 import * as service from "@/lib/services/recordings";
+import { presignDownload } from "@/lib/services/storage";
 import type {
   Recording,
   RecordingInsert,
@@ -107,6 +108,32 @@ export function useRecordingAudioUrlLegacy(
     queryFn: () => service.getRecordingAudioUrlLegacy(storageKey!),
     enabled: !!storageKey,
     staleTime: 50 * 60 * 1000, // slightly under the default 60m signed-url lifetime
+  });
+}
+
+/**
+ * Provider-aware signed URL for playback. Switches between R2
+ * (`storage/presign-get` Edge Function) and the legacy Supabase Storage path
+ * based on `recording.storage_provider`. Disabled when audio has been archived.
+ */
+export function useRecordingAudioUrl(recording: Recording | null | undefined) {
+  return useQuery({
+    queryKey: [
+      "recording-audio-url",
+      recording?.id,
+      recording?.storage_provider,
+      recording?.storage_key,
+    ],
+    queryFn: async (): Promise<string> => {
+      if (!recording) throw new Error("no_recording");
+      if (recording.storage_provider === "r2") {
+        const { url } = await presignDownload(recording.storage_key);
+        return url;
+      }
+      return service.getRecordingAudioUrlLegacy(recording.storage_key);
+    },
+    enabled: !!recording && !recording.audio_archived,
+    staleTime: 50 * 60 * 1000,
   });
 }
 

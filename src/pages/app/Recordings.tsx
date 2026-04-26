@@ -152,9 +152,12 @@ export function Recordings() {
       {/* Desktop (lg+) — original layout: filters + 2 cards on top, list +
           player below. */}
       <div className="hidden lg:flex lg:flex-col gap-5">
-        <div className="flex gap-3">
+        {/* Top row — filters card sized to its content (grows leftward only
+            when the active grouping mode actually needs more horizontal
+            room). QuickRecord + DropZone stay at 220 px each so the upload
+            and recording entry points are always reachable. */}
+        <div className="flex flex-wrap gap-3 items-start">
           <RecordingFilters
-            className="flex-1 min-w-0"
             filters={filters}
             onFiltersChange={setFilters}
             grouping={grouping}

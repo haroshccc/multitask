@@ -130,8 +130,11 @@ export function RecordingFilters({
         />
       </div>
 
-      {/* Grouping tabs + sub-pickers — moved here from a separate banner */}
-      <div className="flex flex-wrap items-center gap-2">
+      {/* Grouping tabs + sub-pickers — moved here from a separate banner.
+          flex-nowrap so the row keeps a single line and forces the
+          enclosing card to grow leftward when linkage mode adds two
+          selects, instead of wrapping internally. */}
+      <div className="flex flex-nowrap items-center gap-2">
         <div className="inline-flex rounded-md bg-ink-100 p-0.5">
           <ModeTab
             icon={Activity}

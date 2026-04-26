@@ -103,7 +103,8 @@ export function AudioPlayer({
       const ctx = new Ctor();
       const source = ctx.createMediaElementSource(audioRef.current);
       const analyser = ctx.createAnalyser();
-      analyser.fftSize = 1024;
+      analyser.fftSize = 2048;            // more bins → finer per-bar resolution
+      analyser.smoothingTimeConstant = 0.45; // less smoothing → more variation between bars
       source.connect(analyser);
       analyser.connect(ctx.destination);
       audioCtxRef.current = ctx;
@@ -128,6 +129,10 @@ export function AudioPlayer({
     const binCount = analyser.frequencyBinCount;
     const data = new Uint8Array(binCount);
 
+    // DC offset and sub-bass bins tend to saturate; skip them so high
+    // frequencies aren't crushed by ultra-low ones.
+    const SKIP_LOW = 2;
+
     const draw = () => {
       const audio = audioRef.current;
       if (!audio || audio.paused) {
@@ -139,25 +144,29 @@ export function AudioPlayer({
       const cssHeight = canvas.clientHeight;
       ctx2d.clearRect(0, 0, cssWidth, cssHeight);
 
-      // Auto-size the bar count by canvas width so the visualizer feels
-      // dense on desktop (~1 bar per 6 px) without smearing on mobile.
+      // ~5 px per bar+gap slot, so 200 bars on a 1000 px desktop canvas
+      // and ~60 bars on a phone. Always narrow.
+      const SLOT = 5;
       const BAR_COUNT = Math.max(
-        32,
-        Math.min(160, Math.floor(cssWidth / 6))
+        40,
+        Math.min(240, Math.floor(cssWidth / SLOT))
       );
-      const binsPerBar = Math.max(1, Math.floor(binCount / BAR_COUNT));
-      const gap = cssWidth >= 600 ? 1 : 2;
-      const barWidth = (cssWidth - gap * (BAR_COUNT - 1)) / BAR_COUNT;
+      const usableBins = binCount - SKIP_LOW;
+      const binsPerBar = Math.max(1, Math.floor(usableBins / BAR_COUNT));
+      const gap = 1.5;
+      const barWidth = Math.max(1.5, (cssWidth - gap * (BAR_COUNT - 1)) / BAR_COUNT);
 
       for (let i = 0; i < BAR_COUNT; i++) {
-        // Average a few neighboring bins so the bars feel chunky rather than spiky.
         let sum = 0;
         for (let j = 0; j < binsPerBar; j++) {
-          sum += data[i * binsPerBar + j] ?? 0;
+          sum += data[SKIP_LOW + i * binsPerBar + j] ?? 0;
         }
         const avg = sum / binsPerBar / 255; // 0..1
-        const minHeight = 2;
-        const barHeight = Math.max(minHeight, avg * cssHeight);
+        // Power scaling spreads the dynamic range — quiet stays quiet,
+        // loud peaks pop, instead of every bar pinning at full height.
+        const scaled = Math.pow(avg, 1.35);
+        const minHeight = 1;
+        const barHeight = Math.max(minHeight, scaled * cssHeight);
         const x = i * (barWidth + gap);
         const y = cssHeight - barHeight;
 
@@ -183,16 +192,27 @@ export function AudioPlayer({
     if (canvas && ctx2d) ctx2d.clearRect(0, 0, canvas.width, canvas.height);
   }
 
-  // Resize the canvas on first mount to its CSS size.
+  // Keep the canvas's pixel buffer in sync with its CSS box. Without this,
+  // resizing the window stretches the original buffer and the bars look
+  // smeared/duplicated.
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width = rect.width * dpr;
-    canvas.height = rect.height * dpr;
-    const ctx2d = canvas.getContext("2d");
-    if (ctx2d) ctx2d.scale(dpr, dpr);
+    const sync = () => {
+      const rect = canvas.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = Math.max(1, rect.width * dpr);
+      canvas.height = Math.max(1, rect.height * dpr);
+      const ctx2d = canvas.getContext("2d");
+      if (ctx2d) {
+        ctx2d.setTransform(1, 0, 0, 1, 0, 0);
+        ctx2d.scale(dpr, dpr);
+      }
+    };
+    sync();
+    const ro = new ResizeObserver(sync);
+    ro.observe(canvas);
+    return () => ro.disconnect();
   }, []);
 
   if (isLoading) {

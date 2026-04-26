@@ -24,6 +24,7 @@ import {
   type ThoughtsViewMode,
 } from "@/components/thoughts/ThoughtsChrome";
 import { ThoughtComposer } from "@/components/thoughts/ThoughtComposer";
+import { RecorderModal } from "@/components/recordings/RecorderModal";
 import { ThoughtCard } from "@/components/thoughts/ThoughtCard";
 import { ThoughtsListsView } from "@/components/thoughts/ThoughtsListsView";
 import { ThoughtEditModal } from "@/components/thoughts/ThoughtEditModal";
@@ -51,6 +52,7 @@ export function Thoughts() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [statsOpen, setStatsOpen] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
+  const [recorderOpen, setRecorderOpen] = useState(false);
 
   const [viewMode, setViewModeState] = useState<ThoughtsViewMode>(() =>
     readLS<ThoughtsViewMode>(VIEW_KEY, "all")
@@ -317,7 +319,30 @@ export function Thoughts() {
           </div>
         )}
 
-        <ThoughtComposer onSubmit={handleCompose} />
+        <ThoughtComposer
+          onSubmit={handleCompose}
+          onRecordRequest={() => setRecorderOpen(true)}
+        />
+
+        <RecorderModal
+          open={recorderOpen}
+          onClose={() => setRecorderOpen(false)}
+          source="thought"
+          title="הקלטה חדשה למחשבות"
+          onSaved={async (recordingId) => {
+            // Mirror QuickCapture: pair the recording with an audio thought
+            // so it lands on this screen immediately.
+            try {
+              await createThought.mutateAsync({
+                source: "app_audio",
+                recording_id: recordingId,
+                text_content: null,
+              });
+            } catch (err) {
+              console.error("link audio thought after recording failed:", err);
+            }
+          }}
+        />
 
         {layout === "feed" ? (
           displayed.length === 0 ? (

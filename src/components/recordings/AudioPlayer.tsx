@@ -352,8 +352,10 @@ export function AudioPlayer({
               title={`מהירות ${speed}×`}
               aria-label="מהירות השמעה"
             >
+              {/* In RTL flex-row, the first DOM child renders rightmost — so
+                  the speed label sits visually to the right of the gauge icon. */}
+              <span className="text-[10px] tabular-nums me-0.5">{speed}×</span>
               <Gauge className="w-4 h-4" />
-              <span className="text-[10px] tabular-nums ms-0.5">{speed}×</span>
             </button>
             {speedOpen && (
               <>

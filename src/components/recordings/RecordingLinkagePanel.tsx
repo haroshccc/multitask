@@ -11,9 +11,12 @@ import {
 import { cn } from "@/lib/utils/cn";
 import { ListIcon } from "@/components/tasks/list-icons";
 import { useUpdateRecording } from "@/lib/hooks/useRecordings";
-import { useProjects } from "@/lib/hooks/useProjects";
-import { useTaskLists } from "@/lib/hooks/useTaskLists";
-import { useEventCalendars } from "@/lib/hooks/useEventCalendars";
+import { useProjects, useCreateProject } from "@/lib/hooks/useProjects";
+import { useTaskLists, useCreateTaskList } from "@/lib/hooks/useTaskLists";
+import {
+  useEventCalendars,
+  useCreateEventCalendar,
+} from "@/lib/hooks/useEventCalendars";
 import {
   useRecordingLists,
   useRecordingListAssignments,
@@ -44,6 +47,9 @@ export function RecordingLinkagePanel({ recording }: Props) {
   const assignList = useAssignRecordingToList();
   const unassignList = useUnassignRecordingFromList();
   const createList = useCreateRecordingList();
+  const createProject = useCreateProject();
+  const createTaskList = useCreateTaskList();
+  const createEventCalendar = useCreateEventCalendar();
 
   const project = projects.find((p) => p.id === recording.project_id) ?? null;
   const taskList = taskLists.find((l) => l.id === recording.task_list_id) ?? null;
@@ -67,13 +73,19 @@ export function RecordingLinkagePanel({ recording }: Props) {
       <SingleLinkPill
         icon={FolderKanban}
         label="פרויקט"
+        createLabel="פרויקט חדש"
         current={project ? project.name : null}
         options={projects.map((p) => ({ id: p.id, label: p.name }))}
         onChange={(id) => setSingle("project_id", id)}
+        onCreateNew={async (name) => {
+          const created = await createProject.mutateAsync({ name });
+          setSingle("project_id", created.id);
+        }}
       />
       <SingleLinkPill
         icon={ListChecks}
         label="משימות"
+        createLabel="רשימת משימות חדשה"
         current={taskList ? taskList.name : null}
         valueIcon={
           taskList ? (
@@ -86,10 +98,19 @@ export function RecordingLinkagePanel({ recording }: Props) {
           icon: <ListIcon emoji={l.emoji} className="w-3.5 h-3.5" />,
         }))}
         onChange={(id) => setSingle("task_list_id", id)}
+        onCreateNew={async (name) => {
+          const created = await createTaskList.mutateAsync({
+            name,
+            sort_order: 0,
+            kind: "custom",
+          });
+          setSingle("task_list_id", created.id);
+        }}
       />
       <SingleLinkPill
         icon={CalendarDays}
         label="יומן"
+        createLabel="יומן חדש"
         current={calendar ? calendar.name : null}
         valueIcon={
           calendar ? (
@@ -102,6 +123,10 @@ export function RecordingLinkagePanel({ recording }: Props) {
           icon: <ListIcon emoji={c.emoji} className="w-3.5 h-3.5" />,
         }))}
         onChange={(id) => setSingle("event_calendar_id", id)}
+        onCreateNew={async (name) => {
+          const created = await createEventCalendar.mutateAsync({ name });
+          setSingle("event_calendar_id", created.id);
+        }}
       />
       <RecordingListsPill
         icon={Mic}
@@ -138,6 +163,8 @@ function SingleLinkPill({
   valueIcon,
   options,
   onChange,
+  onCreateNew,
+  createLabel,
 }: {
   icon: typeof FolderKanban;
   label: string;
@@ -146,10 +173,35 @@ function SingleLinkPill({
   valueIcon?: ReactNode;
   options: { id: string; label: string; icon?: ReactNode }[];
   onChange: (id: string | null) => void;
+  /** When provided, an inline "+ create" form appears at the bottom of the dropdown. */
+  onCreateNew?: (name: string) => Promise<void>;
+  /** Friendly label for the create-new affordance, e.g. "פרויקט חדש". */
+  createLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [createOpen, setCreateOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  useClickAway(ref, () => setOpen(false));
+  useClickAway(ref, () => {
+    setOpen(false);
+    setCreateOpen(false);
+    setNewName("");
+  });
+
+  const handleCreate = async () => {
+    const n = newName.trim();
+    if (!n || !onCreateNew) return;
+    setCreating(true);
+    try {
+      await onCreateNew(n);
+      setNewName("");
+      setCreateOpen(false);
+      setOpen(false);
+    } finally {
+      setCreating(false);
+    }
+  };
 
   return (
     <div ref={ref} className="relative">
@@ -170,39 +222,82 @@ function SingleLinkPill({
         <ChevronDown className="w-3 h-3 opacity-60" />
       </button>
       {open && (
-        <div className="absolute z-30 top-full mt-1 start-0 w-56 max-h-64 overflow-y-auto bg-white border border-ink-200 rounded-md shadow-lift p-1">
-          <button
-            onClick={() => {
-              onChange(null);
-              setOpen(false);
-            }}
-            className={cn(
-              "w-full text-start px-2 py-1.5 text-xs rounded hover:bg-ink-100",
-              !current && "bg-ink-100"
+        <div className="absolute z-30 top-full mt-1 start-0 w-56 bg-white border border-ink-200 rounded-md shadow-lift overflow-hidden">
+          <div className="max-h-56 overflow-y-auto p-1">
+            <button
+              onClick={() => {
+                onChange(null);
+                setOpen(false);
+              }}
+              className={cn(
+                "w-full text-start px-2 py-1.5 text-xs rounded hover:bg-ink-100",
+                !current && "bg-ink-100"
+              )}
+            >
+              — ללא —
+            </button>
+            {options.length === 0 ? (
+              <div className="px-2 py-1.5 text-[11px] text-ink-400">אין אפשרויות</div>
+            ) : (
+              options.map((o) => (
+                <button
+                  key={o.id}
+                  onClick={() => {
+                    onChange(o.id);
+                    setOpen(false);
+                  }}
+                  className={cn(
+                    "w-full text-start px-2 py-1.5 text-xs rounded hover:bg-ink-100 truncate",
+                    "inline-flex items-center gap-1",
+                    current === o.label && "bg-primary-50 text-primary-800"
+                  )}
+                >
+                  {o.icon}
+                  <span className="truncate">{o.label}</span>
+                </button>
+              ))
             )}
-          >
-            — ללא —
-          </button>
-          {options.length === 0 ? (
-            <div className="px-2 py-1.5 text-[11px] text-ink-400">אין אפשרויות</div>
-          ) : (
-            options.map((o) => (
-              <button
-                key={o.id}
-                onClick={() => {
-                  onChange(o.id);
-                  setOpen(false);
-                }}
-                className={cn(
-                  "w-full text-start px-2 py-1.5 text-xs rounded hover:bg-ink-100 truncate",
-                  "inline-flex items-center gap-1",
-                  current === o.label && "bg-primary-50 text-primary-800"
-                )}
-              >
-                {o.icon}
-                <span className="truncate">{o.label}</span>
-              </button>
-            ))
+          </div>
+
+          {onCreateNew && (
+            <div className="border-t border-ink-200 p-1">
+              {createOpen ? (
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    handleCreate();
+                  }}
+                  className="flex items-center gap-1"
+                >
+                  <input
+                    type="text"
+                    autoFocus
+                    placeholder={createLabel ?? `${label} חדש`}
+                    value={newName}
+                    onChange={(e) => setNewName(e.target.value)}
+                    className="field !py-1 !px-2 !text-xs flex-1 min-w-0"
+                    disabled={creating}
+                  />
+                  <button
+                    type="submit"
+                    disabled={!newName.trim() || creating}
+                    className="btn-ghost !py-1 !px-2 disabled:opacity-50"
+                    title="צרי וחברי"
+                  >
+                    <Plus className="w-3 h-3" />
+                  </button>
+                </form>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setCreateOpen(true)}
+                  className="w-full inline-flex items-center gap-1 px-2 py-1.5 text-xs rounded text-primary-700 hover:bg-primary-50"
+                >
+                  <Plus className="w-3 h-3" />
+                  <span>{createLabel ?? `${label} חדש`}</span>
+                </button>
+              )}
+            </div>
           )}
         </div>
       )}

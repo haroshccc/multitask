@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   FolderKanban,
   ListChecks,
@@ -9,6 +9,7 @@ import {
   ChevronDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
+import { ListIcon } from "@/components/tasks/list-icons";
 import { useUpdateRecording } from "@/lib/hooks/useRecordings";
 import { useProjects } from "@/lib/hooks/useProjects";
 import { useTaskLists } from "@/lib/hooks/useTaskLists";
@@ -73,28 +74,32 @@ export function RecordingLinkagePanel({ recording }: Props) {
       <SingleLinkPill
         icon={ListChecks}
         label="משימות"
-        current={
-          taskList
-            ? `${taskList.emoji ? taskList.emoji + " " : ""}${taskList.name}`
-            : null
+        current={taskList ? taskList.name : null}
+        valueIcon={
+          taskList ? (
+            <ListIcon emoji={taskList.emoji} className="w-3.5 h-3.5" />
+          ) : null
         }
         options={taskLists.map((l) => ({
           id: l.id,
-          label: `${l.emoji ? l.emoji + " " : ""}${l.name}`,
+          label: l.name,
+          icon: <ListIcon emoji={l.emoji} className="w-3.5 h-3.5" />,
         }))}
         onChange={(id) => setSingle("task_list_id", id)}
       />
       <SingleLinkPill
         icon={CalendarDays}
         label="יומן"
-        current={
-          calendar
-            ? `${calendar.emoji ? calendar.emoji + " " : ""}${calendar.name}`
-            : null
+        current={calendar ? calendar.name : null}
+        valueIcon={
+          calendar ? (
+            <ListIcon emoji={calendar.emoji} className="w-3.5 h-3.5" />
+          ) : null
         }
         options={calendars.map((c) => ({
           id: c.id,
-          label: `${c.emoji ? c.emoji + " " : ""}${c.name}`,
+          label: c.name,
+          icon: <ListIcon emoji={c.emoji} className="w-3.5 h-3.5" />,
         }))}
         onChange={(id) => setSingle("event_calendar_id", id)}
       />
@@ -130,13 +135,16 @@ function SingleLinkPill({
   icon: Icon,
   label,
   current,
+  valueIcon,
   options,
   onChange,
 }: {
   icon: typeof FolderKanban;
   label: string;
   current: string | null;
-  options: { id: string; label: string }[];
+  /** Optional icon shown alongside the current value text (e.g. ListIcon). */
+  valueIcon?: ReactNode;
+  options: { id: string; label: string; icon?: ReactNode }[];
   onChange: (id: string | null) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -157,6 +165,7 @@ function SingleLinkPill({
       >
         <Icon className="w-3.5 h-3.5" />
         <span className="font-medium">{label}:</span>
+        {valueIcon}
         <span className="truncate max-w-[120px]">{current ?? "—"}</span>
         <ChevronDown className="w-3 h-3 opacity-60" />
       </button>
@@ -186,10 +195,12 @@ function SingleLinkPill({
                 }}
                 className={cn(
                   "w-full text-start px-2 py-1.5 text-xs rounded hover:bg-ink-100 truncate",
+                  "inline-flex items-center gap-1",
                   current === o.label && "bg-primary-50 text-primary-800"
                 )}
               >
-                {o.label}
+                {o.icon}
+                <span className="truncate">{o.label}</span>
               </button>
             ))
           )}
@@ -228,8 +239,12 @@ function RecordingListsPill({
     myLists.length === 0
       ? "—"
       : myLists.length === 1
-      ? `${myLists[0].emoji ? myLists[0].emoji + " " : ""}${myLists[0].name}`
+      ? myLists[0].name
       : `${myLists.length} רשימות`;
+  const summaryIcon =
+    myLists.length === 1 ? (
+      <ListIcon emoji={myLists[0].emoji} className="w-3.5 h-3.5" />
+    ) : null;
 
   const handleCreate = async () => {
     const n = newName.trim();
@@ -257,6 +272,7 @@ function RecordingListsPill({
       >
         <Icon className="w-3.5 h-3.5" />
         <span className="font-medium">רשימות:</span>
+        {summaryIcon}
         <span className="truncate max-w-[120px]">{summary}</span>
         <ChevronDown className="w-3 h-3 opacity-60" />
       </button>
@@ -270,13 +286,13 @@ function RecordingListsPill({
                   key={l.id}
                   className="flex items-center justify-between gap-1 rounded bg-primary-50 px-2 py-1 text-xs text-primary-800"
                 >
-                  <span className="truncate">
-                    {l.emoji ? l.emoji + " " : ""}
-                    {l.name}
+                  <span className="inline-flex items-center gap-1 min-w-0">
+                    <ListIcon emoji={l.emoji} className="w-3.5 h-3.5 shrink-0" />
+                    <span className="truncate">{l.name}</span>
                   </span>
                   <button
                     onClick={() => onUnassign(l.id)}
-                    className="hover:text-danger-700"
+                    className="hover:text-danger-700 shrink-0"
                     aria-label="הסר"
                   >
                     <X className="w-3 h-3" />
@@ -293,10 +309,10 @@ function RecordingListsPill({
                 <button
                   key={l.id}
                   onClick={() => onAssign(l.id)}
-                  className="w-full text-start px-2 py-1 text-xs rounded hover:bg-ink-100 truncate"
+                  className="w-full text-start px-2 py-1 text-xs rounded hover:bg-ink-100 inline-flex items-center gap-1"
                 >
-                  {l.emoji ? l.emoji + " " : ""}
-                  {l.name}
+                  <ListIcon emoji={l.emoji} className="w-3.5 h-3.5 shrink-0" />
+                  <span className="truncate">{l.name}</span>
                 </button>
               ))}
             </div>

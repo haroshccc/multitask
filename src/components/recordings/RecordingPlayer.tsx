@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { AlertCircle, Sparkles, Link2, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { he } from "date-fns/locale";
@@ -16,6 +16,7 @@ import { useEventCalendars } from "@/lib/hooks/useEventCalendars";
 import { ListIcon } from "@/components/tasks/list-icons";
 import { AudioPlayer } from "@/components/recordings/AudioPlayer";
 import { RecordingLinkagePanel } from "@/components/recordings/RecordingLinkagePanel";
+import { TranscriptEditor } from "@/components/recordings/TranscriptEditor";
 import type { Recording } from "@/lib/types/domain";
 
 interface Props {
@@ -24,6 +25,7 @@ interface Props {
 
 export function RecordingPlayer({ recording }: Props) {
   const { data: url, isLoading, error } = useRecordingAudioUrl(recording);
+  const [audioElement, setAudioElement] = useState<HTMLAudioElement | null>(null);
   const { data: projects = [] } = useProjects();
   const { data: taskLists = [] } = useTaskLists();
   const { data: calendars = [] } = useEventCalendars();
@@ -68,6 +70,7 @@ export function RecordingPlayer({ recording }: Props) {
             isLoading={isLoading}
             hasError={!!error}
             downloadFilename={downloadFilename}
+            onAudioElement={setAudioElement}
           />
         )}
       </div>
@@ -115,12 +118,18 @@ export function RecordingPlayer({ recording }: Props) {
         </div>
       </section>
 
-      <TranscriptionSection recording={recording} />
+      <TranscriptionSection recording={recording} audioElement={audioElement} />
     </div>
   );
 }
 
-function TranscriptionSection({ recording }: { recording: Recording }) {
+function TranscriptionSection({
+  recording,
+  audioElement,
+}: {
+  recording: Recording;
+  audioElement: HTMLAudioElement | null;
+}) {
   const trigger = useTriggerRecordingProcessing();
   const status = recording.status;
 
@@ -154,20 +163,7 @@ function TranscriptionSection({ recording }: { recording: Recording }) {
   }
 
   if (status === "ready" && recording.transcript_text) {
-    return (
-      <section className="rounded-md border border-ink-200 bg-ink-50 px-3 py-3 space-y-2">
-        <div className="flex items-center gap-1.5 text-xs font-medium text-ink-700">
-          <Sparkles className="w-3.5 h-3.5 text-primary-600" />
-          תמלול
-          {recording.speakers_count
-            ? ` · ${recording.speakers_count} דוברים`
-            : null}
-        </div>
-        <p className="text-xs text-ink-700 leading-relaxed whitespace-pre-wrap max-h-60 overflow-auto">
-          {recording.transcript_text}
-        </p>
-      </section>
-    );
+    return <TranscriptEditor recording={recording} audioElement={audioElement} />;
   }
 
   if (status === "error") {

@@ -114,6 +114,55 @@ export async function archiveRecordingAudio(
   await updateRecording(recordingId, { audio_archived: true });
 }
 
+/**
+ * Persist transcript edits. The transcript editor lets the user fix individual
+ * utterance texts (and we keep the speaker/start/end intact so click-to-seek
+ * stays accurate). We rewrite both columns:
+ *   - `transcript_json.transcription.utterances[i].text` for the structured copy
+ *   - `transcript_text` recomputed by joining utterances, so plain-text consumers
+ *     (the linked thought, AI summary, etc.) see the corrected text too.
+ */
+export async function saveRecordingTranscriptEdits(
+  recordingId: string,
+  edits: { index: number; text: string }[]
+): Promise<Recording> {
+  const rec = await getRecording(recordingId);
+  if (!rec) throw new Error("recording_not_found");
+  const json = (rec.transcript_json ?? null) as
+    | {
+        transcription?: {
+          full_transcript?: string;
+          utterances?: { text?: string; speaker?: number; start?: number; end?: number }[];
+        };
+      }
+    | null;
+  if (!json?.transcription?.utterances) {
+    throw new Error("no_utterances_to_edit");
+  }
+  const utterances = json.transcription.utterances.slice();
+  for (const edit of edits) {
+    if (utterances[edit.index]) {
+      utterances[edit.index] = { ...utterances[edit.index], text: edit.text };
+    }
+  }
+  const newFullTranscript = utterances
+    .map((u) => (u.text ?? "").trim())
+    .filter(Boolean)
+    .join(" ");
+  const newJson = {
+    ...json,
+    transcription: {
+      ...json.transcription,
+      utterances,
+      full_transcript: newFullTranscript,
+    },
+  };
+  return updateRecording(recordingId, {
+    transcript_json: newJson as unknown as Recording["transcript_json"],
+    transcript_text: newFullTranscript,
+  });
+}
+
 // Speakers -----------------------------------------------------------------
 
 export async function listRecordingSpeakers(

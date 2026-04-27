@@ -227,6 +227,11 @@ async function webhookHandler(req: Request): Promise<Response> {
       .from("thoughts")
       .select("id, text_content")
       .eq("recording_id", recording.id);
+    console.log("transcribe_webhook_thought_sync_v2", {
+      recording_id: recording.id,
+      linked_thoughts: linkedThoughts?.length ?? 0,
+      transcript_chars: transcriptText.length,
+    });
     if (lookupErr) {
       console.warn("transcribe_webhook_thought_lookup_failed", lookupErr);
     } else if (linkedThoughts && linkedThoughts.length > 0) {

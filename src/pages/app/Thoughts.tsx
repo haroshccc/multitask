@@ -14,7 +14,12 @@ import {
   useBulkThoughtProcessingCounts,
   useListVisibility,
   useSetListVisibility,
+  useTriggerRecordingProcessing,
 } from "@/lib/hooks";
+import {
+  useUserThoughtPreferences,
+  useUpdateUserThoughtPreferences,
+} from "@/lib/hooks/useUserThoughtPreferences";
 import type { FilterConfig, Thought, ThoughtList } from "@/lib/types/domain";
 import {
   ThoughtsChrome,
@@ -88,6 +93,12 @@ export function Thoughts() {
   const { data: visibility } = useListVisibility("thoughts");
   const setListVisibility = useSetListVisibility();
   const createThought = useCreateThought();
+
+  const { data: thoughtPrefs } = useUserThoughtPreferences();
+  const updateThoughtPrefs = useUpdateUserThoughtPreferences();
+  const autoTranscribeRecordedThoughts =
+    thoughtPrefs?.auto_transcribe_recorded_thoughts ?? false;
+  const triggerRecordingProcessing = useTriggerRecordingProcessing();
 
   const thoughtIds = useMemo(() => thoughts.map((t) => t.id), [thoughts]);
   const { data: assignments = [] } = useBulkThoughtAssignments(thoughtIds);
@@ -295,6 +306,10 @@ export function Thoughts() {
           onToggleArchive={() => setArchiveOpen((v) => !v)}
           layout={layout}
           onLayoutChange={setLayout}
+          autoTranscribeRecordedThoughts={autoTranscribeRecordedThoughts}
+          onAutoTranscribeChange={(next) =>
+            updateThoughtPrefs.mutate({ auto_transcribe_recorded_thoughts: next })
+          }
         />
 
         {filtersOpen && (
@@ -338,6 +353,9 @@ export function Thoughts() {
                 recording_id: recordingId,
                 text_content: null,
               });
+              if (autoTranscribeRecordedThoughts) {
+                triggerRecordingProcessing.mutate(recordingId);
+              }
             } catch (err) {
               console.error("link audio thought after recording failed:", err);
             }

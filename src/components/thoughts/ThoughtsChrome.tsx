@@ -10,6 +10,7 @@ import {
   Plus,
   Rows3,
   Columns3,
+  Settings as SettingsIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { ListIcon } from "@/components/tasks/list-icons";
@@ -57,6 +58,10 @@ interface ThoughtsChromeProps {
   layout: ThoughtsLayout;
   onLayoutChange: (l: ThoughtsLayout) => void;
 
+  // Per-user settings (server-stored)
+  autoTranscribeRecordedThoughts: boolean;
+  onAutoTranscribeChange: (next: boolean) => void;
+
   className?: string;
 }
 
@@ -94,6 +99,8 @@ export function ThoughtsChrome({
   onToggleArchive,
   layout,
   onLayoutChange,
+  autoTranscribeRecordedThoughts,
+  onAutoTranscribeChange,
   className,
 }: ThoughtsChromeProps) {
   const visibleListCount = lists.length - hiddenListIds.size;
@@ -273,6 +280,48 @@ export function ThoughtsChrome({
         icon={<Archive className="w-3.5 h-3.5" />}
         label="ארכיון"
       />
+
+      {/* Settings popover — server-stored per-user toggles. */}
+      <PopoverButton
+        icon={<SettingsIcon className="w-3.5 h-3.5" />}
+        label="הגדרות"
+        title="הגדרות מסך מחשבות"
+        wide
+      >
+        {() => (
+          <div className="py-2">
+            <div className="text-[10px] font-semibold text-ink-400 uppercase tracking-wider px-3 pb-1">
+              תמלול
+            </div>
+            <button
+              type="button"
+              onClick={() => onAutoTranscribeChange(!autoTranscribeRecordedThoughts)}
+              className="w-full flex items-start gap-2.5 px-3 py-2 text-start hover:bg-ink-50"
+            >
+              <span
+                className={cn(
+                  "w-4 h-4 rounded border flex items-center justify-center shrink-0 mt-0.5",
+                  autoTranscribeRecordedThoughts
+                    ? "bg-primary-500 border-primary-500"
+                    : "bg-white border-ink-300"
+                )}
+              >
+                {autoTranscribeRecordedThoughts && (
+                  <Check className="w-3 h-3 text-white" />
+                )}
+              </span>
+              <span className="flex-1">
+                <span className="block text-sm text-ink-900">
+                  תמלול אוטומטי של מחשבות מוקלטות
+                </span>
+                <span className="block text-[11px] text-ink-500 leading-snug">
+                  הקלטה חדשה שנשמרת כמחשבה תישלח מיד לתמלול ב-Gladia.
+                </span>
+              </span>
+            </button>
+          </div>
+        )}
+      </PopoverButton>
 
       {/* Layout toggle: feed (single column) vs. lists (kanban). */}
       <div className="ms-auto inline-flex rounded-md border border-ink-200 overflow-hidden">

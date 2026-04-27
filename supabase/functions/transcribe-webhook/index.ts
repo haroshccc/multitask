@@ -172,6 +172,37 @@ async function webhookHandler(req: Request): Promise<Response> {
     if (spkErr) console.warn("transcribe_webhook_speakers_upsert_failed", spkErr);
   }
 
+  // Sync the transcript into any thought linked to this recording.
+  // Option C (append): if the user already typed something, keep it and
+  // append the transcript below a separator; if the field is empty, just
+  // set it. We never overwrite typed content.
+  if (transcriptText.trim()) {
+    const { data: linkedThoughts, error: lookupErr } = await service
+      .from("thoughts")
+      .select("id, text_content")
+      .eq("recording_id", recording.id);
+    if (lookupErr) {
+      console.warn("transcribe_webhook_thought_lookup_failed", lookupErr);
+    } else if (linkedThoughts && linkedThoughts.length > 0) {
+      for (const t of linkedThoughts) {
+        const existing = (t.text_content ?? "").trim();
+        const merged = existing
+          ? `${t.text_content}\n\n---\n${transcriptText}`
+          : transcriptText;
+        const { error: thoughtUpdErr } = await service
+          .from("thoughts")
+          .update({ text_content: merged })
+          .eq("id", t.id);
+        if (thoughtUpdErr) {
+          console.warn("transcribe_webhook_thought_update_failed", {
+            thought_id: t.id,
+            error: thoughtUpdErr,
+          });
+        }
+      }
+    }
+  }
+
   // If Claude (phase 6ג #2) isn't wired yet, advance to 'ready' so the UI
   // doesn't get stuck in 'extracting' forever. Once `summarize` exists, drop
   // this fallback and let it own the transition.

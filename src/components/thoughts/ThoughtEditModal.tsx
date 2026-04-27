@@ -14,6 +14,9 @@ import {
   FolderKanban,
   ExternalLink,
   Save,
+  Sparkles,
+  AlertCircle,
+  Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { useNavigate } from "react-router-dom";
@@ -26,7 +29,11 @@ import {
   useAssignThoughtToList,
   useUnassignThoughtFromList,
 } from "@/lib/hooks";
-import { useRecording, useRecordingAudioUrl } from "@/lib/hooks/useRecordings";
+import {
+  useRecording,
+  useRecordingAudioUrl,
+  useTriggerRecordingProcessing,
+} from "@/lib/hooks/useRecordings";
 import type { ThoughtSource } from "@/lib/types/domain";
 import { ListIcon } from "@/components/tasks/list-icons";
 import { AudioPlayer } from "@/components/recordings/AudioPlayer";
@@ -508,6 +515,7 @@ const TARGET_LABEL: Record<string, string> = {
 function ThoughtRecordingPlayer({ recordingId }: { recordingId: string }) {
   const { data: recording } = useRecording(recordingId);
   const { data: url, isLoading, error } = useRecordingAudioUrl(recording);
+  const trigger = useTriggerRecordingProcessing();
 
   const downloadFilename = (() => {
     if (!recording) return "recording";
@@ -519,6 +527,11 @@ function ThoughtRecordingPlayer({ recordingId }: { recordingId: string }) {
       .slice(0, 80);
     return `${stem}.${ext}`;
   })();
+
+  const status = recording?.status;
+  const isWorking = status === "transcribing" || status === "extracting";
+  const isReadyForTranscribe = status === "uploaded";
+  const isError = status === "error";
 
   return (
     <section className="rounded-md border border-ink-200 bg-ink-50 px-3 py-3 space-y-2">
@@ -537,6 +550,42 @@ function ThoughtRecordingPlayer({ recordingId }: { recordingId: string }) {
           hasError={!!error}
           downloadFilename={downloadFilename}
         />
+      )}
+
+      {/* Transcription status / actions. The transcript itself flows into the
+          thought's text_content via the webhook (Option C), so we only render
+          status + a manual trigger here. */}
+      {recording && !recording.audio_archived && (
+        <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-ink-200">
+          <div className="flex items-center gap-1.5 text-[11px] text-ink-600 min-w-0">
+            {isWorking && <Loader2 className="w-3 h-3 animate-spin shrink-0" />}
+            {isError && <AlertCircle className="w-3 h-3 text-danger-600 shrink-0" />}
+            {status === "ready" && (
+              <Sparkles className="w-3 h-3 text-primary-600 shrink-0" />
+            )}
+            <span className="truncate">
+              {status === "transcribing" && "מתמלל ב-Gladia…"}
+              {status === "extracting" && "מחלץ נתונים…"}
+              {status === "ready" && "תמלול הושלם — מצורף לתוכן המחשבה."}
+              {status === "uploaded" && "ההקלטה הועלתה. מוכן לתמלול."}
+              {isError && (recording.error_message ?? "שגיאת תמלול.")}
+            </span>
+          </div>
+          {(isReadyForTranscribe || isError) && (
+            <button
+              type="button"
+              className="btn-outline !py-1 !px-2 !text-[11px] shrink-0"
+              disabled={trigger.isPending}
+              onClick={() => trigger.mutate(recordingId)}
+            >
+              {trigger.isPending
+                ? "שולחת…"
+                : isError
+                ? "נסי שוב"
+                : "תמלל הקלטה"}
+            </button>
+          )}
+        </div>
       )}
     </section>
   );

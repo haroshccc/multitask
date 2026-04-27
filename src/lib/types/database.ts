@@ -1912,6 +1912,27 @@ export type Database = {
         }
         Relationships: []
       }
+      user_thought_preferences: {
+        Row: {
+          auto_transcribe_recorded_thoughts: boolean
+          created_at: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          auto_transcribe_recorded_thoughts?: boolean
+          created_at?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          auto_transcribe_recorded_thoughts?: boolean
+          created_at?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_saved_filters: {
         Row: {
           created_at: string

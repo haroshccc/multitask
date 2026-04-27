@@ -864,6 +864,7 @@ export type Database = {
           event_calendar_id: string | null
           id: string
           language: string
+          merged_into: string | null
           mime_type: string
           organization_id: string
           owner_id: string
@@ -896,6 +897,7 @@ export type Database = {
           event_calendar_id?: string | null
           id?: string
           language?: string
+          merged_into?: string | null
           mime_type?: string
           organization_id: string
           owner_id: string
@@ -928,6 +930,7 @@ export type Database = {
           event_calendar_id?: string | null
           id?: string
           language?: string
+          merged_into?: string | null
           mime_type?: string
           organization_id?: string
           owner_id?: string

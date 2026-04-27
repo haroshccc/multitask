@@ -169,6 +169,23 @@ export function useSaveRecordingTranscriptEdits() {
   });
 }
 
+export function useMergeRecordings() {
+  const qc = useQueryClient();
+  const scope = useOrgScope();
+  return useMutation({
+    mutationFn: (input: { firstId: string; secondId: string }) =>
+      service.mergeRecordings(input),
+    onSuccess: (survivor) => {
+      qc.setQueryData(queryKeys.recording(survivor.id), survivor);
+      if (scope.organizationId) {
+        qc.invalidateQueries({
+          queryKey: queryFamilies.allRecordings(scope.organizationId),
+        });
+      }
+    },
+  });
+}
+
 export function useArchiveRecordingAudio() {
   const qc = useQueryClient();
   const scope = useOrgScope();

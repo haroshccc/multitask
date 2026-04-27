@@ -115,12 +115,13 @@ export function completeMultipartUpload(input: {
   uploadId: string;
   parts: CompletedPart[];
 }): Promise<{ key: string; ok: true }> {
-  // Multipart completion runs an R2 server-side assembly that scales with
-  // file size — give it longer than the default and one retry, since the
-  // operation is idempotent (R2 returns success for an already-completed
-  // upload).
+  // R2 multipart completion is fast in practice (server-side stitching, not
+  // re-upload), but we've had reports of the call hanging at "99% מסיימת".
+  // Tighten the budget so the user sees an error in ~45s instead of waiting
+  // 4 minutes (the previous 120s × 2 attempts was too slow to surface). The
+  // operation is idempotent so the retry stays in.
   return callFunction("complete-multipart", input, {
-    timeoutMs: 120_000,
+    timeoutMs: 45_000,
     retries: 1,
   });
 }

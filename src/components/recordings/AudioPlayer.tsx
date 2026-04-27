@@ -371,38 +371,47 @@ export function AudioPlayer({
         </span>
       </div>
 
-      {/* Single transport row: skip / play / skip — with speed + download icons on the right */}
-      <div className="flex items-center justify-center gap-2 relative">
-        <button
-          onClick={() => skipBy(-SKIP_SECONDS)}
-          className="btn-ghost"
-          title="חזור 10 שניות"
-          aria-label="חזור 10 שניות"
-        >
-          <RotateCcw className="w-4 h-4" />
-          <span className="text-xs">10</span>
-        </button>
+      {/* Transport row.
+          Three-column grid: spacer | centered transport | extras at the end.
+          The 1fr / auto / 1fr columns guarantee the transport buttons stay
+          visually centered even though the extras (speed + download) live in
+          a separate cell — and crucially they stop overlapping the play
+          button on narrow phone screens, which is what the absolute-
+          positioned version did. */}
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+        <div /> {/* spacer balancing the extras column */}
 
-        <button
-          onClick={togglePlay}
-          className="btn-primary !px-5 !py-3"
-          aria-label={playing ? "השהי" : "נגני"}
-        >
-          {playing ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
-        </button>
+        <div className="flex items-center justify-center gap-2">
+          <button
+            onClick={() => skipBy(-SKIP_SECONDS)}
+            className="btn-ghost !px-2"
+            title="חזור 10 שניות"
+            aria-label="חזור 10 שניות"
+          >
+            <RotateCcw className="w-4 h-4" />
+            <span className="text-xs">10</span>
+          </button>
 
-        <button
-          onClick={() => skipBy(SKIP_SECONDS)}
-          className="btn-ghost"
-          title="קדימה 10 שניות"
-          aria-label="קדימה 10 שניות"
-        >
-          <span className="text-xs">10</span>
-          <RotateCw className="w-4 h-4" />
-        </button>
+          <button
+            onClick={togglePlay}
+            className="btn-primary !px-4 !py-2.5 sm:!px-5 sm:!py-3"
+            aria-label={playing ? "השהי" : "נגני"}
+          >
+            {playing ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
+          </button>
 
-        {/* Speed icon + popup, and download icon — anchored to the row's leading edge */}
-        <div className="absolute end-0 top-1/2 -translate-y-1/2 flex items-center gap-1">
+          <button
+            onClick={() => skipBy(SKIP_SECONDS)}
+            className="btn-ghost !px-2"
+            title="קדימה 10 שניות"
+            aria-label="קדימה 10 שניות"
+          >
+            <span className="text-xs">10</span>
+            <RotateCw className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="flex items-center justify-end gap-1">
           {/* Speed */}
           <div className="relative">
             <button

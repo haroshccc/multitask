@@ -163,6 +163,102 @@ export async function saveRecordingTranscriptEdits(
   });
 }
 
+/**
+ * Merge two recordings of the same conversation. The user picks the order
+ * (which one comes first); the "first" recording is the survivor — it keeps
+ * its audio file and absorbs the second's transcript at the appropriate time
+ * offset. The second recording stays in the table but is marked
+ * `merged_into = first.id` and its audio is archived (we don't delete the
+ * row so the audit trail and any prior thought / task linkages survive).
+ *
+ * Returns the merged recording (the survivor).
+ */
+export async function mergeRecordings(input: {
+  firstId: string;
+  secondId: string;
+}): Promise<Recording> {
+  const [first, second] = await Promise.all([
+    getRecording(input.firstId),
+    getRecording(input.secondId),
+  ]);
+  if (!first) throw new Error("first_recording_not_found");
+  if (!second) throw new Error("second_recording_not_found");
+  if (first.id === second.id) throw new Error("cannot_merge_recording_with_itself");
+  if (first.organization_id !== second.organization_id) {
+    throw new Error("cannot_merge_across_organizations");
+  }
+
+  const offset = first.duration_seconds ?? estimateDurationFromUtterances(first);
+  const firstUtterances = extractUtterances(first);
+  const secondUtterances = extractUtterances(second);
+  const shiftedSecond = secondUtterances.map((u) => ({
+    ...u,
+    start: typeof u.start === "number" ? u.start + offset : u.start,
+    end: typeof u.end === "number" ? u.end + offset : u.end,
+  }));
+  const mergedUtterances = [...firstUtterances, ...shiftedSecond];
+
+  const firstText = (first.transcript_text ?? "").trim();
+  const secondText = (second.transcript_text ?? "").trim();
+  const mergedText = [firstText, secondText].filter(Boolean).join("\n\n---\n");
+
+  const firstJson = (first.transcript_json ?? null) as Record<string, unknown> | null;
+  const mergedJson = {
+    ...(firstJson ?? {}),
+    transcription: {
+      ...((firstJson?.transcription as Record<string, unknown>) ?? {}),
+      utterances: mergedUtterances,
+      full_transcript: mergedText,
+    },
+    merged_from: [first.id, second.id],
+  } as unknown as Recording["transcript_json"];
+
+  const survivor = await updateRecording(first.id, {
+    transcript_text: mergedText || null,
+    transcript_json: mergedJson,
+    duration_seconds:
+      (first.duration_seconds ?? 0) + (second.duration_seconds ?? 0) || null,
+    speakers_count: Math.max(
+      first.speakers_count ?? 0,
+      second.speakers_count ?? 0
+    ) || null,
+  });
+
+  // Archive the secondary's audio (free R2 space, unambiguous "this is gone")
+  // and mark it as merged. Keep the row so any thought / task references
+  // linking to it still resolve.
+  await updateRecording(second.id, {
+    merged_into: first.id,
+    audio_archived: true,
+  });
+
+  return survivor;
+}
+
+function extractUtterances(rec: Recording): Array<{
+  speaker?: number;
+  start?: number;
+  end?: number;
+  text?: string;
+}> {
+  const json = rec.transcript_json as
+    | { transcription?: { utterances?: unknown[] } }
+    | null;
+  const list = json?.transcription?.utterances;
+  return Array.isArray(list)
+    ? (list as Array<{ speaker?: number; start?: number; end?: number; text?: string }>)
+    : [];
+}
+
+function estimateDurationFromUtterances(rec: Recording): number {
+  const utterances = extractUtterances(rec);
+  let max = 0;
+  for (const u of utterances) {
+    if (typeof u.end === "number" && u.end > max) max = u.end;
+  }
+  return max;
+}
+
 // Speakers -----------------------------------------------------------------
 
 export async function listRecordingSpeakers(

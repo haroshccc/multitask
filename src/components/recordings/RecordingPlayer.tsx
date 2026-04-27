@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { AlertCircle, Sparkles, Link2, Loader2 } from "lucide-react";
+import { AlertCircle, Sparkles, Link2, Loader2, GitMerge } from "lucide-react";
 import { format } from "date-fns";
 import { he } from "date-fns/locale";
 import {
@@ -17,6 +17,7 @@ import { ListIcon } from "@/components/tasks/list-icons";
 import { AudioPlayer } from "@/components/recordings/AudioPlayer";
 import { RecordingLinkagePanel } from "@/components/recordings/RecordingLinkagePanel";
 import { TranscriptEditor } from "@/components/recordings/TranscriptEditor";
+import { MergeRecordingsDialog } from "@/components/recordings/MergeRecordingsDialog";
 import type { Recording } from "@/lib/types/domain";
 
 interface Props {
@@ -26,6 +27,7 @@ interface Props {
 export function RecordingPlayer({ recording }: Props) {
   const { data: url, isLoading, error } = useRecordingAudioUrl(recording);
   const [audioElement, setAudioElement] = useState<HTMLAudioElement | null>(null);
+  const [mergeOpen, setMergeOpen] = useState(false);
   const { data: projects = [] } = useProjects();
   const { data: taskLists = [] } = useTaskLists();
   const { data: calendars = [] } = useEventCalendars();
@@ -49,14 +51,39 @@ export function RecordingPlayer({ recording }: Props) {
 
   return (
     <div className="card p-5 space-y-4">
-      <header>
-        <h2 className="text-lg font-semibold text-ink-900">
-          {recording.title || "ללא כותרת"}
-        </h2>
-        <p className="text-xs text-ink-500 mt-0.5">
-          הועלתה {format(new Date(recording.created_at), "d בMMM yyyy, HH:mm", { locale: he })}
-        </p>
+      <header className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="text-lg font-semibold text-ink-900 truncate">
+            {recording.title || "ללא כותרת"}
+          </h2>
+          <p className="text-xs text-ink-500 mt-0.5">
+            הועלתה {format(new Date(recording.created_at), "d בMMM yyyy, HH:mm", { locale: he })}
+          </p>
+          {recording.merged_into && (
+            <p className="text-[11px] text-ink-500 mt-1 inline-flex items-center gap-1">
+              <GitMerge className="w-3 h-3" />
+              מוזגה לתוך הקלטה אחרת.
+            </p>
+          )}
+        </div>
+        {!recording.merged_into && (
+          <button
+            type="button"
+            onClick={() => setMergeOpen(true)}
+            className="btn-outline !py-1 !px-2 !text-[11px] inline-flex items-center gap-1 shrink-0"
+            title="איחוד עם הקלטה נוספת"
+          >
+            <GitMerge className="w-3 h-3" />
+            איחוד
+          </button>
+        )}
       </header>
+
+      <MergeRecordingsDialog
+        recording={recording}
+        open={mergeOpen}
+        onClose={() => setMergeOpen(false)}
+      />
 
       <div>
         {recording.audio_archived ? (

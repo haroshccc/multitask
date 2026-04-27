@@ -100,7 +100,7 @@ export function LogoMark({
 
 /**
  * Full logo — animated M mark + wordmark "multi" (gradient) + "task" (ink).
- * Wordmark uses Fredoka, weight 600, left-to-right (Latin).
+ * Wordmark inherits the body font (Rubik), weight 600, left-to-right (Latin).
  */
 interface LogoProps {
   /** Height of the mark in pixels; wordmark size scales from this */

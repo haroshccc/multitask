@@ -18,6 +18,7 @@ import { AudioPlayer } from "@/components/recordings/AudioPlayer";
 import { RecordingLinkagePanel } from "@/components/recordings/RecordingLinkagePanel";
 import { TranscriptEditor } from "@/components/recordings/TranscriptEditor";
 import { MergeRecordingsDialog } from "@/components/recordings/MergeRecordingsDialog";
+import { AiInsights } from "@/components/recordings/AiInsights";
 import type { Recording } from "@/lib/types/domain";
 
 interface Props {
@@ -146,6 +147,10 @@ export function RecordingPlayer({ recording }: Props) {
       </section>
 
       <TranscriptionSection recording={recording} audioElement={audioElement} />
+
+      {recording.status === "ready" && recording.transcript_text && (
+        <AiInsights recording={recording} />
+      )}
     </div>
   );
 }

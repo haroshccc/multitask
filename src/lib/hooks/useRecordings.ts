@@ -169,6 +169,22 @@ export function useSaveRecordingTranscriptEdits() {
   });
 }
 
+export function useTriggerAiProcessing() {
+  const qc = useQueryClient();
+  const scope = useOrgScope();
+  return useMutation({
+    mutationFn: (recordingId: string) => service.triggerAiProcessing(recordingId),
+    onSuccess: (data) => {
+      qc.setQueryData(queryKeys.recording(data.id), data);
+      if (scope.organizationId) {
+        qc.invalidateQueries({
+          queryKey: queryFamilies.allRecordings(scope.organizationId),
+        });
+      }
+    },
+  });
+}
+
 export function useMergeRecordings() {
   const qc = useQueryClient();
   const scope = useOrgScope();

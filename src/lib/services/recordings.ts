@@ -259,6 +259,58 @@ function estimateDurationFromUtterances(rec: Recording): number {
   return max;
 }
 
+// AI processing ------------------------------------------------------------
+
+export interface RecordingAiOutput {
+  summary: string;
+  whatsapp_message: string;
+  email: { subject: string; body: string };
+  tasks: Array<{
+    title: string;
+    speaker_name?: string | null;
+    speaker_index?: number | null;
+    priority?: "low" | "normal" | "high";
+    due_hint?: string | null;
+  }>;
+  events: Array<{
+    title: string;
+    date_iso?: string | null;
+    duration_minutes?: number | null;
+    speaker_name?: string | null;
+  }>;
+  key_decisions: Array<{ text: string }>;
+  questions: Array<{ question: string; context?: string }>;
+}
+
+/**
+ * Triggers the `summarize` edge function. The function blocks until Claude
+ * returns (≈10–30s) so this call can be slow; the UI should disable the
+ * button while in flight. Returns the updated recording row including the
+ * fresh `ai_output`.
+ */
+export async function triggerAiProcessing(
+  recordingId: string
+): Promise<Recording> {
+  const { data: session } = await supabase.auth.getSession();
+  const jwt = session.session?.access_token;
+  if (!jwt) throw new Error("not_authenticated");
+  const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/summarize`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${jwt}`,
+    },
+    body: JSON.stringify({ recording_id: recordingId }),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`summarize_${res.status}: ${detail.slice(0, 500)}`);
+  }
+  const json = (await res.json()) as { ok: true; recording: Recording };
+  return json.recording;
+}
+
 // Speakers -----------------------------------------------------------------
 
 export async function listRecordingSpeakers(

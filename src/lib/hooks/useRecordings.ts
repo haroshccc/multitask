@@ -147,6 +147,28 @@ export function useTriggerRecordingProcessing() {
   });
 }
 
+export function useSaveRecordingTranscriptEdits() {
+  const qc = useQueryClient();
+  const scope = useOrgScope();
+  return useMutation({
+    mutationFn: ({
+      recordingId,
+      edits,
+    }: {
+      recordingId: string;
+      edits: { index: number; text: string }[];
+    }) => service.saveRecordingTranscriptEdits(recordingId, edits),
+    onSuccess: (data, { recordingId }) => {
+      qc.setQueryData(queryKeys.recording(recordingId), data);
+      if (scope.organizationId) {
+        qc.invalidateQueries({
+          queryKey: queryFamilies.allRecordings(scope.organizationId),
+        });
+      }
+    },
+  });
+}
+
 export function useArchiveRecordingAudio() {
   const qc = useQueryClient();
   const scope = useOrgScope();

@@ -18,6 +18,12 @@ interface Props {
   hasError?: boolean;
   /** Filename to suggest for the download. */
   downloadFilename?: string;
+  /**
+   * Callback invoked whenever the underlying <audio> element mounts or
+   * unmounts. The transcript editor uses this to seek and listen to time
+   * updates without us having to lift state into the parent.
+   */
+  onAudioElement?: (el: HTMLAudioElement | null) => void;
   className?: string;
 }
 
@@ -43,6 +49,7 @@ export function AudioPlayer({
   isLoading = false,
   hasError = false,
   downloadFilename,
+  onAudioElement,
   className,
 }: Props) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -280,7 +287,10 @@ export function AudioPlayer({
       {/* crossOrigin lets the AnalyserNode read the buffer; if the response
           doesn't allow it, the audio still plays — only the waveform is blank */}
       <audio
-        ref={audioRef}
+        ref={(el) => {
+          audioRef.current = el;
+          onAudioElement?.(el);
+        }}
         src={src}
         crossOrigin="anonymous"
         preload="metadata"

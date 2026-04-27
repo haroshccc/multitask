@@ -59,12 +59,36 @@ export function ThoughtEditModal({
   const navigate = useNavigate();
   const open = !!thoughtId;
   const { data: thought } = useThought(thoughtId);
+  const { data: linkedRecording } = useRecording(thought?.recording_id);
   const { data: processings = [] } = useThoughtProcessings(thoughtId);
   const { data: allLists = [] } = useThoughtLists();
   const { data: assignments = [] } = useThoughtAssignments(thoughtId);
   const updateThought = useUpdateThought();
   const assignToList = useAssignThoughtToList();
   const unassignFromList = useUnassignThoughtFromList();
+
+  // Fallback transcript-into-thought sync. The webhook is supposed to do
+  // this server-side (PR #71's Option C), but recordings transcribed before
+  // that deploy stayed orphaned with `text_content` empty even though the
+  // recording's `transcript_text` was filled. Here we patch them up
+  // client-side: any time we open a thought whose linked recording has a
+  // ready transcript and whose own `text_content` is still empty, write the
+  // transcript into the thought once.
+  const fallbackSyncRanRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!thought || !linkedRecording) return;
+    if (fallbackSyncRanRef.current === thought.id) return;
+    if (linkedRecording.status !== "ready") return;
+    const transcript = (linkedRecording.transcript_text ?? "").trim();
+    if (!transcript) return;
+    const existing = (thought.text_content ?? "").trim();
+    if (existing) return;
+    fallbackSyncRanRef.current = thought.id;
+    updateThought.mutate({
+      thoughtId: thought.id,
+      patch: { text_content: transcript },
+    });
+  }, [thought?.id, thought?.text_content, linkedRecording?.status, linkedRecording?.transcript_text]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [tab, setTab] = useState<Tab>("overview");
   const [title, setTitle] = useState("");

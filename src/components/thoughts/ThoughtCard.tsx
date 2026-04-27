@@ -96,9 +96,14 @@ export function ThoughtCard({
           ? { borderInlineStartWidth: 3, borderInlineStartColor: cardAccent }
           : undefined
       }
-      onClick={(e) => {
-        // Open edit modal on background click (not on buttons / chip interactions).
-        if (e.target === e.currentTarget) onOpen();
+      onClick={onOpen}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onOpen();
+        }
       }}
     >
       {/* Top row: chips + menu */}

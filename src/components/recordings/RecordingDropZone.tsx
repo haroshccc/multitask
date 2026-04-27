@@ -1,5 +1,5 @@
-import { useRef, useState } from "react";
-import { Upload, FileAudio, AlertCircle } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Upload, FileAudio, AlertCircle, X } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { useFileUpload } from "@/lib/hooks/useFileUpload";
 import { useCreateRecording } from "@/lib/hooks/useRecordings";
@@ -114,6 +114,23 @@ export function RecordingDropZone({ source = "other", onUploaded, className }: P
   const errorText =
     localError ?? (upload.state.status === "failed" ? upload.state.error : null);
 
+  // Stuck-detector. When we sit in `completing` for a long time, surface a
+  // hint to the user so they don't think the page froze; after the cap they
+  // can manually cancel and try again instead of waiting for the timeout.
+  const [completingDots, setCompletingDots] = useState(0);
+  useEffect(() => {
+    if (upload.state.status !== "completing") {
+      setCompletingDots(0);
+      return;
+    }
+    const id = window.setInterval(() => {
+      setCompletingDots((d) => d + 1);
+    }, 1500);
+    return () => window.clearInterval(id);
+  }, [upload.state.status]);
+  const stuckSeconds = completingDots * 1.5;
+  const showStuckHint = upload.state.status === "completing" && stuckSeconds > 8;
+
   return (
     <div
       className={cn(
@@ -157,6 +174,27 @@ export function RecordingDropZone({ source = "other", onUploaded, className }: P
               style={{ width: `${pct}%` }}
             />
           </div>
+          {showStuckHint && (
+            <div className="flex flex-col items-center gap-2 mt-1">
+              <p className="text-[11px] text-ink-500 leading-snug max-w-xs">
+                R2 מסיים לאחד את החתיכות. לקבצי וידאו גדולים זה יכול לקחת
+                כמה עשרות שניות. אם זה לא ממשיך — אפשר לבטל ולהעלות שוב.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  void upload.cancel();
+                  setBatchTotal(0);
+                  setBatchIndex(0);
+                  setLocalError("ההעלאה בוטלה. נסי שוב.");
+                }}
+                className="btn-outline !py-0.5 !px-2 !text-[11px] inline-flex items-center gap-1"
+              >
+                <X className="w-3 h-3" />
+                ביטול ונסי שוב
+              </button>
+            </div>
+          )}
         </div>
       ) : (
         <div className="flex flex-col items-center justify-center gap-2.5">

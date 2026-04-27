@@ -52,9 +52,12 @@
 
 ## 3. סדר הבנייה
 
-> **סטטוס נכון לסוף פאזה 5 (2026-04-25):** פאזות 1-2 (תשתית) +
-> פאזה 3 (משימות) + פאזה 4 (יומן + Gantt) + פאזה 5 (מחשבות)
-> **הסתיימו ומוזגו ל-main**. הפאזה הבאה היא 6 = **הקלטות + R2**.
+> **סטטוס נכון לסוף פאזה 6ב (2026-04-27):** פאזות 1-2 (תשתית) +
+> פאזה 3 (משימות) + פאזה 4 (יומן + Gantt) + פאזה 5 (מחשבות) +
+> **פאזה 6א (R2) + פאזה 6ב (UI הקלטות)** הסתיימו ומוזגו ל-main.
+> נותר **פאזה 6ג**: חיבור Gladia (תמלול) + Claude Haiku
+> (סיכום + חילוץ משימות) — היום `triggerProcessing` הוא stub.
+> אחרי 6ג: פאזה 7 = מסך פרויקטים / תמחור (#14).
 > פירוט מלא בכל פאזה בסוף ה-SPEC ב-Changelog.
 
 1. ✅ Design tokens מ־`design-language.html`
@@ -68,9 +71,9 @@
 9. ✅ מסך משימות *(פאזה 3)*
 10. ✅ מסך יומן *(פאזה 4 + 4.1 polish + פאזה 5 polish)*
 11. ✅ מסך Gantt *(פאזה 4)*
-12. ⏭ **מסך הקלטות** — הפאזה הבאה (פאזה 6, יחד עם תשתית R2)
+12. 🟡 מסך הקלטות *(פאזה 6א + 6ב; **6ג פתוח** — Gladia + Claude)*
 13. ✅ מסך מחשבות *(פאזה 5; קדם להקלטות בכוונה כי ההקלטות תלויות ב-R2)*
-14. ⬜ מסך פרויקטים / תמחור
+14. ⏭ **מסך פרויקטים / תמחור** — הפאזה הבאה (פאזה 7)
 15. ⬜ מסך דשבורד הבית
 16. ⬜ הגדרות + Admin
 17. ⬜ Landing אינטראקטיבי
@@ -2342,6 +2345,153 @@ Hero: "החלל לחשוב. החלל לעשות."
     למזער תעשה שכברירת מחדל זה קודם ממוזער".
   - **PR #46** — תיעוד פאזה 5 polish ב-SPEC §16/§19/Changelog +
     `docs/phase-6-prompt.md` (פרומט עצמאי לצ'אט חדש לפאזה 6).
+
+- **2026-04-26 → 2026-04-27** — **פאזה 6 הסתיימה חלקית: 6א (R2)
+  + 6ב (UI הקלטות) על main. 6ג (Gladia + Claude) פתוח.**
+
+  **פאזה 6א — תשתית Cloudflare R2 (PR #51, ללא UI):**
+  - מיגרציה `20260426000002_recordings_r2_storage.sql`: rename
+    `recordings.storage_path` → `storage_key` (סמנטית — object key,
+    לא file-system path), הוספת enum `storage_provider` ('supabase'
+    | 'r2') כדי ששורות legacy מ-QuickCapture יוכלו לדור עם R2
+    החדש, default flip ל-`'r2'`, עמודה `multipart_upload_id`
+    שדגלה ל-uploads בפעולה. אותו rename גם ב-`task_attachments`
+    לאחידות אוצר־מילים.
+  - מיגרציה `20260426000001_recording_status_add_recording.sql`:
+    הרחבת status ל-`'recording'` למצב in-progress (לפני העלאה
+    מלאה), מבדיל מ-`'uploading'`/`'uploaded'`/`'transcribing'`/
+    `'ready'`/`'failed'`.
+  - Edge Function `supabase/functions/storage`:
+    - `_shared/r2-client.ts` — חתימת AWS-Sigv4 ידנית מול
+      `<account>.r2.cloudflarestorage.com` (Deno + Web Crypto, בלי
+      AWS SDK כדי לא לגרור 8MB ל-edge runtime).
+    - `_shared/auth.ts` — verify של Supabase JWT ב-Edge.
+    - `_shared/cors.ts` — CORS משותף.
+    - `index.ts` — נקודות קצה: `presign-multipart` (יוצר uploadId
+      ומחזיר URL לחלק הראשון), `presign-part` (URL לחלק n נוסף),
+      `complete-multipart` (סוגר את ה-upload, יוצר/מעדכן שורה
+      ב-`recordings`), `abort-multipart`, `get-download-url`.
+  - **למה multipart:** הקלטה של 1.5 שעות ≈ 100MB ב-Opus@128kbps;
+    upload יחיד יישבר על רשת זזה. Multipart מאפשר העלאה מקבילית
+    להקלטה — chunks של ~5MB נשלחים תוך כדי הקלטה במקום אחרי
+    סיום.
+  - **למה לא Supabase Storage:** R2 ב-zero egress fees, ועלות
+    אחסון משמעותית נמוכה יותר על קבצי אודיו ארוכים. Supabase
+    Storage נשאר זמין כ-`provider='supabase'` ל-rows ישנים +
+    fallback אם R2 ייפול.
+
+  **פאזה 6ב — UI מסך הקלטות (PRs #53–#67):**
+
+  - **PR #53** — שלד מסך הקלטות (`/app/recordings`) על תשתית 6א:
+    `RecordingsListBanner` (כמו `ListsBanner` ביומן/משימות),
+    `RecordingFilters` (סטטוס · ספק · טווח תאריכים · רשימה ·
+    פרויקט), `RecordingCard` (תאריך + שם + משך + סטטוס + actions),
+    `RecordingPlayer` (נגן בסיסי + placeholder לתמלול). יצירה
+    ראשונית מתבצעת עדיין דרך FAB → QuickCapture → upload לסופאבייס
+    (יוסב ל-R2 ב-PR #54).
+  - **PR #54** — **מקליט בתוך האפליקציה:**
+    `RecorderPanel` + `RecorderModal` עם pause / resume / discard,
+    timer חי, ויזואליזר. + **QuickCapture FAB עברה ל-R2 multipart**
+    (במקום upload יחיד ל-Supabase). `recordingService.start()`
+    כעת קורא ל-`/storage/presign-multipart` ומעלה chunks תוך כדי
+    הקלטה דרך `MediaRecorder` עם `timeslice=5000`. סטטוס מתעדכן
+    `'recording'` → `'uploading'` → `'uploaded'`.
+  - **PR #55** — נגן מותאם, 3-banner header (ListsBanner + Filters
+    + Player-Strip), פילטרים מורחבים, **תיוג פרויקט** ישיר ב-card,
+    **תיקון "המשך הקלטה" שלא עבד:** המקליט שמר `mediaRecorder`
+    כ-state אבל React batching דרס את ה-stream בריענון. תוקן עם
+    `useRef` ל-MediaRecorder + flush מפורש של ה-chunks הצבורים
+    לפני pause.
+  - **PR #56** — **קישוריות (linkage) להקלטה.** מיגרציה חדשה
+    `20260427000001_recording_links.sql`: הקלטה יכולה להיות
+    מקושרת לרשימת משימות, ליומן אירועים (`event_calendars`),
+    ולרשימת הקלטות (`recording_lists`, חדש). M:N דרך
+    `recording_link_targets` פולימורפית.
+    `RecordingLinkagePanel` חדש מציג את כל הקישורים פר-הקלטה.
+  - **PR #57** — UI polish: filters קופלים, באנרים compact,
+    waveform visualizer, באנר grouping (בין השאר: "לפי תאריך
+    יצירה / לפי פרויקט / לפי רשימה").
+  - **PR #58** — EQ-bar visualizer במקום waveform (פחות יקר
+    בחישוב; עובד על audio element ישיר במקום על Web Audio API),
+    **skip-buttons עובדים** (היה באג שב-`audio.currentTime +=`
+    על `<audio>` עם stream-source לא קופץ — תוקן עם החלפה ל-blob
+    URL אחרי upload), חלוקה לסקציות בנגן, layout נשמר ב-
+    `localStorage`.
+  - **PR #59** — צ'יפים של status/source חזרו (היו hidden
+    בטעות ב-#57), ה-grouping מקופל בתוך ה-filters card במקום
+    סורגן נפרד.
+  - **PR #60** — **פיצול הנגן ל-2 סקציות:** `שיוך` (ניתנת
+    לעריכה — שם, פרויקט, רשימה, יומן, dropdowns מקושרים
+    ל-`useTaskLists`/`useEventCalendars`/`useProjects`) + `משויך`
+    (read-only — מציג ויזואלית את הקישורים שכבר קיימים).
+  - **PR #61** — top row משתמש ב-flex כך שכרטיס ה-filters גדל
+    לכיוון הלידינג (ימין ב-RTL) במקום להישאר רוחב קבוע.
+  - **PR #62** — רשימת הקלטות compact למובייל בלבד: title-only
+    rows, max-height capped עם scroll פנימי, expansion ל-card
+    מלא ב-tap.
+  - **PR #63** — אייקונים בצ'יפי linkage, seek bar שמתקדם תוך
+    כדי playback (היה תקוע בגלל race ב-`setInterval`),
+    EQ-bars צפופים יותר, `RecordingsMobileDropdown` ל-actions
+    במובייל.
+  - **PR #64** — filters בגודל הנכון (היו רחבים מדי במסך גדול),
+    bars dense narrow, **סקציית `משויך` הוסרה** (תיחזור ב-#66),
+    **כפתור "הקלט" ב-Thoughts** — מסך מחשבות יכול לפתוח
+    `RecorderModal` ישר ולהצמיד את ההקלטה למחשבה.
+  - **PR #65** — **inline create על pills של linkage:** "+"
+    קטן בכל popover שיוך → פותח dialog ליצירה (רשימה / יומן /
+    פרויקט) שחוזר עם id חדש לשיוך אוטומטי. אותה תבנית כמו
+    `EventCalendarEditDialog.onSaved(id)` מ-PR #42. + ה-top
+    banner יושר לגובה אחיד. + `AudioPlayer` משובץ בתוך
+    `ThoughtEditModal` (טאב "אודיו") כשלמחשבה יש הקלטה
+    מקושרת.
+  - **PR #66** — `משויך` חזר כ-grid summary read-only מתחת
+    ל-`שיוך` (היה חסר משוב משתמש: "אני לא רואה איפה ההקלטה
+    משויכת").
+  - **PR #67** — header `משויך` הוסר (סקציה עצמה נשארה),
+    אייקון מהירות נגינה (`×1.0` / `×1.5` / `×2.0`) inline
+    בצד הלידינג של הנגן במקום dropdown.
+
+  **קבצים חדשים בתשתית:**
+  - `src/components/recordings/` — `RecorderModal`, `RecorderPanel`,
+    `RecordingPlayer`, `RecordingCard`, `RecordingFilters`,
+    `RecordingLinkagePanel`, `RecordingDropZone`, `AudioPlayer`,
+    `QuickRecordCard`, `RecordingsListBanner`,
+    `RecordingsMobileDropdown`.
+  - `supabase/functions/storage/` + `_shared/{r2-client,auth,cors}.ts`.
+  - 3 מיגרציות חדשות (`recording_status_add_recording`,
+    `recordings_r2_storage`, `recording_links`).
+
+  **החלטות ארכיטקטוניות שהתבססו בסשן:**
+  - **AWS Sigv4 ידני בלי SDK** — חוסך 8MB cold-start ב-Edge.
+    `r2-client.ts` הוא ~200 שורות שעוטפות `crypto.subtle.sign`.
+  - **MediaRecorder עם timeslice + multipart מקבילית** — chunks
+    עוזבים את הדפדפן תוך כדי הקלטה. אם ההקלטה מתפצרצת אי פעם,
+    כל מה שכבר עלה נשמר.
+  - **`useRef` לכל אובייקט media** (MediaRecorder, MediaStream,
+    AudioContext) — לא state. React batching שובר אותם.
+  - **storage_provider enum מהיום הראשון** — לא single-flag
+    boolean, כי בעתיד ייתכנו עוד providers (S3 ישיר, GCS).
+
+  **מה פתוח לפאזה 6ג (חיבור AI):**
+  - Edge Function חדשה `supabase/functions/transcribe`:
+    - שולחת `r2_signed_url` ל-Gladia עם webhook callback.
+    - עדכון `recordings.status='transcribing'` → Realtime UI.
+    - Webhook מקבל transcript+speakers+timestamps, שומר
+      `transcript_text`/`transcript_json`.
+  - Edge Function נוספת `summarize` (או step בתוך `transcribe`):
+    - Claude Haiku 4.5 → `{summary, my_tasks, their_tasks,
+      speakers_hint}`. (`docs/claude-integration.md` מתעד את זה
+      כבר מ-PR #27.)
+    - יצירת `tasks` rows מהפלט עם שיוך ל-recording.
+  - UI ל-speaker tagging ("זה אני / זה דני לקוח") — ב-
+    `RecordingPlayer.tsx:115` יש כבר placeholder. בלחיצה,
+    משימות מ-`their_tasks` מוקצות לדובר הנבחר.
+  - **לא חסר UI** — כל ה-status states (`transcribing`/`ready`/
+    `failed`), שדות ה-DB (`transcript_text`/`transcript_json`/
+    `summary`/`extracted_tasks`) ו-realtime listeners כבר במקום
+    מפאזה 1.
+
+  **PRs בפאזה זו:** #51 (R2), #53–#67 (recordings UI + polish).
 
 
 

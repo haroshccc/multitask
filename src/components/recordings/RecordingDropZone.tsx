@@ -18,46 +18,79 @@ export function RecordingDropZone({ source = "other", onUploaded, className }: P
   const inputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+  // Batch counters — populated when the user picks/drops more than one file.
+  const [batchTotal, setBatchTotal] = useState(0);
+  const [batchIndex, setBatchIndex] = useState(0);
   const upload = useFileUpload();
   const createRecording = useCreateRecording();
 
-  const handleFiles = async (files: FileList | null) => {
+  const handleFiles = async (filesList: FileList | null) => {
     setLocalError(null);
-    const file = files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith("audio/") && !file.type.startsWith("video/")) {
-      setLocalError("רק קבצי אודיו או וידאו נתמכים (MP3 / M4A / MP4 / WebM / WAV / MOV).");
+    if (!filesList || filesList.length === 0) return;
+    const incoming = Array.from(filesList);
+
+    // Validate every file up-front so we don't mid-upload abort with a bad
+    // file in slot 5 of 10.
+    const valid: File[] = [];
+    const validationErrors: string[] = [];
+    for (const f of incoming) {
+      if (!f.type.startsWith("audio/") && !f.type.startsWith("video/")) {
+        validationErrors.push(`"${f.name}" אינו אודיו/וידאו`);
+        continue;
+      }
+      if (f.size > MAX_BYTES) {
+        validationErrors.push(`"${f.name}" גדול מ־500MB`);
+        continue;
+      }
+      valid.push(f);
+    }
+
+    if (valid.length === 0) {
+      setLocalError(validationErrors.join(" · "));
       return;
     }
-    if (file.size > MAX_BYTES) {
-      setLocalError("הקובץ גדול מ־500MB.");
-      return;
+
+    setBatchTotal(valid.length);
+    setBatchIndex(0);
+
+    let firstUploadedId: string | null = null;
+    const uploadErrors: string[] = [...validationErrors];
+
+    for (let i = 0; i < valid.length; i++) {
+      setBatchIndex(i + 1);
+      const file = valid[i];
+      try {
+        const ext = inferExtension(file);
+        const keySuffix = `recordings/${stamp()}-${rand()}.${ext}`;
+        const { key } = await upload.upload(file, {
+          keySuffix,
+          contentType: file.type || `audio/${ext}`,
+        });
+        const rec = await createRecording.mutateAsync({
+          source,
+          title: stripExtension(file.name),
+          storage_key: key,
+          storage_provider: "r2",
+          size_bytes: file.size,
+          mime_type: file.type || `audio/${ext}`,
+          status: "uploaded",
+        });
+        if (!firstUploadedId) firstUploadedId = rec.id;
+      } catch (err) {
+        uploadErrors.push(`"${file.name}": ${humanizeError(err)}`);
+      }
     }
 
-    try {
-      const ext = inferExtension(file);
-      const keySuffix = `recordings/${stamp()}-${rand()}.${ext}`;
+    setBatchTotal(0);
+    setBatchIndex(0);
 
-      // useFileUpload picks single PUT or multipart automatically by file size.
-      const { key } = await upload.upload(file, {
-        keySuffix,
-        contentType: file.type || `audio/${ext}`,
-      });
-
-      // Persist the row pointing at the R2 object.
-      const rec = await createRecording.mutateAsync({
-        source,
-        title: stripExtension(file.name),
-        storage_key: key,
-        storage_provider: "r2",
-        size_bytes: file.size,
-        mime_type: file.type || `audio/${ext}`,
-        status: "uploaded",
-      });
-      onUploaded?.(rec.id);
-    } catch (err) {
-      setLocalError(humanizeError(err));
+    if (uploadErrors.length > 0) {
+      setLocalError(uploadErrors.join(" · "));
     }
+    // Land the user on the first newly-uploaded recording so they can fan
+    // through the rest in upload order. Successful files persist their rows
+    // before we get here, so the list re-renders with all of them regardless.
+    if (firstUploadedId) onUploaded?.(firstUploadedId);
   };
 
   const onDragOver = (e: React.DragEvent) => {
@@ -75,7 +108,8 @@ export function RecordingDropZone({ source = "other", onUploaded, className }: P
     upload.state.status === "single-upload" ||
     upload.state.status === "multipart-open" ||
     upload.state.status === "multipart-uploading" ||
-    upload.state.status === "completing";
+    upload.state.status === "completing" ||
+    batchTotal > 0;
   const pct = upload.state.progress;
   const errorText =
     localError ?? (upload.state.status === "failed" ? upload.state.error : null);
@@ -96,14 +130,24 @@ export function RecordingDropZone({ source = "other", onUploaded, className }: P
         ref={inputRef}
         type="file"
         accept={ACCEPTED}
+        multiple
         className="hidden"
-        onChange={(e) => handleFiles(e.target.files)}
+        onChange={(e) => {
+          handleFiles(e.target.files);
+          // Reset so the same file(s) can be re-picked after a failure.
+          e.target.value = "";
+        }}
       />
 
       {isUploading ? (
         <div className="flex flex-col items-center gap-2 w-full">
           <FileAudio className="w-8 h-8 text-primary-600" />
           <div className="text-xs text-ink-700">
+            {batchTotal > 1 && (
+              <span className="text-primary-700 font-medium">
+                קובץ {batchIndex} מתוך {batchTotal} ·{" "}
+              </span>
+            )}
             {labelForUploadStatus(upload.state.status)}
             {pct > 0 ? ` ${Math.round(pct)}%` : ""}
           </div>
@@ -124,8 +168,12 @@ export function RecordingDropZone({ source = "other", onUploaded, className }: P
           >
             <Upload className="w-5 h-5" />
           </div>
-          <p className="text-sm font-semibold text-ink-900">גררי קובץ אודיו או וידאו</p>
-          <p className="text-xs text-ink-500 -mt-1">MP3 · M4A · MP4 · MOV · WebM · WAV · עד 500MB</p>
+          <p className="text-sm font-semibold text-ink-900">
+            גררי קובץ אודיו או וידאו
+          </p>
+          <p className="text-xs text-ink-500 -mt-1">
+            אפשר גם כמה ביחד · MP3 · M4A · MP4 · MOV · WebM · WAV · עד 500MB
+          </p>
           <button
             type="button"
             onClick={() => inputRef.current?.click()}
@@ -137,9 +185,9 @@ export function RecordingDropZone({ source = "other", onUploaded, className }: P
       )}
 
       {errorText && (
-        <div className="mt-3 inline-flex items-center gap-1.5 text-xs text-danger-600">
-          <AlertCircle className="w-3.5 h-3.5" />
-          <span>{errorText}</span>
+        <div className="mt-3 inline-flex items-start gap-1.5 text-xs text-danger-600 max-w-full text-start">
+          <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+          <span className="break-words">{errorText}</span>
         </div>
       )}
     </div>

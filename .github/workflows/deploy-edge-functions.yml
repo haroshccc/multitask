@@ -26,3 +26,5 @@ jobs:
         run: supabase functions deploy transcribe --project-ref "$SUPABASE_PROJECT_ID"
       - name: Deploy storage
         run: supabase functions deploy storage --project-ref "$SUPABASE_PROJECT_ID"
+      - name: Deploy summarize
+        run: supabase functions deploy summarize --project-ref "$SUPABASE_PROJECT_ID"

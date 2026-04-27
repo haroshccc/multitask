@@ -856,6 +856,9 @@ export type Database = {
       }
       recordings: {
         Row: {
+          ai_output: Json | null
+          ai_output_at: string | null
+          ai_status: string | null
           archive_audio_at: string | null
           audio_archived: boolean
           created_at: string
@@ -889,6 +892,9 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          ai_output?: Json | null
+          ai_output_at?: string | null
+          ai_status?: string | null
           archive_audio_at?: string | null
           audio_archived?: boolean
           created_at?: string
@@ -922,6 +928,9 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          ai_output?: Json | null
+          ai_output_at?: string | null
+          ai_status?: string | null
           archive_audio_at?: string | null
           audio_archived?: boolean
           created_at?: string

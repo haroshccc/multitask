@@ -52,12 +52,14 @@
 
 ## 3. סדר הבנייה
 
-> **סטטוס נכון לסוף פאזה 6ב (2026-04-27):** פאזות 1-2 (תשתית) +
-> פאזה 3 (משימות) + פאזה 4 (יומן + Gantt) + פאזה 5 (מחשבות) +
-> **פאזה 6א (R2) + פאזה 6ב (UI הקלטות)** הסתיימו ומוזגו ל-main.
-> נותר **פאזה 6ג**: חיבור Gladia (תמלול) + Claude Haiku
-> (סיכום + חילוץ משימות) — היום `triggerProcessing` הוא stub.
-> אחרי 6ג: פאזה 7 = מסך פרויקטים / תמחור (#14).
+> **סטטוס נכון ל-2026-04-27:** פאזות 1-2 (תשתית) + פאזה 3 (משימות)
+> + פאזה 4 (יומן + Gantt) + פאזה 5 (מחשבות) + **פאזה 6א (R2)
+> + פאזה 6ב (UI הקלטות)** מוזגו ל-main. **פאזה 6ג שלב 1
+> (Gladia)** קיימת בקוד (`supabase/functions/transcribe` +
+> `transcribe-webhook` + `RecordingPlayer.TranscriptionSection`)
+> ומחכה ל-`GLADIA_API_KEY` + `GLADIA_WEBHOOK_TOKEN` ב-Supabase
+> secrets ולפריסה. נותר **פאזה 6ג שלב 2 (Claude Haiku — סיכום +
+> חילוץ משימות)**. אחרי 6ג: פאזה 7 = מסך פרויקטים / תמחור (#14).
 > פירוט מלא בכל פאזה בסוף ה-SPEC ב-Changelog.
 
 1. ✅ Design tokens מ־`design-language.html`
@@ -2462,8 +2464,10 @@ Hero: "החלל לחשוב. החלל לעשות."
     `recordings_r2_storage`, `recording_links`).
 
   **החלטות ארכיטקטוניות שהתבססו בסשן:**
-  - **AWS Sigv4 ידני בלי SDK** — חוסך 8MB cold-start ב-Edge.
-    `r2-client.ts` הוא ~200 שורות שעוטפות `crypto.subtle.sign`.
+  - **AWS SDK דרך `npm:` ב-Deno** — ה-Edge Function משתמשת ב-
+    `@aws-sdk/client-s3` הסטנדרטי דרך מנגנון ה-`npm:` של Deno
+    במקום לחתום Sigv4 ידנית. R2 הוא S3-compatible אז ה-SDK
+    עובד as-is מול `<account>.r2.cloudflarestorage.com`.
   - **MediaRecorder עם timeslice + multipart מקבילית** — chunks
     עוזבים את הדפדפן תוך כדי הקלטה. אם ההקלטה מתפצרצת אי פעם,
     כל מה שכבר עלה נשמר.
@@ -2492,6 +2496,100 @@ Hero: "החלל לחשוב. החלל לעשות."
     מפאזה 1.
 
   **PRs בפאזה זו:** #51 (R2), #53–#67 (recordings UI + polish).
+
+- **2026-04-27** — **פאזה 6ג שלב 1/2: חיבור Gladia (תמלול).**
+
+  הצעד הראשון מתוך השניים בפאזה 6ג. `triggerProcessing()` הפסיק
+  להיות stub — היום הוא קורא לפונקציה חדשה ב-Edge שיוצרת job
+  אצל Gladia ומחכה לוובהוק.
+
+  **Edge Functions חדשות:**
+  - `supabase/functions/transcribe/` — מקבל `{ recording_id }`
+    מהדפדפן (אחרי auth דרך `requireMember`), מאמת שההקלטה ב-R2 +
+    שייכת לארגון של המשתמש, מייצר presigned GET (~1h) על אובייקט
+    ה-R2, ושולח POST ל-`https://api.gladia.io/v2/pre-recorded`
+    עם `audio_url` + `callback_url` + `diarization=true` +
+    `language_config.languages=['he']`. שומר את `provider='gladia'`
+    + `provider_job_id` ומחליף status ל-`'transcribing'`.
+    אידמפוטנטי — קריאה שנייה על job שכבר רץ/הסתיים = no-op.
+  - `supabase/functions/transcribe-webhook/` — מקבל את ה-callback
+    מ-Gladia. **חייב `verify_jwt = false`** כי ל-Gladia אין JWT
+    של Supabase; האימות הוא דרך `?token=<GLADIA_WEBHOOK_TOKEN>`
+    שמתחלף ב-shared secret. מאתר את ההקלטה לפי `provider_job_id`,
+    שומר `transcript_text` + `transcript_json` (כל ה-payload של
+    Gladia, לרבות utterances + speakers + timestamps) +
+    `speakers_count`, ועושה `upsert` ל-`recording_speakers`
+    (אינדקסים 0-based).
+  - `supabase/config.toml` חדש (לא היה בריפו) — מצהיר `verify_jwt
+    = false` רק ל-`transcribe-webhook`. כל פונקציה אחרת (storage,
+    transcribe) ממשיכה עם ברירת המחדל המאובטחת.
+
+  **State machine מורחב:**
+  - `'uploaded'` → `'transcribing'` (לחיצה על "התחל תמלול"
+    → submit ל-Gladia)
+  - `'transcribing'` → `'extracting'` (Gladia הודיע `done`,
+    transcript נשמר; הסטטוס הזה הוא הזנב של פאזה 6ג שלב 2 = Claude)
+  - **fallback זמני:** אם `ANTHROPIC_API_KEY` עדיין לא מוגדר
+    כסוד ב-Supabase, הוובהוק קופץ מ-`'extracting'` ישר ל-`'ready'`
+    כדי שה-UI לא יישאר תקוע. ביום שמוסיפים את `summarize`,
+    מסירים את ה-fallback הזה.
+  - `'transcribing'` → `'error'` כשהפעלה נכשלה אצל Gladia או
+    שהוובהוק קיבל `error_code`. `error_message` נשמר עם הסיבה.
+
+  **שינויי UI ב-`RecordingPlayer.tsx`:**
+  - חולץ קומפוננט פנימי `TranscriptionSection` שמתפצל לפי
+    `recording.status`:
+    - `uploaded` → כפתור `התחל תמלול` (קורא ל-`useTriggerRecordingProcessing`).
+    - `transcribing` → spinner + "מתמללת...".
+    - `extracting` → spinner + "מחלצת משימות..." (placeholder
+      לפאזה הבאה).
+    - `ready` + יש `transcript_text` → preview גלילתי (max-h-60)
+      עם מספר הדוברים.
+    - `error` → קופסה אדומה עם `error_message` + כפתור "נסה שוב".
+  - ה-placeholder עם הטקסט "תמלול וסיכום AI מתוכננים לפאזה
+    הבאה" (PR #53) הוסר.
+
+  **שינוי ב-`src/lib/services/recordings.ts`:**
+  - `triggerProcessing(recordingId)` — היה
+    `updateRecording(id, { status: 'transcribing' })` יבש; עכשיו
+    קורא בפועל ל-`/functions/v1/transcribe` עם JWT. שגיאה
+    מ-Gladia מתורגמת ל-`error_message` ב-DB דרך ה-Edge Function
+    עצמה (לא בקליינט) — הקליינט רק זורק לאחר non-2xx וה-Realtime
+    מעדכן את הסטטוס.
+
+  **secrets שצריך להגדיר ב-Supabase Edge Functions לפני שזה ירוץ:**
+  - `GLADIA_API_KEY` — מ-<https://app.gladia.io>.
+  - `GLADIA_WEBHOOK_TOKEN` — מחרוזת אקראית (32+ תווים) שמייצרים
+    מקומית, שומרים ב-Supabase secrets, ולא חולקים בשום מקום
+    אחר. הוא חוזר חזרה ב-callback URL של כל job ומאומת על כל
+    קריאה לוובהוק.
+  - `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`
+    — כבר קיימים מהפאזות הקודמות.
+
+  **deploy:**
+  ```
+  supabase functions deploy transcribe
+  supabase functions deploy transcribe-webhook --no-verify-jwt
+  ```
+  (ה-`--no-verify-jwt` מיותר אם ה-`config.toml` נקרא אוטומטית
+  ע"י ה-CLI; משאיר אותו ב-command כ-belt-and-suspenders.)
+
+  **מה פתוח לשלב 2 של פאזה 6ג (Claude):**
+  - `summarize` Edge Function נפרדת (או step בתוך transcribe-webhook):
+    - מקבל `transcript_text` + `recording_id`, קורא
+      ל-Claude Haiku 4.5 (פרומט מ-`docs/claude-integration.md`),
+      מחזיר `{ summary, my_tasks, their_tasks, speakers_hint }`.
+    - יוצר `tasks` rows + `recording_tasks` שיוך לדובר.
+    - מחליף status ל-`'ready'`. מסיר את ה-fallback מהוובהוק.
+  - UI לתיוג דובר (`recording_speakers.role`/`label`) ב-
+    `RecordingPlayer.tsx` — היום הדוברים נשמרים בלי label.
+    בלחיצה "זה אני / זה דני לקוח", `tasks` המקושרים לדובר
+    דרך `recording_tasks.assigned_to_speaker_index` יקבלו
+    `assignee_user_id`.
+
+  **שינוי תיעודי קטן:** הבולט "AWS Sigv4 ידני בלי SDK" בערך
+  הקודם של פאזה 6 הוסר — בפועל `r2-client.ts` משתמש ב-
+  `npm:@aws-sdk/client-s3` הסטנדרטי. הבולט הוחלף בתיאור מדויק.
 
 
 

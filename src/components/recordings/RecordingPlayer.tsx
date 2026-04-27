@@ -1,8 +1,11 @@
 import type { ReactNode } from "react";
-import { AlertCircle, Sparkles, Link2 } from "lucide-react";
+import { AlertCircle, Sparkles, Link2, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { he } from "date-fns/locale";
-import { useRecordingAudioUrl } from "@/lib/hooks/useRecordings";
+import {
+  useRecordingAudioUrl,
+  useTriggerRecordingProcessing,
+} from "@/lib/hooks/useRecordings";
 import {
   useRecordingLists,
   useRecordingListAssignments,
@@ -112,19 +115,104 @@ export function RecordingPlayer({ recording }: Props) {
         </div>
       </section>
 
-      {/* Phase 6ג placeholder — transcription + speaker tagging + extracted tasks */}
-      <section className="rounded-md border border-dashed border-ink-300 bg-ink-50 px-3 py-3">
+      <TranscriptionSection recording={recording} />
+    </div>
+  );
+}
+
+function TranscriptionSection({ recording }: { recording: Recording }) {
+  const trigger = useTriggerRecordingProcessing();
+  const status = recording.status;
+
+  if (status === "transcribing") {
+    return (
+      <section className="rounded-md border border-ink-200 bg-ink-50 px-3 py-3 space-y-1">
         <div className="flex items-center gap-1.5 text-xs font-medium text-ink-700">
-          <Sparkles className="w-3.5 h-3.5 text-primary-600" />
-          תמלול וסיכום AI
+          <Loader2 className="w-3.5 h-3.5 text-primary-600 animate-spin" />
+          מתמללת...
         </div>
-        <p className="mt-1 text-xs text-ink-500 leading-relaxed">
-          חיבור Gladia (תמלול עברית + הפרדת דוברים) ו-Claude Haiku (סיכום וחילוץ
-          משימות) מתוכננים לפאזה הבאה. כרגע הסטטוס נשאר{" "}
-          <span className="font-medium text-ink-700">"הועלתה"</span> ואפשר להאזין.
+        <p className="text-xs text-ink-500 leading-relaxed">
+          Gladia מעבדת את ההקלטה. בדרך כלל לוקח דקה לכל ~10 דקות אודיו. הסטטוס
+          יתעדכן אוטומטית כשהתמלול מוכן.
         </p>
       </section>
-    </div>
+    );
+  }
+
+  if (status === "extracting") {
+    return (
+      <section className="rounded-md border border-ink-200 bg-ink-50 px-3 py-3 space-y-1">
+        <div className="flex items-center gap-1.5 text-xs font-medium text-ink-700">
+          <Loader2 className="w-3.5 h-3.5 text-primary-600 animate-spin" />
+          מחלצת משימות...
+        </div>
+        <p className="text-xs text-ink-500 leading-relaxed">
+          התמלול מוכן. Claude מנתח אותו עכשיו לסיכום ומשימות.
+        </p>
+      </section>
+    );
+  }
+
+  if (status === "ready" && recording.transcript_text) {
+    return (
+      <section className="rounded-md border border-ink-200 bg-ink-50 px-3 py-3 space-y-2">
+        <div className="flex items-center gap-1.5 text-xs font-medium text-ink-700">
+          <Sparkles className="w-3.5 h-3.5 text-primary-600" />
+          תמלול
+          {recording.speakers_count
+            ? ` · ${recording.speakers_count} דוברים`
+            : null}
+        </div>
+        <p className="text-xs text-ink-700 leading-relaxed whitespace-pre-wrap max-h-60 overflow-auto">
+          {recording.transcript_text}
+        </p>
+      </section>
+    );
+  }
+
+  if (status === "error") {
+    return (
+      <section className="rounded-md border border-red-200 bg-red-50 px-3 py-3 space-y-2">
+        <div className="flex items-center gap-1.5 text-xs font-medium text-red-700">
+          <AlertCircle className="w-3.5 h-3.5" />
+          שגיאת תמלול
+        </div>
+        {recording.error_message ? (
+          <p className="text-xs text-red-700 leading-relaxed break-words">
+            {recording.error_message}
+          </p>
+        ) : null}
+        <button
+          type="button"
+          className="text-xs font-medium text-primary-700 hover:underline disabled:opacity-50"
+          disabled={trigger.isPending}
+          onClick={() => trigger.mutate(recording.id)}
+        >
+          נסה שוב
+        </button>
+      </section>
+    );
+  }
+
+  // status === 'uploaded' (default landing state after upload completes)
+  return (
+    <section className="rounded-md border border-dashed border-ink-300 bg-ink-50 px-3 py-3 space-y-2">
+      <div className="flex items-center gap-1.5 text-xs font-medium text-ink-700">
+        <Sparkles className="w-3.5 h-3.5 text-primary-600" />
+        תמלול וסיכום AI
+      </div>
+      <p className="text-xs text-ink-500 leading-relaxed">
+        Gladia מתמללת את ההקלטה עם הפרדת דוברים בעברית. תוצאה תופיע כאן.
+      </p>
+      <button
+        type="button"
+        className="btn-primary text-sm"
+        disabled={trigger.isPending}
+        onClick={() => trigger.mutate(recording.id)}
+      >
+        {trigger.isPending ? "שולחת..." : "התחל תמלול"}
+      </button>
+    </section>
   );
 }
 

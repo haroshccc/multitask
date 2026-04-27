@@ -143,11 +143,31 @@ export async function updateRecordingSpeaker(
 }
 
 /**
- * Placeholder for "process recording" — kicks off transcription + extraction.
- * In MVP this is a no-op; will call an edge function once integrations wired.
+ * Kicks off Gladia transcription via the `transcribe` Edge Function.
+ *
+ * The Edge Function presigns a GET on R2, submits the job to Gladia v2 with
+ * a webhook callback, and flips `recordings.status` to 'transcribing' once
+ * Gladia accepts the job. Realtime then propagates the status flip to the UI.
+ *
+ * Idempotent: a second call on a recording that's already 'transcribing' /
+ * 'extracting' / 'ready' returns ok without re-submitting.
  */
 export async function triggerProcessing(recordingId: string): Promise<void> {
-  // TODO: invoke edge function `recordings-process` with recording_id.
-  // For now, just mark status so UI reflects work queued.
-  await updateRecording(recordingId, { status: "transcribing" });
+  const { data: session } = await supabase.auth.getSession();
+  const jwt = session.session?.access_token;
+  if (!jwt) throw new Error("not_authenticated");
+
+  const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/transcribe`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${jwt}`,
+    },
+    body: JSON.stringify({ recording_id: recordingId }),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`transcribe_start_failed: ${res.status} ${detail}`);
+  }
 }

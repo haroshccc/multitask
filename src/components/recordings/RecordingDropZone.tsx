@@ -194,6 +194,9 @@ function humanizeError(err: unknown): string {
   if (msg.includes("not_authenticated") || msg.includes("invalid_jwt")) {
     return "ההתחברות פגה. רעני את הדף ונסי שוב.";
   }
+  if (msg.includes("_timeout:")) {
+    return "ההעלאה לקחה יותר מדי זמן. נסי שוב — לקבצי וידאו גדולים זה יכול לקרות.";
+  }
   if (msg.toLowerCase().includes("network")) return "תקלת רשת. בדקי חיבור.";
   return msg || "שגיאה לא צפויה בעת ההעלאה.";
 }

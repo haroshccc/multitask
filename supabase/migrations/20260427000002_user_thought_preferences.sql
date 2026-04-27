@@ -12,7 +12,7 @@ create table public.user_thought_preferences (
 
 alter table public.user_thought_preferences enable row level security;
 
-create policy "user_thought_preferences: self"
+create policy user_thought_preferences_self
   on public.user_thought_preferences for all
   using (user_id = auth.uid())
   with check (user_id = auth.uid());

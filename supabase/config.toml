@@ -1,0 +1,9 @@
+# Supabase per-function settings.
+#
+# Functions not listed here keep their dashboard defaults
+# (verify_jwt = true). Only declare overrides.
+
+[functions.transcribe-webhook]
+# Gladia callbacks have no Supabase JWT. We authenticate via the shared
+# `?token=` against GLADIA_WEBHOOK_TOKEN inside the function itself.
+verify_jwt = false

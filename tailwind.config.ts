@@ -10,7 +10,7 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ["Fredoka", "system-ui", "sans-serif"],
+        sans: ["Rubik", "system-ui", "sans-serif"],
         mono: ["SF Mono", "Menlo", "monospace"],
       },
       colors: {

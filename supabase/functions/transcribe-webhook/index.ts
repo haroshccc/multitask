@@ -41,8 +41,14 @@ type GladiaPayloadResult = {
   metadata?: { audio_duration?: number; number_of_distinct_channels?: number };
 };
 
+// Gladia v2 callback shape (what we actually receive):
+//   { id, event: "transcription.success" | "transcription.error", payload: {...} }
+// We also accept the older `{ id, status: "done"|"error", result: {...} }` shape
+// defensively, in case Gladia ever toggles back.
 type GladiaWebhookBody = {
   id?: string;
+  event?: string;
+  payload?: GladiaPayloadResult & { error_code?: number | string };
   status?: string;
   result?: GladiaPayloadResult;
   error_code?: number | string;
@@ -57,12 +63,30 @@ async function webhookHandler(req: Request): Promise<Response> {
   }
 
   const body = (await req.json().catch(() => null)) as GladiaWebhookBody | null;
+  console.log("transcribe_webhook_received", {
+    id: body?.id,
+    event: body?.event,
+    status: body?.status,
+    has_payload: Boolean(body?.payload),
+    has_result: Boolean(body?.result),
+    error_code: body?.error_code,
+  });
   if (!body?.id) {
     return jsonResponse(
       { error: "missing_fields", required: ["id"] },
       { status: 400, origin }
     );
   }
+
+  // Normalize v2 (`event`/`payload`) and legacy (`status`/`result`) shapes.
+  const isError =
+    body.event === "transcription.error" ||
+    body.event === "transcription.failure" ||
+    body.status === "error" ||
+    Boolean(body.error_code);
+  const isSuccess =
+    body.event === "transcription.success" || body.status === "done";
+  const resultBlob = body.payload ?? body.result;
 
   // Service-role client — webhook has no JWT. RLS-bypass is intentional.
   const service = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
@@ -83,24 +107,31 @@ async function webhookHandler(req: Request): Promise<Response> {
     return jsonResponse({ ok: true, ignored: "unknown_job" }, { origin });
   }
 
-  if (body.status === "error" || body.error_code) {
+  if (isError) {
     await service
       .from("recordings")
       .update({
         status: "error",
-        error_message: `gladia_error: ${body.error_code ?? "unknown"}`,
+        error_message: `gladia_error: ${body.error_code ?? body.event ?? "unknown"}`,
       })
       .eq("id", recording.id);
     return jsonResponse({ ok: true }, { origin });
   }
 
-  // We only act on terminal `done`. Intermediate states (queued, processing)
+  // We only act on terminal success. Intermediate states (queued, processing)
   // arrive too but we ignore them — recording.status is already 'transcribing'.
-  if (body.status !== "done" || !body.result) {
-    return jsonResponse({ ok: true, ignored: body.status ?? "no_status" }, { origin });
+  if (!isSuccess || !resultBlob) {
+    return jsonResponse(
+      {
+        ok: true,
+        ignored: body.event ?? body.status ?? "no_status",
+        job_id: body.id,
+      },
+      { origin }
+    );
   }
 
-  const transcription = body.result.transcription ?? {};
+  const transcription = resultBlob.transcription ?? {};
   const transcriptText = transcription.full_transcript ?? "";
   const utterances = transcription.utterances ?? [];
 
@@ -115,7 +146,7 @@ async function webhookHandler(req: Request): Promise<Response> {
     .update({
       status: "extracting", // next stop = Claude (phase 6ג #2). Fallback below if not wired.
       transcript_text: transcriptText,
-      transcript_json: body.result as unknown as Record<string, unknown>,
+      transcript_json: resultBlob as unknown as Record<string, unknown>,
       speakers_count: speakersCount,
       error_message: null,
     })

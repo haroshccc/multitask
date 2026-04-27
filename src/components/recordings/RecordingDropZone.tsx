@@ -11,7 +11,7 @@ interface Props {
   className?: string;
 }
 
-const ACCEPTED = "audio/*";
+const ACCEPTED = "audio/*,video/*";
 const MAX_BYTES = 500 * 1024 * 1024; // SPEC §8 caps at 3h; 500MB covers MP3 320kbps × 3.5h.
 
 export function RecordingDropZone({ source = "other", onUploaded, className }: Props) {
@@ -25,8 +25,8 @@ export function RecordingDropZone({ source = "other", onUploaded, className }: P
     setLocalError(null);
     const file = files?.[0];
     if (!file) return;
-    if (!file.type.startsWith("audio/")) {
-      setLocalError("רק קבצי אודיו נתמכים (MP3 / M4A / WebM / WAV).");
+    if (!file.type.startsWith("audio/") && !file.type.startsWith("video/")) {
+      setLocalError("רק קבצי אודיו או וידאו נתמכים (MP3 / M4A / MP4 / WebM / WAV / MOV).");
       return;
     }
     if (file.size > MAX_BYTES) {
@@ -124,8 +124,8 @@ export function RecordingDropZone({ source = "other", onUploaded, className }: P
           >
             <Upload className="w-5 h-5" />
           </div>
-          <p className="text-sm font-semibold text-ink-900">גררי קובץ אודיו</p>
-          <p className="text-xs text-ink-500 -mt-1">MP3 · M4A · WebM · WAV · עד 500MB</p>
+          <p className="text-sm font-semibold text-ink-900">גררי קובץ אודיו או וידאו</p>
+          <p className="text-xs text-ink-500 -mt-1">MP3 · M4A · MP4 · MOV · WebM · WAV · עד 500MB</p>
           <button
             type="button"
             onClick={() => inputRef.current?.click()}
@@ -163,7 +163,9 @@ function inferExtension(file: File): string {
   if (m) return m[1].toLowerCase();
   const t = file.type.toLowerCase();
   if (t.includes("mpeg") || t.includes("mp3")) return "mp3";
+  if (t.startsWith("video/mp4")) return "mp4";
   if (t.includes("mp4") || t.includes("m4a") || t.includes("aac")) return "m4a";
+  if (t.includes("quicktime") || t.includes("mov")) return "mov";
   if (t.includes("webm")) return "webm";
   if (t.includes("ogg") || t.includes("opus")) return "ogg";
   if (t.includes("wav")) return "wav";

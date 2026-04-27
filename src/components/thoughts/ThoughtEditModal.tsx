@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   X,
@@ -73,12 +73,53 @@ export function ThoughtEditModal({
   const [tagDraft, setTagDraft] = useState("");
   const [guardOpen, setGuardOpen] = useState(false);
 
+  // Snapshot of the server-side values we last accepted into local state.
+  // We diff against this on every render to decide whether a server update
+  // (e.g. transcript synced in via realtime) should overwrite the field — but
+  // only if the user hasn't started typing over it locally. Without this the
+  // textarea looked permanently empty during auto-transcribe even after the
+  // webhook wrote text_content into the row.
+  const lastSyncedRef = useRef<{
+    title: string;
+    text: string;
+    tags: string[];
+  }>({ title: "", text: "", tags: [] });
+
   useEffect(() => {
     if (!thought) return;
-    setTitle(thought.ai_generated_title ?? "");
-    setText(thought.text_content ?? "");
-    setTags(thought.tags ?? []);
-  }, [thought?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+    const serverTitle = thought.ai_generated_title ?? "";
+    const serverText = thought.text_content ?? "";
+    const serverTags = thought.tags ?? [];
+
+    // Always re-sync when switching to a different thought.
+    const switchedThought =
+      lastSyncedRef.current !== undefined &&
+      lastSyncedRef.current.text !== serverText &&
+      // Heuristic: the only way local matches the previous synced value is
+      // if the user hasn't typed anything since we last accepted the server
+      // value. In that case, accept the new server value.
+      (text === lastSyncedRef.current.text || text === "");
+
+    setTitle((prev) =>
+      prev === lastSyncedRef.current.title ? serverTitle : prev
+    );
+    if (switchedThought) {
+      setText(serverText);
+    }
+    setTags((prev) =>
+      arraysEqual(prev, lastSyncedRef.current.tags) ? serverTags : prev
+    );
+    lastSyncedRef.current = {
+      title: serverTitle,
+      text: serverText,
+      tags: serverTags,
+    };
+  }, [
+    thought?.id,
+    thought?.text_content,
+    thought?.ai_generated_title,
+    thought?.tags,
+  ]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Dirty when any user-editable text/tags differ from the persisted row.
   // List assignments are committed eagerly (their own service calls) and
@@ -589,4 +630,12 @@ function ThoughtRecordingPlayer({ recordingId }: { recordingId: string }) {
       )}
     </section>
   );
+}
+
+function arraysEqual(a: readonly string[], b: readonly string[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
 }

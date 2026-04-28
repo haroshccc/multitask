@@ -1,5 +1,5 @@
-import { useEffect, useState, type ReactNode } from "react";
-import { AlertCircle, Sparkles, Link2, Loader2, GitMerge, Trash2 } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { AlertCircle, Sparkles, Loader2, GitMerge, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { he } from "date-fns/locale";
 import {
@@ -11,13 +11,19 @@ import {
 import {
   useRecordingLists,
   useRecordingListAssignments,
+  useAssignRecordingToList,
+  useUnassignRecordingFromList,
+  useCreateRecordingList,
 } from "@/lib/hooks/useRecordingLists";
-import { useProjects } from "@/lib/hooks/useProjects";
-import { useTaskLists } from "@/lib/hooks/useTaskLists";
-import { useEventCalendars } from "@/lib/hooks/useEventCalendars";
+import { useProjects, useCreateProject } from "@/lib/hooks/useProjects";
+import { useTaskLists, useCreateTaskList } from "@/lib/hooks/useTaskLists";
+import {
+  useEventCalendars,
+  useCreateEventCalendar,
+} from "@/lib/hooks/useEventCalendars";
+import { cn } from "@/lib/utils/cn";
 import { ListIcon } from "@/components/tasks/list-icons";
 import { AudioPlayer } from "@/components/recordings/AudioPlayer";
-import { RecordingLinkagePanel } from "@/components/recordings/RecordingLinkagePanel";
 import { TranscriptEditor } from "@/components/recordings/TranscriptEditor";
 import { MergeRecordingsDialog } from "@/components/recordings/MergeRecordingsDialog";
 import { AiInsights } from "@/components/recordings/AiInsights";
@@ -31,26 +37,8 @@ export function RecordingPlayer({ recording }: Props) {
   const { data: url, isLoading, error } = useRecordingAudioUrl(recording);
   const [audioElement, setAudioElement] = useState<HTMLAudioElement | null>(null);
   const [mergeOpen, setMergeOpen] = useState(false);
-  const { data: projects = [] } = useProjects();
-  const { data: taskLists = [] } = useTaskLists();
-  const { data: calendars = [] } = useEventCalendars();
-  const { data: recordingLists = [] } = useRecordingLists();
-  const { data: assignments = [] } = useRecordingListAssignments(recording.id);
 
   const downloadFilename = buildDownloadFilename(recording);
-
-  const project = projects.find((p) => p.id === recording.project_id) ?? null;
-  const taskList = taskLists.find((l) => l.id === recording.task_list_id) ?? null;
-  const calendar = calendars.find((c) => c.id === recording.event_calendar_id) ?? null;
-  const myLists = assignments
-    .map((a) => recordingLists.find((l) => l.id === a.list_id))
-    .filter((l): l is NonNullable<typeof l> => Boolean(l));
-  const listsSummary =
-    myLists.length === 0
-      ? null
-      : myLists.length === 1
-      ? myLists[0].name
-      : `${myLists.length} רשימות`;
 
   return (
     <div className="card p-5 space-y-4">
@@ -106,46 +94,18 @@ export function RecordingPlayer({ recording }: Props) {
         )}
       </div>
 
-      {/* שיוך — editable chip-bar with all 4 linkage types */}
-      <section className="space-y-2">
-        <div className="flex items-center gap-1.5 text-xs font-medium text-ink-700">
-          <Link2 className="w-3.5 h-3.5 text-ink-500" />
-          שיוך
-        </div>
-        <RecordingLinkagePanel recording={recording} />
-      </section>
-
-      {/* Read-only summary grid showing the values currently linked to this
-          recording. The header was removed because it duplicated the שיוך
-          label visually; the grid alone is enough at-a-glance read. */}
+      {/* Editable meta grid — every cell is a status-style picker with an */}
+      {/* inline "+ create new" affordance. Replaces both the read-only       */}
+      {/* summary grid and the standalone "שיוך" chip-bar that used to       */}
+      {/* duplicate this data above. */}
       <section className="space-y-2">
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-xs">
           <StatusMeta recording={recording} />
           <Meta label="מקור" value={sourceLabel(recording.source)} />
-          <Meta label="פרויקט" value={project?.name ?? null} />
-          <Meta
-            label="יומן"
-            value={calendar?.name ?? null}
-            valueIcon={
-              calendar ? <ListIcon emoji={calendar.emoji} className="w-3 h-3" /> : null
-            }
-          />
-          <Meta
-            label="משימות"
-            value={taskList?.name ?? null}
-            valueIcon={
-              taskList ? <ListIcon emoji={taskList.emoji} className="w-3 h-3" /> : null
-            }
-          />
-          <Meta
-            label="רשימות"
-            value={listsSummary}
-            valueIcon={
-              myLists.length === 1 ? (
-                <ListIcon emoji={myLists[0].emoji} className="w-3 h-3" />
-              ) : null
-            }
-          />
+          <ProjectLinkMeta recording={recording} />
+          <EventCalendarLinkMeta recording={recording} />
+          <TaskListLinkMeta recording={recording} />
+          <RecordingListsLinkMeta recording={recording} />
         </div>
       </section>
 
@@ -333,6 +293,379 @@ function DeleteButton({ recording }: { recording: Recording }) {
       <Trash2 className="w-3 h-3" />
       מחיקה
     </button>
+  );
+}
+
+/**
+ * Status-meta-style picker cell. The dropdown lists the existing options;
+ * the bottom panel exposes "+ Add new" inline so the user never has to leave
+ * the recording to create a project / calendar / list / etc.
+ */
+function LinkMeta<T extends { id: string }>({
+  label,
+  current,
+  options,
+  renderOption,
+  onChange,
+  createLabel,
+  onCreate,
+}: {
+  label: string;
+  current: T | null;
+  options: T[];
+  renderOption: (o: T) => ReactNode;
+  onChange: (id: string | null) => void;
+  createLabel: string;
+  onCreate?: (name: string) => Promise<{ id: string } | undefined>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [busy, setBusy] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  // Click-away to close.
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+        setCreating(false);
+      }
+    };
+    window.addEventListener("mousedown", onDown);
+    return () => window.removeEventListener("mousedown", onDown);
+  }, [open]);
+
+  const submitCreate = async () => {
+    if (!onCreate) return;
+    const name = draft.trim();
+    if (!name) return;
+    setBusy(true);
+    try {
+      const created = await onCreate(name);
+      if (created?.id) onChange(created.id);
+      setDraft("");
+      setCreating(false);
+      setOpen(false);
+    } catch (err) {
+      console.error("create from picker failed:", err);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div ref={ref} className="rounded-md bg-ink-50 px-2.5 py-2 relative">
+      <div className="text-[10px] uppercase tracking-wider text-ink-400">{label}</div>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="bg-transparent text-xs text-ink-800 mt-0.5 w-full text-start outline-none cursor-pointer hover:text-primary-700 truncate"
+      >
+        {current ? renderOption(current) : "—"}
+      </button>
+      {open && (
+        <div className="absolute z-30 top-full mt-1 start-0 w-56 bg-white border border-ink-200 rounded-md shadow-lift overflow-hidden text-xs">
+          <div className="max-h-48 overflow-y-auto p-1">
+            <button
+              onClick={() => {
+                onChange(null);
+                setOpen(false);
+              }}
+              className="w-full text-start px-2 py-1.5 rounded hover:bg-ink-100"
+            >
+              — ללא —
+            </button>
+            {options.map((o) => (
+              <button
+                key={o.id}
+                onClick={() => {
+                  onChange(o.id);
+                  setOpen(false);
+                }}
+                className="w-full text-start px-2 py-1.5 rounded hover:bg-ink-100 truncate inline-flex items-center gap-1"
+              >
+                {renderOption(o)}
+              </button>
+            ))}
+          </div>
+          {onCreate && (
+            <div className="border-t border-ink-200 p-1">
+              {creating ? (
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    void submitCreate();
+                  }}
+                  className="flex items-center gap-1"
+                >
+                  <input
+                    autoFocus
+                    type="text"
+                    value={draft}
+                    onChange={(e) => setDraft(e.target.value)}
+                    placeholder={createLabel}
+                    disabled={busy}
+                    className="field !py-1 !px-2 !text-xs flex-1 min-w-0"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!draft.trim() || busy}
+                    className="btn-ghost !py-1 !px-2 disabled:opacity-50"
+                    title="הוספה"
+                  >
+                    +
+                  </button>
+                </form>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setCreating(true)}
+                  className="w-full text-start px-2 py-1.5 rounded text-primary-700 hover:bg-primary-50"
+                >
+                  + {createLabel}
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ProjectLinkMeta({ recording }: { recording: Recording }) {
+  const update = useUpdateRecording();
+  const { data: projects = [] } = useProjects();
+  const createProject = useCreateProject();
+  const current = projects.find((p) => p.id === recording.project_id) ?? null;
+  return (
+    <LinkMeta
+      label="פרויקט"
+      current={current}
+      options={projects}
+      renderOption={(p) => <span className="truncate">{p.name}</span>}
+      onChange={(id) =>
+        update.mutate({ recordingId: recording.id, patch: { project_id: id } })
+      }
+      createLabel="פרויקט חדש"
+      onCreate={async (name) => {
+        const created = await createProject.mutateAsync({ name });
+        return created;
+      }}
+    />
+  );
+}
+
+function EventCalendarLinkMeta({ recording }: { recording: Recording }) {
+  const update = useUpdateRecording();
+  const { data: calendars = [] } = useEventCalendars();
+  const createCalendar = useCreateEventCalendar();
+  const current =
+    calendars.find((c) => c.id === recording.event_calendar_id) ?? null;
+  return (
+    <LinkMeta
+      label="יומן"
+      current={current}
+      options={calendars}
+      renderOption={(c) => (
+        <span className="inline-flex items-center gap-1 truncate">
+          <ListIcon emoji={c.emoji} className="w-3 h-3" />
+          <span className="truncate">{c.name}</span>
+        </span>
+      )}
+      onChange={(id) =>
+        update.mutate({
+          recordingId: recording.id,
+          patch: { event_calendar_id: id },
+        })
+      }
+      createLabel="יומן חדש"
+      onCreate={async (name) => {
+        const created = await createCalendar.mutateAsync({ name });
+        return created;
+      }}
+    />
+  );
+}
+
+function TaskListLinkMeta({ recording }: { recording: Recording }) {
+  const update = useUpdateRecording();
+  const { data: taskLists = [] } = useTaskLists();
+  const createTaskList = useCreateTaskList();
+  const current = taskLists.find((l) => l.id === recording.task_list_id) ?? null;
+  return (
+    <LinkMeta
+      label="משימות"
+      current={current}
+      options={taskLists}
+      renderOption={(l) => (
+        <span className="inline-flex items-center gap-1 truncate">
+          <ListIcon emoji={l.emoji} className="w-3 h-3" />
+          <span className="truncate">{l.name}</span>
+        </span>
+      )}
+      onChange={(id) =>
+        update.mutate({
+          recordingId: recording.id,
+          patch: { task_list_id: id },
+        })
+      }
+      createLabel="רשימת משימות חדשה"
+      onCreate={async (name) => {
+        const created = await createTaskList.mutateAsync({ name });
+        return created;
+      }}
+    />
+  );
+}
+
+function RecordingListsLinkMeta({ recording }: { recording: Recording }) {
+  const { data: allLists = [] } = useRecordingLists();
+  const { data: assignments = [] } = useRecordingListAssignments(recording.id);
+  const assign = useAssignRecordingToList();
+  const unassign = useUnassignRecordingFromList();
+  const createList = useCreateRecordingList();
+  const myLists = assignments
+    .map((a) => allLists.find((l) => l.id === a.list_id))
+    .filter((l): l is NonNullable<typeof l> => Boolean(l));
+  const summary =
+    myLists.length === 0
+      ? null
+      : myLists.length === 1
+      ? myLists[0].name
+      : `${myLists.length} רשימות`;
+  const [open, setOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [busy, setBusy] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+        setCreating(false);
+      }
+    };
+    window.addEventListener("mousedown", onDown);
+    return () => window.removeEventListener("mousedown", onDown);
+  }, [open]);
+
+  const toggle = (id: string) => {
+    const owned = assignments.some((a) => a.list_id === id);
+    if (owned) {
+      unassign.mutate({ recordingId: recording.id, listId: id });
+    } else {
+      assign.mutate({ recordingId: recording.id, listId: id });
+    }
+  };
+
+  const submitCreate = async () => {
+    const name = draft.trim();
+    if (!name) return;
+    setBusy(true);
+    try {
+      const created = await createList.mutateAsync({ name });
+      assign.mutate({ recordingId: recording.id, listId: created.id });
+      setDraft("");
+      setCreating(false);
+    } catch (err) {
+      console.error("create recording list failed:", err);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div ref={ref} className="rounded-md bg-ink-50 px-2.5 py-2 relative">
+      <div className="text-[10px] uppercase tracking-wider text-ink-400">רשימות</div>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="bg-transparent text-xs text-ink-800 mt-0.5 w-full text-start outline-none cursor-pointer hover:text-primary-700 inline-flex items-center gap-1 truncate"
+      >
+        {myLists.length === 1 && (
+          <ListIcon emoji={myLists[0].emoji} className="w-3 h-3" />
+        )}
+        <span className="truncate">{summary ?? "—"}</span>
+      </button>
+      {open && (
+        <div className="absolute z-30 top-full mt-1 start-0 w-56 bg-white border border-ink-200 rounded-md shadow-lift overflow-hidden text-xs">
+          <div className="max-h-48 overflow-y-auto p-1">
+            {allLists.length === 0 ? (
+              <div className="px-2 py-1.5 text-[11px] text-ink-400">אין רשימות עדיין</div>
+            ) : (
+              allLists.map((l) => {
+                const owned = assignments.some((a) => a.list_id === l.id);
+                return (
+                  <button
+                    key={l.id}
+                    onClick={() => toggle(l.id)}
+                    className={cn(
+                      "w-full text-start px-2 py-1.5 rounded inline-flex items-center gap-1.5 truncate",
+                      owned
+                        ? "bg-primary-50 text-primary-800 hover:bg-primary-100"
+                        : "hover:bg-ink-100"
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0",
+                        owned
+                          ? "bg-primary-500 border-primary-500 text-white"
+                          : "border-ink-300 bg-white"
+                      )}
+                    >
+                      {owned && "✓"}
+                    </span>
+                    <ListIcon emoji={l.emoji} className="w-3 h-3" />
+                    <span className="truncate">{l.name}</span>
+                  </button>
+                );
+              })
+            )}
+          </div>
+          <div className="border-t border-ink-200 p-1">
+            {creating ? (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void submitCreate();
+                }}
+                className="flex items-center gap-1"
+              >
+                <input
+                  autoFocus
+                  type="text"
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  placeholder="רשימה חדשה"
+                  disabled={busy}
+                  className="field !py-1 !px-2 !text-xs flex-1 min-w-0"
+                />
+                <button
+                  type="submit"
+                  disabled={!draft.trim() || busy}
+                  className="btn-ghost !py-1 !px-2 disabled:opacity-50"
+                  title="הוספה"
+                >
+                  +
+                </button>
+              </form>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setCreating(true)}
+                className="w-full text-start px-2 py-1.5 rounded text-primary-700 hover:bg-primary-50"
+              >
+                + רשימה חדשה
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 

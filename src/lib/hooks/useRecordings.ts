@@ -185,6 +185,38 @@ export function useTriggerAiProcessing() {
   });
 }
 
+export function useDeleteRecording() {
+  const qc = useQueryClient();
+  const scope = useOrgScope();
+  return useMutation({
+    mutationFn: (recordingId: string) => service.deleteRecording(recordingId),
+    onSuccess: (_data, recordingId) => {
+      qc.removeQueries({ queryKey: queryKeys.recording(recordingId) });
+      if (scope.organizationId) {
+        qc.invalidateQueries({
+          queryKey: queryFamilies.allRecordings(scope.organizationId),
+        });
+      }
+    },
+  });
+}
+
+export function useMergeRecordingsMany() {
+  const qc = useQueryClient();
+  const scope = useOrgScope();
+  return useMutation({
+    mutationFn: (orderedIds: string[]) => service.mergeRecordingsMany(orderedIds),
+    onSuccess: (survivor) => {
+      qc.setQueryData(queryKeys.recording(survivor.id), survivor);
+      if (scope.organizationId) {
+        qc.invalidateQueries({
+          queryKey: queryFamilies.allRecordings(scope.organizationId),
+        });
+      }
+    },
+  });
+}
+
 export function useMergeRecordings() {
   const qc = useQueryClient();
   const scope = useOrgScope();

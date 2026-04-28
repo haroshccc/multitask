@@ -557,47 +557,14 @@ function TasksSection({
           לחיצי "הוספת משימה" או הפעילי AI כדי לקבל הצעות.
         </p>
       ) : (
-        <div className="space-y-3">
-          {groupTasksBySpeaker(items).map((group) => (
-            <div key={group.key} className="space-y-1.5">
-              <div className="text-[11px] font-semibold text-ink-600 inline-flex items-center gap-1.5 px-1">
-                <span
-                  className={cn(
-                    "w-1.5 h-1.5 rounded-full",
-                    group.key === "_self_"
-                      ? "bg-primary-500"
-                      : group.key === "_unassigned_"
-                      ? "bg-ink-300"
-                      : "bg-warning-500"
-                  )}
-                />
-                {group.label} · {group.indices.length}
-              </div>
-              {group.indices.map((i) => {
-                const task = items[i];
-                const createdId = createdByIndex[i];
-                const isOtherSide =
-                  group.key !== "_self_" && group.key !== "_unassigned_";
-                return (
-                  <TaskRow
-                    key={i}
-                    index={i}
-                    task={task}
-                    items={items}
-                    onChange={onChange}
-                    createdId={createdId}
-                    isOtherSide={isOtherSide}
-                    recording={recording}
-                    onCreate={() => onCreateOne(i)}
-                    onEdit={() =>
-                      createdId && onEditExisting(i, createdId)
-                    }
-                  />
-                );
-              })}
-            </div>
-          ))}
-        </div>
+        <SpeakerGroupedTasks
+          items={items}
+          recording={recording}
+          createdByIndex={createdByIndex}
+          onChange={onChange}
+          onCreateOne={onCreateOne}
+          onEditExisting={onEditExisting}
+        />
       )}
       <TaskEditModal
         taskId={editorState?.taskId ?? null}
@@ -816,6 +783,282 @@ interface TaskGroup {
   indices: number[];
 }
 
+/**
+ * Renders the speaker-grouped tasks UI: a chip filter at the top picks
+ * which speakers to show, and each shown speaker can flip between the
+ * existing task-rows view ("משימות") and a copy-paste-friendly text
+ * summary ("טקסט") with WhatsApp / mail / copy buttons. State here is
+ * intentionally local — it doesn't persist across recording switches,
+ * which is what we want (each conversation starts with everyone visible).
+ */
+function SpeakerGroupedTasks({
+  items,
+  recording,
+  createdByIndex,
+  onChange,
+  onCreateOne,
+  onEditExisting,
+}: {
+  items: RecordingAiOutput["tasks"];
+  recording: Recording;
+  createdByIndex: Record<number, string>;
+  onChange: (items: RecordingAiOutput["tasks"]) => void;
+  onCreateOne: (i: number) => void;
+  onEditExisting: (i: number, taskId: string) => void;
+}) {
+  const groups = useMemo(() => groupTasksBySpeaker(items), [items]);
+  const [hidden, setHidden] = useState<Set<string>>(new Set());
+  const [modes, setModes] = useState<Record<string, "tasks" | "text">>({});
+
+  const toggleVisibility = (key: string) =>
+    setHidden((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+
+  const setMode = (key: string, mode: "tasks" | "text") =>
+    setModes((m) => ({ ...m, [key]: mode }));
+
+  return (
+    <div className="space-y-3">
+      {groups.length > 1 && (
+        <div className="flex items-center gap-1 flex-wrap text-[11px] text-ink-500">
+          <span className="px-1">דוברים:</span>
+          {groups.map((g) => {
+            const isHidden = hidden.has(g.key);
+            return (
+              <button
+                key={g.key}
+                type="button"
+                onClick={() => toggleVisibility(g.key)}
+                className={cn(
+                  "rounded-full border px-2 py-0.5 transition-colors",
+                  isHidden
+                    ? "border-ink-200 bg-white text-ink-400 line-through"
+                    : "border-primary-300 bg-primary-50 text-primary-800"
+                )}
+              >
+                {g.label} · {g.indices.length}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {groups.map((group) => {
+        if (hidden.has(group.key)) return null;
+        const mode = modes[group.key] ?? "tasks";
+        const dotColor =
+          group.key === "_self_"
+            ? "bg-primary-500"
+            : group.key === "_unassigned_"
+            ? "bg-ink-300"
+            : "bg-warning-500";
+        const isOtherSide =
+          group.key !== "_self_" && group.key !== "_unassigned_";
+        return (
+          <div key={group.key} className="space-y-1.5">
+            <div className="flex items-center justify-between gap-2 px-1">
+              <div className="text-[11px] font-semibold text-ink-600 inline-flex items-center gap-1.5">
+                <span className={cn("w-1.5 h-1.5 rounded-full", dotColor)} />
+                {group.label} · {group.indices.length}
+              </div>
+              <div className="inline-flex rounded-md border border-ink-200 overflow-hidden text-[10px]">
+                <ModeTab
+                  active={mode === "tasks"}
+                  onClick={() => setMode(group.key, "tasks")}
+                >
+                  משימות
+                </ModeTab>
+                <ModeTab
+                  active={mode === "text"}
+                  onClick={() => setMode(group.key, "text")}
+                >
+                  טקסט
+                </ModeTab>
+              </div>
+            </div>
+
+            {mode === "tasks" ? (
+              <>
+                {group.indices.map((i) => (
+                  <TaskRow
+                    key={i}
+                    index={i}
+                    task={items[i]}
+                    items={items}
+                    onChange={onChange}
+                    createdId={createdByIndex[i]}
+                    isOtherSide={isOtherSide}
+                    recording={recording}
+                    onCreate={() => onCreateOne(i)}
+                    onEdit={() => {
+                      const id = createdByIndex[i];
+                      if (id) onEditExisting(i, id);
+                    }}
+                  />
+                ))}
+              </>
+            ) : (
+              <TaskTextSummary
+                group={group}
+                items={items}
+                recording={recording}
+                isOtherSide={isOtherSide}
+              />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ModeTab({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "px-2 py-0.5 transition-colors",
+        active ? "bg-ink-900 text-white" : "bg-white text-ink-700 hover:bg-ink-50"
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+/** Renders the speaker's tasks as a numbered text block + send buttons. */
+function TaskTextSummary({
+  group,
+  items,
+  recording,
+  isOtherSide,
+}: {
+  group: TaskGroup;
+  items: RecordingAiOutput["tasks"];
+  recording: Recording;
+  isOtherSide: boolean;
+}) {
+  const speakerName =
+    group.key === "_self_"
+      ? null
+      : group.key === "_unassigned_"
+      ? null
+      : group.key;
+  const lines = group.indices
+    .map((i) => items[i])
+    .map((t, idx) => {
+      const text = (t.title ?? "").trim();
+      if (!text) return null;
+      const due = t.due_hint ? ` (דד-ליין: ${t.due_hint})` : "";
+      return `${idx + 1}. ${text}${due}`;
+    })
+    .filter((s): s is string => Boolean(s));
+  const greeting = speakerName ? `היי ${speakerName},` : null;
+  const heading =
+    group.key === "_self_"
+      ? "המשימות שלי מהשיחה:"
+      : speakerName
+      ? "אלה המשימות שעלו בשיחה שלנו ואני זקוקה לך עליהן:"
+      : "משימות נוספות מהשיחה:";
+  const body = [greeting, heading, ...lines]
+    .filter(Boolean)
+    .join("\n");
+  const [draft, setDraft] = useState(body);
+  // Re-seed when the underlying tasks change (server response or user edit).
+  useEffect(() => {
+    setDraft(body);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [body]);
+  const [copied, setCopied] = useState(false);
+
+  const onWhatsApp = () => {
+    if (!draft.trim()) return;
+    const url = `https://wa.me/?text=${encodeURIComponent(draft)}`;
+    window.open(url, "_blank", "noopener");
+  };
+  const onMail = () => {
+    if (!draft.trim()) return;
+    const subject = `משימות מתוך השיחה: ${recording.title ?? ""}`;
+    window.location.href = `mailto:?subject=${encodeURIComponent(
+      subject
+    )}&body=${encodeURIComponent(draft)}`;
+  };
+  const onCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(draft);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  if (lines.length === 0) {
+    return (
+      <p className="text-[11px] text-ink-500 px-1">
+        אין משימות מסומנות לדובר זה.
+      </p>
+    );
+  }
+  return (
+    <div className="rounded-md border border-ink-200 bg-white px-2.5 py-2 space-y-2">
+      <textarea
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        rows={Math.max(4, lines.length + 2)}
+        className="field text-xs resize-y leading-relaxed"
+        dir="auto"
+      />
+      <div className="flex items-center gap-1 flex-wrap">
+        {isOtherSide && (
+          <>
+            <ActionBtn
+              onClick={onWhatsApp}
+              icon={<Send className="w-3 h-3" />}
+              disabled={!draft.trim()}
+            >
+              WhatsApp
+            </ActionBtn>
+            <ActionBtn
+              onClick={onMail}
+              icon={<Mail className="w-3 h-3" />}
+              disabled={!draft.trim()}
+            >
+              מייל
+            </ActionBtn>
+          </>
+        )}
+        <ActionBtn
+          onClick={onCopy}
+          icon={
+            copied ? (
+              <Check className="w-3 h-3 text-success-700" />
+            ) : (
+              <Copy className="w-3 h-3" />
+            )
+          }
+          disabled={!draft.trim()}
+        >
+          {copied ? "הועתק" : "העתקה"}
+        </ActionBtn>
+      </div>
+    </div>
+  );
+}
+
 const SELF_TOKENS = ["אני", "myself", "me", "self"];
 
 /**
@@ -918,32 +1161,6 @@ function TaskRow({
         dir="auto"
       />
       <div className="flex items-center gap-2 flex-wrap">
-        <label className="text-[10px] text-ink-500 inline-flex items-center gap-1">
-          עדיפות:
-          <select
-            value={task.priority ?? "normal"}
-            onChange={(e) =>
-              onChange(
-                items.map((it, j) =>
-                  j === i
-                    ? {
-                        ...it,
-                        priority: e.target.value as
-                          | "low"
-                          | "normal"
-                          | "high",
-                      }
-                    : it
-                )
-              )
-            }
-            className="field !py-0.5 !px-1 text-[11px] w-auto"
-          >
-            <option value="low">נמוכה</option>
-            <option value="normal">רגילה</option>
-            <option value="high">גבוהה</option>
-          </select>
-        </label>
         {task.due_hint && (
           <span className="text-[11px] text-ink-500">
             דד-ליין: {task.due_hint}

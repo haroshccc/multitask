@@ -49,9 +49,9 @@ const DEFAULT_PROMPTS: Record<string, string> = {
   long_summary:
     "צור סיכום מפורט של מספר פסקאות שמכסות את הנושאים העיקריים, ההחלטות שהתקבלו, ושאלות פתוחות שעלו. אל תכלול דברי נימוס.",
   whatsapp_message:
-    "כתוב הודעת מעקב קצרה (3–5 שורות) שמתאימה לשליחה ב-WhatsApp לצד השני בשיחה. בטון אישי, כולל סיכום של מה שהוסכם ומה הצעדים הבאים.",
+    "כתוב/כתבי הודעת מעקב קצרה (3–5 שורות) לשליחה ב-WhatsApp לצד השני בשיחה. פתח/פתחי ב-'היי <שם>' תוך שימוש בשם של הדובר העיקרי שאינו בעלת ההקלטה (לפי תיוג הדוברים שמופיע בהקשר). השתמש/י בלשון אישית בגוף שני (את/אתה). כלול/כללי סיכום של מה שהוסכם ומה הצעדים הבאים. אם אין שם דובר אחר ידוע, אל תכלול שורת פתיחה אלא הודעה ניטרלית.",
   email:
-    "צור טיוטת מייל פורמלית לשליחה לצד השני. נושא תמציתי וגוף עם פתיח, סיכום הנקודות העיקריות, רשימה של פעולות שסוכמו, ופנייה חיובית לסיום.",
+    "צור/צרי טיוטת מייל פורמלית לשליחה לצד השני. הנושא תמציתי. גוף המייל מתחיל ב-'היי <שם>' עם שם הדובר העיקרי שאינו בעלת ההקלטה (לפי תיוג הדוברים שמופיע בהקשר), בלשון אישית בגוף שני. אחר כך — סיכום הנקודות העיקריות, רשימה של פעולות שסוכמו, ופנייה חיובית לסיום. אם אין שם דובר אחר ידוע, פתח/פתחי ב-'שלום' ללא שם.",
   tasks:
     "זהה משימות שצריך לבצע אחרי השיחה ופצל אותן לפי האחראי. לכל משימה קבע: כותרת ברורה, speaker_name של הדובר שאחראי לבצע אותה (השתמש/י ב-'אני' אם זו משימה של בעלת ההקלטה — דובר 0 כברירת מחדל אלא אם תויג אחרת), עדיפות (low/normal/high), ורמז דד-ליין טקסטואלי אם הוזכר תאריך יחסי כמו 'מחר' או 'בשבוע הבא'. אל תמציא משימות.",
   events:
@@ -131,14 +131,74 @@ async function callClaude(args: {
   const hasOverrides =
     args.promptOverrides &&
     Object.values(args.promptOverrides).some((v) => v && v.trim().length > 0);
+  // Tool-use forces a structured object output. Without this the model
+  // sometimes returned slightly-malformed JSON (unescaped newlines mid-
+  // string, smart quotes, etc.) and our `JSON.parse(text)` blew up. With
+  // tool_choice locked to this tool, the API returns the parsed object as
+  // `tool_use.input` directly — no string parsing on our side.
+  const reportTool = {
+    name: "report_analysis",
+    description:
+      "Returns the structured analysis of the conversation transcript.",
+    input_schema: {
+      type: "object",
+      properties: {
+        short_summary: { type: "string" },
+        long_summary: { type: "string" },
+        whatsapp_message: { type: "string" },
+        email: {
+          type: "object",
+          properties: {
+            subject: { type: "string" },
+            body: { type: "string" },
+          },
+          required: ["subject", "body"],
+        },
+        tasks: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              title: { type: "string" },
+              speaker_name: { type: ["string", "null"] },
+              speaker_index: { type: ["number", "null"] },
+              priority: {
+                type: "string",
+                enum: ["low", "normal", "high"],
+              },
+              due_hint: { type: ["string", "null"] },
+            },
+            required: ["title"],
+          },
+        },
+        events: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              title: { type: "string" },
+              date_iso: { type: ["string", "null"] },
+              duration_minutes: { type: ["number", "null"] },
+              speaker_name: { type: ["string", "null"] },
+            },
+            required: ["title"],
+          },
+        },
+      },
+      required: [
+        "short_summary",
+        "long_summary",
+        "whatsapp_message",
+        "email",
+        "tasks",
+        "events",
+      ],
+    },
+  };
   const body = {
     model: ANTHROPIC_MODEL,
     max_tokens: 4096,
     system: [
-      // Static system prompt — cached when no per-user overrides are in play
-      // (cache hits save ~80% of input tokens). When the user customizes any
-      // prompt section the system prompt diverges so caching it would be a
-      // miss either way; we drop the cache hint then.
       hasOverrides
         ? { type: "text", text: systemPrompt }
         : {
@@ -147,6 +207,8 @@ async function callClaude(args: {
             cache_control: { type: "ephemeral" },
           },
     ],
+    tools: [reportTool],
+    tool_choice: { type: "tool", name: "report_analysis" },
     messages: [
       {
         role: "user",
@@ -170,23 +232,20 @@ async function callClaude(args: {
     throw new Error(`anthropic_${res.status}: ${text.slice(0, 500)}`);
   }
   const json = (await res.json()) as {
-    content?: Array<{ type: string; text?: string }>;
+    content?: Array<{
+      type: string;
+      text?: string;
+      name?: string;
+      input?: unknown;
+    }>;
   };
-  const text = json.content?.find((b) => b.type === "text")?.text ?? "";
-  if (!text) throw new Error("anthropic_empty_response");
-
-  // Tolerate occasional ```json fences even though we asked for raw JSON.
-  const cleaned = text
-    .trim()
-    .replace(/^```(?:json)?\s*/i, "")
-    .replace(/\s*```\s*$/i, "");
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(cleaned);
-  } catch {
-    throw new Error(`anthropic_unparseable_json: ${cleaned.slice(0, 300)}`);
+  const toolBlock = json.content?.find(
+    (b) => b.type === "tool_use" && b.name === "report_analysis"
+  );
+  if (!toolBlock?.input) {
+    throw new Error("anthropic_no_tool_use_block");
   }
-  return parsed as AiOutput;
+  return toolBlock.input as AiOutput;
 }
 
 async function summarizeHandler(

@@ -106,6 +106,8 @@ const STATUS_META: Record<RecordingStatus, { label: string; className: string }>
   transcribing: { label: "מתמללת", className: "bg-primary-100 text-primary-700" },
   extracting: { label: "מחלצת", className: "bg-primary-100 text-primary-700" },
   ready: { label: "מוכנה", className: "bg-emerald-100 text-emerald-700" },
+  processing: { label: "בעיבוד", className: "bg-primary-100 text-primary-700" },
+  processed: { label: "עובדה", className: "bg-emerald-100 text-emerald-700" },
   error: { label: "שגיאה", className: "bg-danger-100 text-danger-700" },
 };
 

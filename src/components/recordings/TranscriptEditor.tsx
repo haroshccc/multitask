@@ -14,6 +14,16 @@ interface Utterance {
   text?: string;
 }
 
+/** A display "row" — N consecutive same-speaker utterances joined into one. */
+interface Block {
+  speaker: number | undefined;
+  start: number;
+  end: number;
+  text: string;
+  /** Indexes into the raw `utterances` array that contributed to this block. */
+  source: number[];
+}
+
 interface Props {
   recording: Recording;
   /**
@@ -25,27 +35,26 @@ interface Props {
 }
 
 const SAVE_DEBOUNCE_MS = 800;
-
-// Pixel height of the prompter window. Rough guideline = ~5 average rows.
-// Inactive rows are compact, active row grows; the window centers on the
-// active row so neighbors fade in/out as audio progresses.
 const PROMPTER_HEIGHT_PX = 320;
+// Grouping rules — we collapse consecutive same-speaker utterances into one
+// row, but if a single uninterrupted block runs longer than this we force-cut
+// it into roughly TARGET-second chunks at utterance boundaries so a long
+// monologue doesn't end up as one wall of text.
+const FORCE_SPLIT_AFTER_S = 15;
+const TARGET_CHUNK_S = 10;
 
 export function TranscriptEditor({ recording, audioElement, className }: Props) {
   const utterances = extractUtterances(recording);
   const { data: speakers = [] } = useRecordingSpeakers(recording.id);
   const save = useSaveRecordingTranscriptEdits();
 
-  // Per-row text under edit. The map is sparse — only rows the user touched.
-  // Once an edit lands successfully, the row drops out of `drafts` and reads
-  // its text from the (now-fresh) `recording.transcript_json` again.
+  // Drafts keyed by block index — sparse map of rows the user touched.
   const [drafts, setDrafts] = useState<Record<number, string>>({});
   const draftsRef = useRef(drafts);
   draftsRef.current = drafts;
   const [savedFlash, setSavedFlash] = useState(false);
 
-  // Highlight whichever utterance the audio is currently inside. We listen
-  // directly on the element so we don't need to lift state into the parent.
+  // Audio time tracking for active-row highlighting.
   const [currentTime, setCurrentTime] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   useEffect(() => {
@@ -75,63 +84,80 @@ export function TranscriptEditor({ recording, audioElement, className }: Props) 
     return map;
   }, [speakers]);
 
-  // Active row index, computed from currentTime. -1 when nothing matches
-  // (e.g. before the first utterance starts or in a silence between rows).
-  // We fall back to the last row whose start ≤ currentTime, so silences keep
-  // the previous row highlighted instead of clearing the prompter.
+  // Compute display blocks from raw utterances.
+  const blocks = useMemo(() => groupUtterances(utterances), [utterances]);
+
+  // Drop drafts whose block index no longer exists (e.g. after a save we
+  // collapsed N utterances into 1 and the block count dropped).
+  useEffect(() => {
+    setDrafts((prev) => {
+      const next: Record<number, string> = {};
+      for (const [k, v] of Object.entries(prev)) {
+        if (Number(k) < blocks.length) next[Number(k)] = v;
+      }
+      return next;
+    });
+  }, [blocks.length]);
+
+  // Active block index, derived from currentTime.
   const activeIndex = useMemo(() => {
     let candidate = -1;
-    for (let i = 0; i < utterances.length; i++) {
-      const start = typeof utterances[i].start === "number" ? utterances[i].start! : 0;
-      if (start <= currentTime) candidate = i;
+    for (let i = 0; i < blocks.length; i++) {
+      if (blocks[i].start <= currentTime) candidate = i;
       else break;
     }
     return candidate;
-  }, [currentTime, utterances]);
+  }, [currentTime, blocks]);
 
-  // Auto-scroll the prompter so the active row is centered. We scroll
-  // imperatively rather than via CSS so we can ignore user-initiated scrolls
-  // (so manual review during pause doesn't fight the prompter).
+  // Auto-scroll prompter — same logic as before, just keyed off blocks now.
   const containerRef = useRef<HTMLOListElement | null>(null);
   const rowRefs = useRef<Array<HTMLLIElement | null>>([]);
   const userScrolledAtRef = useRef<number>(0);
   useEffect(() => {
     if (activeIndex < 0) return;
-    if (!isPlaying) return; // pause = let the user scroll freely
-    // If the user manually scrolled in the last 4s, pause auto-follow so
-    // we don't yank the view back while they're reviewing.
+    if (!isPlaying) return;
     if (Date.now() - userScrolledAtRef.current < 4_000) return;
     const row = rowRefs.current[activeIndex];
     const container = containerRef.current;
     if (!row || !container) return;
-    const rowRect = row.getBoundingClientRect();
-    const containerRect = container.getBoundingClientRect();
     const desiredTop =
       row.offsetTop -
       container.clientHeight / 2 +
-      rowRect.height / 2;
+      row.getBoundingClientRect().height / 2;
     container.scrollTo({ top: desiredTop, behavior: "smooth" });
-    void containerRect; // silence unused; left for future debug
   }, [activeIndex, isPlaying]);
 
-  // Debounced save — collect every dirty draft and flush together.
+  // Debounced save. For each dirty BLOCK we have to write back into the
+  // underlying utterances array — the first source utterance gets the new
+  // edited text, the rest are blanked so the next render's grouping still
+  // joins them into one block (just from one populated source instead of N).
   useEffect(() => {
     if (Object.keys(drafts).length === 0) return;
     const handle = window.setTimeout(() => {
       const snapshot = draftsRef.current;
-      const edits = Object.entries(snapshot).map(([k, v]) => ({
-        index: Number(k),
-        text: v,
-      }));
-      if (edits.length === 0) return;
+      const blockEdits = Object.entries(snapshot)
+        .map(([k, v]) => ({ blockIndex: Number(k), text: v }))
+        .filter((e) => e.blockIndex < blocks.length);
+      if (blockEdits.length === 0) return;
+      const utteranceEdits: { index: number; text: string }[] = [];
+      for (const e of blockEdits) {
+        const block = blocks[e.blockIndex];
+        if (!block) continue;
+        for (let i = 0; i < block.source.length; i++) {
+          utteranceEdits.push({
+            index: block.source[i],
+            text: i === 0 ? e.text : "",
+          });
+        }
+      }
       save.mutate(
-        { recordingId: recording.id, edits },
+        { recordingId: recording.id, edits: utteranceEdits },
         {
           onSuccess: () => {
             setDrafts((prev) => {
               const next = { ...prev };
-              for (const { index, text } of edits) {
-                if (next[index] === text) delete next[index];
+              for (const e of blockEdits) {
+                if (next[e.blockIndex] === e.text) delete next[e.blockIndex];
               }
               return next;
             });
@@ -142,21 +168,21 @@ export function TranscriptEditor({ recording, audioElement, className }: Props) 
       );
     }, SAVE_DEBOUNCE_MS);
     return () => window.clearTimeout(handle);
-  }, [drafts, recording.id, save]);
+  }, [drafts, recording.id, save, blocks]);
 
   const seekTo = (seconds: number) => {
     if (!audioElement) return;
     try {
       audioElement.currentTime = seconds;
       void audioElement.play().catch(() => {
-        /* play may reject if not allowed; ignore — user can hit play. */
+        /* play may reject if not allowed; ignore. */
       });
     } catch {
-      /* some browsers throw on unseekable streams; ignore. */
+      /* unseekable streams; ignore. */
     }
   };
 
-  if (utterances.length === 0) {
+  if (blocks.length === 0) {
     return (
       <section
         className={cn(
@@ -208,24 +234,20 @@ export function TranscriptEditor({ recording, audioElement, className }: Props) 
       <ol
         ref={containerRef}
         onScroll={() => {
-          // Note: smooth scrollTo() also fires onScroll. We can't perfectly
-          // distinguish, but a 4s window is short enough that manual scrolls
-          // still pause auto-follow without pinning the prompter forever.
           userScrolledAtRef.current = Date.now();
         }}
         style={{ maxHeight: PROMPTER_HEIGHT_PX, scrollBehavior: "smooth" }}
         className="relative space-y-1.5 overflow-y-auto pe-1"
       >
-        {utterances.map((u, i) => {
-          const start = typeof u.start === "number" ? u.start : 0;
+        {blocks.map((b, i) => {
           const isActive = i === activeIndex;
           const isPast = i < activeIndex;
           const speakerName =
-            typeof u.speaker === "number"
-              ? speakerLabels.get(u.speaker) ?? `דובר ${u.speaker + 1}`
+            typeof b.speaker === "number"
+              ? speakerLabels.get(b.speaker) ?? `דובר ${b.speaker + 1}`
               : "—";
           const draft = drafts[i];
-          const text = draft !== undefined ? draft : u.text ?? "";
+          const text = draft !== undefined ? draft : b.text;
           return (
             <li
               key={i}
@@ -244,14 +266,14 @@ export function TranscriptEditor({ recording, audioElement, className }: Props) 
               <div className="flex items-baseline gap-2 mb-1">
                 <button
                   type="button"
-                  onClick={() => seekTo(start)}
+                  onClick={() => seekTo(b.start)}
                   className={cn(
                     "text-[11px] tabular-nums hover:underline shrink-0",
                     isActive ? "text-primary-800 font-semibold" : "text-primary-700"
                   )}
                   title="קפצי להשמעה מהזמן הזה"
                 >
-                  {formatTime(start)}
+                  {formatTime(b.start)}
                 </button>
                 <span
                   className={cn(
@@ -267,7 +289,7 @@ export function TranscriptEditor({ recording, audioElement, className }: Props) 
                 onChange={(e) =>
                   setDrafts((prev) => ({ ...prev, [i]: e.target.value }))
                 }
-                rows={Math.max(1, Math.ceil(text.length / 80))}
+                rows={Math.max(1, Math.ceil(text.length / 60))}
                 dir="auto"
                 className={cn(
                   "w-full bg-transparent leading-relaxed resize-none outline-none focus:ring-1 focus:ring-primary-300 rounded-sm transition-[font-size,font-weight] duration-200",
@@ -284,12 +306,84 @@ export function TranscriptEditor({ recording, audioElement, className }: Props) 
   );
 }
 
+// ─── helpers ──────────────────────────────────────────────────────────────
+
 function extractUtterances(recording: Recording): Utterance[] {
   const json = recording.transcript_json as
     | { transcription?: { utterances?: Utterance[] } }
     | null
     | undefined;
   return json?.transcription?.utterances ?? [];
+}
+
+/**
+ * Collapse consecutive same-speaker utterances into a single Block, then
+ * force-split any block whose duration exceeds FORCE_SPLIT_AFTER_S into
+ * roughly TARGET-second chunks at utterance boundaries (so we don't break
+ * inside a sentence).
+ */
+function groupUtterances(utterances: Utterance[]): Block[] {
+  if (utterances.length === 0) return [];
+
+  // Pass 1 — merge consecutive same-speaker.
+  const raw: Block[] = [];
+  let cur: Block | null = null;
+  for (let i = 0; i < utterances.length; i++) {
+    const u = utterances[i];
+    const start = typeof u.start === "number" ? u.start : cur?.end ?? 0;
+    const end = typeof u.end === "number" ? u.end : start;
+    const text = (u.text ?? "").trim();
+    if (cur && cur.speaker === u.speaker) {
+      cur.end = end;
+      cur.text = cur.text + (cur.text && text ? " " : "") + text;
+      cur.source.push(i);
+    } else {
+      if (cur) raw.push(cur);
+      cur = { speaker: u.speaker, start, end, text, source: [i] };
+    }
+  }
+  if (cur) raw.push(cur);
+
+  // Pass 2 — force-split long monologues at utterance boundaries.
+  const out: Block[] = [];
+  for (const g of raw) {
+    if (g.end - g.start <= FORCE_SPLIT_AFTER_S) {
+      out.push(g);
+      continue;
+    }
+    let chunk: Block | null = null;
+    for (const idx of g.source) {
+      const u = utterances[idx];
+      const uStart = typeof u.start === "number" ? u.start : chunk?.end ?? g.start;
+      const uEnd = typeof u.end === "number" ? u.end : uStart;
+      const uText = (u.text ?? "").trim();
+      if (chunk && uEnd - chunk.start >= TARGET_CHUNK_S) {
+        out.push(chunk);
+        chunk = {
+          speaker: g.speaker,
+          start: uStart,
+          end: uEnd,
+          text: uText,
+          source: [idx],
+        };
+      } else if (chunk) {
+        chunk.end = uEnd;
+        chunk.text = chunk.text + (chunk.text && uText ? " " : "") + uText;
+        chunk.source.push(idx);
+      } else {
+        chunk = {
+          speaker: g.speaker,
+          start: uStart,
+          end: uEnd,
+          text: uText,
+          source: [idx],
+        };
+      }
+    }
+    if (chunk) out.push(chunk);
+  }
+
+  return out;
 }
 
 function formatTime(seconds: number): string {

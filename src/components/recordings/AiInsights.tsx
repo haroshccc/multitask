@@ -557,96 +557,46 @@ function TasksSection({
           לחיצי "הוספת משימה" או הפעילי AI כדי לקבל הצעות.
         </p>
       ) : (
-        <div className="space-y-2">
-          {items.map((task, i) => {
-            const createdId = createdByIndex[i];
-            return (
-            <div
-              key={i}
-              className={cn(
-                "rounded-md border px-2.5 py-1.5 space-y-1",
-                createdId
-                  ? "border-success-300 bg-success-50"
-                  : "border-ink-200"
-              )}
-            >
-              <input
-                value={task.title}
-                onChange={(e) =>
-                  onChange(
-                    items.map((it, j) =>
-                      j === i ? { ...it, title: e.target.value } : it
-                    )
-                  )
-                }
-                className="field !py-1 text-sm"
-                placeholder="כותרת המשימה"
-                dir="auto"
-              />
-              <div className="flex items-center gap-2 flex-wrap">
-                <label className="text-[10px] text-ink-500 inline-flex items-center gap-1">
-                  עדיפות:
-                  <select
-                    value={task.priority ?? "normal"}
-                    onChange={(e) =>
-                      onChange(
-                        items.map((it, j) =>
-                          j === i
-                            ? {
-                                ...it,
-                                priority: e.target.value as "low" | "normal" | "high",
-                              }
-                            : it
-                        )
-                      )
-                    }
-                    className="field !py-0.5 !px-1 text-[11px] w-auto"
-                  >
-                    <option value="low">נמוכה</option>
-                    <option value="normal">רגילה</option>
-                    <option value="high">גבוהה</option>
-                  </select>
-                </label>
-                {task.speaker_name && (
-                  <span className="text-[11px] text-ink-500">
-                    דובר: {task.speaker_name}
-                  </span>
-                )}
-                {task.due_hint && (
-                  <span className="text-[11px] text-ink-500">
-                    דד-ליין: {task.due_hint}
-                  </span>
-                )}
-                <div className="ms-auto flex items-center gap-1">
-                  {createdId ? (
-                    <ActionBtn
-                      onClick={() => onEditExisting(i, createdId)}
-                      icon={<Check className="w-3 h-3 text-success-700" />}
-                    >
-                      פתחי לעריכה
-                    </ActionBtn>
-                  ) : (
-                    <ActionBtn
-                      onClick={() => onCreateOne(i)}
-                      icon={<CheckSquare className="w-3 h-3" />}
-                      disabled={!task.title.trim()}
-                    >
-                      צור משימה
-                    </ActionBtn>
+        <div className="space-y-3">
+          {groupTasksBySpeaker(items).map((group) => (
+            <div key={group.key} className="space-y-1.5">
+              <div className="text-[11px] font-semibold text-ink-600 inline-flex items-center gap-1.5 px-1">
+                <span
+                  className={cn(
+                    "w-1.5 h-1.5 rounded-full",
+                    group.key === "_self_"
+                      ? "bg-primary-500"
+                      : group.key === "_unassigned_"
+                      ? "bg-ink-300"
+                      : "bg-warning-500"
                   )}
-                  <ActionBtn
-                    onClick={() =>
-                      onChange(items.filter((_, j) => j !== i))
-                    }
-                    icon={<span className="text-[11px]">×</span>}
-                  >
-                    הסר
-                  </ActionBtn>
-                </div>
+                />
+                {group.label} · {group.indices.length}
               </div>
+              {group.indices.map((i) => {
+                const task = items[i];
+                const createdId = createdByIndex[i];
+                const isOtherSide =
+                  group.key !== "_self_" && group.key !== "_unassigned_";
+                return (
+                  <TaskRow
+                    key={i}
+                    index={i}
+                    task={task}
+                    items={items}
+                    onChange={onChange}
+                    createdId={createdId}
+                    isOtherSide={isOtherSide}
+                    recording={recording}
+                    onCreate={() => onCreateOne(i)}
+                    onEdit={() =>
+                      createdId && onEditExisting(i, createdId)
+                    }
+                  />
+                );
+              })}
             </div>
-            );
-          })}
+          ))}
         </div>
       )}
       <TaskEditModal
@@ -859,6 +809,192 @@ function ActionBtn({
 }
 
 // ─── small utils ──────────────────────────────────────────────────────────
+
+interface TaskGroup {
+  key: string;
+  label: string;
+  indices: number[];
+}
+
+const SELF_TOKENS = ["אני", "myself", "me", "self"];
+
+/**
+ * Groups tasks for the משימות pane:
+ *   _self_       — tasks attributed to the user ("אני" / "me" / matching name)
+ *   _unassigned_ — speaker_name missing or unrecognised
+ *   <speaker>    — one bucket per other-side speaker_name
+ */
+function groupTasksBySpeaker(items: RecordingAiOutput["tasks"]): TaskGroup[] {
+  const order: string[] = [];
+  const buckets: Record<string, TaskGroup> = {};
+  const ensure = (key: string, label: string) => {
+    if (!buckets[key]) {
+      buckets[key] = { key, label, indices: [] };
+      order.push(key);
+    }
+    return buckets[key];
+  };
+  for (let i = 0; i < items.length; i++) {
+    const name = (items[i].speaker_name ?? "").trim();
+    if (!name) {
+      ensure("_unassigned_", "משימות ללא דובר").indices.push(i);
+    } else if (SELF_TOKENS.some((t) => name.toLowerCase() === t)) {
+      ensure("_self_", "המשימות שלי").indices.push(i);
+    } else {
+      ensure(name, `משימות עבור ${name}`).indices.push(i);
+    }
+  }
+  // Stable ordering: _self_ first, then other speakers in encounter order,
+  // _unassigned_ last so it doesn't push the meaningful groups down.
+  return order
+    .sort((a, b) => {
+      const score = (k: string) =>
+        k === "_self_" ? 0 : k === "_unassigned_" ? 2 : 1;
+      const sa = score(a);
+      const sb = score(b);
+      if (sa !== sb) return sa - sb;
+      return order.indexOf(a) - order.indexOf(b);
+    })
+    .map((k) => buckets[k]);
+}
+
+function TaskRow({
+  index,
+  task,
+  items,
+  onChange,
+  createdId,
+  isOtherSide,
+  recording,
+  onCreate,
+  onEdit,
+}: {
+  index: number;
+  task: RecordingAiOutput["tasks"][number];
+  items: RecordingAiOutput["tasks"];
+  onChange: (items: RecordingAiOutput["tasks"]) => void;
+  createdId: string | undefined;
+  isOtherSide: boolean;
+  recording: Recording;
+  onCreate: () => void;
+  onEdit: () => void;
+}) {
+  const i = index;
+  const sendBody = task.due_hint
+    ? `${task.title} (${task.due_hint})`
+    : task.title;
+  const onWhatsApp = () => {
+    if (!sendBody.trim()) return;
+    const url = `https://wa.me/?text=${encodeURIComponent(sendBody)}`;
+    window.open(url, "_blank", "noopener");
+  };
+  const onMail = () => {
+    if (!sendBody.trim()) return;
+    const subject = `מתוך השיחה: ${recording.title ?? ""}`;
+    const body = `${sendBody}`;
+    window.location.href = `mailto:?subject=${encodeURIComponent(
+      subject
+    )}&body=${encodeURIComponent(body)}`;
+  };
+
+  return (
+    <div
+      className={cn(
+        "rounded-md border px-2.5 py-1.5 space-y-1",
+        createdId ? "border-success-300 bg-success-50" : "border-ink-200"
+      )}
+    >
+      <input
+        value={task.title}
+        onChange={(e) =>
+          onChange(
+            items.map((it, j) =>
+              j === i ? { ...it, title: e.target.value } : it
+            )
+          )
+        }
+        className="field !py-1 text-sm"
+        placeholder="כותרת המשימה"
+        dir="auto"
+      />
+      <div className="flex items-center gap-2 flex-wrap">
+        <label className="text-[10px] text-ink-500 inline-flex items-center gap-1">
+          עדיפות:
+          <select
+            value={task.priority ?? "normal"}
+            onChange={(e) =>
+              onChange(
+                items.map((it, j) =>
+                  j === i
+                    ? {
+                        ...it,
+                        priority: e.target.value as
+                          | "low"
+                          | "normal"
+                          | "high",
+                      }
+                    : it
+                )
+              )
+            }
+            className="field !py-0.5 !px-1 text-[11px] w-auto"
+          >
+            <option value="low">נמוכה</option>
+            <option value="normal">רגילה</option>
+            <option value="high">גבוהה</option>
+          </select>
+        </label>
+        {task.due_hint && (
+          <span className="text-[11px] text-ink-500">
+            דד-ליין: {task.due_hint}
+          </span>
+        )}
+        <div className="ms-auto flex items-center gap-1 flex-wrap justify-end">
+          {isOtherSide && (
+            <>
+              <ActionBtn
+                onClick={onWhatsApp}
+                icon={<Send className="w-3 h-3" />}
+                disabled={!task.title.trim()}
+              >
+                WhatsApp
+              </ActionBtn>
+              <ActionBtn
+                onClick={onMail}
+                icon={<Mail className="w-3 h-3" />}
+                disabled={!task.title.trim()}
+              >
+                מייל
+              </ActionBtn>
+            </>
+          )}
+          {createdId ? (
+            <ActionBtn
+              onClick={onEdit}
+              icon={<Check className="w-3 h-3 text-success-700" />}
+            >
+              פתחי לעריכה
+            </ActionBtn>
+          ) : (
+            <ActionBtn
+              onClick={onCreate}
+              icon={<CheckSquare className="w-3 h-3" />}
+              disabled={!task.title.trim()}
+            >
+              צור משימה
+            </ActionBtn>
+          )}
+          <ActionBtn
+            onClick={() => onChange(items.filter((_, j) => j !== i))}
+            icon={<span className="text-[11px]">×</span>}
+          >
+            הסר
+          </ActionBtn>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function priorityToUrgency(p: "low" | "normal" | "high"): number {
   if (p === "low") return 25;

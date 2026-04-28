@@ -5,6 +5,7 @@ import { he } from "date-fns/locale";
 import {
   useRecordingAudioUrl,
   useTriggerRecordingProcessing,
+  useUpdateRecording,
 } from "@/lib/hooks/useRecordings";
 import {
   useRecordingLists,
@@ -117,7 +118,7 @@ export function RecordingPlayer({ recording }: Props) {
           label visually; the grid alone is enough at-a-glance read. */}
       <section className="space-y-2">
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-xs">
-          <Meta label="סטטוס" value={statusLabel(recording.status)} />
+          <StatusMeta recording={recording} />
           <Meta label="מקור" value={sourceLabel(recording.source)} />
           <Meta label="פרויקט" value={project?.name ?? null} />
           <Meta
@@ -148,8 +149,13 @@ export function RecordingPlayer({ recording }: Props) {
 
       <TranscriptionSection recording={recording} audioElement={audioElement} />
 
-      {(recording.status === "ready" || recording.status === "extracting") &&
-        recording.transcript_text && <AiInsights recording={recording} />}
+      {/* AI/manual processing pane is always available once the recording */}
+      {/* exists. Even without a transcript the user can fill the sections by */}
+      {/* hand and "הפעלת AI" gates itself on whether transcript_text is set. */}
+      {recording.status !== "recording" &&
+        recording.status !== "transcribing" && (
+          <AiInsights recording={recording} />
+        )}
     </div>
   );
 }
@@ -256,6 +262,37 @@ function Meta({
   );
 }
 
+function StatusMeta({ recording }: { recording: Recording }) {
+  const update = useUpdateRecording();
+  const onChange = (next: Recording["status"]) => {
+    if (next === recording.status) return;
+    update.mutate({ recordingId: recording.id, patch: { status: next } });
+  };
+  return (
+    <div className="rounded-md bg-ink-50 px-2.5 py-2">
+      <div className="text-[10px] uppercase tracking-wider text-ink-400">סטטוס</div>
+      <select
+        value={recording.status}
+        onChange={(e) => onChange(e.target.value as Recording["status"])}
+        disabled={update.isPending}
+        className="bg-transparent text-xs text-ink-800 mt-0.5 w-full outline-none cursor-pointer hover:text-primary-700 disabled:cursor-wait"
+      >
+        {/* Render the current status even if it's not user-pickable (e.g. */}
+        {/* `transcribing` while a job is in flight) so the dropdown reflects */}
+        {/* reality and the user can flip to a manual status from there. */}
+        {!USER_PICKABLE_STATUSES.some((o) => o.value === recording.status) && (
+          <option value={recording.status}>{statusLabel(recording.status)}</option>
+        )}
+        {USER_PICKABLE_STATUSES.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
 function statusLabel(status: Recording["status"]): string {
   switch (status) {
     case "recording":
@@ -268,10 +305,25 @@ function statusLabel(status: Recording["status"]): string {
       return "מחלצת משימות";
     case "ready":
       return "מוכנה";
+    case "processing":
+      return "בעיבוד";
+    case "processed":
+      return "עובדה";
     case "error":
       return "שגיאה";
   }
 }
+
+const USER_PICKABLE_STATUSES: Array<{
+  value: Recording["status"];
+  label: string;
+}> = [
+  { value: "uploaded", label: "הועלתה" },
+  { value: "ready", label: "מוכנה" },
+  { value: "processing", label: "בעיבוד" },
+  { value: "processed", label: "עובדה" },
+  { value: "error", label: "שגיאה" },
+];
 
 function sourceLabel(source: Recording["source"]): string {
   switch (source) {

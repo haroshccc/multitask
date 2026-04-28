@@ -21,7 +21,8 @@ const ANTHROPIC_MODEL = "claude-sonnet-4-6";
 const MAX_TRANSCRIPT_CHARS = 80_000; // ~20k tokens; well under context limit
 
 interface AiOutput {
-  summary: string;
+  short_summary: string;
+  long_summary: string;
   whatsapp_message: string;
   email: { subject: string; body: string };
   tasks: Array<{
@@ -37,23 +38,24 @@ interface AiOutput {
     duration_minutes?: number | null;
     speaker_name?: string | null;
   }>;
-  key_decisions: Array<{ text: string }>;
-  questions: Array<{ question: string; context?: string }>;
 }
 
-const SYSTEM_PROMPT = `אתה עוזר אישי שמנתח שיחות מתומללות בעברית. המשתמש (בעלת המוצר) הקליטה שיחה עם לקוח / שותף / חבר צוות, ועכשיו את צריכה לעבד את התמלול כדי להוציא ממנו ערך שימושי: סיכום, טיוטות הודעות מעקב, משימות, אירועים, החלטות מרכזיות ושאלות פתוחות.
+const SYSTEM_PROMPT = `אתה עוזר אישי שמנתח שיחות מתומללות בעברית. המשתמש (בעלת המוצר) הקליטה שיחה עם לקוח / שותף / חבר צוות, ועכשיו את צריכה לעבד את התמלול כדי להוציא ממנו ערך שימושי: סיכומים, טיוטות הודעות מעקב, משימות ואירועים.
 
 דרישות:
 - כל הטקסט החופשי בעברית בלבד.
 - אל תמציא נתונים שאינם בתמלול.
+- "סיכום קצר" — משפט-שניים שמסכמים את הליבה (אלוואטור-פיץ').
+- "סיכום ארוך" — מספר פסקאות שמכסות נקודות מרכזיות, החלטות שהתקבלו, ושאלות פתוחות שעלו.
 - אם משימה נאמרה ע"י דובר מסוים, ציין/י את שמו (אם תויג ב-recording_speakers) או את מספר הדובר.
 - תאריכים יחסיים ("מחר", "בעוד שבועיים") הופכים לרמז טקסטואלי ב-due_hint, לא לתאריך אבסולוטי.
-- אם אין מידע מתאים לסעיף, החזר/י מערך ריק.
+- אם אין מידע מתאים לסעיף, החזר/י מערך ריק או מחרוזת ריקה.
 
 החזר/י JSON תקני בלבד התואם בדיוק לסכימה הבאה — בלי מלל לפני או אחרי, בלי בלוקי \`\`\`:
 
 {
-  "summary": string,
+  "short_summary": string,
+  "long_summary": string,
   "whatsapp_message": string,
   "email": { "subject": string, "body": string },
   "tasks": [
@@ -61,9 +63,7 @@ const SYSTEM_PROMPT = `אתה עוזר אישי שמנתח שיחות מתומל
   ],
   "events": [
     { "title": string, "date_iso": string | null, "duration_minutes": number | null, "speaker_name": string | null }
-  ],
-  "key_decisions": [ { "text": string } ],
-  "questions": [ { "question": string, "context": string } ]
+  ]
 }`;
 
 function buildUserPrompt(args: {
@@ -194,10 +194,10 @@ async function summarizeHandler(
     if (s.label?.trim()) speakerLabels[s.speaker_index] = s.label.trim();
   }
 
-  // Mark in-flight so the UI can disable retry buttons. Don't await failure.
+  // Mark in-flight so the UI shows "בעיבוד".
   await ctx.serviceClient
     .from("recordings")
-    .update({ ai_status: "pending", error_message: null })
+    .update({ ai_status: "pending", status: "processing", error_message: null })
     .eq("id", recording.id);
 
   let aiOutput: AiOutput;
@@ -211,7 +211,7 @@ async function summarizeHandler(
     const msg = err instanceof Error ? err.message : String(err);
     await ctx.serviceClient
       .from("recordings")
-      .update({ ai_status: "error", error_message: msg })
+      .update({ ai_status: "error", status: "ready", error_message: msg })
       .eq("id", recording.id);
     console.error("summarize_failed", { recording_id: recording.id, err: msg });
     return jsonResponse({ error: "summarize_failed", message: msg }, {
@@ -226,6 +226,7 @@ async function summarizeHandler(
       ai_output: aiOutput as unknown as Record<string, unknown>,
       ai_output_at: new Date().toISOString(),
       ai_status: "ready",
+      status: "processed",
       error_message: null,
     })
     .eq("id", recording.id)

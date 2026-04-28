@@ -2273,6 +2273,8 @@ export type Database = {
         | "transcribing"
         | "extracting"
         | "ready"
+        | "processing"
+        | "processed"
         | "error"
       share_entity_type:
         | "task"
@@ -2504,6 +2506,8 @@ export const Constants = {
         "transcribing",
         "extracting",
         "ready",
+        "processing",
+        "processed",
         "error",
       ],
       share_entity_type: [

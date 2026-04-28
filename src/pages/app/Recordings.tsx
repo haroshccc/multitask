@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Mic, ArrowLeft } from "lucide-react";
+import { Mic, ArrowLeft, Settings as SettingsIcon } from "lucide-react";
 import { ScreenScaffold } from "@/components/layout/ScreenScaffold";
 import { RecordingDropZone } from "@/components/recordings/RecordingDropZone";
 import { RecordingCard } from "@/components/recordings/RecordingCard";
@@ -7,6 +7,7 @@ import { RecordingPlayer } from "@/components/recordings/RecordingPlayer";
 import { RecorderModal } from "@/components/recordings/RecorderModal";
 import { QuickRecordCard } from "@/components/recordings/QuickRecordCard";
 import { RecordingsMobileDropdown } from "@/components/recordings/RecordingsMobileDropdown";
+import { AiPromptsDialog } from "@/components/recordings/AiPromptsDialog";
 import {
   RecordingFilters,
   DEFAULT_RECORDING_FILTERS,
@@ -52,6 +53,7 @@ export function Recordings() {
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [recorderOpen, setRecorderOpen] = useState(false);
+  const [aiPromptsOpen, setAiPromptsOpen] = useState(false);
 
   // Auto-select most recent on first load + keep a valid selection on the list.
   useEffect(() => {
@@ -86,13 +88,29 @@ export function Recordings() {
       title="הקלטות"
       subtitle="הקלטה ישירה, גרירת קובץ, ניגון, הורדה ושיוך לפרויקט. תמלול עברית בפאזה הבאה."
       actions={
-        allRecordings.length > 0 ? (
-          <span className="chip">
-            {allRecordings.length} הקלטות · {formatTotal(totalSeconds)}
-          </span>
-        ) : null
+        <span className="inline-flex items-center gap-2">
+          {allRecordings.length > 0 && (
+            <span className="chip">
+              {allRecordings.length} הקלטות · {formatTotal(totalSeconds)}
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={() => setAiPromptsOpen(true)}
+            className="p-1.5 rounded-md hover:bg-ink-100 text-ink-600"
+            title="הנחיות Claude לעיבוד הקלטות"
+            aria-label="הגדרות AI"
+          >
+            <SettingsIcon className="w-4 h-4" />
+          </button>
+        </span>
       }
     >
+      <AiPromptsDialog
+        open={aiPromptsOpen}
+        onClose={() => setAiPromptsOpen(false)}
+      />
+
       <RecorderModal
         open={recorderOpen}
         onClose={() => setRecorderOpen(false)}

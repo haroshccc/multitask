@@ -148,9 +148,8 @@ export function RecordingPlayer({ recording }: Props) {
 
       <TranscriptionSection recording={recording} audioElement={audioElement} />
 
-      {recording.status === "ready" && recording.transcript_text && (
-        <AiInsights recording={recording} />
-      )}
+      {(recording.status === "ready" || recording.status === "extracting") &&
+        recording.transcript_text && <AiInsights recording={recording} />}
     </div>
   );
 }
@@ -180,21 +179,14 @@ function TranscriptionSection({
     );
   }
 
-  if (status === "extracting") {
-    return (
-      <section className="rounded-md border border-ink-200 bg-ink-50 px-3 py-3 space-y-1">
-        <div className="flex items-center gap-1.5 text-xs font-medium text-ink-700">
-          <Loader2 className="w-3.5 h-3.5 text-primary-600 animate-spin" />
-          מחלצת משימות...
-        </div>
-        <p className="text-xs text-ink-500 leading-relaxed">
-          התמלול מוכן. Claude מנתח אותו עכשיו לסיכום ומשימות.
-        </p>
-      </section>
-    );
-  }
-
-  if (status === "ready" && recording.transcript_text) {
+  // 'extracting' was an old transitional status that meant "Gladia done,
+  // Claude AI running auto" — we removed the auto step, AI is manual now.
+  // Treat any old recordings still parked there as ready (they have the
+  // transcript filled, so the editor + AI button work fine).
+  if (
+    (status === "ready" || status === "extracting") &&
+    recording.transcript_text
+  ) {
     return <TranscriptEditor recording={recording} audioElement={audioElement} />;
   }
 

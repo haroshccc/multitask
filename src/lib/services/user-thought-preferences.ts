@@ -41,12 +41,14 @@ export async function upsertUserThoughtPreferences(
     >
   >
 ): Promise<UserThoughtPreferences> {
+  // The generated `recording_ai_prompts` column type is `Json`; we use the
+  // narrower `RecordingAiPromptOverrides` shape locally for autocomplete.
+  // Cast at the wire boundary so the upsert payload satisfies the generated
+  // table type without us giving up the typed shape callers consume.
+  const wirePatch = patch as Record<string, unknown>;
   const { data, error } = await supabase
     .from("user_thought_preferences")
-    .upsert(
-      { user_id: userId, ...patch },
-      { onConflict: "user_id" }
-    )
+    .upsert({ user_id: userId, ...wirePatch }, { onConflict: "user_id" })
     .select()
     .single();
   if (error) throw error;

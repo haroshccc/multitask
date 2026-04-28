@@ -330,8 +330,9 @@ function groupUtterances(utterances: Utterance[]): Block[] {
   let cur: Block | null = null;
   for (let i = 0; i < utterances.length; i++) {
     const u = utterances[i];
-    const start = typeof u.start === "number" ? u.start : cur?.end ?? 0;
-    const end = typeof u.end === "number" ? u.end : start;
+    const start: number =
+      typeof u.start === "number" ? u.start : cur?.end ?? 0;
+    const end: number = typeof u.end === "number" ? u.end : start;
     const text = (u.text ?? "").trim();
     if (cur && cur.speaker === u.speaker) {
       cur.end = end;
@@ -354,8 +355,9 @@ function groupUtterances(utterances: Utterance[]): Block[] {
     let chunk: Block | null = null;
     for (const idx of g.source) {
       const u = utterances[idx];
-      const uStart = typeof u.start === "number" ? u.start : chunk?.end ?? g.start;
-      const uEnd = typeof u.end === "number" ? u.end : uStart;
+      const uStart: number =
+        typeof u.start === "number" ? u.start : chunk?.end ?? g.start;
+      const uEnd: number = typeof u.end === "number" ? u.end : uStart;
       const uText = (u.text ?? "").trim();
       if (chunk && uEnd - chunk.start >= TARGET_CHUNK_S) {
         out.push(chunk);

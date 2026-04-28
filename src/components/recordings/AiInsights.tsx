@@ -12,7 +12,6 @@ import {
   Lightbulb,
   Send,
   Save,
-  RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import {

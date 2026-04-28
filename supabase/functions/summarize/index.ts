@@ -40,16 +40,46 @@ interface AiOutput {
   }>;
 }
 
-const SYSTEM_PROMPT = `אתה עוזר אישי שמנתח שיחות מתומללות בעברית. המשתמש (בעלת המוצר) הקליטה שיחה עם לקוח / שותף / חבר צוות, ועכשיו את צריכה לעבד את התמלול כדי להוציא ממנו ערך שימושי: סיכומים, טיוטות הודעות מעקב, משימות ואירועים.
+// Default per-section instructions. Mirrored verbatim from
+// `src/lib/ai/recording-prompts.ts` — keep in sync. Each user can override
+// any of these via `user_thought_preferences.recording_ai_prompts`.
+const DEFAULT_PROMPTS: Record<string, string> = {
+  short_summary:
+    "צור סיכום קצר של 1–2 משפטים שמסכמים את הנקודה המרכזית של השיחה (אלוואטור-פיץ').",
+  long_summary:
+    "צור סיכום מפורט של מספר פסקאות שמכסות את הנושאים העיקריים, ההחלטות שהתקבלו, ושאלות פתוחות שעלו. אל תכלול דברי נימוס.",
+  whatsapp_message:
+    "כתוב הודעת מעקב קצרה (3–5 שורות) שמתאימה לשליחה ב-WhatsApp לצד השני בשיחה. בטון אישי, כולל סיכום של מה שהוסכם ומה הצעדים הבאים.",
+  email:
+    "צור טיוטת מייל פורמלית לשליחה לצד השני. נושא תמציתי וגוף עם פתיח, סיכום הנקודות העיקריות, רשימה של פעולות שסוכמו, ופנייה חיובית לסיום.",
+  tasks:
+    "זהה משימות שצריך לבצע אחרי השיחה. לכל משימה קבע: כותרת ברורה, מי הדובר שאחראי (אם ידוע), עדיפות (low/normal/high), ורמז דד-ליין טקסטואלי אם הוזכר תאריך יחסי כמו 'מחר' או 'בשבוע הבא'. אל תמציא משימות.",
+  events:
+    "זהה פגישות / אירועים / מועדים שנקבעו בשיחה. לכל אירוע קבע: כותרת, תאריך ISO אם הוזכר תאריך מפורש (אחרת null), משך בדקות (ברירת מחדל 30), ומי הדובר אם זה רלוונטי.",
+};
 
-דרישות:
+function buildSystemPrompt(
+  overrides: Record<string, string | null | undefined> | null
+): string {
+  const get = (k: string) => {
+    const v = overrides?.[k]?.trim();
+    return v && v.length > 0 ? v : DEFAULT_PROMPTS[k];
+  };
+  return `אתה עוזר אישי שמנתח שיחות מתומללות בעברית. המשתמש (בעלת המוצר) הקליטה שיחה עם לקוח / שותף / חבר צוות, ועכשיו את צריכה לעבד את התמלול כדי להוציא ממנו ערך שימושי.
+
+דרישות כלליות:
 - כל הטקסט החופשי בעברית בלבד.
 - אל תמציא נתונים שאינם בתמלול.
-- "סיכום קצר" — משפט-שניים שמסכמים את הליבה (אלוואטור-פיץ').
-- "סיכום ארוך" — מספר פסקאות שמכסות נקודות מרכזיות, החלטות שהתקבלו, ושאלות פתוחות שעלו.
-- אם משימה נאמרה ע"י דובר מסוים, ציין/י את שמו (אם תויג ב-recording_speakers) או את מספר הדובר.
-- תאריכים יחסיים ("מחר", "בעוד שבועיים") הופכים לרמז טקסטואלי ב-due_hint, לא לתאריך אבסולוטי.
 - אם אין מידע מתאים לסעיף, החזר/י מערך ריק או מחרוזת ריקה.
+
+הנחיות פר-סקציה (ניתנות להתאמה ע"י המשתמשת):
+
+[short_summary] ${get("short_summary")}
+[long_summary] ${get("long_summary")}
+[whatsapp_message] ${get("whatsapp_message")}
+[email] ${get("email")}
+[tasks] ${get("tasks")}
+[events] ${get("events")}
 
 החזר/י JSON תקני בלבד התואם בדיוק לסכימה הבאה — בלי מלל לפני או אחרי, בלי בלוקי \`\`\`:
 
@@ -65,6 +95,7 @@ const SYSTEM_PROMPT = `אתה עוזר אישי שמנתח שיחות מתומל
     { "title": string, "date_iso": string | null, "duration_minutes": number | null, "speaker_name": string | null }
   ]
 }`;
+}
 
 function buildUserPrompt(args: {
   title: string | null;
@@ -88,6 +119,7 @@ async function callClaude(args: {
   title: string | null;
   transcript_text: string;
   speakerLabels: Record<number, string>;
+  promptOverrides: Record<string, string | null | undefined> | null;
 }): Promise<AiOutput> {
   if (!ANTHROPIC_API_KEY) {
     throw new Error(
@@ -95,17 +127,25 @@ async function callClaude(args: {
         "Supabase Dashboard → Edge Functions → Secrets."
     );
   }
+  const systemPrompt = buildSystemPrompt(args.promptOverrides);
+  const hasOverrides =
+    args.promptOverrides &&
+    Object.values(args.promptOverrides).some((v) => v && v.trim().length > 0);
   const body = {
     model: ANTHROPIC_MODEL,
     max_tokens: 4096,
     system: [
-      // Static system prompt — wrapped in array form so we can mark it as a
-      // cache breakpoint. Saves ~80% of input tokens on subsequent calls.
-      {
-        type: "text",
-        text: SYSTEM_PROMPT,
-        cache_control: { type: "ephemeral" },
-      },
+      // Static system prompt — cached when no per-user overrides are in play
+      // (cache hits save ~80% of input tokens). When the user customizes any
+      // prompt section the system prompt diverges so caching it would be a
+      // miss either way; we drop the cache hint then.
+      hasOverrides
+        ? { type: "text", text: systemPrompt }
+        : {
+            type: "text",
+            text: systemPrompt,
+            cache_control: { type: "ephemeral" },
+          },
     ],
     messages: [
       {
@@ -194,6 +234,16 @@ async function summarizeHandler(
     if (s.label?.trim()) speakerLabels[s.speaker_index] = s.label.trim();
   }
 
+  // Pull the recording owner's per-user prompt overrides (if any). Empty /
+  // missing keys fall back to the defaults inlined above.
+  const { data: prefs } = await ctx.serviceClient
+    .from("user_thought_preferences")
+    .select("recording_ai_prompts")
+    .eq("user_id", ctx.userId)
+    .maybeSingle();
+  const promptOverrides =
+    (prefs?.recording_ai_prompts as Record<string, string> | null) ?? null;
+
   // Mark in-flight so the UI shows "בעיבוד".
   await ctx.serviceClient
     .from("recordings")
@@ -206,6 +256,7 @@ async function summarizeHandler(
       title: recording.title,
       transcript_text: recording.transcript_text,
       speakerLabels,
+      promptOverrides,
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

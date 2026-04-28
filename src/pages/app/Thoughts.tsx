@@ -30,6 +30,7 @@ import {
 } from "@/components/thoughts/ThoughtsChrome";
 import { ThoughtComposer } from "@/components/thoughts/ThoughtComposer";
 import { RecorderModal } from "@/components/recordings/RecorderModal";
+import { AiPromptsDialog } from "@/components/recordings/AiPromptsDialog";
 import { ThoughtCard } from "@/components/thoughts/ThoughtCard";
 import { ThoughtsListsView } from "@/components/thoughts/ThoughtsListsView";
 import { ThoughtEditModal } from "@/components/thoughts/ThoughtEditModal";
@@ -58,6 +59,7 @@ export function Thoughts() {
   const [statsOpen, setStatsOpen] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [recorderOpen, setRecorderOpen] = useState(false);
+  const [aiPromptsOpen, setAiPromptsOpen] = useState(false);
 
   const [viewMode, setViewModeState] = useState<ThoughtsViewMode>(() =>
     readLS<ThoughtsViewMode>(VIEW_KEY, "all")
@@ -310,6 +312,12 @@ export function Thoughts() {
           onAutoTranscribeChange={(next) =>
             updateThoughtPrefs.mutate({ auto_transcribe_recorded_thoughts: next })
           }
+          onOpenAiPrompts={() => setAiPromptsOpen(true)}
+        />
+
+        <AiPromptsDialog
+          open={aiPromptsOpen}
+          onClose={() => setAiPromptsOpen(false)}
         />
 
         {filtersOpen && (

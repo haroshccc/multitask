@@ -10,7 +10,6 @@ import {
   CheckSquare,
   CalendarPlus,
   Lightbulb,
-  HelpCircle,
   Send,
   Save,
   RefreshCw,
@@ -31,13 +30,12 @@ interface Props {
 
 /** Empty defaults so the editable form always has the full shape on screen. */
 const EMPTY_AI_OUTPUT: RecordingAiOutput = {
-  summary: "",
+  short_summary: "",
+  long_summary: "",
   whatsapp_message: "",
   email: { subject: "", body: "" },
   tasks: [],
   events: [],
-  key_decisions: [],
-  questions: [],
 };
 
 export function AiInsights({ recording }: Props) {
@@ -51,8 +49,13 @@ export function AiInsights({ recording }: Props) {
   const serverOutput = useMemo<RecordingAiOutput>(() => {
     const raw = recording.ai_output as unknown as RecordingAiOutput | null;
     if (!raw) return EMPTY_AI_OUTPUT;
+    // Backward-compat: if the row was generated before we split summary
+    // into short/long, fall back the old `summary` text into long_summary so
+    // existing data still renders.
+    const rawAny = raw as unknown as RecordingAiOutput & { summary?: string };
     return {
-      summary: raw.summary ?? "",
+      short_summary: raw.short_summary ?? "",
+      long_summary: raw.long_summary ?? rawAny.summary ?? "",
       whatsapp_message: raw.whatsapp_message ?? "",
       email: {
         subject: raw.email?.subject ?? "",
@@ -60,8 +63,6 @@ export function AiInsights({ recording }: Props) {
       },
       tasks: raw.tasks ?? [],
       events: raw.events ?? [],
-      key_decisions: raw.key_decisions ?? [],
-      questions: raw.questions ?? [],
     };
   }, [recording.ai_output, recording.id]);
 
@@ -92,75 +93,31 @@ export function AiInsights({ recording }: Props) {
     });
   };
 
-  // -------- empty state: never processed -----------------------------------
-  if (!recording.ai_output && aiStatus !== "pending") {
-    const errorBanner =
-      aiStatus === "error" && recording.error_message ? (
-        <div className="rounded-md border border-danger-200 bg-danger-50 px-3 py-2 text-xs text-danger-700 inline-flex items-start gap-1.5">
-          <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-          <span className="break-words">{recording.error_message}</span>
-        </div>
-      ) : null;
-    return (
-      <section className="rounded-md border border-dashed border-ink-300 bg-ink-50 px-3 py-3 space-y-2">
-        <div className="flex items-center gap-1.5 text-xs font-medium text-ink-700">
-          <Sparkles className="w-3.5 h-3.5 text-primary-600" />
-          עיבוד AI
-        </div>
-        <p className="text-xs text-ink-500 leading-relaxed">
-          Claude מסכם את השיחה ומציע הודעות מעקב, משימות, אירועים, החלטות
-          ושאלות. כל פריט ניתן לעריכה ולאישור ידני לפני שהוא נכנס למערכת.
-        </p>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            className="btn-primary text-sm"
-            disabled={trigger.isPending}
-            onClick={onTrigger}
-          >
-            {trigger.isPending ? (
-              <span className="inline-flex items-center gap-1.5">
-                <Loader2 className="w-3.5 h-3.5 animate-spin" /> מנתחת…
-              </span>
-            ) : (
-              "הפעלי עיבוד AI"
-            )}
-          </button>
-          {trigger.isPending && (
-            <span className="text-[11px] text-ink-500">
-              לוקח 10–30 שניות לרוב.
-            </span>
-          )}
-        </div>
-        {errorBanner}
-      </section>
-    );
-  }
+  const errorBanner =
+    aiStatus === "error" && recording.error_message ? (
+      <div className="rounded-md border border-danger-200 bg-danger-50 px-3 py-2 text-xs text-danger-700 inline-flex items-start gap-1.5">
+        <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+        <span className="break-words">{recording.error_message}</span>
+      </div>
+    ) : null;
 
-  // -------- in-flight state -------------------------------------------------
-  if (aiStatus === "pending" && !recording.ai_output) {
-    return (
-      <section className="rounded-md border border-ink-200 bg-ink-50 px-3 py-3 space-y-1 inline-flex items-center gap-2 text-xs text-ink-700">
-        <Loader2 className="w-3.5 h-3.5 animate-spin text-primary-600" />
-        Claude מנתחת את השיחה…
-      </section>
-    );
-  }
-
+  // The form is always editable — even before AI runs the user can fill any
+  // section by hand. AI augments the same form when triggered. After AI we
+  // keep all "+" buttons visible so missed items can still be added manually.
   // -------- main editable view ---------------------------------------------
   return (
     <section className="rounded-md border border-ink-200 bg-white px-3 py-3 space-y-3">
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-1.5 text-xs font-medium text-ink-700">
           <Sparkles className="w-3.5 h-3.5 text-primary-600" />
-          עיבוד AI
+          עיבוד
           {recording.ai_output_at && (
             <span className="text-[10px] text-ink-400 font-normal">
-              · נותח {formatRelative(recording.ai_output_at)}
+              · AI נותח {formatRelative(recording.ai_output_at)}
             </span>
           )}
         </div>
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 flex-wrap">
           {dirty && (
             <button
               type="button"
@@ -176,23 +133,53 @@ export function AiInsights({ recording }: Props) {
           <button
             type="button"
             onClick={onTrigger}
-            disabled={trigger.isPending}
+            disabled={
+              trigger.isPending ||
+              aiStatus === "pending" ||
+              !recording.transcript_text
+            }
             className="btn-outline !py-1 !px-2 !text-[11px] inline-flex items-center gap-1"
-            title="עיבוד מחדש (יחליף את הניתוח הנוכחי)"
+            title={
+              !recording.transcript_text
+                ? "צריכה תמלול לפני שClaude יכולה לעבד"
+                : recording.ai_output
+                ? "הפעלת AI מחדש (יחליף את הניתוח הנוכחי)"
+                : "Claude מסכם וממלא את הסקציות אוטומטית"
+            }
           >
-            {trigger.isPending ? (
+            {trigger.isPending || aiStatus === "pending" ? (
               <Loader2 className="w-3 h-3 animate-spin" />
             ) : (
-              <RefreshCw className="w-3 h-3" />
+              <Sparkles className="w-3 h-3" />
             )}
-            עיבוד מחדש
+            {recording.ai_output ? "עיבוד AI מחדש" : "הפעלת AI"}
           </button>
         </div>
       </div>
 
-      <SummarySection
-        value={draft.summary}
-        onChange={(v) => setDraft((d) => ({ ...d, summary: v }))}
+      {!recording.ai_output && aiStatus !== "pending" && (
+        <p className="text-[11px] text-ink-500 leading-relaxed">
+          ניתן למלא ידנית כל סקציה, או ללחוץ "הפעלת AI" וClaude ימלא הצעות
+          שאת תוכלי לערוך / להוסיף עוד פריטים.
+        </p>
+      )}
+
+      {errorBanner}
+
+      <SummaryTextSection
+        label="סיכום קצר"
+        placeholder="משפט-שניים שמסכמים את השיחה"
+        rowsHint={3}
+        value={draft.short_summary}
+        onChange={(v) => setDraft((d) => ({ ...d, short_summary: v }))}
+      />
+
+      <SummaryTextSection
+        label="סיכום ארוך"
+        placeholder="סיכום מפורט — נקודות מרכזיות, החלטות, שאלות פתוחות"
+        rowsHint={6}
+        value={draft.long_summary}
+        onChange={(v) => setDraft((d) => ({ ...d, long_summary: v }))}
       />
 
       <WhatsAppSection
@@ -219,37 +206,33 @@ export function AiInsights({ recording }: Props) {
         items={draft.events}
         onChange={(items) => setDraft((d) => ({ ...d, events: items }))}
       />
-
-      <KeyDecisionsSection
-        items={draft.key_decisions}
-        onChange={(items) => setDraft((d) => ({ ...d, key_decisions: items }))}
-      />
-
-      <QuestionsSection
-        items={draft.questions}
-        onChange={(items) => setDraft((d) => ({ ...d, questions: items }))}
-      />
     </section>
   );
 }
 
 // ─── Sections ─────────────────────────────────────────────────────────────
 
-function SummarySection({
+function SummaryTextSection({
+  label,
+  placeholder,
+  rowsHint,
   value,
   onChange,
 }: {
+  label: string;
+  placeholder: string;
+  rowsHint: number;
   value: string;
   onChange: (v: string) => void;
 }) {
   return (
-    <Pane icon={<Lightbulb className="w-3.5 h-3.5 text-primary-600" />} label="סיכום">
+    <Pane icon={<Lightbulb className="w-3.5 h-3.5 text-primary-600" />} label={label}>
       <textarea
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        rows={Math.max(3, Math.min(10, Math.ceil(value.length / 70)))}
+        rows={Math.max(rowsHint, Math.min(20, Math.ceil(value.length / 70)))}
         className="field min-h-[80px] resize-y text-sm"
-        placeholder="סיכום השיחה"
+        placeholder={placeholder}
         dir="auto"
       />
     </Pane>
@@ -393,13 +376,26 @@ function TasksSection({
     }
   };
 
+  const addBlank = () =>
+    onChange([
+      ...items,
+      { title: "", priority: "normal", speaker_name: null, due_hint: null },
+    ]);
+
   return (
     <Pane
       icon={<CheckSquare className="w-3.5 h-3.5 text-primary-600" />}
       label={`משימות (${items.length})`}
+      actions={
+        <ActionBtn onClick={addBlank} icon={<span className="text-[11px]">+</span>}>
+          הוספת משימה
+        </ActionBtn>
+      }
     >
       {items.length === 0 ? (
-        <p className="text-[11px] text-ink-500">לא זוהו משימות בשיחה.</p>
+        <p className="text-[11px] text-ink-500">
+          לחיצי "הוספת משימה" או הפעילי AI כדי לקבל הצעות.
+        </p>
       ) : (
         <div className="space-y-2">
           {items.map((task, i) => (
@@ -426,26 +422,29 @@ function TasksSection({
                 dir="auto"
               />
               <div className="flex items-center gap-2 flex-wrap">
-                <select
-                  value={task.priority ?? "normal"}
-                  onChange={(e) =>
-                    onChange(
-                      items.map((it, j) =>
-                        j === i
-                          ? {
-                              ...it,
-                              priority: e.target.value as "low" | "normal" | "high",
-                            }
-                          : it
+                <label className="text-[10px] text-ink-500 inline-flex items-center gap-1">
+                  עדיפות:
+                  <select
+                    value={task.priority ?? "normal"}
+                    onChange={(e) =>
+                      onChange(
+                        items.map((it, j) =>
+                          j === i
+                            ? {
+                                ...it,
+                                priority: e.target.value as "low" | "normal" | "high",
+                              }
+                            : it
+                        )
                       )
-                    )
-                  }
-                  className="field !py-0.5 !px-1 text-[11px] w-auto"
-                >
-                  <option value="low">נמוכה</option>
-                  <option value="normal">רגילה</option>
-                  <option value="high">גבוהה</option>
-                </select>
+                    }
+                    className="field !py-0.5 !px-1 text-[11px] w-auto"
+                  >
+                    <option value="low">נמוכה</option>
+                    <option value="normal">רגילה</option>
+                    <option value="high">גבוהה</option>
+                  </select>
+                </label>
                 {task.speaker_name && (
                   <span className="text-[11px] text-ink-500">
                     דובר: {task.speaker_name}
@@ -524,13 +523,26 @@ function EventsSection({
     }
   };
 
+  const addBlank = () =>
+    onChange([
+      ...items,
+      { title: "", date_iso: null, duration_minutes: 30, speaker_name: null },
+    ]);
+
   return (
     <Pane
       icon={<CalendarPlus className="w-3.5 h-3.5 text-primary-600" />}
       label={`אירועים (${items.length})`}
+      actions={
+        <ActionBtn onClick={addBlank} icon={<span className="text-[11px]">+</span>}>
+          הוספת אירוע
+        </ActionBtn>
+      }
     >
       {items.length === 0 ? (
-        <p className="text-[11px] text-ink-500">לא זוהו אירועים בשיחה.</p>
+        <p className="text-[11px] text-ink-500">
+          לחיצי "הוספת אירוע" או הפעילי AI כדי לקבל הצעות.
+        </p>
       ) : (
         <div className="space-y-2">
           {items.map((ev, i) => (
@@ -613,113 +625,6 @@ function EventsSection({
             </div>
           ))}
         </div>
-      )}
-    </Pane>
-  );
-}
-
-function KeyDecisionsSection({
-  items,
-  onChange,
-}: {
-  items: RecordingAiOutput["key_decisions"];
-  onChange: (items: RecordingAiOutput["key_decisions"]) => void;
-}) {
-  return (
-    <Pane
-      icon={<Lightbulb className="w-3.5 h-3.5 text-warning-500" />}
-      label={`החלטות מרכזיות (${items.length})`}
-    >
-      {items.length === 0 ? (
-        <p className="text-[11px] text-ink-500">לא זוהו החלטות בשיחה.</p>
-      ) : (
-        <ul className="space-y-1">
-          {items.map((d, i) => (
-            <li key={i} className="flex items-center gap-1.5">
-              <input
-                value={d.text}
-                onChange={(e) =>
-                  onChange(
-                    items.map((it, j) =>
-                      j === i ? { text: e.target.value } : it
-                    )
-                  )
-                }
-                className="field !py-1 text-sm flex-1"
-                dir="auto"
-              />
-              <button
-                type="button"
-                onClick={() => onChange(items.filter((_, j) => j !== i))}
-                className="text-ink-400 hover:text-danger-600 text-xs px-1"
-                title="הסר"
-              >
-                ×
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </Pane>
-  );
-}
-
-function QuestionsSection({
-  items,
-  onChange,
-}: {
-  items: RecordingAiOutput["questions"];
-  onChange: (items: RecordingAiOutput["questions"]) => void;
-}) {
-  return (
-    <Pane
-      icon={<HelpCircle className="w-3.5 h-3.5 text-primary-600" />}
-      label={`שאלות פתוחות (${items.length})`}
-    >
-      {items.length === 0 ? (
-        <p className="text-[11px] text-ink-500">לא זוהו שאלות פתוחות.</p>
-      ) : (
-        <ul className="space-y-1.5">
-          {items.map((q, i) => (
-            <li key={i} className="rounded-md border border-ink-200 px-2.5 py-1.5 space-y-1">
-              <input
-                value={q.question}
-                onChange={(e) =>
-                  onChange(
-                    items.map((it, j) =>
-                      j === i ? { ...it, question: e.target.value } : it
-                    )
-                  )
-                }
-                className="field !py-1 text-sm"
-                placeholder="השאלה"
-                dir="auto"
-              />
-              {q.context && (
-                <input
-                  value={q.context}
-                  onChange={(e) =>
-                    onChange(
-                      items.map((it, j) =>
-                        j === i ? { ...it, context: e.target.value } : it
-                      )
-                    )
-                  }
-                  className="field !py-0.5 !px-1 text-[11px]"
-                  placeholder="הקשר / רקע"
-                  dir="auto"
-                />
-              )}
-              <button
-                type="button"
-                onClick={() => onChange(items.filter((_, j) => j !== i))}
-                className="text-[11px] text-ink-500 hover:text-danger-600"
-              >
-                הסר
-              </button>
-            </li>
-          ))}
-        </ul>
       )}
     </Pane>
   );

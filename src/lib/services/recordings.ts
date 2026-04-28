@@ -262,7 +262,10 @@ function estimateDurationFromUtterances(rec: Recording): number {
 // AI processing ------------------------------------------------------------
 
 export interface RecordingAiOutput {
-  summary: string;
+  /** 1–2 sentences. The "elevator pitch" for the call. */
+  short_summary: string;
+  /** Several paragraphs covering decisions, action items, open questions. */
+  long_summary: string;
   whatsapp_message: string;
   email: { subject: string; body: string };
   tasks: Array<{
@@ -278,8 +281,6 @@ export interface RecordingAiOutput {
     duration_minutes?: number | null;
     speaker_name?: string | null;
   }>;
-  key_decisions: Array<{ text: string }>;
-  questions: Array<{ question: string; context?: string }>;
 }
 
 /**

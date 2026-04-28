@@ -69,7 +69,14 @@ export type UploadOptions = {
   onFailed?: (error: Error) => void;
 };
 
-const SINGLE_UPLOAD_MAX_BYTES = 5 * 1024 * 1024;
+// Single-PUT covers files up to 100 MB. Above the threshold we have to
+// chunk-and-stitch via R2's multipart API, but R2's CompleteMultipartUpload
+// has been observed to hang in the wild (we saw 45s timeouts with all parts
+// uploaded successfully — chunks went up but the assembly call never came
+// back). Single PUT side-steps that whole pipeline entirely. R2 itself
+// supports single PUT up to ~5 TB so we have plenty of headroom; the cap
+// here is really about browser memory pressure when slicing the blob.
+const SINGLE_UPLOAD_MAX_BYTES = 100 * 1024 * 1024;
 const PART_SIZE_BYTES = 5 * 1024 * 1024;
 const MAX_RETRIES_PER_PART = 3;
 

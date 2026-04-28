@@ -1,8 +1,9 @@
-import { useState, type ReactNode } from "react";
-import { AlertCircle, Sparkles, Link2, Loader2, GitMerge } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
+import { AlertCircle, Sparkles, Link2, Loader2, GitMerge, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { he } from "date-fns/locale";
 import {
+  useDeleteRecording,
   useRecordingAudioUrl,
   useTriggerRecordingProcessing,
   useUpdateRecording,
@@ -54,10 +55,8 @@ export function RecordingPlayer({ recording }: Props) {
   return (
     <div className="card p-5 space-y-4">
       <header className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h2 className="text-lg font-semibold text-ink-900 truncate">
-            {recording.title || "ללא כותרת"}
-          </h2>
+        <div className="min-w-0 flex-1">
+          <EditableTitle recording={recording} />
           <p className="text-xs text-ink-500 mt-0.5">
             הועלתה {format(new Date(recording.created_at), "d בMMM yyyy, HH:mm", { locale: he })}
           </p>
@@ -68,17 +67,20 @@ export function RecordingPlayer({ recording }: Props) {
             </p>
           )}
         </div>
-        {!recording.merged_into && (
-          <button
-            type="button"
-            onClick={() => setMergeOpen(true)}
-            className="btn-outline !py-1 !px-2 !text-[11px] inline-flex items-center gap-1 shrink-0"
-            title="איחוד עם הקלטה נוספת"
-          >
-            <GitMerge className="w-3 h-3" />
-            איחוד
-          </button>
-        )}
+        <div className="flex items-center gap-1 shrink-0">
+          {!recording.merged_into && (
+            <button
+              type="button"
+              onClick={() => setMergeOpen(true)}
+              className="btn-outline !py-1 !px-2 !text-[11px] inline-flex items-center gap-1"
+              title="איחוד עם הקלטה נוספת"
+            >
+              <GitMerge className="w-3 h-3" />
+              איחוד
+            </button>
+          )}
+          <DeleteButton recording={recording} />
+        </div>
       </header>
 
       <MergeRecordingsDialog
@@ -239,6 +241,98 @@ function TranscriptionSection({
         {trigger.isPending ? "שולחת..." : "התחל תמלול"}
       </button>
     </section>
+  );
+}
+
+function EditableTitle({ recording }: { recording: Recording }) {
+  const update = useUpdateRecording();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(recording.title ?? "");
+  // Resync the draft whenever the row changes from the server (e.g. after a
+  // successful save, or when the user navigates between recordings).
+  useEffect(() => {
+    if (!editing) setDraft(recording.title ?? "");
+  }, [recording.title, recording.id, editing]);
+
+  const commit = () => {
+    const next = draft.trim();
+    if (next === (recording.title ?? "")) {
+      setEditing(false);
+      return;
+    }
+    update.mutate(
+      { recordingId: recording.id, patch: { title: next || null } },
+      { onSettled: () => setEditing(false) }
+    );
+  };
+
+  if (!editing) {
+    return (
+      <h2
+        className="text-lg font-semibold text-ink-900 truncate cursor-text hover:bg-ink-50 rounded px-1 -mx-1"
+        title="לחיצה לעריכה"
+        onClick={() => setEditing(true)}
+      >
+        {recording.title || "ללא כותרת"}
+      </h2>
+    );
+  }
+  return (
+    <input
+      autoFocus
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          commit();
+        } else if (e.key === "Escape") {
+          setDraft(recording.title ?? "");
+          setEditing(false);
+        }
+      }}
+      className="text-lg font-semibold text-ink-900 bg-transparent border-b border-primary-300 outline-none w-full min-w-0"
+      placeholder="ללא כותרת"
+    />
+  );
+}
+
+function DeleteButton({ recording }: { recording: Recording }) {
+  const del = useDeleteRecording();
+  const [confirm, setConfirm] = useState(false);
+  if (confirm) {
+    return (
+      <span className="inline-flex items-center gap-1 text-[11px]">
+        <span className="text-ink-700">למחוק?</span>
+        <button
+          type="button"
+          onClick={() => del.mutate(recording.id)}
+          disabled={del.isPending}
+          className="btn-primary !py-1 !px-2 !text-[11px] !bg-danger-600 !border-danger-600 hover:!bg-danger-700"
+        >
+          {del.isPending ? "מוחקת…" : "מחיקה"}
+        </button>
+        <button
+          type="button"
+          onClick={() => setConfirm(false)}
+          className="btn-outline !py-1 !px-2 !text-[11px]"
+        >
+          ביטול
+        </button>
+      </span>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => setConfirm(true)}
+      className="btn-outline !py-1 !px-2 !text-[11px] inline-flex items-center gap-1 text-danger-600 hover:!bg-danger-50"
+      title="מחיקת ההקלטה — בלתי הפיך"
+    >
+      <Trash2 className="w-3 h-3" />
+      מחיקה
+    </button>
   );
 }
 

@@ -100,6 +100,39 @@ export async function updateRecording(
   return data;
 }
 
+/**
+ * Delete a recording row entirely. The DB cascade clears `recording_speakers`,
+ * `thoughts.recording_id` (set null) and any list assignments. The R2 audio
+ * file is left in the bucket — Cloudflare's lifecycle policy reclaims it.
+ */
+export async function deleteRecording(recordingId: string): Promise<void> {
+  const { error } = await supabase
+    .from("recordings")
+    .delete()
+    .eq("id", recordingId);
+  if (error) throw error;
+}
+
+/**
+ * N-recording merge: walks `orderedIds[0]` through `orderedIds[N-1]`,
+ * absorbing each subsequent recording into the first. The first recording
+ * keeps its audio and accumulates the others' transcripts in the order the
+ * user picked. Returns the final survivor.
+ */
+export async function mergeRecordingsMany(
+  orderedIds: string[]
+): Promise<Recording> {
+  if (orderedIds.length < 2) throw new Error("need_at_least_two_recordings");
+  let survivor: Recording | null = null;
+  for (let i = 1; i < orderedIds.length; i++) {
+    survivor = await mergeRecordings({
+      firstId: orderedIds[0],
+      secondId: orderedIds[i],
+    });
+  }
+  return survivor!;
+}
+
 export async function archiveRecordingAudio(
   recordingId: string
 ): Promise<void> {

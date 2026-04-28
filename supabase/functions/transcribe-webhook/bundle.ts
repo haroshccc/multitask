@@ -190,7 +190,7 @@ async function webhookHandler(req: Request): Promise<Response> {
   const { error: updErr } = await service
     .from("recordings")
     .update({
-      status: "extracting",
+      status: "ready",
       transcript_text: transcriptText,
       transcript_json: resultBlob as unknown as Record<string, unknown>,
       speakers_count: speakersCount,
@@ -254,12 +254,10 @@ async function webhookHandler(req: Request): Promise<Response> {
     }
   }
 
-  // If Claude (phase 6ג #2) isn't wired yet, advance to 'ready' so the UI
-  // doesn't get stuck in 'extracting' forever.
-  const summarizeWired = Deno.env.get("ANTHROPIC_API_KEY");
-  if (!summarizeWired) {
-    await service.from("recordings").update({ status: "ready" }).eq("id", recording.id);
-  }
+  // AI processing (`summarize` Edge Function) is a separate, manual step
+  // the user triggers from the recording player. Don't gate the `ready`
+  // status on it — go straight to 'ready' so the transcript editor and
+  // the AI button are both reachable.
 
   return jsonResponse({ ok: true, recording_id: recording.id, speakersCount }, { origin });
 }

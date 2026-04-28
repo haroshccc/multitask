@@ -18,7 +18,12 @@ export function useUpdateUserThoughtPreferences() {
   const scope = useOrgScope();
   return useMutation({
     mutationFn: (
-      patch: Partial<Pick<UserThoughtPreferences, "auto_transcribe_recorded_thoughts">>
+      patch: Partial<
+        Pick<
+          UserThoughtPreferences,
+          "auto_transcribe_recorded_thoughts" | "recording_ai_prompts"
+        >
+      >
     ) => {
       if (!scope.userId) throw new Error("no user scope");
       return service.upsertUserThoughtPreferences(scope.userId, patch);

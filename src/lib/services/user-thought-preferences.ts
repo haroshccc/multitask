@@ -1,14 +1,17 @@
 import { supabase } from "@/lib/supabase/client";
+import type { RecordingAiPromptOverrides } from "@/lib/ai/recording-prompts";
 
 export interface UserThoughtPreferences {
   user_id: string;
   auto_transcribe_recorded_thoughts: boolean;
+  recording_ai_prompts: RecordingAiPromptOverrides;
   created_at: string;
   updated_at: string;
 }
 
 const DEFAULTS = {
   auto_transcribe_recorded_thoughts: false,
+  recording_ai_prompts: {} as RecordingAiPromptOverrides,
 } as const;
 
 /**
@@ -31,7 +34,12 @@ export async function getUserThoughtPreferences(
 
 export async function upsertUserThoughtPreferences(
   userId: string,
-  patch: Partial<Pick<UserThoughtPreferences, "auto_transcribe_recorded_thoughts">>
+  patch: Partial<
+    Pick<
+      UserThoughtPreferences,
+      "auto_transcribe_recorded_thoughts" | "recording_ai_prompts"
+    >
+  >
 ): Promise<UserThoughtPreferences> {
   const { data, error } = await supabase
     .from("user_thought_preferences")

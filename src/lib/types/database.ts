@@ -1928,18 +1928,21 @@ export type Database = {
         Row: {
           auto_transcribe_recorded_thoughts: boolean
           created_at: string
+          recording_ai_prompts: Json
           updated_at: string
           user_id: string
         }
         Insert: {
           auto_transcribe_recorded_thoughts?: boolean
           created_at?: string
+          recording_ai_prompts?: Json
           updated_at?: string
           user_id: string
         }
         Update: {
           auto_transcribe_recorded_thoughts?: boolean
           created_at?: string
+          recording_ai_prompts?: Json
           updated_at?: string
           user_id?: string
         }

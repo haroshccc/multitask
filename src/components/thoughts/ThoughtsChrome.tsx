@@ -11,6 +11,7 @@ import {
   Rows3,
   Columns3,
   Settings as SettingsIcon,
+  Sparkles as SparklesIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { ListIcon } from "@/components/tasks/list-icons";
@@ -61,6 +62,7 @@ interface ThoughtsChromeProps {
   // Per-user settings (server-stored)
   autoTranscribeRecordedThoughts: boolean;
   onAutoTranscribeChange: (next: boolean) => void;
+  onOpenAiPrompts: () => void;
 
   className?: string;
 }
@@ -101,6 +103,7 @@ export function ThoughtsChrome({
   onLayoutChange,
   autoTranscribeRecordedThoughts,
   onAutoTranscribeChange,
+  onOpenAiPrompts,
   className,
 }: ThoughtsChromeProps) {
   const visibleListCount = lists.length - hiddenListIds.size;
@@ -319,6 +322,28 @@ export function ThoughtsChrome({
                 </span>
               </span>
             </button>
+
+            <div className="border-t border-ink-100 mt-1 pt-1">
+              <div className="text-[10px] font-semibold text-ink-400 uppercase tracking-wider px-3 pb-1">
+                AI
+              </div>
+              <button
+                type="button"
+                onClick={onOpenAiPrompts}
+                className="w-full flex items-start gap-2.5 px-3 py-2 text-start hover:bg-ink-50"
+              >
+                <SparklesIcon className="w-4 h-4 text-primary-600 shrink-0 mt-0.5" />
+                <span className="flex-1">
+                  <span className="block text-sm text-ink-900">
+                    הנחיות Claude לעיבוד הקלטות
+                  </span>
+                  <span className="block text-[11px] text-ink-500 leading-snug">
+                    עריכת ההסבר ש-Claude מקבל לכל סקציה (סיכום, WhatsApp, מייל,
+                    משימות, אירועים).
+                  </span>
+                </span>
+              </button>
+            </div>
           </div>
         )}
       </PopoverButton>

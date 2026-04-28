@@ -18,7 +18,10 @@ import {
   useTriggerAiProcessing,
   useUpdateRecording,
 } from "@/lib/hooks/useRecordings";
-import { useCreateTask } from "@/lib/hooks/useTasks";
+import {
+  TaskEditModal,
+  type TaskCreateDraft,
+} from "@/components/tasks/TaskEditModal";
 import { useCreateEvent } from "@/lib/hooks/useEvents";
 import type { Recording } from "@/lib/types/domain";
 import type { RecordingAiOutput } from "@/lib/services/recordings";
@@ -355,24 +358,37 @@ function TasksSection({
   items: RecordingAiOutput["tasks"];
   onChange: (items: RecordingAiOutput["tasks"]) => void;
 }) {
-  const createTask = useCreateTask();
-  const [createdIndices, setCreatedIndices] = useState<Set<number>>(new Set());
+  // Track which AI suggestions have already been turned into real tasks so we
+  // can show "נוצרה" + the new task id instead of a stale "צור משימה".
+  const [createdByIndex, setCreatedByIndex] = useState<Record<number, string>>(
+    {}
+  );
+  // Open TaskEditModal in either CREATE mode (no taskId, with a draft) or
+  // EDIT mode (taskId set, draft cleared).
+  const [editorState, setEditorState] = useState<{
+    sourceIndex: number;
+    taskId: string | null;
+    draft: TaskCreateDraft | null;
+  } | null>(null);
 
-  const onCreateOne = async (i: number) => {
+  const onCreateOne = (i: number) => {
     const item = items[i];
     if (!item?.title.trim()) return;
-    try {
-      await createTask.mutateAsync({
+    setEditorState({
+      sourceIndex: i,
+      taskId: null,
+      draft: {
         title: item.title,
         description: item.due_hint
           ? `מתוך הקלטה: ${recording.title ?? ""} · רמז דד-ליין: ${item.due_hint}`
           : `מתוך הקלטה: ${recording.title ?? ""}`,
         urgency: priorityToUrgency(item.priority ?? "normal"),
-      });
-      setCreatedIndices((s) => new Set(s).add(i));
-    } catch (err) {
-      console.error("create task from ai failed:", err);
-    }
+      },
+    });
+  };
+
+  const onEditExisting = (i: number, taskId: string) => {
+    setEditorState({ sourceIndex: i, taskId, draft: null });
   };
 
   const addBlank = () =>
@@ -397,12 +413,14 @@ function TasksSection({
         </p>
       ) : (
         <div className="space-y-2">
-          {items.map((task, i) => (
+          {items.map((task, i) => {
+            const createdId = createdByIndex[i];
+            return (
             <div
               key={i}
               className={cn(
                 "rounded-md border px-2.5 py-1.5 space-y-1",
-                createdIndices.has(i)
+                createdId
                   ? "border-success-300 bg-success-50"
                   : "border-ink-200"
               )}
@@ -455,15 +473,18 @@ function TasksSection({
                   </span>
                 )}
                 <div className="ms-auto flex items-center gap-1">
-                  {createdIndices.has(i) ? (
-                    <span className="text-[11px] text-success-700 inline-flex items-center gap-0.5">
-                      <Check className="w-3 h-3" /> נוצרה
-                    </span>
+                  {createdId ? (
+                    <ActionBtn
+                      onClick={() => onEditExisting(i, createdId)}
+                      icon={<Check className="w-3 h-3 text-success-700" />}
+                    >
+                      פתחי לעריכה
+                    </ActionBtn>
                   ) : (
                     <ActionBtn
                       onClick={() => onCreateOne(i)}
                       icon={<CheckSquare className="w-3 h-3" />}
-                      disabled={createTask.isPending || !task.title.trim()}
+                      disabled={!task.title.trim()}
                     >
                       צור משימה
                     </ActionBtn>
@@ -479,9 +500,21 @@ function TasksSection({
                 </div>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
+      <TaskEditModal
+        taskId={editorState?.taskId ?? null}
+        createDraft={editorState?.draft ?? null}
+        onClose={() => setEditorState(null)}
+        onCreated={(taskId) => {
+          if (editorState) {
+            const idx = editorState.sourceIndex;
+            setCreatedByIndex((prev) => ({ ...prev, [idx]: taskId }));
+          }
+        }}
+      />
     </Pane>
   );
 }

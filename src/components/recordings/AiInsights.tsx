@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Sparkles,
   Loader2,
@@ -22,6 +23,8 @@ import {
   TaskEditModal,
   type TaskCreateDraft,
 } from "@/components/tasks/TaskEditModal";
+import { useCreateTask } from "@/lib/hooks/useTasks";
+import { useTaskLists } from "@/lib/hooks/useTaskLists";
 import { useCreateEvent } from "@/lib/hooks/useEvents";
 import type { Recording } from "@/lib/types/domain";
 import type { RecordingAiOutput } from "@/lib/services/recordings";
@@ -358,6 +361,9 @@ function TasksSection({
   items: RecordingAiOutput["tasks"];
   onChange: (items: RecordingAiOutput["tasks"]) => void;
 }) {
+  const navigate = useNavigate();
+  const { data: taskLists = [] } = useTaskLists();
+  const createTask = useCreateTask();
   // Track which AI suggestions have already been turned into real tasks so we
   // can show "נוצרה" + the new task id instead of a stale "צור משימה".
   const [createdByIndex, setCreatedByIndex] = useState<Record<number, string>>(
@@ -370,6 +376,19 @@ function TasksSection({
     taskId: string | null;
     draft: TaskCreateDraft | null;
   } | null>(null);
+
+  // Bulk-create state machine.
+  // - 'idle' = no panel showing
+  // - 'pick' = list-picker open, user choosing destination
+  // - 'creating' = `createTask` calls in flight
+  // - 'done' = banner shown with count + "go to tasks"
+  const [bulkState, setBulkState] = useState<
+    | { kind: "idle" }
+    | { kind: "pick" }
+    | { kind: "creating"; total: number; done: number }
+    | { kind: "done"; created: number; listId: string | null; listName: string }
+  >({ kind: "idle" });
+  const [bulkListId, setBulkListId] = useState<string | null>(null);
 
   const onCreateOne = (i: number) => {
     const item = items[i];
@@ -397,16 +416,142 @@ function TasksSection({
       { title: "", priority: "normal", speaker_name: null, due_hint: null },
     ]);
 
+  // Bulk-create every still-uncreated task that has a non-empty title, all to
+  // the same picked task_list. We loop sequentially through useCreateTask so
+  // optimistic-cache invalidation behaves like manually clicking each one.
+  const onCreateAll = async () => {
+    const targets = items
+      .map((item, i) => ({ item, i }))
+      .filter(
+        ({ item, i }) =>
+          item.title.trim().length > 0 && !createdByIndex[i]
+      );
+    if (targets.length === 0) {
+      setBulkState({ kind: "idle" });
+      return;
+    }
+    setBulkState({ kind: "creating", total: targets.length, done: 0 });
+    const created: Record<number, string> = {};
+    let done = 0;
+    for (const { item, i } of targets) {
+      try {
+        const t = await createTask.mutateAsync({
+          title: item.title,
+          description: item.due_hint
+            ? `מתוך הקלטה: ${recording.title ?? ""} · רמז דד-ליין: ${item.due_hint}`
+            : `מתוך הקלטה: ${recording.title ?? ""}`,
+          urgency: priorityToUrgency(item.priority ?? "normal"),
+          task_list_id: bulkListId,
+        });
+        created[i] = t.id;
+      } catch (err) {
+        console.error("bulk create task failed:", err);
+      }
+      done += 1;
+      setBulkState({ kind: "creating", total: targets.length, done });
+    }
+    setCreatedByIndex((prev) => ({ ...prev, ...created }));
+    const list = taskLists.find((l) => l.id === bulkListId);
+    setBulkState({
+      kind: "done",
+      created: Object.keys(created).length,
+      listId: bulkListId,
+      listName: list?.name ?? "ברירת מחדל",
+    });
+  };
+
+  const uncreatedCount = items.filter(
+    (it, i) => it.title.trim() && !createdByIndex[i]
+  ).length;
+
   return (
     <Pane
       icon={<CheckSquare className="w-3.5 h-3.5 text-primary-600" />}
       label={`משימות (${items.length})`}
       actions={
-        <ActionBtn onClick={addBlank} icon={<span className="text-[11px]">+</span>}>
-          הוספת משימה
-        </ActionBtn>
+        <>
+          {uncreatedCount >= 2 && bulkState.kind === "idle" && (
+            <ActionBtn
+              onClick={() => setBulkState({ kind: "pick" })}
+              icon={<Send className="w-3 h-3" />}
+            >
+              צור את כולן ({uncreatedCount})
+            </ActionBtn>
+          )}
+          <ActionBtn onClick={addBlank} icon={<span className="text-[11px]">+</span>}>
+            הוספת משימה
+          </ActionBtn>
+        </>
       }
     >
+      {bulkState.kind === "pick" && (
+        <div className="rounded-md border border-primary-200 bg-primary-50/40 px-3 py-2 space-y-2">
+          <div className="text-[11px] font-semibold text-ink-700">
+            לאיזו רשימה לשייך את כל {uncreatedCount} המשימות?
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <select
+              value={bulkListId ?? ""}
+              onChange={(e) => setBulkListId(e.target.value || null)}
+              className="field !py-1 !px-2 text-xs flex-1 min-w-[160px]"
+            >
+              <option value="">— ללא רשימה —</option>
+              {taskLists.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.name}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={onCreateAll}
+              className="btn-primary !py-1 !px-2 !text-[11px]"
+            >
+              צור הכל
+            </button>
+            <button
+              type="button"
+              onClick={() => setBulkState({ kind: "idle" })}
+              className="btn-outline !py-1 !px-2 !text-[11px]"
+            >
+              ביטול
+            </button>
+          </div>
+        </div>
+      )}
+
+      {bulkState.kind === "creating" && (
+        <div className="rounded-md border border-ink-200 bg-ink-50 px-3 py-2 text-[11px] text-ink-700 inline-flex items-center gap-2">
+          <Loader2 className="w-3 h-3 animate-spin" />
+          יוצרת משימות… {bulkState.done} מתוך {bulkState.total}
+        </div>
+      )}
+
+      {bulkState.kind === "done" && (
+        <div className="rounded-md border border-success-300 bg-success-50 px-3 py-2 space-y-1.5">
+          <div className="text-xs text-success-800 inline-flex items-center gap-1.5">
+            <Check className="w-3.5 h-3.5" />
+            נוצרו {bulkState.created} משימות חדשות ברשימה "{bulkState.listName}".
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={() => navigate("/app/tasks")}
+              className="btn-primary !py-1 !px-2 !text-[11px] inline-flex items-center gap-1"
+            >
+              פתחי מסך משימות לעריכה מלאה
+            </button>
+            <button
+              type="button"
+              onClick={() => setBulkState({ kind: "idle" })}
+              className="btn-outline !py-1 !px-2 !text-[11px]"
+            >
+              סגירה והמשך עיבוד
+            </button>
+          </div>
+        </div>
+      )}
+
       {items.length === 0 ? (
         <p className="text-[11px] text-ink-500">
           לחיצי "הוספת משימה" או הפעילי AI כדי לקבל הצעות.

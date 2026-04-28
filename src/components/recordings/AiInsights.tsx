@@ -891,8 +891,6 @@ function SpeakerGroupedTasks({
                     items={items}
                     onChange={onChange}
                     createdId={createdByIndex[i]}
-                    isOtherSide={isOtherSide}
-                    recording={recording}
                     onCreate={() => onCreateOne(i)}
                     onEdit={() => {
                       const id = createdByIndex[i];
@@ -1107,8 +1105,6 @@ function TaskRow({
   items,
   onChange,
   createdId,
-  isOtherSide,
-  recording,
   onCreate,
   onEdit,
 }: {
@@ -1117,29 +1113,10 @@ function TaskRow({
   items: RecordingAiOutput["tasks"];
   onChange: (items: RecordingAiOutput["tasks"]) => void;
   createdId: string | undefined;
-  isOtherSide: boolean;
-  recording: Recording;
   onCreate: () => void;
   onEdit: () => void;
 }) {
   const i = index;
-  const sendBody = task.due_hint
-    ? `${task.title} (${task.due_hint})`
-    : task.title;
-  const onWhatsApp = () => {
-    if (!sendBody.trim()) return;
-    const url = `https://wa.me/?text=${encodeURIComponent(sendBody)}`;
-    window.open(url, "_blank", "noopener");
-  };
-  const onMail = () => {
-    if (!sendBody.trim()) return;
-    const subject = `מתוך השיחה: ${recording.title ?? ""}`;
-    const body = `${sendBody}`;
-    window.location.href = `mailto:?subject=${encodeURIComponent(
-      subject
-    )}&body=${encodeURIComponent(body)}`;
-  };
-
   return (
     <div
       className={cn(
@@ -1167,24 +1144,6 @@ function TaskRow({
           </span>
         )}
         <div className="ms-auto flex items-center gap-1 flex-wrap justify-end">
-          {isOtherSide && (
-            <>
-              <ActionBtn
-                onClick={onWhatsApp}
-                icon={<Send className="w-3 h-3" />}
-                disabled={!task.title.trim()}
-              >
-                WhatsApp
-              </ActionBtn>
-              <ActionBtn
-                onClick={onMail}
-                icon={<Mail className="w-3 h-3" />}
-                disabled={!task.title.trim()}
-              >
-                מייל
-              </ActionBtn>
-            </>
-          )}
           {createdId ? (
             <ActionBtn
               onClick={onEdit}

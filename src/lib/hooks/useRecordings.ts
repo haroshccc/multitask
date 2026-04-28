@@ -251,6 +251,36 @@ export function useArchiveRecordingAudio() {
 
 // Speakers ------------------------------------------------------------------
 
+export function useSpeakerLabelSuggestions(projectId?: string | null) {
+  const scope = useOrgScope();
+  return useQuery<string[]>({
+    queryKey: ["speaker-label-suggestions", scope.organizationId, projectId ?? "_none_"],
+    queryFn: () =>
+      service.listSpeakerLabelSuggestions({
+        organizationId: scope.organizationId!,
+        projectId: projectId ?? null,
+      }),
+    enabled: scope.enabled,
+  });
+}
+
+export function useUpsertRecordingSpeakerLabel() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      recordingId: string;
+      speakerIndex: number;
+      label: string;
+    }) => service.upsertRecordingSpeakerLabel(input),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({
+        queryKey: queryKeys.recordingSpeakers(vars.recordingId),
+      });
+      qc.invalidateQueries({ queryKey: ["speaker-label-suggestions"] });
+    },
+  });
+}
+
 export function useRecordingSpeakers(recordingId: string | null | undefined) {
   return useQuery<RecordingSpeaker[]>({
     queryKey: queryKeys.recordingSpeakers(recordingId ?? ""),

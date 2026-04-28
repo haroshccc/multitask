@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Sparkles, Loader2, Check } from "lucide-react";
+import { Sparkles, Loader2, Check, Users } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import {
   useRecordingSpeakers,
   useSaveRecordingTranscriptEdits,
 } from "@/lib/hooks/useRecordings";
+import { SpeakerEditorDialog } from "@/components/recordings/SpeakerEditorDialog";
 import type { Recording } from "@/lib/types/domain";
 
 interface Utterance {
@@ -57,6 +58,7 @@ export function TranscriptEditor({ recording, audioElement, className }: Props) 
   // Audio time tracking for active-row highlighting.
   const [currentTime, setCurrentTime] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [speakerEditorOpen, setSpeakerEditorOpen] = useState(false);
   useEffect(() => {
     if (!audioElement) return;
     const onUpdate = () => setCurrentTime(audioElement.currentTime);
@@ -208,7 +210,7 @@ export function TranscriptEditor({ recording, audioElement, className }: Props) 
         className
       )}
     >
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-1.5 text-xs font-medium text-ink-700">
           <Sparkles className="w-3.5 h-3.5 text-primary-600" />
           תמלול
@@ -216,20 +218,36 @@ export function TranscriptEditor({ recording, audioElement, className }: Props) 
             ? ` · ${recording.speakers_count} דוברים`
             : null}
         </div>
-        <div className="flex items-center gap-1.5 text-[10px] text-ink-500">
-          {save.isPending && <Loader2 className="w-3 h-3 animate-spin" />}
-          {save.isPending && "שומרת…"}
-          {!save.isPending && savedFlash && (
-            <span className="inline-flex items-center gap-0.5 text-primary-600">
-              <Check className="w-3 h-3" />
-              נשמר
-            </span>
-          )}
-          {!save.isPending && !savedFlash && (
-            <span>לחיצה על שעה תקפיץ את ההשמעה.</span>
-          )}
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => setSpeakerEditorOpen(true)}
+            className="btn-outline !py-0.5 !px-1.5 !text-[11px] inline-flex items-center gap-1"
+            title="האזנה לכל דובר ובחירת שמות"
+          >
+            <Users className="w-3 h-3" />
+            עריכת דוברים
+          </button>
+          <div className="flex items-center gap-1.5 text-[10px] text-ink-500">
+            {save.isPending && <Loader2 className="w-3 h-3 animate-spin" />}
+            {save.isPending && "שומרת…"}
+            {!save.isPending && savedFlash && (
+              <span className="inline-flex items-center gap-0.5 text-primary-600">
+                <Check className="w-3 h-3" />
+                נשמר
+              </span>
+            )}
+            {!save.isPending && !savedFlash && (
+              <span>לחיצה על שעה תקפיץ את ההשמעה.</span>
+            )}
+          </div>
         </div>
       </div>
+      <SpeakerEditorDialog
+        recording={recording}
+        open={speakerEditorOpen}
+        onClose={() => setSpeakerEditorOpen(false)}
+      />
 
       <ol
         ref={containerRef}

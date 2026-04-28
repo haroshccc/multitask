@@ -347,6 +347,66 @@ export async function triggerAiProcessing(
 
 // Speakers -----------------------------------------------------------------
 
+/**
+ * Distinct speaker labels the user has used before, scoped to recordings the
+ * current user can see. Optionally narrow to a specific project so the
+ * suggestions match that recording's context. Most-recently-used first.
+ */
+export async function listSpeakerLabelSuggestions(args: {
+  organizationId: string;
+  projectId?: string | null;
+  limit?: number;
+}): Promise<string[]> {
+  const { organizationId, projectId, limit = 20 } = args;
+  // Server-side: pick recording_speakers whose recording belongs to the org
+  // (and optionally the project), ordered by the recording's created_at
+  // descending so recent labels float to the top.
+  let q = supabase
+    .from("recording_speakers")
+    .select("label, recording:recordings!inner(created_at, organization_id, project_id)")
+    .not("label", "is", null)
+    .eq("recording.organization_id", organizationId)
+    .order("recording(created_at)", { ascending: false })
+    .limit(200);
+  if (projectId) q = q.eq("recording.project_id", projectId);
+  const { data, error } = await q;
+  if (error) throw error;
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const row of (data ?? []) as Array<{ label: string | null }>) {
+    const label = row.label?.trim();
+    if (!label) continue;
+    if (seen.has(label)) continue;
+    seen.add(label);
+    out.push(label);
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+/**
+ * Ensure a `recording_speakers` row exists for a given recording + speaker
+ * index. Used by the edit-speakers dialog when the user types a label for a
+ * speaker that the webhook didn't pre-create (e.g. legacy recordings).
+ */
+export async function upsertRecordingSpeakerLabel(args: {
+  recordingId: string;
+  speakerIndex: number;
+  label: string;
+}): Promise<RecordingSpeaker> {
+  const { recordingId, speakerIndex, label } = args;
+  const { data, error } = await supabase
+    .from("recording_speakers")
+    .upsert(
+      { recording_id: recordingId, speaker_index: speakerIndex, label },
+      { onConflict: "recording_id,speaker_index" }
+    )
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
 export async function listRecordingSpeakers(
   recordingId: string
 ): Promise<RecordingSpeaker[]> {

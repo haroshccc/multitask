@@ -2595,3 +2595,77 @@ Hero: "החלל לחשוב. החלל לעשות."
 
 
 
+- **2026-04-28 — סשן ארוך, 29 PRs (#69–#97).** התחיל מתמלול תקוע ונגמר בצינור AI מלא, עורך תמלול prompter, איחוד N הקלטות, ועוד.
+
+  **בלוקרים שנפתחו (פאזה 6ג בעצם הסתיים בסשן הזה):**
+  - **#69** — `transcribe-webhook` היה מחפש `body.status==='done'` ו-`body.result`, אבל Gladia v2 שולח `body.event==='transcription.success'` ו-`body.payload`. כל בקשה החזירה 200 עם `ignored` ולא עדכנה את ה-DB → ההקלטות תקעו ב-`transcribing`. ה-webhook עכשיו מקבל את שתי הצורות + מלוגג את ה-body כדי שמיסמאצ'ים עתידיים יהיו ברורים מ-Logs.
+  - **#69** — הוקם **GitHub Actions workflow** (`.github/workflows/deploy-edge-functions.yml`) שמטמיע אוטומטית את כל ה-Edge Functions בכל push ל-main שנגע ב-`supabase/functions/**` או `supabase/config.toml`. דורש `SUPABASE_ACCESS_TOKEN` + `SUPABASE_PROJECT_ID` ב-repo secrets.
+  - **#83** — MP4 multipart upload תקע ב-99% כי `complete-multipart` ל-R2 לא חזר. בדיקה ב-Network הראתה שכל ה-chunks נכנסו אבל ה-Complete תקע. במקום לחקור פאת R2, הועלה ה-`SINGLE_UPLOAD_MAX_BYTES` מ-5MB → **100MB** — קבצים מתחת לסף עוברים ב-PUT בודד ישירות ל-R2 בלי המעורבות של ה-edge function. R2 תומך ב-PUT בודד עד ~5TB, התקרה האמיתית פה היא זיכרון של הדפדפן.
+  - **#82** — סטטוס `'extracting'` היה שלב ביניים מתוכנן בין transcribe ל-AI. אחרי שה-AI נעשה ידני, הקוד נשאר ב-`extracting` לנצח. עכשיו ה-webhook עובר ישר ל-`'ready'` והשלב `'extracting'` נחשב ב-UI כ-`ready` לטובת הקלטות ישנות שתקעו.
+
+  **AI Pipeline חדש לגמרי (PR #81 + #85 + #86 + #94 + #96):**
+  - Edge Function חדש `summarize/index.ts` שקורא ל-**Claude Sonnet 4.6** עם **tool-use** (#96 — JSON מובטח, אי אפשר לשבור).
+  - מבנה output: `short_summary`, `long_summary`, `whatsapp_message`, `email{subject,body}`, `tasks[]`, `events[]` — לפי schema של tool-use.
+  - **prompts ניתנים לעריכה פר-משתמש** (#86) — מיגרציה `20260427000006` הוסיפה `recording_ai_prompts jsonb` ל-`user_thought_preferences`. ל-summarize יש 6 הנחיות (per section); ברירת מחדל מוגדרת ב-`src/lib/ai/recording-prompts.ts` ובמראה ב-`summarize/index.ts` `DEFAULT_PROMPTS` (חייבים להישאר זהים — Deno לא יכול לייבא מ-Vite). UI דרך **AiPromptsDialog** נגיש מ-Thoughts → ⚙ ומ-Recordings header (#91).
+  - **prompts אישיים** (#96) — WhatsApp ומייל כותבים "היי \<שם\>" עם שם הדובר השני (לפי `recording_speakers.label`).
+  - הסטטוס נע אוטומטית: `processing` בזמן הקריאה ל-Claude → `processed` בסוף. enum הורחב במיגרציה `20260427000005`.
+
+  **משימות AI עם בקרה מלאה (PR #85 + #90 + #92 + #94 + #96):**
+  - הסקציה משימות תמיד גלויה — אפשר למלא ידנית גם בלי AI. "+ הוספת משימה" + "צור את כולן" + שמירת ערכים.
+  - **TaskEditModal פתוח ב-CREATE mode** (#90) מ-"צור משימה" — אותו מודאל עריכה כמו במסך משימות, עם list / dependencies / scheduling.
+  - **bulk-create N משימות לרשימה אחת** (#92) — בחירת רשימה → כל המשימות נוצרות בה → באנר "פתחי מסך משימות לעריכה מלאה" / "סגירה והמשך עיבוד".
+  - **משימות מפוצלות לפי דובר** (#94) — קיבוץ "המשימות שלי / משימות עבור \<שם\> / ללא דובר" + chip filter למעלה לכבות/להדליק קבוצות (#96).
+  - **מתג מצב per speaker** (#96) — "משימות" (UI הקיים) או "טקסט" (בלוק טקסט עם "היי \<שם\>" + WhatsApp / מייל / העתק לשליחת כל הקבוצה במכה).
+  - **שדה priority** הוסר מ-`<TaskRow>` (#97) — אין סטטוס כזה במערכת. השדה נשאר ב-DB.
+
+  **עורך תמלול prompter (PR #73 + #76 + #84):**
+  - per-utterance editing — לחיצה על זמן → seek לאודיו, edit text → debounced save שמעדכן `transcript_json.utterances[i].text` + recompute של `transcript_text`.
+  - **prompter mode** (#76) — חלון ~5 שורות, גלילה אוטומטית כך שהשורה הפעילה במרכז, פאוז על "האזנה ידנית" 4 שניות אחרי כל scroll של המשתמש.
+  - **קיבוץ דוברים** (#84) — Gladia מחזיר utterances כל 1-2 שניות; עכשיו utterances רצופות של אותו דובר נכנסות לבלוק אחד. בלוק > 15s נחתך לחתיכות של ~10s בגבולות utterance.
+  - **עריכת שמות דוברים** (#95) — `<SpeakerEditorDialog>` עם play/pause לקטע של כל דובר (גבולות עם `timeupdate` כי HTML5 audio אין lookahead). תמיד "אני" כ-suggestion + תיוגי דוברים שנשמרו בעבר באותו פרויקט.
+
+  **שיתוף תמלול ↔ מחשבה (PR #71 + #80):**
+  - **Option C — append** (PR #71) — ה-webhook מסכרן `transcript_text` ל-`thoughts.text_content` של מחשבות מקושרות. אם תוכן קיים → צירוף בסוף עם `\n\n---\n`. אם ריק → קביעה.
+  - **Auto-transcribe toggle** (#71) — מיגרציה `20260427000002` הוסיפה `user_thought_preferences` עם `auto_transcribe_recorded_thoughts boolean`. UI ב-Thoughts → ⚙. כש-on, הקלטה חדשה במחשבות קופצת אוטומטית ל-transcribe.
+  - **Modal staleness fix** (#75) — ThoughtEditModal היה קורא state פעם אחת ב-`useEffect([thought?.id])` ולא היה מתעדכן כש-realtime מבטל cache. עכשיו `lastSyncedRef` משווה את הקלט הנוכחי לערך שהיה ב-server ב-sync האחרון, ומעדכן רק אם המשתמש לא הספיק להקליד.
+  - **Client fallback** (#80) — להקלטות שתומללו לפני שה-webhook הוסיף את ה-Option C, פתיחה של המחשבה מסנכרנת אוטומטית בצד הלקוח.
+
+  **איחוד הקלטות (PR #78 + #88 + #89):**
+  - מיגרציה `20260427000003` הוסיפה `recordings.merged_into uuid → recordings(id) ON DELETE SET NULL`.
+  - service `mergeRecordings({firstId, secondId})` (#78) — האחת סופחת תמלול של השנייה עם time-offset של duration; הראשונה שומרת את האודיו, השנייה מקבלת `merged_into = first.id` ו-audio_archived.
+  - **N-recording merge UI** (#89) — דיאלוג עם רשימה ניתנת לסידור (חצים ▲▼), נגן per row (lazy presigned URL), הוספת הקלטה דרך picker פנימי. submit עובר דרך `useMergeRecordingsMany` שמחבר pairwise.
+
+  **שיוך בתאי-meta (PR #93):**
+  - הסיר את ה-`<RecordingLinkagePanel>` הנפרד ואת ה-Meta cells הקריאים-בלבד.
+  - עכשיו פרויקט / יומן / משימות / רשימות הם **תאים editable** בסגנון `StatusMeta` — לחיצה פותחת popover עם אפשרויות + "**+ הוספת X חדש**" inline. פותר משימות חדשות מתוך הקלטה בלי לעבור מסך.
+
+  **multi-file upload (PR #77):**
+  - `<input multiple>` + ולידציה לכל קובץ + העלאה סדרתית. badge "קובץ X מתוך Y" כשהבאטץ' > 1. שגיאות נאספות ולא עוצרות את הבאטץ'.
+
+  **עריכת שם הקלטה + מחיקה (PR #88):**
+  - `<EditableTitle>` — קליק על הכותרת → input → Enter שומר, Esc מבטל.
+  - `<DeleteButton>` — confirm דו-שלבי inline. שירות `deleteRecording(id)` ו-DB cascade מנקה speakers/lists/thought.recording_id.
+
+  **תיקוני UI אגב (PR #79 + #80):**
+  - הכפתורים של AudioPlayer חופפים במובייל — שינוי מ-`absolute end-0` ל-3-column grid (1fr/auto/1fr).
+  - לחיצה על כרטיס מחשבה פתחה את העריכה רק ברקע המדויק; עכשיו role=button פותח מכל מקום (chips/menu עדיין עוצרים propagation).
+
+  **שינויי סכמה בסשן (כולל פעולות ידניות אחרי מ-merge):**
+  ```
+  20260427000002_user_thought_preferences.sql
+  20260427000003_recording_merge.sql
+  20260427000004_recording_ai_output.sql
+  20260427000005_recording_status_ai_phases.sql
+  20260427000006_user_recording_ai_prompts.sql
+  ```
+  כולן הורצו ב-Supabase SQL Editor במהלך הסשן. אין מיגרציות פתוחות.
+
+  **secrets שהוספו ב-session:**
+  - `ANTHROPIC_API_KEY` (Supabase Edge Functions Secrets) — דרוש ל-`summarize`.
+  - `SUPABASE_ACCESS_TOKEN` + `SUPABASE_PROJECT_ID` (GitHub repo secrets) — דרוש ל-CI שפורס edge functions.
+
+  **build infra:**
+  - הסשן חשף ש-`tsc --noEmit` שמרצנו לוקאלית לא תופס regressions ש-`tsc -b` כן (#87 תיקן 5 שגיאות שנצברו). מכאן והלאה: לפני push, להריץ `npx tsc -b` (לא רק `--noEmit`) או `npx vite build` שכולל את שניהם.
+
+  **מה פתוח לשלב הבא:**
+  - אין כיום שום פאזה פתוחה במסך הקלטות. כל הבקשות של הסשן הזה מומשו.

@@ -177,7 +177,7 @@ export function RecordingDropZone({ source = "other", onUploaded, className }: P
           {showStuckHint && (
             <div className="flex flex-col items-center gap-2 mt-1">
               <p className="text-[11px] text-ink-500 leading-snug max-w-xs">
-                R2 מסיים לאחד את החתיכות. לקבצי וידאו גדולים זה יכול לקחת
+                R2 מסיים לאחסן את הקובץ. לקבצי וידאו גדולים זה יכול לקחת
                 כמה עשרות שניות. אם זה לא ממשיך — אפשר לבטל ולהעלות שוב.
               </p>
               <button

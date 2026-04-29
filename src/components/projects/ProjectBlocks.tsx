@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import {
   BarChart3,
   Calendar as CalendarIcon,
-  ListTodo,
   FileText,
   Mic,
   LayoutTemplate,
@@ -11,6 +10,7 @@ import {
 import type { WidgetDefinition } from "@/components/dashboard/DashboardGrid";
 import { useProject, useDebouncedProjectUpdate } from "@/lib/hooks/useProjects";
 import type { ProjectPricingMode } from "@/lib/types/domain";
+import { TasksBlock } from "@/components/projects/blocks/TasksBlock";
 import {
   computeFixedBreakdown,
   computeHourlyBreakdown,
@@ -280,16 +280,6 @@ function CalendarBlock() {
       icon={<CalendarIcon className="w-4 h-4" />}
       title="לוח זמנים"
       hint="יום / שבוע / חודש עם רשומות סטופר כבלוקים צבעוניים. מחכה לסטופר."
-    />
-  );
-}
-
-function TasksBlock() {
-  return (
-    <BlockComingSoon
-      icon={<ListTodo className="w-4 h-4" />}
-      title="טבלת משימות"
-      hint="משימות, תת־משימות, סטופר, עמודות דינמיות, חיפוש. PR ייעודי."
     />
   );
 }

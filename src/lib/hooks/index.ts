@@ -18,6 +18,7 @@ export * from "./useQuestions";
 export * from "./useTimer";
 export * from "./useProjectTemplates";
 export * from "./useTaskCustomFields";
+export * from "./useExtractQuestions";
 export * from "./useNotifications";
 export * from "./useDashboardLayout";
 export * from "./useListVisibility";

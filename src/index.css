@@ -133,6 +133,26 @@
   .scrollbar-thin::-webkit-scrollbar-thumb {
     @apply bg-ink-300 rounded-full;
   }
+
+  /* Block-style slider — RTL-aware track fill via inline gradient.
+     The .block-slider element is given `background: linear-gradient(...)` per
+     instance so the filled portion matches its current value. */
+  .block-slider {
+    @apply w-full h-1.5 rounded-full appearance-none cursor-pointer;
+    direction: rtl;
+  }
+  .block-slider::-webkit-slider-thumb {
+    @apply appearance-none w-4 h-4 rounded-full bg-white shadow-soft;
+    border: 2px solid #111118;
+    transition: transform 120ms ease;
+  }
+  .block-slider::-webkit-slider-thumb:hover {
+    transform: scale(1.15);
+  }
+  .block-slider::-moz-range-thumb {
+    @apply w-4 h-4 rounded-full bg-white shadow-soft;
+    border: 2px solid #111118;
+  }
 }
 
 /* Global keyframes (Tailwind's @keyframes block lives in the config;

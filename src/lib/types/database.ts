@@ -2248,6 +2248,7 @@ export type Database = {
         | "thoughts"
         | "projects"
         | "pricing"
+        | "project_detail"
       dependency_relation:
         | "finish_to_start"
         | "start_to_start"

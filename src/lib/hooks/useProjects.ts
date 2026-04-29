@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { queryKeys, queryFamilies } from "@/lib/query-keys";
 import * as service from "@/lib/services/projects";
@@ -81,6 +82,50 @@ export function useUpdateProject() {
       }
     },
   });
+}
+
+/**
+ * Debounced patch accumulator for project updates. Use from blocks that fire
+ * many small mutations (slider drags, tag edits) — pending patches are merged
+ * and flushed `delayMs` after the last call.
+ */
+export function useDebouncedProjectUpdate(
+  projectId: string | null | undefined,
+  delayMs = 600
+) {
+  const update = useUpdateProject();
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pending = useRef<ProjectUpdate>({});
+
+  useEffect(() => {
+    return () => {
+      if (timer.current) clearTimeout(timer.current);
+    };
+  }, []);
+
+  const scheduleUpdate = (patch: ProjectUpdate) => {
+    if (!projectId) return;
+    pending.current = { ...pending.current, ...patch };
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => {
+      const next = pending.current;
+      pending.current = {};
+      update.mutate({ projectId, patch: next });
+    }, delayMs);
+  };
+
+  const flush = () => {
+    if (!projectId || !timer.current) return;
+    clearTimeout(timer.current);
+    timer.current = null;
+    const next = pending.current;
+    pending.current = {};
+    if (Object.keys(next).length > 0) {
+      update.mutate({ projectId, patch: next });
+    }
+  };
+
+  return { scheduleUpdate, flush, saving: update.isPending };
 }
 
 export function useArchiveProject() {

@@ -10,6 +10,7 @@ import { CalendarBlock } from "@/components/projects/blocks/CalendarBlock";
 import { TemplatesBlock } from "@/components/projects/blocks/TemplatesBlock";
 import { QuoteBlock } from "@/components/projects/blocks/QuoteBlock";
 import { UploadBlock } from "@/components/projects/blocks/UploadBlock";
+import { QuestionsBlock } from "@/components/projects/blocks/QuestionsBlock";
 import {
   computeFixedBreakdown,
   computeHourlyBreakdown,
@@ -449,6 +450,14 @@ export const PROJECT_WIDGETS: WidgetDefinition[] = [
     defaultDesktop: { x: 0, y: 19, w: 12, h: 4, minW: 6, minH: 3 },
     defaultTablet: { x: 0, y: 38, w: 8, h: 4 },
     defaultMobile: { x: 0, y: 38, w: 4, h: 4 },
+  },
+  {
+    key: "questions",
+    title: "שאלות",
+    component: QuestionsBlock,
+    defaultDesktop: { x: 0, y: 23, w: 6, h: 5, minW: 4, minH: 4 },
+    defaultTablet: { x: 0, y: 42, w: 8, h: 5 },
+    defaultMobile: { x: 0, y: 42, w: 4, h: 6 },
   },
 ];
 

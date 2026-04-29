@@ -580,6 +580,7 @@ export type Database = {
           archive_expires_at: string | null
           archived_at: string | null
           color: string | null
+          column_labels: Json
           created_at: string
           currency: string
           description: string | null
@@ -605,6 +606,7 @@ export type Database = {
           archive_expires_at?: string | null
           archived_at?: string | null
           color?: string | null
+          column_labels?: Json
           created_at?: string
           currency?: string
           description?: string | null
@@ -630,6 +632,7 @@ export type Database = {
           archive_expires_at?: string | null
           archived_at?: string | null
           color?: string | null
+          column_labels?: Json
           created_at?: string
           currency?: string
           description?: string | null
@@ -2239,6 +2242,10 @@ export type Database = {
         | "checkbox"
         | "url"
         | "file"
+        | "time"
+        | "location"
+        | "person"
+        | "tag"
       dashboard_screen:
         | "home"
         | "tasks"
@@ -2466,6 +2473,10 @@ export const Constants = {
         "select",
         "multiselect",
         "stars",
+        "time",
+        "location",
+        "person",
+        "tag",
         "checkbox",
         "url",
         "file",

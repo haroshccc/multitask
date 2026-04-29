@@ -12,6 +12,18 @@ import {
   GripVertical,
   ArrowUp,
   ArrowDown,
+  Clock,
+  Calendar as CalendarIcon,
+  MapPin,
+  Folder,
+  User,
+  Link2,
+  Tag,
+  Circle,
+  Star,
+  CircleDollarSign,
+  AlignLeft,
+  CheckSquare,
 } from "lucide-react";
 import {
   DndContext,
@@ -49,7 +61,9 @@ import {
   useUpdateCustomField,
   useDeleteCustomField,
 } from "@/lib/hooks";
+import { useUpdateProject } from "@/lib/hooks/useProjects";
 import type {
+  Project,
   Task,
   TimeEntry,
   TaskCustomField,
@@ -180,6 +194,7 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
   const complete = useCompleteTask();
   const del = useDeleteTask();
   const reorder = useReorderTasks();
+  const updateProject = useUpdateProject();
   const { data: activeTimer } = useActiveTimer();
   const startTimer = useStartTimer();
   const stopTimer = useStopTimer();
@@ -433,6 +448,26 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
     updateField.mutate({ fieldId, patch: { field_label: label } });
   };
 
+  const fixedLabels = useMemo(() => {
+    const raw = (project?.column_labels ?? {}) as Record<string, unknown>;
+    const out: Record<string, string> = {};
+    for (const [k, v] of Object.entries(raw)) {
+      if (typeof v === "string" && v.trim()) out[k] = v;
+    }
+    return out;
+  }, [project?.column_labels]);
+
+  const handleRenameFixedColumn = (key: string, label: string) => {
+    if (!projectId) return;
+    const next = { ...fixedLabels };
+    if (label) next[key] = label;
+    else delete next[key];
+    updateProject.mutate({
+      projectId,
+      patch: { column_labels: next as Project["column_labels"] },
+    });
+  };
+
   /**
    * Drop on a column header → renumber sort_order on every column so the new
    * left-to-right order persists. We bulk-update via individual mutations
@@ -509,9 +544,11 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
             <TableHeader
               gridCols={gridCols}
               customFields={customFields}
+              fixedLabels={fixedLabels}
               sortKey={sortKey}
               sortDir={sortDir}
               onSort={handleHeaderSort}
+              onRenameFixed={handleRenameFixedColumn}
               onAddField={handleAddField}
               onDeleteField={handleDeleteField}
               onRenameField={handleRenameField}
@@ -572,9 +609,11 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
 function TableHeader({
   gridCols,
   customFields,
+  fixedLabels,
   sortKey,
   sortDir,
   onSort,
+  onRenameFixed,
   onAddField,
   onDeleteField,
   onRenameField,
@@ -582,9 +621,11 @@ function TableHeader({
 }: {
   gridCols: string;
   customFields: TaskCustomField[];
+  fixedLabels: Record<string, string>;
   sortKey: string | null;
   sortDir: "asc" | "desc";
   onSort: (key: string) => void;
+  onRenameFixed: (key: string, label: string) => void;
   onAddField: (type: CustomFieldType, label: string) => void;
   onDeleteField: (fieldId: string) => void;
   onRenameField: (fieldId: string, label: string) => void;
@@ -617,28 +658,28 @@ function TableHeader({
       <ArrowDown className={cls} />
     );
   };
-  const headerBtn = (
-    label: string,
+  const renderFixed = (
+    defaultLabel: string,
     key: string,
-    align: "start" | "end" | "center" = "start"
-  ) => (
-    <button
-      type="button"
-      onClick={() => onSort(key)}
-      className={
-        "select-none hover:text-ink-900 transition-colors " +
-        (align === "end"
-          ? "text-end"
-          : align === "center"
-          ? "text-center"
-          : "text-start")
-      }
-      title={`מיון לפי ${label}`}
-    >
-      {label}
-      {arrow(key, align)}
-    </button>
-  );
+    options: {
+      align?: "start" | "end" | "center";
+      sortable?: boolean;
+    } = {}
+  ) => {
+    const align = options.align ?? "start";
+    const label = fixedLabels[key] ?? defaultLabel;
+    return (
+      <FixedColumnHeader
+        label={label}
+        defaultLabel={defaultLabel}
+        align={align}
+        sortable={options.sortable ?? true}
+        sortArrow={arrow(key, align)}
+        onSort={options.sortable === false ? undefined : () => onSort(key)}
+        onRename={(v) => onRenameFixed(key, v)}
+      />
+    );
+  };
   return (
     <div
       className="grid items-center gap-1 px-1.5 py-1.5 sticky top-0 bg-ink-50/80 backdrop-blur z-10 text-[10px] font-semibold uppercase tracking-wider text-ink-500 border-b border-ink-200"
@@ -647,13 +688,13 @@ function TableHeader({
       <span></span>
       <span></span>
       <span></span>
-      {headerBtn("משימה", "title", "start")}
-      {headerBtn("שעות", "estimated_hours", "end")}
-      {headerBtn("ספייר", "spare_hours", "end")}
-      {headerBtn("דחיפות", "urgency", "center")}
-      <span className="text-center">סטופר</span>
-      {headerBtn("בפועל", "actual_seconds", "end")}
-      <span>הערות</span>
+      {renderFixed("משימה", "title", { align: "start" })}
+      {renderFixed("שעות", "estimated_hours", { align: "end" })}
+      {renderFixed("ספייר", "spare_hours", { align: "end" })}
+      {renderFixed("דחיפות", "urgency", { align: "center" })}
+      {renderFixed("סטופר", "timer", { align: "center", sortable: false })}
+      {renderFixed("בפועל", "actual_seconds", { align: "end" })}
+      {renderFixed("הערות", "notes", { align: "start", sortable: false })}
       <DndContext
         sensors={colDragSensors}
         collisionDetection={closestCenter}
@@ -675,6 +716,98 @@ function TableHeader({
       </DndContext>
       <AddColumnButton onAdd={onAddField} />
     </div>
+  );
+}
+
+/**
+ * Fixed-column header: sortable on click (when `sortable=true`), renamable
+ * on double-click. The user-supplied label persists on the project so the
+ * project's vocabulary survives reloads.
+ */
+function FixedColumnHeader({
+  label,
+  defaultLabel,
+  align,
+  sortable,
+  sortArrow,
+  onSort,
+  onRename,
+}: {
+  label: string;
+  defaultLabel: string;
+  align: "start" | "end" | "center";
+  sortable: boolean;
+  sortArrow: React.ReactNode;
+  onSort?: () => void;
+  onRename: (label: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(label);
+  useEffect(() => setDraft(label), [label]);
+
+  const commit = () => {
+    const v = draft.trim();
+    setEditing(false);
+    if (!v) {
+      // Reverting to default = clearing the override.
+      if (label !== defaultLabel) onRename("");
+      else setDraft(label);
+      return;
+    }
+    if (v !== label) onRename(v === defaultLabel ? "" : v);
+  };
+
+  const alignCls =
+    align === "end" ? "text-end" : align === "center" ? "text-center" : "text-start";
+
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+          if (e.key === "Escape") {
+            setDraft(label);
+            setEditing(false);
+          }
+        }}
+        placeholder={defaultLabel}
+        className={
+          "w-full bg-white border border-primary-500 rounded px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-ink-700 outline-none " +
+          alignCls
+        }
+      />
+    );
+  }
+
+  if (sortable && onSort) {
+    return (
+      <button
+        type="button"
+        onClick={onSort}
+        onDoubleClick={() => setEditing(true)}
+        className={
+          "select-none hover:text-ink-900 transition-colors " + alignCls
+        }
+        title={`${label} — קליק למיון, דאבל-קליק לשינוי שם`}
+      >
+        {label}
+        {sortArrow}
+      </button>
+    );
+  }
+
+  return (
+    <span
+      onDoubleClick={() => setEditing(true)}
+      className={"select-none cursor-text " + alignCls}
+      title="דאבל-קליק לשינוי שם"
+    >
+      {label}
+    </span>
   );
 }
 
@@ -770,20 +903,40 @@ function DynColumnHeader({
   );
 }
 
+/**
+ * 12 column types per the spec MD's "בחר סוג עמודה" panel. The picker shows
+ * them as a grid of icon cards; clicking creates the column with the type's
+ * default Hebrew label, which the user can rename later by double-clicking
+ * the header.
+ */
+const COLUMN_TYPES: {
+  type: CustomFieldType;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+}[] = [
+  { type: "time", label: "שעה", icon: Clock },
+  { type: "date", label: "תאריך יעד", icon: CalendarIcon },
+  { type: "location", label: "מיקום", icon: MapPin },
+  { type: "file", label: "קבצים", icon: Folder },
+  { type: "person", label: "אחראי", icon: User },
+  { type: "url", label: "קישור URL", icon: Link2 },
+  { type: "tag", label: "תג", icon: Tag },
+  { type: "select", label: "סטטוס", icon: Circle },
+  { type: "stars", label: "דירוג נוסף", icon: Star },
+  { type: "number", label: "עלות חיצונית", icon: CircleDollarSign },
+  { type: "text", label: "פירוט ארוך", icon: AlignLeft },
+  { type: "checkbox", label: "תיבת סימון", icon: CheckSquare },
+];
+
 function AddColumnButton({
   onAdd,
 }: {
   onAdd: (type: CustomFieldType, label: string) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [type, setType] = useState<CustomFieldType>("text");
-  const [label, setLabel] = useState("");
 
-  const submit = () => {
-    const v = label.trim();
-    if (!v) return;
-    onAdd(type, v);
-    setLabel("");
+  const pick = (type: CustomFieldType, defaultLabel: string) => {
+    onAdd(type, defaultLabel);
     setOpen(false);
   };
 
@@ -804,45 +957,28 @@ function AddColumnButton({
             className="fixed inset-0 z-20"
             onClick={() => setOpen(false)}
           />
-          <div className="absolute end-0 top-full mt-1 z-30 bg-white border border-ink-200 rounded-xl shadow-lift p-3 w-56 space-y-2 normal-case font-normal tracking-normal text-ink-900">
-            <div>
-              <label className="eyebrow mb-1 block text-[10px]">סוג עמודה</label>
-              <select
-                value={type}
-                onChange={(e) => setType(e.target.value as CustomFieldType)}
-                className="field py-1 text-xs"
-              >
-                <option value="text">טקסט</option>
-                <option value="number">מספר</option>
-                <option value="date">תאריך</option>
-                <option value="url">קישור</option>
-                <option value="checkbox">תיבת סימון</option>
-                <option value="select">בחירה</option>
-                <option value="stars">דירוג</option>
-              </select>
+          <div className="absolute end-0 top-full mt-1 z-30 bg-white border border-ink-200 rounded-xl shadow-lift p-3 w-72 normal-case font-normal tracking-normal text-ink-900">
+            <h4 className="text-xs font-semibold text-ink-900 mb-2">
+              בחרי סוג עמודה
+            </h4>
+            <div className="grid grid-cols-3 gap-1.5">
+              {COLUMN_TYPES.map(({ type, label, icon: Icon }) => (
+                <button
+                  key={type + label}
+                  type="button"
+                  onClick={() => pick(type, label)}
+                  className="flex flex-col items-center justify-center gap-1 p-2 rounded-md border border-ink-200 hover:border-primary-400 hover:bg-primary-50 transition-colors text-ink-700 hover:text-primary-700"
+                >
+                  <Icon className="w-4 h-4" />
+                  <span className="text-[10px] font-medium leading-tight text-center">
+                    {label}
+                  </span>
+                </button>
+              ))}
             </div>
-            <div>
-              <label className="eyebrow mb-1 block text-[10px]">שם</label>
-              <input
-                value={label}
-                onChange={(e) => setLabel(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") submit();
-                  if (e.key === "Escape") setOpen(false);
-                }}
-                placeholder="למשל: ספרינט"
-                className="field py-1 text-xs"
-                autoFocus
-              />
-            </div>
-            <button
-              type="button"
-              onClick={submit}
-              disabled={!label.trim()}
-              className="btn-accent text-xs w-full disabled:opacity-50"
-            >
-              הוסיפי
-            </button>
+            <p className="text-[10px] text-ink-400 mt-2 leading-snug">
+              דאבל-קליק על שם העמודה לאחר היצירה לשינוי שם.
+            </p>
           </div>
         </>
       )}
@@ -1350,6 +1486,20 @@ function DynCell({
         />
       );
     }
+    case "time":
+      return <DynTimeCell value={(value as string) ?? ""} onSave={onSave} />;
+    case "location":
+      return <DynLocationCell value={(value as string) ?? ""} onSave={onSave} />;
+    case "person":
+      return <DynPersonCell value={(value as string) ?? ""} onSave={onSave} />;
+    case "tag":
+      return <DynTagCell value={(value as string[]) ?? []} onSave={onSave} />;
+    case "file":
+      return (
+        <span className="text-[10px] text-ink-400 truncate" title="העלאת קבצים בקרוב">
+          📎 בקרוב
+        </span>
+      );
     default:
       return (
         <span className="text-[10px] text-ink-300 truncate">
@@ -1536,6 +1686,155 @@ function DynSelectCell({
         </option>
       ))}
     </select>
+  );
+}
+
+function DynTimeCell({
+  value,
+  onSave,
+}: {
+  value: string;
+  onSave: (v: string | null) => void;
+}) {
+  return (
+    <input
+      type="time"
+      value={value}
+      onChange={(e) => onSave(e.target.value || null)}
+      className="w-full bg-transparent border-0 outline-none text-[11px] text-ink-700 px-1 py-0.5 rounded hover:bg-white focus:bg-white focus:ring-1 focus:ring-primary-500/40"
+    />
+  );
+}
+
+function DynLocationCell({
+  value,
+  onSave,
+}: {
+  value: string;
+  onSave: (v: string | null) => void;
+}) {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => setDraft(value), [value]);
+  return (
+    <div className="flex items-center gap-0.5 min-w-0">
+      <input
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => draft !== value && onSave(draft || null)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+        }}
+        placeholder="כתובת…"
+        className="w-full min-w-0 bg-transparent border-0 outline-none text-[11px] text-ink-700 px-1 py-0.5 rounded hover:bg-white focus:bg-white focus:ring-1 focus:ring-primary-500/40 truncate"
+      />
+      {value && (
+        <a
+          href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(value)}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="shrink-0 text-primary-600 hover:text-primary-700"
+          title="פתח במפות"
+        >
+          <MapPin className="w-3 h-3" />
+        </a>
+      )}
+    </div>
+  );
+}
+
+function DynPersonCell({
+  value,
+  onSave,
+}: {
+  value: string;
+  onSave: (v: string | null) => void;
+}) {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => setDraft(value), [value]);
+  return (
+    <div className="flex items-center gap-1 min-w-0">
+      {value && (
+        <span
+          className="shrink-0 w-4 h-4 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center text-[9px] font-semibold"
+          aria-hidden
+        >
+          {value.charAt(0).toUpperCase()}
+        </span>
+      )}
+      <input
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => draft !== value && onSave(draft || null)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+        }}
+        placeholder="שם…"
+        className="w-full min-w-0 bg-transparent border-0 outline-none text-[11px] text-ink-700 px-1 py-0.5 rounded hover:bg-white focus:bg-white focus:ring-1 focus:ring-primary-500/40 truncate"
+      />
+    </div>
+  );
+}
+
+function DynTagCell({
+  value,
+  onSave,
+}: {
+  value: string[];
+  onSave: (v: string[]) => void;
+}) {
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState("");
+  const submit = () => {
+    const v = draft.trim();
+    if (v && !value.includes(v)) onSave([...value, v]);
+    setDraft("");
+    setAdding(false);
+  };
+  return (
+    <div className="flex items-center gap-1 flex-wrap min-w-0">
+      {value.map((t) => (
+        <span
+          key={t}
+          className="group/tag inline-flex items-center gap-0.5 chip text-[9px] py-0 px-1.5"
+        >
+          {t}
+          <button
+            type="button"
+            onClick={() => onSave(value.filter((x) => x !== t))}
+            className="opacity-0 group-hover/tag:opacity-100 hover:text-danger transition-opacity"
+            aria-label="הסירי"
+          >
+            ×
+          </button>
+        </span>
+      ))}
+      {adding ? (
+        <input
+          autoFocus
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={submit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") submit();
+            if (e.key === "Escape") {
+              setDraft("");
+              setAdding(false);
+            }
+          }}
+          placeholder="תג…"
+          className="w-12 bg-white border border-ink-300 rounded text-[10px] px-1 outline-none focus:border-primary-500"
+        />
+      ) : (
+        <button
+          type="button"
+          onClick={() => setAdding(true)}
+          className="text-[10px] text-ink-400 hover:text-ink-700"
+          aria-label="הוסיפי תג"
+        >
+          +
+        </button>
+      )}
+    </div>
   );
 }
 

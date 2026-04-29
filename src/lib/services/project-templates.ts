@@ -48,6 +48,76 @@ export async function createProjectTemplate(
  * the template) under the project, then creates a top-level task per entry
  * in `template_data.tasks`. Returns the new list id.
  */
+/**
+ * Snapshots the current project's open tasks into a brand-new template row.
+ * Mirrors `applyTemplateToProject` in reverse: tasks → template_data shape.
+ */
+export async function saveProjectAsTemplate(args: {
+  projectId: string;
+  organizationId: string;
+  ownerId: string;
+  name: string;
+  description?: string | null;
+  emoji?: string | null;
+}): Promise<ProjectTemplate> {
+  const { projectId, organizationId, ownerId, name, description, emoji } = args;
+
+  // Pull tasks via the same chain useTasksByProject uses: lists → tasks.
+  const { data: lists, error: lErr } = await supabase
+    .from("task_lists")
+    .select("id")
+    .eq("organization_id", organizationId)
+    .eq("project_id", projectId);
+  if (lErr) throw lErr;
+  const listIds = (lists ?? []).map((l) => l.id);
+
+  type SnapshotTask = {
+    title: string;
+    estimated_hours: number | null;
+    spare_hours: number | null;
+    urgency: number;
+    sort_order: number;
+  };
+  let tasksRows: SnapshotTask[] = [];
+  if (listIds.length > 0) {
+    const { data: tasks, error: tErr } = await supabase
+      .from("tasks")
+      .select("title, estimated_hours, spare_hours, urgency, sort_order, status, completed_at, parent_task_id")
+      .in("task_list_id", listIds)
+      .is("parent_task_id", null) // top-level only — keep the template flat
+      .order("sort_order", { ascending: true });
+    if (tErr) throw tErr;
+    tasksRows = (tasks ?? [])
+      .filter((t) => t.status !== "done" && !t.completed_at)
+      .map((t) => ({
+        title: t.title,
+        estimated_hours: t.estimated_hours,
+        spare_hours: t.spare_hours,
+        urgency: t.urgency,
+        sort_order: t.sort_order,
+      }));
+  }
+
+  const templateData: ProjectTemplateData = {
+    tasks: tasksRows.map((t) => ({
+      title: t.title,
+      estimated_hours: t.estimated_hours ?? undefined,
+      spare_hours: t.spare_hours ?? undefined,
+      urgency: t.urgency,
+    })),
+  };
+
+  return createProjectTemplate({
+    organization_id: organizationId,
+    owner_id: ownerId,
+    name,
+    description: description ?? null,
+    emoji: emoji ?? null,
+    is_default: false,
+    template_data: templateData as unknown as ProjectTemplate["template_data"],
+  });
+}
+
 export async function applyTemplateToProject(args: {
   templateId: string;
   projectId: string;

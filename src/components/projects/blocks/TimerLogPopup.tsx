@@ -41,11 +41,18 @@ export function TimerLogPopup({
   const handleAdd = () => {
     const now = new Date();
     const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
-    create.mutate({
-      task_id: task.id,
-      started_at: oneHourAgo.toISOString(),
-      ended_at: now.toISOString(),
-    });
+    create.mutate(
+      {
+        task_id: task.id,
+        started_at: oneHourAgo.toISOString(),
+        ended_at: now.toISOString(),
+      },
+      {
+        // Open the new entry in edit mode immediately so the user fills in
+        // the actual times (default = "1 hour ago to now" is just a stub).
+        onSuccess: (entry) => setEditingId(entry.id),
+      }
+    );
   };
 
   return (

@@ -1,7 +1,5 @@
 import { useEffect, useState } from "react";
 import {
-  BarChart3,
-  Calendar as CalendarIcon,
   FileText,
   Mic,
   LayoutTemplate,
@@ -9,8 +7,11 @@ import {
 } from "lucide-react";
 import type { WidgetDefinition } from "@/components/dashboard/DashboardGrid";
 import { useProject, useDebouncedProjectUpdate } from "@/lib/hooks/useProjects";
+import { useTasksByProject } from "@/lib/hooks";
 import type { ProjectPricingMode } from "@/lib/types/domain";
 import { TasksBlock } from "@/components/projects/blocks/TasksBlock";
+import { StatsBlock } from "@/components/projects/blocks/StatsBlock";
+import { CalendarBlock } from "@/components/projects/blocks/CalendarBlock";
 import {
   computeFixedBreakdown,
   computeHourlyBreakdown,
@@ -190,11 +191,20 @@ function PricingBlock({ scopeId }: { scopeId?: string | null }) {
 
 function SummaryBlock({ scopeId }: { scopeId?: string | null }) {
   const { data: project } = useProject(scopeId);
+  const { data: tasks = [] } = useTasksByProject(scopeId);
+
+  const estimatedHours = tasks.reduce(
+    (sum, t) => sum + (t.estimated_hours ?? 0),
+    0
+  );
+  const actualSeconds = tasks.reduce(
+    (sum, t) => sum + (t.actual_seconds ?? 0),
+    0
+  );
+
   if (!project) return <BlockEmpty hint="טוען…" />;
 
   const currency = (project.currency as Currency) ?? "ILS";
-  // Tasks aggregation will land in PR-3; for now hours = 0 from tasks side.
-  const estimatedHours = 0;
   const spareHours =
     project.spare_mode === "percent"
       ? (estimatedHours * (project.spare_value ?? 0)) / 100
@@ -256,33 +266,14 @@ function SummaryBlock({ scopeId }: { scopeId?: string | null }) {
 
       <p className="text-[11px] text-ink-500 flex items-center gap-2">
         <TrendingUp className="w-3 h-3" />
-        0.0 ש בפועל · רווח: {formatMoney(perHourCents, currency)}/ש
+        {(actualSeconds / 3600).toFixed(1)} ש בפועל · רווח:{" "}
+        {formatMoney(perHourCents, currency)}/ש
       </p>
     </div>
   );
 }
 
 // ─── Stub blocks ────────────────────────────────────────────────────────────
-
-function StatsBlock() {
-  return (
-    <BlockComingSoon
-      icon={<BarChart3 className="w-4 h-4" />}
-      title="סטטיסטיקות"
-      hint="ביצוע זמן %, רווח שעתי, משימות הושלמו, שעות שנחסכו — מתחבר אחרי שטבלת המשימות תיכנס."
-    />
-  );
-}
-
-function CalendarBlock() {
-  return (
-    <BlockComingSoon
-      icon={<CalendarIcon className="w-4 h-4" />}
-      title="לוח זמנים"
-      hint="יום / שבוע / חודש עם רשומות סטופר כבלוקים צבעוניים. מחכה לסטופר."
-    />
-  );
-}
 
 function QuoteBlock() {
   return (
@@ -444,17 +435,18 @@ function BlockComingSoon({
 
 // ─── Widget registry ───────────────────────────────────────────────────────
 
-// Default desktop layout: 12-col grid laid out as side-by-side halves for the
-// top section, then a full-width tasks block, then a 2/3+1/3 row, and a final
-// full-width templates strip. Tablet (8 cols) and mobile (4 cols) defaults are
-// stacked single-column with sensible heights so blocks aren't truncated.
+// Layout defaults
+//  - lg (≥1200px, 12 cols): true 2-column dashboard layout per the spec
+//  - md (768–1199px, 8 cols): single column — narrow desktops/tablets get
+//    everything stacked full-width so nothing gets cramped
+//  - sm (<768px, 4 cols): single column with mobile-friendly heights
 export const PROJECT_WIDGETS: WidgetDefinition[] = [
   {
     key: "stats",
     title: "סטטיסטיקות",
     component: StatsBlock,
     defaultDesktop: { x: 6, y: 0, w: 6, h: 3, minW: 3, minH: 3 },
-    defaultTablet: { x: 4, y: 0, w: 4, h: 3 },
+    defaultTablet: { x: 0, y: 0, w: 8, h: 4 },
     defaultMobile: { x: 0, y: 0, w: 4, h: 4 },
   },
   {
@@ -462,7 +454,7 @@ export const PROJECT_WIDGETS: WidgetDefinition[] = [
     title: "לוח זמנים",
     component: CalendarBlock,
     defaultDesktop: { x: 0, y: 0, w: 6, h: 5, minW: 4, minH: 4 },
-    defaultTablet: { x: 0, y: 0, w: 4, h: 4 },
+    defaultTablet: { x: 0, y: 4, w: 8, h: 5 },
     defaultMobile: { x: 0, y: 4, w: 4, h: 5 },
   },
   {
@@ -470,7 +462,7 @@ export const PROJECT_WIDGETS: WidgetDefinition[] = [
     title: "פרמטרי תמחור",
     component: PricingBlock,
     defaultDesktop: { x: 6, y: 3, w: 6, h: 5, minW: 4, minH: 4 },
-    defaultTablet: { x: 4, y: 3, w: 4, h: 5 },
+    defaultTablet: { x: 0, y: 9, w: 8, h: 6 },
     defaultMobile: { x: 0, y: 9, w: 4, h: 6 },
   },
   {
@@ -478,7 +470,7 @@ export const PROJECT_WIDGETS: WidgetDefinition[] = [
     title: "סיכום בזמן אמת",
     component: SummaryBlock,
     defaultDesktop: { x: 0, y: 5, w: 6, h: 4, minW: 4, minH: 3 },
-    defaultTablet: { x: 0, y: 4, w: 4, h: 4 },
+    defaultTablet: { x: 0, y: 15, w: 8, h: 5 },
     defaultMobile: { x: 0, y: 15, w: 4, h: 5 },
   },
   {
@@ -486,7 +478,7 @@ export const PROJECT_WIDGETS: WidgetDefinition[] = [
     title: "טבלת משימות",
     component: TasksBlock,
     defaultDesktop: { x: 0, y: 9, w: 12, h: 6, minW: 8, minH: 4 },
-    defaultTablet: { x: 0, y: 8, w: 8, h: 8 },
+    defaultTablet: { x: 0, y: 20, w: 8, h: 10 },
     defaultMobile: { x: 0, y: 20, w: 4, h: 10 },
   },
   {
@@ -494,7 +486,7 @@ export const PROJECT_WIDGETS: WidgetDefinition[] = [
     title: "הצעת מחיר",
     component: QuoteBlock,
     defaultDesktop: { x: 4, y: 15, w: 8, h: 4, minW: 6, minH: 3 },
-    defaultTablet: { x: 0, y: 16, w: 8, h: 4 },
+    defaultTablet: { x: 0, y: 30, w: 8, h: 4 },
     defaultMobile: { x: 0, y: 30, w: 4, h: 4 },
   },
   {
@@ -502,7 +494,7 @@ export const PROJECT_WIDGETS: WidgetDefinition[] = [
     title: "העלאת הקלטה",
     component: UploadBlock,
     defaultDesktop: { x: 0, y: 15, w: 4, h: 4, minW: 3, minH: 3 },
-    defaultTablet: { x: 0, y: 20, w: 4, h: 4 },
+    defaultTablet: { x: 0, y: 34, w: 8, h: 4 },
     defaultMobile: { x: 0, y: 34, w: 4, h: 4 },
   },
   {
@@ -510,7 +502,7 @@ export const PROJECT_WIDGETS: WidgetDefinition[] = [
     title: "תבניות פרויקט",
     component: TemplatesBlock,
     defaultDesktop: { x: 0, y: 19, w: 12, h: 4, minW: 6, minH: 3 },
-    defaultTablet: { x: 0, y: 24, w: 8, h: 4 },
+    defaultTablet: { x: 0, y: 38, w: 8, h: 4 },
     defaultMobile: { x: 0, y: 38, w: 4, h: 4 },
   },
 ];

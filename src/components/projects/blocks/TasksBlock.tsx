@@ -45,6 +45,8 @@ import { CSS } from "@dnd-kit/utilities";
 import { TimerLogPopup } from "@/components/projects/blocks/TimerLogPopup";
 import { useFileUpload } from "@/lib/hooks/useFileUpload";
 import { presignDownload } from "@/lib/services/storage";
+import { TaskEditModal } from "@/components/tasks/TaskEditModal";
+import { HelpCircle } from "lucide-react";
 import { pushUndo } from "@/lib/undo/store";
 import {
   useTasksByProject,
@@ -64,6 +66,7 @@ import {
   useUpdateCustomField,
   useDeleteCustomField,
   useOrgMembers,
+  useProjectQuestions,
 } from "@/lib/hooks";
 import { useUpdateProject } from "@/lib/hooks/useProjects";
 import type {
@@ -91,7 +94,8 @@ type FixedColumnKey =
   | "urgency"
   | "timer"
   | "actual_seconds"
-  | "notes";
+  | "notes"
+  | "questions";
 
 const DEFAULT_FIXED_ORDER: FixedColumnKey[] = [
   "title",
@@ -101,6 +105,7 @@ const DEFAULT_FIXED_ORDER: FixedColumnKey[] = [
   "timer",
   "actual_seconds",
   "notes",
+  "questions",
 ];
 
 const FIXED_COLUMN_WIDTHS: Record<FixedColumnKey, string> = {
@@ -111,6 +116,7 @@ const FIXED_COLUMN_WIDTHS: Record<FixedColumnKey, string> = {
   timer: "32px",
   actual_seconds: "60px",
   notes: "140px",
+  questions: "44px",
 };
 
 const FIXED_COLUMN_DEFAULT_LABELS: Record<FixedColumnKey, string> = {
@@ -121,6 +127,7 @@ const FIXED_COLUMN_DEFAULT_LABELS: Record<FixedColumnKey, string> = {
   timer: "סטופר",
   actual_seconds: "בפועל",
   notes: "הערות",
+  questions: "שאלות",
 };
 
 const FIXED_COLUMN_ALIGN: Record<FixedColumnKey, "start" | "end" | "center"> = {
@@ -131,6 +138,7 @@ const FIXED_COLUMN_ALIGN: Record<FixedColumnKey, "start" | "end" | "center"> = {
   timer: "center",
   actual_seconds: "end",
   notes: "start",
+  questions: "center",
 };
 
 const FIXED_COLUMN_SORTABLE: Record<FixedColumnKey, boolean> = {
@@ -141,6 +149,7 @@ const FIXED_COLUMN_SORTABLE: Record<FixedColumnKey, boolean> = {
   timer: false,
   actual_seconds: true,
   notes: false,
+  questions: false,
 };
 
 const SORT_KEY_OF_FIXED: Record<FixedColumnKey, string | null> = {
@@ -151,6 +160,7 @@ const SORT_KEY_OF_FIXED: Record<FixedColumnKey, string | null> = {
   timer: null,
   actual_seconds: "actual_seconds",
   notes: null,
+  questions: null,
 };
 
 const CONTROL_COLS = "20px 20px 20px"; // drag · expand · checkbox
@@ -317,6 +327,17 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
     [tasks, logTaskId]
   );
   const [optionsFieldId, setOptionsFieldId] = useState<string | null>(null);
+  const [editTaskId, setEditTaskId] = useState<string | null>(null);
+
+  const { data: questions = [] } = useProjectQuestions(projectId);
+  const questionsByTaskId = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const q of questions) {
+      if (!q.task_id) continue;
+      m.set(q.task_id, (m.get(q.task_id) ?? 0) + 1);
+    }
+    return m;
+  }, [questions]);
 
   const projectLists = useMemo(
     () => lists.filter((l) => l.project_id === projectId),
@@ -644,6 +665,12 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
           onClose={() => setOptionsFieldId(null)}
         />
       )}
+      {editTaskId && (
+        <TaskEditModal
+          taskId={editTaskId}
+          onClose={() => setEditTaskId(null)}
+        />
+      )}
       <div className="flex items-center gap-2 shrink-0">
         <div className="relative flex-1 min-w-0">
           <Search className="absolute start-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-400 pointer-events-none" />
@@ -703,6 +730,7 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
               customFields={customFields}
               gridCols={gridCols}
               orderedFixedKeys={orderedFixedKeys}
+              questionsByTaskId={questionsByTaskId}
               onReorder={handleReorderTopLevel}
               onUpdate={handleTaskUpdate}
               onComplete={handleCompleteWithUndo}
@@ -713,6 +741,7 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
                 else startTimer.mutate({ taskId });
               }}
               onOpenLog={(taskId) => setLogTaskId(taskId)}
+              onOpenEdit={(taskId) => setEditTaskId(taskId)}
               onAddAfter={handleAddAfter}
               onIndent={handleIndentWithUndo}
               onOutdent={handleOutdentWithUndo}
@@ -726,6 +755,7 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
                 customFields={customFields}
                 gridCols={gridCols}
                 orderedFixedKeys={orderedFixedKeys}
+                questionsByTaskId={questionsByTaskId}
                 onUpdate={handleTaskUpdate}
                 onComplete={handleCompleteWithUndo}
                 onDelete={(id) => del.mutate(id)}
@@ -735,6 +765,7 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
                   else startTimer.mutate({ taskId });
                 }}
                 onOpenLog={(taskId) => setLogTaskId(taskId)}
+                onOpenEdit={(taskId) => setEditTaskId(taskId)}
                 onAddAfter={handleAddAfter}
                 onIndent={handleIndentWithUndo}
                 onOutdent={handleOutdentWithUndo}
@@ -1235,6 +1266,7 @@ interface RowHandlers {
   onAddSub: (parent: Task) => void;
   onToggleTimer: (taskId: string, isCurrentlyActive: boolean) => void;
   onOpenLog: (taskId: string) => void;
+  onOpenEdit: (taskId: string) => void;
   onAddAfter: (current: Task) => void;
   onIndent: (current: Task) => void;
   onOutdent: (current: Task) => void;
@@ -1249,6 +1281,7 @@ interface TaskListProps {
   customFields: TaskCustomField[];
   gridCols: string;
   orderedFixedKeys: FixedColumnKey[];
+  questionsByTaskId: Map<string, number>;
 }
 
 function TaskList({
@@ -1260,6 +1293,7 @@ function TaskList({
   customFields,
   gridCols,
   orderedFixedKeys,
+  questionsByTaskId,
   ...handlers
 }: TaskListProps & RowHandlers) {
   if (nodes.length === 0) return null;
@@ -1276,6 +1310,7 @@ function TaskList({
           customFields={customFields}
           gridCols={gridCols}
           orderedFixedKeys={orderedFixedKeys}
+          questionsByTaskId={questionsByTaskId}
           {...handlers}
         />
       ))}
@@ -1295,6 +1330,7 @@ function SortableTaskList({
   customFields,
   gridCols,
   orderedFixedKeys,
+  questionsByTaskId,
   onReorder,
   ...handlers
 }: {
@@ -1305,6 +1341,7 @@ function SortableTaskList({
   customFields: TaskCustomField[];
   gridCols: string;
   orderedFixedKeys: FixedColumnKey[];
+  questionsByTaskId: Map<string, number>;
   onReorder: (newOrder: TaskNode[]) => void;
 } & RowHandlers) {
   const sensors = useSensors(
@@ -1340,6 +1377,7 @@ function SortableTaskList({
               customFields={customFields}
               gridCols={gridCols}
               orderedFixedKeys={orderedFixedKeys}
+              questionsByTaskId={questionsByTaskId}
               {...handlers}
             />
           ))}
@@ -1357,6 +1395,7 @@ function SortableTaskItem({
   customFields,
   gridCols,
   orderedFixedKeys,
+  questionsByTaskId,
   ...handlers
 }: {
   node: TaskNode;
@@ -1366,6 +1405,7 @@ function SortableTaskItem({
   customFields: TaskCustomField[];
   gridCols: string;
   orderedFixedKeys: FixedColumnKey[];
+  questionsByTaskId: Map<string, number>;
 } & RowHandlers) {
   const sortable = useSortable({ id: node.task.id });
   const [expanded, setExpanded] = useState(true);
@@ -1390,6 +1430,7 @@ function SortableTaskItem({
         customFields={customFields}
         gridCols={gridCols}
         orderedFixedKeys={orderedFixedKeys}
+        questionsByTaskId={questionsByTaskId}
         onToggleExpand={() => setExpanded((v) => !v)}
         dragHandleProps={sortable.listeners}
         {...handlers}
@@ -1404,6 +1445,7 @@ function SortableTaskItem({
           customFields={customFields}
           gridCols={gridCols}
           orderedFixedKeys={orderedFixedKeys}
+          questionsByTaskId={questionsByTaskId}
           {...handlers}
         />
       )}
@@ -1420,6 +1462,7 @@ function TaskItem({
   customFields,
   gridCols,
   orderedFixedKeys,
+  questionsByTaskId,
   ...handlers
 }: {
   node: TaskNode;
@@ -1430,6 +1473,7 @@ function TaskItem({
   customFields: TaskCustomField[];
   gridCols: string;
   orderedFixedKeys: FixedColumnKey[];
+  questionsByTaskId: Map<string, number>;
 } & RowHandlers) {
   const [expanded, setExpanded] = useState(true);
   const hasChildren = node.children.length > 0;
@@ -1447,6 +1491,7 @@ function TaskItem({
         customFields={customFields}
         gridCols={gridCols}
         orderedFixedKeys={orderedFixedKeys}
+        questionsByTaskId={questionsByTaskId}
         onToggleExpand={() => setExpanded((v) => !v)}
         {...handlers}
       />
@@ -1460,6 +1505,7 @@ function TaskItem({
           customFields={customFields}
           gridCols={gridCols}
           orderedFixedKeys={orderedFixedKeys}
+          questionsByTaskId={questionsByTaskId}
           {...handlers}
         />
       )}
@@ -1480,12 +1526,14 @@ function TaskRow({
   customFields,
   gridCols,
   orderedFixedKeys,
+  questionsByTaskId,
   onUpdate,
   onComplete,
   onDelete,
   onAddSub,
   onToggleTimer,
   onOpenLog,
+  onOpenEdit,
   onAddAfter,
   onIndent,
   onOutdent,
@@ -1502,6 +1550,7 @@ function TaskRow({
   customFields: TaskCustomField[];
   gridCols: string;
   orderedFixedKeys: FixedColumnKey[];
+  questionsByTaskId: Map<string, number>;
 } & RowHandlers) {
   const isDone = task.status === "done" || !!task.completed_at;
   const isTimerActive = activeTimer?.task_id === task.id;
@@ -1601,6 +1650,13 @@ function TaskRow({
           <NotesCell
             value={task.notes ?? ""}
             onSave={(v) => onUpdate(task.id, { notes: v || null })}
+          />
+        );
+      case "questions":
+        return (
+          <QuestionsCountCell
+            count={questionsByTaskId.get(task.id) ?? 0}
+            onOpen={() => onOpenEdit(task.id)}
           />
         );
       default:
@@ -2538,6 +2594,31 @@ function DynFileCell({
   );
 }
 
+function QuestionsCountCell({
+  count,
+  onOpen,
+}: {
+  count: number;
+  onOpen: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className={
+        "inline-flex items-center justify-center gap-0.5 mx-auto rounded px-1 py-0.5 text-[10px] transition-colors " +
+        (count > 0
+          ? "text-primary-700 hover:bg-primary-100"
+          : "text-ink-300 hover:text-ink-700 hover:bg-ink-100")
+      }
+      title={count > 0 ? `${count} שאלות` : "אין שאלות"}
+    >
+      <HelpCircle className="w-3 h-3" />
+      {count > 0 && <span className="tabular-nums">{count}</span>}
+    </button>
+  );
+}
+
 function NotesCell({
   value,
   onSave,
@@ -2741,6 +2822,7 @@ function DoneSection({
   customFields,
   gridCols,
   orderedFixedKeys,
+  questionsByTaskId,
   ...handlers
 }: {
   nodes: TaskNode[];
@@ -2750,6 +2832,7 @@ function DoneSection({
   customFields: TaskCustomField[];
   gridCols: string;
   orderedFixedKeys: FixedColumnKey[];
+  questionsByTaskId: Map<string, number>;
 } & RowHandlers) {
   const [open, setOpen] = useState(false);
   const count = useMemo(() => countTree(nodes), [nodes]);
@@ -2777,6 +2860,7 @@ function DoneSection({
           customFields={customFields}
           gridCols={gridCols}
           orderedFixedKeys={orderedFixedKeys}
+          questionsByTaskId={questionsByTaskId}
           {...handlers}
         />
       )}

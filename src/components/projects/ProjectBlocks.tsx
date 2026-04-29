@@ -1,8 +1,17 @@
 import { useEffect, useState } from "react";
 import { TrendingUp } from "lucide-react";
 import type { WidgetDefinition } from "@/components/dashboard/DashboardGrid";
-import { useProject, useDebouncedProjectUpdate } from "@/lib/hooks/useProjects";
+import {
+  useProject,
+  useDebouncedProjectUpdate,
+  useProjectExpenses,
+  useCreateProjectExpense,
+  useUpdateProjectExpense,
+  useDeleteProjectExpense,
+} from "@/lib/hooks/useProjects";
 import { useTasksByProject } from "@/lib/hooks";
+import type { ProjectExpense } from "@/lib/types/domain";
+import { Trash2 } from "lucide-react";
 import type { ProjectPricingMode } from "@/lib/types/domain";
 import { TasksBlock } from "@/components/projects/blocks/TasksBlock";
 import { StatsBlock } from "@/components/projects/blocks/StatsBlock";
@@ -36,6 +45,7 @@ function PricingBlock({ scopeId }: { scopeId?: string | null }) {
   const [spareValue, setSpareValue] = useState(0);
   const [totalPrice, setTotalPrice] = useState(0);
   const [mode, setMode] = useState<ProjectPricingMode>("hourly");
+  const [vatPct, setVatPct] = useState(17);
 
   useEffect(() => {
     if (!project) return;
@@ -45,6 +55,7 @@ function PricingBlock({ scopeId }: { scopeId?: string | null }) {
     setSpareMode((project.spare_mode as "percent" | "hours" | null) ?? "percent");
     setSpareValue(project.spare_value ?? 0);
     setTotalPrice(Math.round((project.total_price_cents ?? 0) / 100));
+    setVatPct(project.vat_percentage ?? 17);
   }, [project?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!project) return <BlockEmpty hint="טוען…" />;
@@ -182,7 +193,136 @@ function PricingBlock({ scopeId }: { scopeId?: string | null }) {
           את המחשבון.
         </div>
       )}
+
+      {mode !== "quote" && (
+        <SliderRow
+          label='מע"מ (%)'
+          value={vatPct}
+          min={0}
+          max={25}
+          step={1}
+          onChange={(v) => {
+            setVatPct(v);
+            scheduleUpdate({ vat_percentage: v });
+          }}
+          onCommit={flush}
+        />
+      )}
+
+      {project.id && <ExpensesSection projectId={project.id} />}
     </div>
+  );
+}
+
+// ─── Expenses inline editor ─────────────────────────────────────────────────
+
+function ExpensesSection({ projectId }: { projectId: string }) {
+  const { data: expenses = [] } = useProjectExpenses(projectId);
+  const create = useCreateProjectExpense();
+  const update = useUpdateProjectExpense();
+  const del = useDeleteProjectExpense();
+  const total = expenses.reduce((s, e) => s + (e.amount_cents ?? 0), 0);
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1.5">
+        <span className="eyebrow">הוצאות נוספות</span>
+        <span className="text-xs text-ink-500 tabular-nums">
+          סה״כ ₪{(total / 100).toFixed(0)}
+        </span>
+      </div>
+      <ul className="space-y-1">
+        {expenses.map((e) => (
+          <ExpenseRow
+            key={e.id}
+            expense={e}
+            onSave={(patch) =>
+              update.mutate({ expenseId: e.id, projectId, patch })
+            }
+            onDelete={() => del.mutate({ expenseId: e.id, projectId })}
+          />
+        ))}
+      </ul>
+      <button
+        type="button"
+        onClick={() =>
+          create.mutate({ project_id: projectId, label: "", amount_cents: 0 })
+        }
+        disabled={create.isPending}
+        className="mt-1 text-[11px] text-primary-600 hover:text-primary-700 disabled:opacity-50"
+      >
+        + הוסיפי הוצאה
+      </button>
+    </div>
+  );
+}
+
+function ExpenseRow({
+  expense,
+  onSave,
+  onDelete,
+}: {
+  expense: ProjectExpense;
+  onSave: (patch: { label?: string; amount_cents?: number }) => void;
+  onDelete: () => void;
+}) {
+  const [label, setLabel] = useState(expense.label ?? "");
+  const [amount, setAmount] = useState(
+    expense.amount_cents ? String(expense.amount_cents / 100) : ""
+  );
+  useEffect(() => setLabel(expense.label ?? ""), [expense.label]);
+  useEffect(
+    () =>
+      setAmount(
+        expense.amount_cents ? String(expense.amount_cents / 100) : ""
+      ),
+    [expense.amount_cents]
+  );
+
+  const commitLabel = () => {
+    const v = label.trim();
+    if (v !== (expense.label ?? "").trim()) onSave({ label: v });
+  };
+  const commitAmount = () => {
+    const n = parseFloat(amount) || 0;
+    const cents = Math.round(n * 100);
+    if (cents !== (expense.amount_cents ?? 0)) onSave({ amount_cents: cents });
+  };
+
+  return (
+    <li className="group/exp flex items-center gap-1.5">
+      <input
+        value={label}
+        onChange={(e) => setLabel(e.target.value)}
+        onBlur={commitLabel}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+        }}
+        placeholder="תיאור הוצאה"
+        className="field py-1 text-xs flex-1"
+      />
+      <input
+        value={amount}
+        onChange={(e) => setAmount(e.target.value)}
+        onBlur={commitAmount}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+        }}
+        placeholder="₪"
+        inputMode="decimal"
+        className="field py-1 text-xs w-20 tabular-nums text-end"
+      />
+      <button
+        type="button"
+        onClick={() => {
+          if (confirm("למחוק את ההוצאה?")) onDelete();
+        }}
+        className="opacity-0 group-hover/exp:opacity-100 text-ink-400 hover:text-danger transition-opacity p-1"
+        aria-label="מחקי"
+      >
+        <Trash2 className="w-3 h-3" />
+      </button>
+    </li>
   );
 }
 
@@ -191,6 +331,7 @@ function PricingBlock({ scopeId }: { scopeId?: string | null }) {
 function SummaryBlock({ scopeId }: { scopeId?: string | null }) {
   const { data: project } = useProject(scopeId);
   const { data: tasks = [] } = useTasksByProject(scopeId);
+  const { data: expenses = [] } = useProjectExpenses(scopeId);
 
   const estimatedHours = tasks.reduce(
     (sum, t) => sum + (t.estimated_hours ?? 0),
@@ -200,17 +341,19 @@ function SummaryBlock({ scopeId }: { scopeId?: string | null }) {
     (sum, t) => sum + (t.actual_seconds ?? 0),
     0
   );
+  const expensesCents = expenses.reduce((s, e) => s + (e.amount_cents ?? 0), 0);
 
   if (!project) return <BlockEmpty hint="טוען…" />;
 
   const currency = (project.currency as Currency) ?? "ILS";
+  const vatPct = project.vat_percentage ?? 0;
   const spareHours =
     project.spare_mode === "percent"
       ? (estimatedHours * (project.spare_value ?? 0)) / 100
       : project.spare_value ?? 0;
   const effectiveHours = estimatedHours + spareHours;
 
-  let suggestedCents = 0;
+  let laborCents = 0;
   let perHourCents = 0;
 
   if (project.pricing_mode === "hourly" && project.hourly_rate_cents) {
@@ -222,18 +365,25 @@ function SummaryBlock({ scopeId }: { scopeId?: string | null }) {
       vatPercentage: 0,
     });
     perHourCents = breakdown.subtotalCents;
-    suggestedCents = Math.round(perHourCents * effectiveHours);
-  } else if (project.pricing_mode === "fixed_price" && project.total_price_cents) {
+    laborCents = Math.round(perHourCents * effectiveHours);
+  } else if (
+    project.pricing_mode === "fixed_price" &&
+    project.total_price_cents
+  ) {
     const breakdown = computeFixedBreakdown({
       totalPriceCents: project.total_price_cents,
       vatPercentage: 0,
       priceIncludesVat: false,
     });
-    suggestedCents = breakdown.totalGrossCents;
-    perHourCents = effectiveHours > 0
-      ? Math.round(suggestedCents / effectiveHours)
-      : 0;
+    laborCents = breakdown.totalGrossCents;
+    perHourCents =
+      effectiveHours > 0 ? Math.round(laborCents / effectiveHours) : 0;
   }
+
+  // suggested = labor (with profit) + expenses, then × VAT.
+  const subtotalCents = laborCents + expensesCents;
+  const vatCents = Math.round(subtotalCents * (vatPct / 100));
+  const suggestedCents = subtotalCents + vatCents;
 
   return (
     <div className="space-y-3">
@@ -251,6 +401,20 @@ function SummaryBlock({ scopeId }: { scopeId?: string | null }) {
         label="שעות אפקטיביות"
         value={`${effectiveHours.toFixed(1)} ש`}
       />
+      {expensesCents > 0 && (
+        <SummaryRow
+          label="+ הוצאות"
+          value={formatMoney(expensesCents, currency)}
+          muted
+        />
+      )}
+      {vatPct > 0 && (
+        <SummaryRow
+          label={`+ מע"מ ${vatPct}%`}
+          value={formatMoney(vatCents, currency)}
+          muted
+        />
+      )}
 
       <div className="rounded-lg bg-brand-gradient-soft border border-primary-200 p-3 mt-3">
         <div className="flex items-baseline justify-between">
@@ -265,8 +429,10 @@ function SummaryBlock({ scopeId }: { scopeId?: string | null }) {
 
       <p className="text-[11px] text-ink-500 flex items-center gap-2">
         <TrendingUp className="w-3 h-3" />
-        {(actualSeconds / 3600).toFixed(1)} ש בפועל · רווח:{" "}
-        {formatMoney(perHourCents, currency)}/ש
+        {(actualSeconds / 3600).toFixed(1)} ש בפועל · {formatMoney(
+          perHourCents,
+          currency
+        )}/ש
       </p>
     </div>
   );

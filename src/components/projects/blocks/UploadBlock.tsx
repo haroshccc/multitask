@@ -1,12 +1,17 @@
 import { RecordingDropZone } from "@/components/recordings/RecordingDropZone";
 
 /**
- * Thin wrapper around the existing RecordingDropZone — gives the project
- * page a quick way to attach an audio file (briefing call, voice notes, …)
- * that goes through the standard recording pipeline (transcription, AI
- * summary). Future enhancement: filter the recordings list to those tagged
- * with this project.
+ * Drop zone that auto-tags new recordings with the current project — when the
+ * user drags audio onto the project page, the recording row is created with
+ * `project_id` set so it shows up later in the project's history without an
+ * extra "assign to project" step.
  */
-export function UploadBlock() {
-  return <RecordingDropZone source="other" className="h-full" />;
+export function UploadBlock({ scopeId }: { scopeId?: string | null }) {
+  return (
+    <RecordingDropZone
+      source="other"
+      projectId={scopeId}
+      className="h-full"
+    />
+  );
 }

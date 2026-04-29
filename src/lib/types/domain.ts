@@ -23,6 +23,33 @@ export type Project = Tables["projects"]["Row"];
 export type ProjectInsert = Tables["projects"]["Insert"];
 export type ProjectUpdate = Tables["projects"]["Update"];
 
+/**
+ * Per-project dynamic column definition. The id is a stable string the UI
+ * generates; values for each task land in `tasks.custom_fields[id]`. The MD
+ * spec lists 12 types — we ship a starter set and expand from there.
+ */
+export type DynColumnType =
+  | "text"
+  | "date"
+  | "url"
+  | "status"
+  | "person"
+  | "tag"
+  | "cost"
+  | "rating"
+  | "check"
+  | "file"
+  | "time"
+  | "location";
+
+export interface DynColumn {
+  id: string;
+  type: DynColumnType;
+  label: string;
+  emoji?: string;
+  opts?: { id: string; label: string; color?: string }[];
+}
+
 export type ProjectExpense = Tables["project_expenses"]["Row"];
 export type ProjectExpenseInsert = Tables["project_expenses"]["Insert"];
 

@@ -90,6 +90,7 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
   const stopTimer = useStopTimer();
 
   const [search, setSearch] = useState("");
+  const [focusTaskId, setFocusTaskId] = useState<string | null>(null);
 
   const projectLists = useMemo(
     () => lists.filter((l) => l.project_id === projectId),
@@ -131,22 +132,77 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
   const handleAddTopLevel = async () => {
     if (!projectId) return;
     const listId = await ensureList();
-    await create.mutateAsync({
+    const newTask = await create.mutateAsync({
       task_list_id: listId,
-      title: "משימה חדשה",
+      title: "",
       parent_task_id: null,
       status: "todo",
     });
+    setFocusTaskId(newTask.id);
   };
 
   const handleAddSub = async (parent: Task) => {
     const listId = parent.task_list_id ?? (await ensureList());
-    await create.mutateAsync({
+    const newTask = await create.mutateAsync({
       task_list_id: listId,
-      title: "תת-משימה",
+      title: "",
       parent_task_id: parent.id,
       status: "todo",
     });
+    setFocusTaskId(newTask.id);
+  };
+
+  // Enter on a row → create a sibling right after it (same parent, between
+  // the current row and its next sibling) and focus the new title.
+  const handleAddAfter = async (current: Task) => {
+    const listId = current.task_list_id ?? (await ensureList());
+    const siblings = tasks
+      .filter((t) => t.parent_task_id === current.parent_task_id)
+      .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+    const idx = siblings.findIndex((t) => t.id === current.id);
+    let nextSortOrder: number;
+    if (idx === -1 || idx === siblings.length - 1) {
+      nextSortOrder = (current.sort_order ?? 0) + 1000;
+    } else {
+      const a = current.sort_order ?? 0;
+      const b = siblings[idx + 1].sort_order ?? 0;
+      nextSortOrder = (a + b) / 2;
+    }
+    const newTask = await create.mutateAsync({
+      task_list_id: listId,
+      title: "",
+      parent_task_id: current.parent_task_id,
+      status: "todo",
+      sort_order: nextSortOrder,
+    });
+    setFocusTaskId(newTask.id);
+  };
+
+  // Tab → become a sub-task of the previous sibling.
+  const handleIndent = (current: Task) => {
+    const siblings = tasks
+      .filter((t) => t.parent_task_id === current.parent_task_id)
+      .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+    const idx = siblings.findIndex((t) => t.id === current.id);
+    if (idx <= 0) return; // need a previous sibling
+    const newParent = siblings[idx - 1];
+    update.mutate({
+      taskId: current.id,
+      patch: { parent_task_id: newParent.id },
+    });
+    setFocusTaskId(current.id);
+  };
+
+  // Shift+Tab → move out one level (parent's parent becomes parent).
+  const handleOutdent = (current: Task) => {
+    if (!current.parent_task_id) return;
+    const parent = tasks.find((t) => t.id === current.parent_task_id);
+    if (!parent) return;
+    update.mutate({
+      taskId: current.id,
+      patch: { parent_task_id: parent.parent_task_id ?? null },
+    });
+    setFocusTaskId(current.id);
   };
 
   const isPending = create.isPending || createList.isPending;
@@ -201,6 +257,8 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
               nodes={filteredOpen}
               level={0}
               activeTimer={activeTimer ?? null}
+              focusTaskId={focusTaskId}
+              onFocusHandled={() => setFocusTaskId(null)}
               onUpdate={(id, patch) =>
                 update.mutate({ taskId: id, patch })
               }
@@ -213,11 +271,16 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
                 if (isCurrentlyActive) stopTimer.mutate();
                 else startTimer.mutate({ taskId });
               }}
+              onAddAfter={handleAddAfter}
+              onIndent={handleIndent}
+              onOutdent={handleOutdent}
             />
             {filteredDone.length > 0 && (
               <DoneSection
                 nodes={filteredDone}
                 activeTimer={activeTimer ?? null}
+                focusTaskId={focusTaskId}
+                onFocusHandled={() => setFocusTaskId(null)}
                 onUpdate={(id, patch) =>
                   update.mutate({ taskId: id, patch })
                 }
@@ -230,6 +293,9 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
                   if (isCurrentlyActive) stopTimer.mutate();
                   else startTimer.mutate({ taskId });
                 }}
+                onAddAfter={handleAddAfter}
+                onIndent={handleIndent}
+                onOutdent={handleOutdent}
               />
             )}
           </div>
@@ -269,18 +335,25 @@ interface RowHandlers {
   onDelete: (id: string) => void;
   onAddSub: (parent: Task) => void;
   onToggleTimer: (taskId: string, isCurrentlyActive: boolean) => void;
+  onAddAfter: (current: Task) => void;
+  onIndent: (current: Task) => void;
+  onOutdent: (current: Task) => void;
 }
 
 interface TaskListProps {
   nodes: TaskNode[];
   level: number;
   activeTimer: TimeEntry | null;
+  focusTaskId: string | null;
+  onFocusHandled: () => void;
 }
 
 function TaskList({
   nodes,
   level,
   activeTimer,
+  focusTaskId,
+  onFocusHandled,
   ...handlers
 }: TaskListProps & RowHandlers) {
   if (nodes.length === 0) return null;
@@ -292,6 +365,8 @@ function TaskList({
           node={node}
           level={level}
           activeTimer={activeTimer}
+          focusTaskId={focusTaskId}
+          onFocusHandled={onFocusHandled}
           {...handlers}
         />
       ))}
@@ -303,8 +378,16 @@ function TaskItem({
   node,
   level,
   activeTimer,
+  focusTaskId,
+  onFocusHandled,
   ...handlers
-}: { node: TaskNode; level: number; activeTimer: TimeEntry | null } & RowHandlers) {
+}: {
+  node: TaskNode;
+  level: number;
+  activeTimer: TimeEntry | null;
+  focusTaskId: string | null;
+  onFocusHandled: () => void;
+} & RowHandlers) {
   const [expanded, setExpanded] = useState(true);
   const hasChildren = node.children.length > 0;
 
@@ -316,6 +399,8 @@ function TaskItem({
         expanded={expanded}
         hasChildren={hasChildren}
         activeTimer={activeTimer}
+        shouldFocus={focusTaskId === node.task.id}
+        onFocusHandled={onFocusHandled}
         onToggleExpand={() => setExpanded((v) => !v)}
         {...handlers}
       />
@@ -324,6 +409,8 @@ function TaskItem({
           nodes={node.children}
           level={level + 1}
           activeTimer={activeTimer}
+          focusTaskId={focusTaskId}
+          onFocusHandled={onFocusHandled}
           {...handlers}
         />
       )}
@@ -337,18 +424,25 @@ function TaskRow({
   expanded,
   hasChildren,
   activeTimer,
+  shouldFocus,
+  onFocusHandled,
   onToggleExpand,
   onUpdate,
   onComplete,
   onDelete,
   onAddSub,
   onToggleTimer,
+  onAddAfter,
+  onIndent,
+  onOutdent,
 }: {
   task: Task;
   level: number;
   expanded: boolean;
   hasChildren: boolean;
   activeTimer: TimeEntry | null;
+  shouldFocus: boolean;
+  onFocusHandled: () => void;
   onToggleExpand: () => void;
 } & RowHandlers) {
   const isDone = task.status === "done" || !!task.completed_at;
@@ -401,7 +495,12 @@ function TaskRow({
         <EditableTitle
           value={task.title}
           done={isDone}
+          shouldFocus={shouldFocus}
+          onFocusHandled={onFocusHandled}
           onSave={(v) => onUpdate(task.id, { title: v })}
+          onEnter={() => onAddAfter(task)}
+          onTab={() => onIndent(task)}
+          onShiftTab={() => onOutdent(task)}
         />
       </div>
 
@@ -532,38 +631,67 @@ function NotesCell({
 function EditableTitle({
   value,
   done,
+  shouldFocus,
+  onFocusHandled,
   onSave,
+  onEnter,
+  onTab,
+  onShiftTab,
 }: {
   value: string;
   done: boolean;
+  shouldFocus?: boolean;
+  onFocusHandled?: () => void;
   onSave: (v: string) => void;
+  onEnter?: () => void;
+  onTab?: () => void;
+  onShiftTab?: () => void;
 }) {
   const [draft, setDraft] = useState(value);
+  const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     setDraft(value);
   }, [value]);
 
+  // Auto-focus when the parent flagged this row for focus (just-created or
+  // just-indented). Calls back so the parent clears the flag.
+  useEffect(() => {
+    if (shouldFocus) {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+      onFocusHandled?.();
+    }
+  }, [shouldFocus, onFocusHandled]);
+
   const commit = () => {
     const trimmed = draft.trim();
-    if (!trimmed) {
-      setDraft(value);
-      return;
-    }
-    if (trimmed !== value) onSave(trimmed);
+    if (trimmed === value) return;
+    // allow empty title — fresh-created rows often start blank.
+    onSave(trimmed);
   };
 
   return (
     <input
+      ref={inputRef}
       value={draft}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={commit}
       onKeyDown={(e) => {
-        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-        if (e.key === "Escape") {
+        if (e.key === "Enter" && !e.shiftKey) {
+          e.preventDefault();
+          commit();
+          onEnter?.();
+        } else if (e.key === "Tab") {
+          e.preventDefault();
+          commit();
+          if (e.shiftKey) onShiftTab?.();
+          else onTab?.();
+        } else if (e.key === "Escape") {
           setDraft(value);
           (e.target as HTMLInputElement).blur();
         }
       }}
+      placeholder="משימה חדשה…"
       className={
         "w-full min-w-0 bg-transparent border-0 outline-none text-sm px-1.5 py-1 rounded hover:bg-white focus:bg-white focus:ring-1 focus:ring-primary-500/40 transition-colors " +
         (done ? "line-through text-ink-400" : "text-ink-900")
@@ -664,8 +792,15 @@ function UrgencyBars({
 function DoneSection({
   nodes,
   activeTimer,
+  focusTaskId,
+  onFocusHandled,
   ...handlers
-}: { nodes: TaskNode[]; activeTimer: TimeEntry | null } & RowHandlers) {
+}: {
+  nodes: TaskNode[];
+  activeTimer: TimeEntry | null;
+  focusTaskId: string | null;
+  onFocusHandled: () => void;
+} & RowHandlers) {
   const [open, setOpen] = useState(false);
   const count = useMemo(() => countTree(nodes), [nodes]);
   return (
@@ -687,6 +822,8 @@ function DoneSection({
           nodes={nodes}
           level={0}
           activeTimer={activeTimer}
+          focusTaskId={focusTaskId}
+          onFocusHandled={onFocusHandled}
           {...handlers}
         />
       )}

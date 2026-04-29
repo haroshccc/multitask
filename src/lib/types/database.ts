@@ -583,6 +583,7 @@ export type Database = {
           created_at: string
           currency: string
           description: string | null
+          dyn_columns: Json
           emoji: string | null
           hourly_rate_cents: number | null
           id: string
@@ -608,6 +609,7 @@ export type Database = {
           created_at?: string
           currency?: string
           description?: string | null
+          dyn_columns?: Json
           emoji?: string | null
           hourly_rate_cents?: number | null
           id?: string
@@ -633,6 +635,7 @@ export type Database = {
           created_at?: string
           currency?: string
           description?: string | null
+          dyn_columns?: Json
           emoji?: string | null
           hourly_rate_cents?: number | null
           id?: string

@@ -7,6 +7,7 @@ import {
   RotateCcw,
   Trash2,
   Link2,
+  Sparkles,
 } from "lucide-react";
 import {
   useProjectQuestions,
@@ -16,8 +17,10 @@ import {
   useDeleteQuestion,
   useUpdateQuestion,
   useTasksByProject,
+  useRecordings,
+  useExtractQuestions,
 } from "@/lib/hooks";
-import type { Question, Task } from "@/lib/types/domain";
+import type { Question, Task, Recording } from "@/lib/types/domain";
 
 /**
  * Questions panel — the spec MD's "qNotepads" surface, simplified to one flat
@@ -34,8 +37,22 @@ export function QuestionsBlock({ scopeId }: { scopeId?: string | null }) {
   const reopen = useReopenQuestion();
   const remove = useDeleteQuestion();
   const update = useUpdateQuestion();
+  const extract = useExtractQuestions();
+  const { data: allRecordings = [] } = useRecordings();
+
+  // Recordings tagged to this project that have a transcript ready.
+  const projectRecordings = useMemo(
+    () =>
+      allRecordings.filter(
+        (r) =>
+          r.project_id === projectId &&
+          (r.transcript_text ?? "").trim().length > 0
+      ),
+    [allRecordings, projectId]
+  );
 
   const [draft, setDraft] = useState("");
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   const { open, answered } = useMemo(() => {
     const o: Question[] = [];
@@ -55,6 +72,28 @@ export function QuestionsBlock({ scopeId }: { scopeId?: string | null }) {
     );
   };
 
+  const handleExtract = (recording: Recording) => {
+    if (!projectId) return;
+    extract.mutate(
+      {
+        recordingId: recording.id,
+        projectId,
+        replace: false,
+      },
+      {
+        onSuccess: (res) => {
+          setPickerOpen(false);
+          if (res.count === 0) {
+            alert("לא נמצאו שאלות פתוחות בתמלול.");
+          }
+        },
+        onError: (err) => {
+          alert(`חילוץ שאלות נכשל: ${err instanceof Error ? err.message : err}`);
+        },
+      }
+    );
+  };
+
   if (!projectId) {
     return (
       <div className="text-xs text-ink-500 text-center py-6">בחרי פרויקט.</div>
@@ -63,7 +102,7 @@ export function QuestionsBlock({ scopeId }: { scopeId?: string | null }) {
 
   return (
     <div className="flex flex-col h-full gap-2.5">
-      <div className="flex items-center gap-2 shrink-0">
+      <div className="flex items-center gap-2 shrink-0 flex-wrap">
         <input
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
@@ -71,7 +110,7 @@ export function QuestionsBlock({ scopeId }: { scopeId?: string | null }) {
             if (e.key === "Enter") handleAdd();
           }}
           placeholder="שאלה חדשה ללקוח / לעצמך…"
-          className="field py-1.5 text-xs flex-1"
+          className="field py-1.5 text-xs flex-1 min-w-[120px]"
         />
         <button
           type="button"
@@ -83,6 +122,49 @@ export function QuestionsBlock({ scopeId }: { scopeId?: string | null }) {
           הוסיפי
         </button>
       </div>
+
+      {projectRecordings.length > 0 && (
+        <div className="relative shrink-0">
+          <button
+            type="button"
+            onClick={() => setPickerOpen((v) => !v)}
+            disabled={extract.isPending}
+            className="btn-outline text-[11px] w-full flex items-center justify-center gap-1 disabled:opacity-50"
+          >
+            {extract.isPending ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Sparkles className="w-3.5 h-3.5" />
+            )}
+            {extract.isPending
+              ? "מחלץ שאלות מהקלטה…"
+              : `חלצי שאלות מהקלטה (${projectRecordings.length})`}
+          </button>
+          {pickerOpen && (
+            <>
+              <div
+                className="fixed inset-0 z-30"
+                onClick={() => setPickerOpen(false)}
+              />
+              <div className="absolute end-0 top-full mt-1 z-40 bg-white border border-ink-200 rounded-md shadow-lift w-full max-h-64 overflow-y-auto py-1">
+                {projectRecordings.map((r) => (
+                  <button
+                    key={r.id}
+                    type="button"
+                    onClick={() => handleExtract(r)}
+                    className="w-full text-start text-[11px] hover:bg-ink-50 px-3 py-2 flex items-center justify-between gap-2"
+                  >
+                    <span className="truncate">{r.title || "(ללא שם)"}</span>
+                    <span className="text-[9px] text-ink-400 shrink-0">
+                      {new Date(r.created_at).toLocaleDateString("he-IL")}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       <div className="flex-1 min-h-0 overflow-y-auto -mx-1 px-1 space-y-2">
         {isLoading ? (

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Mic, ArrowLeft, Settings as SettingsIcon } from "lucide-react";
 import { ScreenScaffold } from "@/components/layout/ScreenScaffold";
 import { RecordingDropZone } from "@/components/recordings/RecordingDropZone";
@@ -51,7 +52,21 @@ export function Recordings() {
     return applyGrouping(filtered, grouping, listsByRecording);
   }, [allRecordings, filters, listsByRecording, grouping]);
 
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Honor `?id=...` from the URL — used by deep links from the project page's
+  // recordings list. Cleared when the user picks something else.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialIdFromUrl = searchParams.get("id");
+  const [selectedId, setSelectedId] = useState<string | null>(initialIdFromUrl);
+  useEffect(() => {
+    if (initialIdFromUrl && initialIdFromUrl !== selectedId) {
+      setSelectedId(initialIdFromUrl);
+      // Drop the param so reload doesn't re-force this selection forever.
+      const next = new URLSearchParams(searchParams);
+      next.delete("id");
+      setSearchParams(next, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialIdFromUrl]);
   const [recorderOpen, setRecorderOpen] = useState(false);
   const [aiPromptsOpen, setAiPromptsOpen] = useState(false);
 

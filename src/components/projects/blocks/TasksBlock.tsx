@@ -28,6 +28,7 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { TimerLogPopup } from "@/components/projects/blocks/TimerLogPopup";
 import {
   useTasksByProject,
   useCreateTask,
@@ -189,6 +190,11 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
   const [focusTaskId, setFocusTaskId] = useState<string | null>(null);
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [logTaskId, setLogTaskId] = useState<string | null>(null);
+  const logTask = useMemo(
+    () => tasks.find((t) => t.id === logTaskId) ?? null,
+    [tasks, logTaskId]
+  );
 
   const projectLists = useMemo(
     () => lists.filter((l) => l.project_id === projectId),
@@ -369,6 +375,9 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
 
   return (
     <div className="flex flex-col gap-2.5 h-full">
+      {logTask && (
+        <TimerLogPopup task={logTask} onClose={() => setLogTaskId(null)} />
+      )}
       <div className="flex items-center gap-2 shrink-0">
         <div className="relative flex-1 min-w-0">
           <Search className="absolute start-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-400 pointer-events-none" />
@@ -434,6 +443,7 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
                 if (isCurrentlyActive) stopTimer.mutate();
                 else startTimer.mutate({ taskId });
               }}
+              onOpenLog={(taskId) => setLogTaskId(taskId)}
               onAddAfter={handleAddAfter}
               onIndent={handleIndent}
               onOutdent={handleOutdent}
@@ -458,6 +468,7 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
                   if (isCurrentlyActive) stopTimer.mutate();
                   else startTimer.mutate({ taskId });
                 }}
+                onOpenLog={(taskId) => setLogTaskId(taskId)}
                 onAddAfter={handleAddAfter}
                 onIndent={handleIndent}
                 onOutdent={handleOutdent}
@@ -724,6 +735,7 @@ interface RowHandlers {
   onDelete: (id: string) => void;
   onAddSub: (parent: Task) => void;
   onToggleTimer: (taskId: string, isCurrentlyActive: boolean) => void;
+  onOpenLog: (taskId: string) => void;
   onAddAfter: (current: Task) => void;
   onIndent: (current: Task) => void;
   onOutdent: (current: Task) => void;
@@ -959,6 +971,7 @@ function TaskRow({
   onDelete,
   onAddSub,
   onToggleTimer,
+  onOpenLog,
   onAddAfter,
   onIndent,
   onOutdent,
@@ -1094,16 +1107,22 @@ function TaskRow({
         </button>
       </div>
 
-      {/* Actual seconds (live ticking when timer is active) */}
-      <span
+      {/* Actual seconds — click to open log popup (history of sessions) */}
+      <button
+        type="button"
+        onClick={() => onOpenLog(task.id)}
         className={
-          "text-[10px] tabular-nums text-end " +
-          (isTimerActive ? "text-danger font-semibold" : "text-ink-400")
+          "text-[10px] tabular-nums text-end px-1 py-0.5 rounded hover:bg-ink-100 transition-colors " +
+          (isTimerActive
+            ? "text-danger font-semibold"
+            : liveSeconds > 0
+            ? "text-ink-700 hover:text-ink-900"
+            : "text-ink-400 hover:text-ink-700")
         }
-        title="שעות בפועל"
+        title="היסטוריית סטופר"
       >
         {fmtHours(liveSeconds)}
-      </span>
+      </button>
 
       {/* Notes (editable) */}
       <NotesCell

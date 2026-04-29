@@ -14,6 +14,7 @@ import {
   ArrowDown,
   Clock,
   Calendar as CalendarIcon,
+  CalendarPlus,
   MapPin,
   Folder,
   User,
@@ -28,7 +29,8 @@ import {
 } from "lucide-react";
 import {
   DndContext,
-  PointerSensor,
+  MouseSensor,
+  TouchSensor,
   useSensor,
   useSensors,
   closestCenter,
@@ -115,7 +117,10 @@ const FIXED_COLUMN_WIDTHS: Record<FixedColumnKey, string> = {
   urgency: "56px",
   timer: "32px",
   actual_seconds: "60px",
-  notes: "140px",
+  // notes used to be a fixed 140px, but on narrow viewports the truncation
+  // hid most of the text; minmax lets the cell breathe when there's room
+  // (up to 1fr) yet still respect a sensible floor.
+  notes: "minmax(120px, 0.6fr)",
   questions: "44px",
 };
 
@@ -164,9 +169,11 @@ const SORT_KEY_OF_FIXED: Record<FixedColumnKey, string | null> = {
 };
 
 const CONTROL_COLS = "20px 20px 20px"; // drag · expand · checkbox
-const ACTIONS_COL = "72px";
+// 3 small action buttons (calendar / + sub / trash) need a touch more room
+// than 2 buttons did — 96px keeps them from spilling onto the next row.
+const ACTIONS_COL = "96px";
 const DYN_COL_WIDTH = 110;
-const CONTROL_AND_ACTIONS_WIDTH = 60 + 72; // approx baseline minus content
+const CONTROL_AND_ACTIONS_WIDTH = 60 + 96;
 
 function buildGridCols(
   orderedFixedKeys: FixedColumnKey[],
@@ -796,7 +803,12 @@ function TableHeader({
   onEditFieldOptions: (fieldId: string) => void;
 }) {
   const colDragSensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } })
+    useSensor(MouseSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(TouchSensor, {
+      // Touch: long-press 250ms (with up-to-5px wobble) before drag begins,
+      // otherwise scroll/tap conflict with drag activation on mobile.
+      activationConstraint: { delay: 250, tolerance: 5 },
+    })
   );
   const handleColumnDragEnd = (e: DragEndEvent) => {
     const { active, over } = e;
@@ -1357,7 +1369,12 @@ function SortableTaskList({
   onReorder: (newOrder: TaskNode[]) => void;
 } & RowHandlers) {
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } })
+    useSensor(MouseSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(TouchSensor, {
+      // Touch: long-press 250ms (with up-to-5px wobble) before drag begins,
+      // otherwise scroll/tap conflict with drag activation on mobile.
+      activationConstraint: { delay: 250, tolerance: 5 },
+    })
   );
   const ids = nodes.map((n) => n.task.id);
   const handleDragEnd = (e: DragEndEvent) => {
@@ -1754,6 +1771,22 @@ function TaskRow({
 
       {/* Actions (visible on hover) */}
       <div className="flex items-center justify-end gap-0.5 opacity-0 group-hover/row:opacity-100 transition-opacity">
+        <button
+          type="button"
+          onClick={() =>
+            onUpdate(task.id, { is_event: !task.is_event })
+          }
+          className={
+            "p-1 rounded hover:bg-ink-200 " +
+            (task.is_event
+              ? "text-primary-600 hover:text-primary-700"
+              : "text-ink-500 hover:text-ink-900")
+          }
+          title={task.is_event ? "אירוע ביומן (קליק להסרה)" : "סמני כאירוע ביומן"}
+          aria-label={task.is_event ? "הסירי מהיומן" : "סמני כאירוע ביומן"}
+        >
+          <CalendarPlus className="w-3 h-3" />
+        </button>
         <button
           type="button"
           onClick={() => onAddSub(task)}
@@ -2315,6 +2348,42 @@ function DynLocationCell({
  * profile-tinted highlight. Click opens a dropdown with current org members
  * + a free-text fallback.
  */
+function PersonAvatar({
+  name,
+  avatarUrl,
+  size,
+}: {
+  name: string;
+  avatarUrl: string | null;
+  size: "sm" | "md";
+}) {
+  const dim = size === "sm" ? "w-4 h-4" : "w-5 h-5";
+  const text = size === "sm" ? "text-[9px]" : "text-[10px]";
+  if (avatarUrl) {
+    return (
+      <img
+        src={avatarUrl}
+        alt={name}
+        className={"shrink-0 rounded-full object-cover " + dim}
+        loading="lazy"
+      />
+    );
+  }
+  return (
+    <span
+      className={
+        "shrink-0 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center font-semibold " +
+        dim +
+        " " +
+        text
+      }
+      aria-hidden
+    >
+      {name.charAt(0).toUpperCase()}
+    </span>
+  );
+}
+
 function DynPersonCell({
   value,
   onSave,
@@ -2330,6 +2399,7 @@ function DynPersonCell({
     (m) => m.profile?.full_name === value || m.profile?.id === value
   );
   const display = matched?.profile?.full_name ?? value;
+  const matchedAvatar = matched?.profile?.avatar_url ?? null;
 
   const filtered = useMemo(() => {
     if (!search.trim()) return members;
@@ -2348,12 +2418,11 @@ function DynPersonCell({
       >
         {display ? (
           <>
-            <span
-              className="shrink-0 w-4 h-4 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center text-[9px] font-semibold"
-              aria-hidden
-            >
-              {display.charAt(0).toUpperCase()}
-            </span>
+            <PersonAvatar
+              name={display}
+              avatarUrl={matchedAvatar}
+              size="sm"
+            />
             <span className="text-ink-700 truncate">{display}</span>
           </>
         ) : (
@@ -2419,9 +2488,11 @@ function DynPersonCell({
                 }}
                 className="w-full text-start text-[11px] flex items-center gap-1.5 hover:bg-ink-50 px-2 py-1"
               >
-                <span className="w-4 h-4 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center text-[9px] font-semibold">
-                  {(m.profile?.full_name ?? "?").charAt(0).toUpperCase()}
-                </span>
+                <PersonAvatar
+                  name={m.profile?.full_name ?? "?"}
+                  avatarUrl={m.profile?.avatar_url ?? null}
+                  size="sm"
+                />
                 <span>{m.profile?.full_name ?? "(ללא שם)"}</span>
               </button>
             ))}
@@ -2510,6 +2581,77 @@ interface StoredFile {
  * tuples in the task's `custom_fields[fieldKey]` array, and lets the user
  * download via on-demand `presignDownload` (presign-get edge function).
  */
+/**
+ * Single file chip with image-mime preview thumbnail. The thumbnail URL is
+ * presigned lazily on mount so we don't blast the storage gateway when a
+ * row has many files; if the presign call fails the chip falls back to the
+ * filename-only style.
+ */
+function FileChip({
+  file,
+  onDownload,
+  onRemove,
+}: {
+  file: StoredFile;
+  onDownload: () => void;
+  onRemove: () => void;
+}) {
+  const isImage = file.mime?.startsWith("image/") ?? false;
+  const [thumbUrl, setThumbUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isImage) return;
+    let cancelled = false;
+    presignDownload(file.key)
+      .then(({ url }) => {
+        if (!cancelled) setThumbUrl(url);
+      })
+      .catch(() => {
+        // Stay on text-only chip if presign fails.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [file.key, isImage]);
+
+  return (
+    <span
+      className="group/file inline-flex items-center gap-0.5 chip text-[9px] py-0 px-1 max-w-[100px]"
+      title={`${file.name} (${(file.size / 1024).toFixed(0)} KB)`}
+    >
+      {thumbUrl ? (
+        <button
+          type="button"
+          onClick={onDownload}
+          className="shrink-0 w-4 h-4 rounded overflow-hidden border border-ink-200 hover:border-primary-400"
+        >
+          <img
+            src={thumbUrl}
+            alt=""
+            className="w-full h-full object-cover"
+            loading="lazy"
+          />
+        </button>
+      ) : null}
+      <button
+        type="button"
+        onClick={onDownload}
+        className="truncate hover:underline"
+      >
+        {file.name}
+      </button>
+      <button
+        type="button"
+        onClick={onRemove}
+        className="opacity-0 group-hover/file:opacity-100 hover:text-danger transition-opacity"
+        aria-label="הסירי"
+      >
+        ×
+      </button>
+    </span>
+  );
+}
+
 function DynFileCell({
   value,
   onSave,
@@ -2567,27 +2709,12 @@ function DynFileCell({
         onChange={(e) => handlePick(e.target.files)}
       />
       {value.map((f) => (
-        <span
+        <FileChip
           key={f.key}
-          className="group/file inline-flex items-center gap-0.5 chip text-[9px] py-0 px-1 max-w-[80px]"
-          title={`${f.name} (${(f.size / 1024).toFixed(0)} KB)`}
-        >
-          <button
-            type="button"
-            onClick={() => handleDownload(f)}
-            className="truncate hover:underline"
-          >
-            {f.name}
-          </button>
-          <button
-            type="button"
-            onClick={() => onSave(value.filter((x) => x.key !== f.key))}
-            className="opacity-0 group-hover/file:opacity-100 hover:text-danger transition-opacity"
-            aria-label="הסירי"
-          >
-            ×
-          </button>
-        </span>
+          file={f}
+          onDownload={() => handleDownload(f)}
+          onRemove={() => onSave(value.filter((x) => x.key !== f.key))}
+        />
       ))}
       <button
         type="button"

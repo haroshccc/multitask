@@ -7,6 +7,8 @@ import type { RecordingSource } from "@/lib/types/domain";
 
 interface Props {
   source?: RecordingSource;
+  /** When provided, recordings created here are auto-tagged to this project. */
+  projectId?: string | null;
   onUploaded?: (recordingId: string) => void;
   className?: string;
 }
@@ -14,7 +16,12 @@ interface Props {
 const ACCEPTED = "audio/*,video/*";
 const MAX_BYTES = 500 * 1024 * 1024; // SPEC §8 caps at 3h; 500MB covers MP3 320kbps × 3.5h.
 
-export function RecordingDropZone({ source = "other", onUploaded, className }: Props) {
+export function RecordingDropZone({
+  source = "other",
+  projectId = null,
+  onUploaded,
+  className,
+}: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
@@ -68,6 +75,7 @@ export function RecordingDropZone({ source = "other", onUploaded, className }: P
         });
         const rec = await createRecording.mutateAsync({
           source,
+          project_id: projectId,
           title: stripExtension(file.name),
           storage_key: key,
           storage_provider: "r2",

@@ -18,6 +18,14 @@ export interface WidgetDefinition {
   defaultDesktop: { x: number; y: number; w: number; h: number; minW?: number; minH?: number };
   defaultTablet?: { x: number; y: number; w: number; h: number };
   defaultMobile?: { x: number; y: number; w: number; h: number };
+  /**
+   * `framed` — wrap the widget body in a card with a visible header bar.
+   *   Use for fresh blocks designed against this chrome (e.g. project page).
+   * `bare`  — render only a small floating drag handle on top; widget keeps
+   *   its own styling and outer borders. Use when wrapping existing screens
+   *   so the original design is preserved exactly.
+   */
+  chromeStyle?: "framed" | "bare";
 }
 
 interface DashboardGridProps {
@@ -171,16 +179,17 @@ export function DashboardGrid({
         {visibleWidgets.map((w) => {
           const Component = w.component;
           const collapsed = widgetState[w.key]?.collapsed ?? false;
+          const Chrome = w.chromeStyle === "bare" ? BareChrome : WidgetChrome;
           return (
             <div key={w.key}>
-              <WidgetChrome
+              <Chrome
                 title={w.title}
                 collapsed={collapsed}
                 onToggleCollapse={() => toggleCollapsed(w.key)}
                 onHide={() => hideWidget(w.key)}
               >
                 {!collapsed && <Component scopeId={scopeId} />}
-              </WidgetChrome>
+              </Chrome>
             </div>
           );
         })}
@@ -228,6 +237,74 @@ function WidgetChrome({
       </header>
       {!collapsed && (
         <div className="flex-1 overflow-auto p-4">{children}</div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Minimal chrome: renders the widget body unmodified and overlays a small,
+ * subtle drag handle in the top-end corner. Lets existing screens preserve
+ * their original visual design while still participating in the grid.
+ */
+function BareChrome({
+  title,
+  collapsed,
+  onToggleCollapse,
+  onHide,
+  children,
+}: {
+  title: string;
+  collapsed: boolean;
+  onToggleCollapse: () => void;
+  onHide: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <div className="relative h-full group/widget">
+      <div
+        className={cn(
+          "absolute top-1.5 end-1.5 z-10 flex items-center gap-0.5",
+          "rounded-md bg-white/80 backdrop-blur shadow-soft px-1 py-0.5",
+          "opacity-0 group-hover/widget:opacity-100 transition-opacity duration-150"
+        )}
+      >
+        <span
+          className="widget-drag-handle p-1 cursor-move text-ink-500 hover:text-ink-900"
+          title={`גררי: ${title}`}
+          aria-label={`גרירת ${title}`}
+        >
+          <GripVertical className="w-3.5 h-3.5" />
+        </span>
+        <button
+          type="button"
+          onClick={onToggleCollapse}
+          className="p-1 rounded hover:bg-ink-100 text-ink-500 hover:text-ink-900"
+          title={collapsed ? "פתח" : "כווץ"}
+          aria-label={collapsed ? "פתח" : "כווץ"}
+        >
+          {collapsed ? (
+            <ChevronDown className="w-3.5 h-3.5" />
+          ) : (
+            <ChevronUp className="w-3.5 h-3.5" />
+          )}
+        </button>
+        <button
+          type="button"
+          onClick={onHide}
+          className="p-1 rounded hover:bg-ink-100 text-ink-500 hover:text-ink-900"
+          title="הסתר"
+          aria-label="הסתר"
+        >
+          <X className="w-3.5 h-3.5" />
+        </button>
+      </div>
+      {collapsed ? (
+        <div className="card h-full flex items-center justify-center text-xs text-ink-400">
+          {title} — מכווץ
+        </div>
+      ) : (
+        children
       )}
     </div>
   );

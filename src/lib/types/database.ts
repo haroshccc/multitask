@@ -581,6 +581,7 @@ export type Database = {
           archived_at: string | null
           color: string | null
           column_labels: Json
+          column_order: Json
           created_at: string
           currency: string
           description: string | null
@@ -607,6 +608,7 @@ export type Database = {
           archived_at?: string | null
           color?: string | null
           column_labels?: Json
+          column_order?: Json
           created_at?: string
           currency?: string
           description?: string | null
@@ -633,6 +635,7 @@ export type Database = {
           archived_at?: string | null
           color?: string | null
           column_labels?: Json
+          column_order?: Json
           created_at?: string
           currency?: string
           description?: string | null

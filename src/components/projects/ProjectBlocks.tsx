@@ -444,54 +444,74 @@ function BlockComingSoon({
 
 // ─── Widget registry ───────────────────────────────────────────────────────
 
+// Default desktop layout: 12-col grid laid out as side-by-side halves for the
+// top section, then a full-width tasks block, then a 2/3+1/3 row, and a final
+// full-width templates strip. Tablet (8 cols) and mobile (4 cols) defaults are
+// stacked single-column with sensible heights so blocks aren't truncated.
 export const PROJECT_WIDGETS: WidgetDefinition[] = [
   {
     key: "stats",
     title: "סטטיסטיקות",
     component: StatsBlock,
     defaultDesktop: { x: 6, y: 0, w: 6, h: 3, minW: 3, minH: 3 },
+    defaultTablet: { x: 4, y: 0, w: 4, h: 3 },
+    defaultMobile: { x: 0, y: 0, w: 4, h: 4 },
   },
   {
     key: "calendar",
     title: "לוח זמנים",
     component: CalendarBlock,
     defaultDesktop: { x: 0, y: 0, w: 6, h: 5, minW: 4, minH: 4 },
+    defaultTablet: { x: 0, y: 0, w: 4, h: 4 },
+    defaultMobile: { x: 0, y: 4, w: 4, h: 5 },
   },
   {
     key: "pricing",
     title: "פרמטרי תמחור",
     component: PricingBlock,
     defaultDesktop: { x: 6, y: 3, w: 6, h: 5, minW: 4, minH: 4 },
+    defaultTablet: { x: 4, y: 3, w: 4, h: 5 },
+    defaultMobile: { x: 0, y: 9, w: 4, h: 6 },
   },
   {
     key: "summary",
     title: "סיכום בזמן אמת",
     component: SummaryBlock,
     defaultDesktop: { x: 0, y: 5, w: 6, h: 4, minW: 4, minH: 3 },
+    defaultTablet: { x: 0, y: 4, w: 4, h: 4 },
+    defaultMobile: { x: 0, y: 15, w: 4, h: 5 },
   },
   {
     key: "tasks",
     title: "טבלת משימות",
     component: TasksBlock,
     defaultDesktop: { x: 0, y: 9, w: 12, h: 6, minW: 8, minH: 4 },
+    defaultTablet: { x: 0, y: 8, w: 8, h: 8 },
+    defaultMobile: { x: 0, y: 20, w: 4, h: 10 },
   },
   {
     key: "quote",
     title: "הצעת מחיר",
     component: QuoteBlock,
     defaultDesktop: { x: 4, y: 15, w: 8, h: 4, minW: 6, minH: 3 },
+    defaultTablet: { x: 0, y: 16, w: 8, h: 4 },
+    defaultMobile: { x: 0, y: 30, w: 4, h: 4 },
   },
   {
     key: "upload",
     title: "העלאת הקלטה",
     component: UploadBlock,
     defaultDesktop: { x: 0, y: 15, w: 4, h: 4, minW: 3, minH: 3 },
+    defaultTablet: { x: 0, y: 20, w: 4, h: 4 },
+    defaultMobile: { x: 0, y: 34, w: 4, h: 4 },
   },
   {
     key: "templates",
     title: "תבניות פרויקט",
     component: TemplatesBlock,
     defaultDesktop: { x: 0, y: 19, w: 12, h: 4, minW: 6, minH: 3 },
+    defaultTablet: { x: 0, y: 24, w: 8, h: 4 },
+    defaultMobile: { x: 0, y: 38, w: 4, h: 4 },
   },
 ];
 

@@ -271,7 +271,10 @@ function BareChrome({
         className={cn(
           "absolute top-1.5 end-1.5 z-10 flex items-center gap-0.5",
           "rounded-md bg-white/80 backdrop-blur shadow-soft px-1 py-0.5",
-          "opacity-0 group-hover/widget:opacity-100 transition-opacity duration-150"
+          // On mobile/touch (no hover), keep the handle visible at 50%; on
+          // desktop fade it in on hover so it doesn't compete with content.
+          "opacity-50 md:opacity-0 md:group-hover/widget:opacity-100",
+          "transition-opacity duration-150"
         )}
       >
         <span

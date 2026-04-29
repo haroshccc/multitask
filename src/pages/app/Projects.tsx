@@ -1,5 +1,4 @@
 import { useMemo, useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
 import { Plus, LayoutGrid, List as ListIcon, FolderArchive } from "lucide-react";
 import { ScreenScaffold } from "@/components/layout/ScreenScaffold";
 import {
@@ -28,7 +27,6 @@ const PRICING_OPTIONS = [
 ];
 
 export function Projects() {
-  const navigate = useNavigate();
   const [filters, setFilters] = useFiltersFromUrl();
   const [showArchived, setShowArchived] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
@@ -95,7 +93,6 @@ export function Projects() {
       <CreateProjectDialog
         open={createOpen}
         onClose={() => setCreateOpen(false)}
-        onCreated={(id) => navigate(`/app/projects/${id}`)}
       />
 
       <div className="space-y-3">

@@ -1,10 +1,5 @@
 import { useEffect, useState } from "react";
-import {
-  FileText,
-  Mic,
-  LayoutTemplate,
-  TrendingUp,
-} from "lucide-react";
+import { TrendingUp } from "lucide-react";
 import type { WidgetDefinition } from "@/components/dashboard/DashboardGrid";
 import { useProject, useDebouncedProjectUpdate } from "@/lib/hooks/useProjects";
 import { useTasksByProject } from "@/lib/hooks";
@@ -12,6 +7,9 @@ import type { ProjectPricingMode } from "@/lib/types/domain";
 import { TasksBlock } from "@/components/projects/blocks/TasksBlock";
 import { StatsBlock } from "@/components/projects/blocks/StatsBlock";
 import { CalendarBlock } from "@/components/projects/blocks/CalendarBlock";
+import { TemplatesBlock } from "@/components/projects/blocks/TemplatesBlock";
+import { QuoteBlock } from "@/components/projects/blocks/QuoteBlock";
+import { UploadBlock } from "@/components/projects/blocks/UploadBlock";
 import {
   computeFixedBreakdown,
   computeHourlyBreakdown,
@@ -273,38 +271,6 @@ function SummaryBlock({ scopeId }: { scopeId?: string | null }) {
   );
 }
 
-// ─── Stub blocks ────────────────────────────────────────────────────────────
-
-function QuoteBlock() {
-  return (
-    <BlockComingSoon
-      icon={<FileText className="w-4 h-4" />}
-      title="הצעת מחיר"
-      hint="יצירה ושיתוף הצעה (PDF / WhatsApp / מייל / קישור)."
-    />
-  );
-}
-
-function UploadBlock() {
-  return (
-    <BlockComingSoon
-      icon={<Mic className="w-4 h-4" />}
-      title="העלאת הקלטה"
-      hint="גררי קובץ אודיו לכאן או לחצי לבחירה. מתחבר ל-Recordings."
-    />
-  );
-}
-
-function TemplatesBlock() {
-  return (
-    <BlockComingSoon
-      icon={<LayoutTemplate className="w-4 h-4" />}
-      title="תבניות פרויקט"
-      hint="UX סטנדרטי / מיתוג בסיסי / פיתוח אג'יל. טעינה תיצור משימות בסיס."
-    />
-  );
-}
-
 // ─── Building blocks ────────────────────────────────────────────────────────
 
 function SliderRow({
@@ -409,27 +375,6 @@ function SummaryRow({
 function BlockEmpty({ hint }: { hint: string }) {
   return (
     <div className="text-xs text-ink-500 text-center py-6">{hint}</div>
-  );
-}
-
-function BlockComingSoon({
-  icon,
-  title,
-  hint,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  hint: string;
-}) {
-  return (
-    <div className="h-full flex flex-col items-center justify-center text-center px-4 py-6">
-      <div className="w-9 h-9 rounded-full bg-ink-100 text-ink-500 flex items-center justify-center mb-2">
-        {icon}
-      </div>
-      <h4 className="text-sm font-semibold text-ink-800 mb-1">{title}</h4>
-      <p className="text-[11px] text-ink-500 max-w-[28ch] leading-snug">{hint}</p>
-      <span className="mt-2 chip-accent text-[10px]">בקרוב</span>
-    </div>
   );
 }
 

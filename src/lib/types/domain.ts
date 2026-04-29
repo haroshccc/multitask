@@ -27,6 +27,8 @@ export type ProjectExpense = Tables["project_expenses"]["Row"];
 export type ProjectExpenseInsert = Tables["project_expenses"]["Insert"];
 
 export type ProjectTemplate = Tables["project_templates"]["Row"];
+export type ProjectTemplateInsert = Tables["project_templates"]["Insert"];
+export type ProjectTemplateUpdate = Tables["project_templates"]["Update"];
 
 export type TaskList = Tables["task_lists"]["Row"];
 export type TaskListInsert = Tables["task_lists"]["Insert"];

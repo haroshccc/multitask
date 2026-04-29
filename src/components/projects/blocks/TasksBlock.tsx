@@ -30,6 +30,13 @@ interface TaskNode {
   children: TaskNode[];
 }
 
+// Column template for the tasks grid — applied to both header and rows so
+// columns line up. RTL-readable in source order: expand · checkbox · title ·
+// hours · spare · urgency · timer · actual · notes · actions.
+const TASKS_GRID_COLS =
+  "24px 24px minmax(140px, 1fr) 60px 60px 56px 32px 60px 140px 60px";
+const TASKS_GRID_MIN_WIDTH = 640;
+
 function buildTree(tasks: Task[]): TaskNode[] {
   const byParent = new Map<string | null, Task[]>();
   for (const t of tasks) {
@@ -180,7 +187,7 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
         </button>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto -mx-1 px-1">
+      <div className="flex-1 min-h-0 overflow-auto -mx-1 px-1">
         {isLoading ? (
           <div className="text-xs text-ink-500 text-center py-6">
             <Loader2 className="w-4 h-4 animate-spin mx-auto" />
@@ -188,7 +195,8 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
         ) : tasks.length === 0 ? (
           <EmptyState onAdd={handleAddTopLevel} pending={isPending} />
         ) : (
-          <>
+          <div style={{ minWidth: TASKS_GRID_MIN_WIDTH }}>
+            <TableHeader />
             <TaskList
               nodes={filteredOpen}
               level={0}
@@ -224,9 +232,31 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
                 }}
               />
             )}
-          </>
+          </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ─── Table header ───────────────────────────────────────────────────────────
+
+function TableHeader() {
+  return (
+    <div
+      className="grid items-center gap-1 px-1.5 py-1.5 sticky top-0 bg-ink-50/80 backdrop-blur z-10 text-[10px] font-semibold uppercase tracking-wider text-ink-500 border-b border-ink-200"
+      style={{ gridTemplateColumns: TASKS_GRID_COLS }}
+    >
+      <span></span>
+      <span></span>
+      <span>משימה</span>
+      <span className="text-end">שעות</span>
+      <span className="text-end">ספייר</span>
+      <span className="text-center">דחיפות</span>
+      <span className="text-center">סטופר</span>
+      <span className="text-end">בפועל</span>
+      <span>הערות</span>
+      <span></span>
     </div>
   );
 }
@@ -255,7 +285,7 @@ function TaskList({
 }: TaskListProps & RowHandlers) {
   if (nodes.length === 0) return null;
   return (
-    <ul className="divide-y divide-ink-200/60">
+    <ul>
       {nodes.map((node) => (
         <TaskItem
           key={node.task.id}
@@ -324,19 +354,19 @@ function TaskRow({
   const isDone = task.status === "done" || !!task.completed_at;
   const isTimerActive = activeTimer?.task_id === task.id;
   const liveSeconds = useLiveActualSeconds(task, activeTimer);
-  const indentPx = level * 20;
+  const indentPx = level * 16;
 
   return (
     <div
-      className="group/row flex items-center gap-1.5 py-1.5 hover:bg-ink-50 rounded-md px-1.5 transition-colors"
-      style={{ paddingInlineStart: `${indentPx + 6}px` }}
+      className="group/row grid items-center gap-1 py-1 hover:bg-ink-50 px-1.5 transition-colors border-b border-ink-100/80"
+      style={{ gridTemplateColumns: TASKS_GRID_COLS }}
     >
       {/* Expand chevron / spacer */}
       <button
         type="button"
         onClick={onToggleExpand}
         className={
-          "w-4 h-4 flex items-center justify-center text-ink-400 hover:text-ink-700 shrink-0 " +
+          "w-5 h-5 flex items-center justify-center text-ink-400 hover:text-ink-700 " +
           (hasChildren ? "" : "invisible")
         }
         aria-label={expanded ? "כווץ" : "פתח"}
@@ -353,7 +383,7 @@ function TaskRow({
         type="button"
         onClick={() => onComplete(task.id, !isDone)}
         className={
-          "w-4 h-4 rounded border flex items-center justify-center transition-colors shrink-0 " +
+          "w-4 h-4 rounded border flex items-center justify-center transition-colors mx-auto " +
           (isDone
             ? "bg-primary-500 border-primary-500 text-white"
             : "border-ink-300 hover:border-primary-500")
@@ -363,12 +393,17 @@ function TaskRow({
         {isDone && <Check className="w-3 h-3" strokeWidth={3} />}
       </button>
 
-      {/* Title (editable) */}
-      <EditableTitle
-        value={task.title}
-        done={isDone}
-        onSave={(v) => onUpdate(task.id, { title: v })}
-      />
+      {/* Title (editable, indented per level) */}
+      <div
+        className="min-w-0"
+        style={{ paddingInlineStart: `${indentPx}px` }}
+      >
+        <EditableTitle
+          value={task.title}
+          done={isDone}
+          onSave={(v) => onUpdate(task.id, { title: v })}
+        />
+      </div>
 
       {/* Estimated hours */}
       <NumberCell
@@ -386,36 +421,40 @@ function TaskRow({
         onSave={(v) => onUpdate(task.id, { spare_hours: v })}
       />
 
-      {/* Urgency bars (3-level, click to cycle 0→1→2→3→0) */}
-      <UrgencyBars
-        value={task.urgency ?? 0}
-        onChange={(v) => onUpdate(task.id, { urgency: v })}
-      />
+      {/* Urgency bars */}
+      <div className="flex items-center justify-center">
+        <UrgencyBars
+          value={task.urgency ?? 0}
+          onChange={(v) => onUpdate(task.id, { urgency: v })}
+        />
+      </div>
 
       {/* Timer toggle */}
-      <button
-        type="button"
-        onClick={() => onToggleTimer(task.id, isTimerActive)}
-        className={
-          "p-1 rounded shrink-0 transition-colors " +
-          (isTimerActive
-            ? "bg-danger/10 text-danger animate-pulse"
-            : "text-ink-400 hover:text-primary-600 hover:bg-primary-50")
-        }
-        title={isTimerActive ? "עצור סטופר" : "התחל סטופר"}
-        aria-label={isTimerActive ? "עצור סטופר" : "התחל סטופר"}
-      >
-        {isTimerActive ? (
-          <Square className="w-3 h-3" strokeWidth={3} />
-        ) : (
-          <Play className="w-3 h-3" />
-        )}
-      </button>
+      <div className="flex items-center justify-center">
+        <button
+          type="button"
+          onClick={() => onToggleTimer(task.id, isTimerActive)}
+          className={
+            "p-1 rounded transition-colors " +
+            (isTimerActive
+              ? "bg-danger/10 text-danger animate-pulse"
+              : "text-ink-400 hover:text-primary-600 hover:bg-primary-50")
+          }
+          title={isTimerActive ? "עצור סטופר" : "התחל סטופר"}
+          aria-label={isTimerActive ? "עצור סטופר" : "התחל סטופר"}
+        >
+          {isTimerActive ? (
+            <Square className="w-3 h-3" strokeWidth={3} />
+          ) : (
+            <Play className="w-3 h-3" />
+          )}
+        </button>
+      </div>
 
       {/* Actual seconds (live ticking when timer is active) */}
       <span
         className={
-          "text-[10px] tabular-nums w-12 text-end shrink-0 " +
+          "text-[10px] tabular-nums text-end " +
           (isTimerActive ? "text-danger font-semibold" : "text-ink-400")
         }
         title="שעות בפועל"
@@ -423,8 +462,14 @@ function TaskRow({
         {fmtHours(liveSeconds)}
       </span>
 
+      {/* Notes (editable) */}
+      <NotesCell
+        value={task.notes ?? ""}
+        onSave={(v) => onUpdate(task.id, { notes: v || null })}
+      />
+
       {/* Actions (visible on hover) */}
-      <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover/row:opacity-100 transition-opacity">
+      <div className="flex items-center justify-end gap-0.5 opacity-0 group-hover/row:opacity-100 transition-opacity">
         <button
           type="button"
           onClick={() => onAddSub(task)}
@@ -447,6 +492,38 @@ function TaskRow({
         </button>
       </div>
     </div>
+  );
+}
+
+function NotesCell({
+  value,
+  onSave,
+}: {
+  value: string;
+  onSave: (v: string) => void;
+}) {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
+  const commit = () => {
+    if (draft !== value) onSave(draft);
+  };
+  return (
+    <input
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+        if (e.key === "Escape") {
+          setDraft(value);
+          (e.target as HTMLInputElement).blur();
+        }
+      }}
+      placeholder="הערה…"
+      className="w-full bg-transparent border-0 outline-none text-[11px] text-ink-700 placeholder:text-ink-300 px-1.5 py-0.5 rounded hover:bg-white focus:bg-white focus:ring-1 focus:ring-primary-500/40 transition-colors"
+    />
   );
 }
 
@@ -488,7 +565,7 @@ function EditableTitle({
         }
       }}
       className={
-        "flex-1 min-w-0 bg-transparent border-0 outline-none text-sm px-1.5 py-1 rounded hover:bg-white focus:bg-white focus:ring-1 focus:ring-primary-500/40 transition-colors " +
+        "w-full min-w-0 bg-transparent border-0 outline-none text-sm px-1.5 py-1 rounded hover:bg-white focus:bg-white focus:ring-1 focus:ring-primary-500/40 transition-colors " +
         (done ? "line-through text-ink-400" : "text-ink-900")
       }
     />
@@ -525,10 +602,7 @@ function NumberCell({
   };
 
   return (
-    <div
-      title={title}
-      className="inline-flex items-baseline gap-0.5 w-12 shrink-0"
-    >
+    <div title={title} className="flex items-baseline gap-0.5 justify-end">
       <input
         type="text"
         inputMode="decimal"

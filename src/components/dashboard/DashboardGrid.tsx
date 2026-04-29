@@ -1,4 +1,10 @@
-import { useMemo, useState, type ReactNode, type ComponentType } from "react";
+import {
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+  type ComponentType,
+} from "react";
 import { Responsive, WidthProvider, type Layout, type Layouts } from "react-grid-layout";
 import { ChevronDown, ChevronUp, X, Plus, GripVertical } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
@@ -35,7 +41,10 @@ interface DashboardGridProps {
   className?: string;
 }
 
-const BREAKPOINTS = { lg: 1200, md: 768, sm: 0 };
+// `lg` raised from 1200 to 1400 so phones in "request desktop site" mode
+// (typically reports ~1024-1080px) land in `md` (single-column) instead of
+// the cramped 2-column desktop layout.
+const BREAKPOINTS = { lg: 1400, md: 768, sm: 0 };
 const COLS = { lg: 12, md: 8, sm: 4 };
 const ROW_HEIGHT = 80;
 const MARGIN: [number, number] = [16, 16];
@@ -111,7 +120,17 @@ export function DashboardGrid({
     };
   }, [layouts, visibleWidgets]);
 
+  // react-grid-layout fires onLayoutChange immediately on mount with the
+  // initial defaults. We skip the very first call so opening the page never
+  // freezes the current defaults into the DB — a real user drag is what
+  // should persist, not a synthetic "page just loaded" event.
+  const isFirstLayoutChange = useRef(true);
+
   const handleLayoutChange = (_current: Layout[], all: Layouts) => {
+    if (isFirstLayoutChange.current) {
+      isFirstLayoutChange.current = false;
+      return;
+    }
     scheduleSave({
       layout_desktop: all.lg as unknown as WidgetLayout,
       layout_tablet: all.md as unknown as WidgetLayout,

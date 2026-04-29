@@ -46,7 +46,7 @@ import { TimerLogPopup } from "@/components/projects/blocks/TimerLogPopup";
 import { useFileUpload } from "@/lib/hooks/useFileUpload";
 import { presignDownload } from "@/lib/services/storage";
 import { TaskEditModal } from "@/components/tasks/TaskEditModal";
-import { HelpCircle } from "lucide-react";
+import { HelpCircle, Pencil } from "lucide-react";
 import { pushUndo } from "@/lib/undo/store";
 import {
   useTasksByProject,
@@ -277,6 +277,26 @@ function readSortValue(task: Task, key: string): unknown {
   }
 }
 
+function sortTreeWithDoneAtBottom(
+  nodes: TaskNode[],
+  key: string | null,
+  dir: "asc" | "desc"
+): TaskNode[] {
+  const sorted = sortTree(nodes, key, dir);
+  // Stable partition: open first, then done — both already sorted by `key`.
+  const openOnes: TaskNode[] = [];
+  const doneOnes: TaskNode[] = [];
+  for (const n of sorted) {
+    const isDone = n.task.status === "done" || !!n.task.completed_at;
+    if (isDone) doneOnes.push(n);
+    else openOnes.push(n);
+  }
+  return [...openOnes, ...doneOnes].map((n) => ({
+    task: n.task,
+    children: sortTreeWithDoneAtBottom(n.children, key, dir),
+  }));
+}
+
 function filterTree(nodes: TaskNode[], query: string): TaskNode[] {
   if (!query.trim()) return nodes;
   const q = query.trim().toLowerCase();
@@ -344,25 +364,14 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
     [lists, projectId]
   );
 
-  const { open, done } = useMemo(() => {
-    const splitOpen: Task[] = [];
-    const splitDone: Task[] = [];
-    for (const t of tasks) {
-      if (t.status === "done" || t.completed_at) splitDone.push(t);
-      else splitOpen.push(t);
-    }
-    return { open: splitOpen, done: splitDone };
-  }, [tasks]);
-
-  const openTree = useMemo(() => buildTree(open), [open]);
-  const doneTree = useMemo(() => buildTree(done), [done]);
-  const filteredOpen = useMemo(
-    () => sortTree(filterTree(openTree, search), sortKey, sortDir),
-    [openTree, search, sortKey, sortDir]
-  );
-  const filteredDone = useMemo(
-    () => sortTree(filterTree(doneTree, search), sortKey, sortDir),
-    [doneTree, search, sortKey, sortDir]
+  // Per spec §15.6: ✓ checkbox → "צניחה לתחתית" — done tasks stay with their
+  // siblings but sink to the bottom of their level. We keep the whole tree
+  // unified (no separate "Done" section) and let the sort comparator push
+  // done items below open ones at every level.
+  const tree = useMemo(() => buildTree(tasks), [tasks]);
+  const filteredTree = useMemo(
+    () => sortTreeWithDoneAtBottom(filterTree(tree, search), sortKey, sortDir),
+    [tree, search, sortKey, sortDir]
   );
 
   const handleHeaderSort = (key: string) => {
@@ -723,7 +732,7 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
               onEditFieldOptions={(fieldId) => setOptionsFieldId(fieldId)}
             />
             <SortableTaskList
-              nodes={filteredOpen}
+              nodes={filteredTree}
               activeTimer={activeTimer ?? null}
               focusTaskId={focusTaskId}
               onFocusHandled={() => setFocusTaskId(null)}
@@ -746,31 +755,6 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
               onIndent={handleIndentWithUndo}
               onOutdent={handleOutdentWithUndo}
             />
-            {filteredDone.length > 0 && (
-              <DoneSection
-                nodes={filteredDone}
-                activeTimer={activeTimer ?? null}
-                focusTaskId={focusTaskId}
-                onFocusHandled={() => setFocusTaskId(null)}
-                customFields={customFields}
-                gridCols={gridCols}
-                orderedFixedKeys={orderedFixedKeys}
-                questionsByTaskId={questionsByTaskId}
-                onUpdate={handleTaskUpdate}
-                onComplete={handleCompleteWithUndo}
-                onDelete={(id) => del.mutate(id)}
-                onAddSub={handleAddSub}
-                onToggleTimer={(taskId, isCurrentlyActive) => {
-                  if (isCurrentlyActive) stopTimer.mutate();
-                  else startTimer.mutate({ taskId });
-                }}
-                onOpenLog={(taskId) => setLogTaskId(taskId)}
-                onOpenEdit={(taskId) => setEditTaskId(taskId)}
-                onAddAfter={handleAddAfter}
-                onIndent={handleIndentWithUndo}
-                onOutdent={handleOutdentWithUndo}
-              />
-            )}
           </div>
         )}
       </div>
@@ -1038,31 +1022,50 @@ function FixedColumnHeader({
     );
   }
 
+  const renamePencil = (
+    <button
+      type="button"
+      onClick={onStartEdit}
+      onPointerDown={(e) => e.stopPropagation()}
+      className="opacity-0 group-hover/fixed:opacity-100 text-ink-400 hover:text-primary-600 transition-opacity ms-0.5"
+      aria-label="שני שם"
+      title="שני שם עמודה"
+    >
+      <Pencil className="w-2.5 h-2.5 inline-block" />
+    </button>
+  );
+
   if (sortable && onSort) {
     return (
-      <button
-        type="button"
-        onClick={onSort}
-        onDoubleClick={onStartEdit}
-        onPointerDown={(e) => e.stopPropagation()}
-        className={
-          "select-none hover:text-ink-900 transition-colors " + alignCls
-        }
-        title={`${label} — קליק למיון, דאבל-קליק לשינוי שם, גרירה לסידור מחדש`}
-      >
-        {label}
-        {sortArrow}
-      </button>
+      <span className="group/fixed inline-flex items-center gap-0.5">
+        <button
+          type="button"
+          onClick={onSort}
+          onDoubleClick={onStartEdit}
+          className={
+            "select-none hover:text-ink-900 transition-colors " + alignCls
+          }
+          title={`${label} — קליק למיון, דאבל-קליק או ✏️ לשינוי שם, גרירה לסידור`}
+        >
+          {label}
+          {sortArrow}
+        </button>
+        {renamePencil}
+      </span>
     );
   }
 
   return (
     <span
       onDoubleClick={onStartEdit}
-      className={"select-none cursor-text " + alignCls}
-      title="דאבל-קליק לשינוי שם · גרירה לסידור מחדש"
+      className={
+        "group/fixed inline-flex items-center gap-0.5 select-none cursor-text " +
+        alignCls
+      }
+      title="דאבל-קליק או ✏️ לשינוי שם · גרירה לסידור"
     >
       {label}
+      {renamePencil}
     </span>
   );
 }
@@ -1134,7 +1137,6 @@ function DynColumnHeader({
         type="button"
         onClick={onSort}
         onDoubleClick={() => setEditing(true)}
-        onPointerDown={(e) => e.stopPropagation()}
         className="truncate hover:text-ink-900 transition-colors flex-1 text-start"
         title={`${field.field_label} — קליק למיון, דאבל-קליק לשינוי שם, גרירה לסידור מחדש`}
       >
@@ -1145,6 +1147,16 @@ function DynColumnHeader({
           ) : (
             <ArrowDown className="w-2.5 h-2.5 inline-block ms-0.5" />
           ))}
+      </button>
+      <button
+        type="button"
+        onClick={() => setEditing(true)}
+        onPointerDown={(e) => e.stopPropagation()}
+        className="opacity-0 group-hover/dyn:opacity-100 text-ink-400 hover:text-primary-600 transition-opacity"
+        aria-label="שני שם"
+        title="שני שם עמודה"
+      >
+        <Pencil className="w-2.5 h-2.5" />
       </button>
       {supportsOptions && (
         <button
@@ -2813,68 +2825,6 @@ function UrgencyBars({
 }
 
 // ─── Done section ───────────────────────────────────────────────────────────
-
-function DoneSection({
-  nodes,
-  activeTimer,
-  focusTaskId,
-  onFocusHandled,
-  customFields,
-  gridCols,
-  orderedFixedKeys,
-  questionsByTaskId,
-  ...handlers
-}: {
-  nodes: TaskNode[];
-  activeTimer: TimeEntry | null;
-  focusTaskId: string | null;
-  onFocusHandled: () => void;
-  customFields: TaskCustomField[];
-  gridCols: string;
-  orderedFixedKeys: FixedColumnKey[];
-  questionsByTaskId: Map<string, number>;
-} & RowHandlers) {
-  const [open, setOpen] = useState(false);
-  const count = useMemo(() => countTree(nodes), [nodes]);
-  return (
-    <div className="mt-3 pt-3 border-t border-ink-200">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1 text-xs text-ink-500 hover:text-ink-800 mb-1.5"
-      >
-        {open ? (
-          <ChevronDown className="w-3 h-3" />
-        ) : (
-          <ChevronLeft className="w-3 h-3" />
-        )}
-        הושלמו ({count})
-      </button>
-      {open && (
-        <TaskList
-          nodes={nodes}
-          level={0}
-          activeTimer={activeTimer}
-          focusTaskId={focusTaskId}
-          onFocusHandled={onFocusHandled}
-          customFields={customFields}
-          gridCols={gridCols}
-          orderedFixedKeys={orderedFixedKeys}
-          questionsByTaskId={questionsByTaskId}
-          {...handlers}
-        />
-      )}
-    </div>
-  );
-}
-
-function countTree(nodes: TaskNode[]): number {
-  let n = 0;
-  for (const node of nodes) {
-    n += 1 + countTree(node.children);
-  }
-  return n;
-}
 
 // ─── Empty state ────────────────────────────────────────────────────────────
 

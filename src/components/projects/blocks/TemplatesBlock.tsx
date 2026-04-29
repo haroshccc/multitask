@@ -1,10 +1,17 @@
-import { Loader2, Star, Sparkles } from "lucide-react";
-import { useProjectTemplates, useApplyProjectTemplate } from "@/lib/hooks";
+import { Loader2, Star, Sparkles, Save } from "lucide-react";
+import {
+  useProjectTemplates,
+  useApplyProjectTemplate,
+  useSaveProjectAsTemplate,
+  useProject,
+} from "@/lib/hooks";
 
 export function TemplatesBlock({ scopeId }: { scopeId?: string | null }) {
   const projectId = scopeId ?? null;
   const { data: templates = [], isLoading } = useProjectTemplates();
+  const { data: project } = useProject(projectId);
   const apply = useApplyProjectTemplate();
+  const saveAs = useSaveProjectAsTemplate();
 
   const onApply = (templateId: string, name: string) => {
     if (!projectId) return;
@@ -17,6 +24,21 @@ export function TemplatesBlock({ scopeId }: { scopeId?: string | null }) {
     apply.mutate({ templateId, projectId });
   };
 
+  const onSaveAs = () => {
+    if (!projectId) return;
+    const defaultName = project?.name
+      ? `${project.name} — תבנית`
+      : "תבנית חדשה";
+    const name = window.prompt("שם התבנית החדשה:", defaultName);
+    if (!name?.trim()) return;
+    saveAs.mutate({
+      projectId,
+      name: name.trim(),
+      description: project?.description ?? null,
+      emoji: project?.emoji ?? null,
+    });
+  };
+
   if (isLoading) {
     return (
       <div className="text-xs text-ink-500 text-center py-6">
@@ -25,19 +47,34 @@ export function TemplatesBlock({ scopeId }: { scopeId?: string | null }) {
     );
   }
 
-  if (templates.length === 0) {
-    return (
-      <div className="text-center py-6">
-        <Sparkles className="w-5 h-5 text-ink-400 mx-auto mb-2" />
-        <p className="text-xs text-ink-500">
-          עוד אין תבניות. אפשר לשמור פרויקט קיים כתבנית בעתיד.
-        </p>
-      </div>
-    );
-  }
-
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+      <button
+        type="button"
+        onClick={onSaveAs}
+        disabled={!projectId || saveAs.isPending}
+        className="rounded-lg border-2 border-dashed border-ink-300 bg-ink-50/40 p-3 flex flex-col items-center justify-center gap-1.5 hover:border-primary-400 hover:bg-primary-50/40 hover:text-primary-700 transition-all text-ink-500 disabled:opacity-50 min-h-[120px]"
+      >
+        {saveAs.isPending ? (
+          <Loader2 className="w-5 h-5 animate-spin" />
+        ) : (
+          <Save className="w-5 h-5" />
+        )}
+        <span className="text-xs font-medium">
+          {saveAs.isPending ? "שומרת…" : "שמרי כתבנית"}
+        </span>
+        <span className="text-[10px] opacity-75">
+          המשימות שלך → תבנית חדשה
+        </span>
+      </button>
+      {templates.length === 0 && !isLoading && (
+        <div className="col-span-full text-center py-4">
+          <Sparkles className="w-5 h-5 text-ink-400 mx-auto mb-2" />
+          <p className="text-xs text-ink-500">
+            עוד אין תבניות. הוסיפי משימות לפרויקט ושמרי כתבנית.
+          </p>
+        </div>
+      )}
       {templates.map((tpl) => {
         const data = (tpl.template_data as { tasks?: { title: string }[] }) ?? {};
         const taskCount = data.tasks?.length ?? 0;

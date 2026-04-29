@@ -12,6 +12,41 @@ export function useProjectTemplates() {
   });
 }
 
+export function useSaveProjectAsTemplate() {
+  const qc = useQueryClient();
+  const scope = useOrgScope();
+  return useMutation({
+    mutationFn: ({
+      projectId,
+      name,
+      description,
+      emoji,
+    }: {
+      projectId: string;
+      name: string;
+      description?: string | null;
+      emoji?: string | null;
+    }) => {
+      const { organizationId, userId } = assertOrgScope(scope);
+      return service.saveProjectAsTemplate({
+        projectId,
+        organizationId,
+        ownerId: userId,
+        name,
+        description,
+        emoji,
+      });
+    },
+    onSuccess: () => {
+      if (scope.organizationId) {
+        qc.invalidateQueries({
+          queryKey: ["project_templates", scope.organizationId],
+        });
+      }
+    },
+  });
+}
+
 export function useApplyProjectTemplate() {
   const qc = useQueryClient();
   const scope = useOrgScope();

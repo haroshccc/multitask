@@ -43,6 +43,8 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { TimerLogPopup } from "@/components/projects/blocks/TimerLogPopup";
+import { useFileUpload } from "@/lib/hooks/useFileUpload";
+import { presignDownload } from "@/lib/services/storage";
 import { pushUndo } from "@/lib/undo/store";
 import {
   useTasksByProject,
@@ -1768,9 +1770,10 @@ function DynCell({
       return <DynTagCell value={(value as string[]) ?? []} onSave={onSave} />;
     case "file":
       return (
-        <span className="text-[10px] text-ink-400 truncate" title="העלאת קבצים בקרוב">
-          📎 בקרוב
-        </span>
+        <DynFileCell
+          value={(value as StoredFile[]) ?? []}
+          onSave={onSave}
+        />
       );
     default:
       return (
@@ -2420,6 +2423,117 @@ function DynTagCell({
           +
         </button>
       )}
+    </div>
+  );
+}
+
+// ─── File upload cell ──────────────────────────────────────────────────────
+
+interface StoredFile {
+  name: string;
+  key: string;
+  size: number;
+  mime: string;
+}
+
+/**
+ * File upload cell. Picks files via the existing R2-backed pipeline
+ * (`useFileUpload` → `presign-put` → R2 PUT), stores `{name, key, size, mime}`
+ * tuples in the task's `custom_fields[fieldKey]` array, and lets the user
+ * download via on-demand `presignDownload` (presign-get edge function).
+ */
+function DynFileCell({
+  value,
+  onSave,
+}: {
+  value: StoredFile[];
+  onSave: (v: StoredFile[]) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const upload = useFileUpload();
+  const [isUploading, setIsUploading] = useState(false);
+
+  const handlePick = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    setIsUploading(true);
+    const next: StoredFile[] = [...value];
+    try {
+      for (const file of Array.from(files)) {
+        const safeName = file.name.replace(/[^\w.-]+/g, "_");
+        const keySuffix = `task-files/${Date.now()}_${safeName}`;
+        const { key } = await upload.upload(file, {
+          keySuffix,
+          contentType: file.type || "application/octet-stream",
+          totalBytes: file.size,
+        });
+        next.push({
+          name: file.name,
+          key,
+          size: file.size,
+          mime: file.type || "application/octet-stream",
+        });
+      }
+      onSave(next);
+    } finally {
+      setIsUploading(false);
+      if (inputRef.current) inputRef.current.value = "";
+    }
+  };
+
+  const handleDownload = async (file: StoredFile) => {
+    try {
+      const { url } = await presignDownload(file.key);
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch {
+      alert("שגיאה ביצירת קישור הורדה");
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-1 flex-wrap min-w-0">
+      <input
+        ref={inputRef}
+        type="file"
+        multiple
+        className="hidden"
+        onChange={(e) => handlePick(e.target.files)}
+      />
+      {value.map((f) => (
+        <span
+          key={f.key}
+          className="group/file inline-flex items-center gap-0.5 chip text-[9px] py-0 px-1 max-w-[80px]"
+          title={`${f.name} (${(f.size / 1024).toFixed(0)} KB)`}
+        >
+          <button
+            type="button"
+            onClick={() => handleDownload(f)}
+            className="truncate hover:underline"
+          >
+            {f.name}
+          </button>
+          <button
+            type="button"
+            onClick={() => onSave(value.filter((x) => x.key !== f.key))}
+            className="opacity-0 group-hover/file:opacity-100 hover:text-danger transition-opacity"
+            aria-label="הסירי"
+          >
+            ×
+          </button>
+        </span>
+      ))}
+      <button
+        type="button"
+        onClick={() => inputRef.current?.click()}
+        disabled={isUploading}
+        className="text-[10px] text-ink-400 hover:text-primary-600 disabled:opacity-50"
+        aria-label="העלי קובץ"
+      >
+        {isUploading ? (
+          <Loader2 className="w-3 h-3 animate-spin" />
+        ) : (
+          "+"
+        )}
+      </button>
     </div>
   );
 }

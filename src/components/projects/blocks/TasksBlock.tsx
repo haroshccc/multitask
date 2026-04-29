@@ -24,6 +24,7 @@ import {
   CircleDollarSign,
   AlignLeft,
   CheckSquare,
+  Settings2,
 } from "lucide-react";
 import {
   DndContext,
@@ -60,6 +61,7 @@ import {
   useCreateCustomField,
   useUpdateCustomField,
   useDeleteCustomField,
+  useOrgMembers,
 } from "@/lib/hooks";
 import { useUpdateProject } from "@/lib/hooks/useProjects";
 import type {
@@ -212,6 +214,7 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
     () => tasks.find((t) => t.id === logTaskId) ?? null,
     [tasks, logTaskId]
   );
+  const [optionsFieldId, setOptionsFieldId] = useState<string | null>(null);
 
   const projectLists = useMemo(
     () => lists.filter((l) => l.project_id === projectId),
@@ -448,6 +451,19 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
     updateField.mutate({ fieldId, patch: { field_label: label } });
   };
 
+  const handleSaveOptions = (fieldId: string, options: SelectOption[]) => {
+    updateField.mutate({
+      fieldId,
+      patch: { options: options as unknown as TaskCustomField["options"] },
+    });
+    setOptionsFieldId(null);
+  };
+
+  const optionsField = useMemo(
+    () => customFields.find((f) => f.id === optionsFieldId) ?? null,
+    [customFields, optionsFieldId]
+  );
+
   const fixedLabels = useMemo(() => {
     const raw = (project?.column_labels ?? {}) as Record<string, unknown>;
     const out: Record<string, string> = {};
@@ -506,6 +522,13 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
       {logTask && (
         <TimerLogPopup task={logTask} onClose={() => setLogTaskId(null)} />
       )}
+      {optionsField && (
+        <OptionsEditorModal
+          field={optionsField}
+          onSave={(opts) => handleSaveOptions(optionsField.id, opts)}
+          onClose={() => setOptionsFieldId(null)}
+        />
+      )}
       <div className="flex items-center gap-2 shrink-0">
         <div className="relative flex-1 min-w-0">
           <Search className="absolute start-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-400 pointer-events-none" />
@@ -553,6 +576,7 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
               onDeleteField={handleDeleteField}
               onRenameField={handleRenameField}
               onReorderFields={handleReorderFields}
+              onEditFieldOptions={(fieldId) => setOptionsFieldId(fieldId)}
             />
             <SortableTaskList
               nodes={filteredOpen}
@@ -618,6 +642,7 @@ function TableHeader({
   onDeleteField,
   onRenameField,
   onReorderFields,
+  onEditFieldOptions,
 }: {
   gridCols: string;
   customFields: TaskCustomField[];
@@ -630,6 +655,7 @@ function TableHeader({
   onDeleteField: (fieldId: string) => void;
   onRenameField: (fieldId: string, label: string) => void;
   onReorderFields: (newOrder: TaskCustomField[]) => void;
+  onEditFieldOptions: (fieldId: string) => void;
 }) {
   const colDragSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } })
@@ -710,6 +736,7 @@ function TableHeader({
               onSort={() => onSort(`cf:${f.field_key}`)}
               onRename={(label) => onRenameField(f.id, label)}
               onDelete={() => onDeleteField(f.id)}
+              onEditOptions={() => onEditFieldOptions(f.id)}
             />
           ))}
         </SortableContext>
@@ -818,6 +845,7 @@ function DynColumnHeader({
   onSort,
   onRename,
   onDelete,
+  onEditOptions,
 }: {
   field: TaskCustomField;
   sortActive: boolean;
@@ -825,10 +853,12 @@ function DynColumnHeader({
   onSort: () => void;
   onRename: (label: string) => void;
   onDelete: () => void;
+  onEditOptions: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(field.field_label);
   useEffect(() => setDraft(field.field_label), [field.field_label]);
+  const supportsOptions = field.field_type === "select" || field.field_type === "multiselect";
 
   const sortable = useSortable({ id: field.id, disabled: editing });
   const style: React.CSSProperties = {
@@ -887,6 +917,18 @@ function DynColumnHeader({
             <ArrowDown className="w-2.5 h-2.5 inline-block ms-0.5" />
           ))}
       </button>
+      {supportsOptions && (
+        <button
+          type="button"
+          onClick={onEditOptions}
+          onPointerDown={(e) => e.stopPropagation()}
+          className="opacity-0 group-hover/dyn:opacity-100 text-ink-400 hover:text-primary-600 transition-opacity"
+          aria-label="ערכי אפשרויות"
+          title="ערכי אפשרויות"
+        >
+          <Settings2 className="w-2.5 h-2.5" />
+        </button>
+      )}
       <button
         type="button"
         onClick={() => {
@@ -1476,8 +1518,7 @@ function DynCell({
     case "stars":
       return <DynStarsCell value={(value as number) ?? 0} onSave={onSave} />;
     case "select": {
-      const opts =
-        (field.options as { value: string; label: string }[] | null) ?? [];
+      const opts = (field.options as SelectOption[] | null) ?? [];
       return (
         <DynSelectCell
           value={(value as string) ?? ""}
@@ -1664,28 +1705,252 @@ function DynStarsCell({
   );
 }
 
+/**
+ * Modal that lets the user manage the options (label + color) for a select
+ * column. Saves to `task_custom_fields.options` jsonb on Save.
+ */
+function OptionsEditorModal({
+  field,
+  onSave,
+  onClose,
+}: {
+  field: TaskCustomField;
+  onSave: (options: SelectOption[]) => void;
+  onClose: () => void;
+}) {
+  const initial = (field.options as SelectOption[] | null) ?? [];
+  const [options, setOptions] = useState<SelectOption[]>(
+    initial.length > 0 ? initial : []
+  );
+
+  const addOption = () => {
+    const idx = options.length;
+    setOptions([
+      ...options,
+      {
+        value: `opt_${Date.now().toString(36)}_${idx}`,
+        label: "אופציה",
+        color: STATUS_COLORS[idx % STATUS_COLORS.length].id,
+      },
+    ]);
+  };
+
+  const updateAt = (i: number, patch: Partial<SelectOption>) => {
+    setOptions((prev) => prev.map((o, idx) => (idx === i ? { ...o, ...patch } : o)));
+  };
+
+  const removeAt = (i: number) => {
+    setOptions((prev) => prev.filter((_, idx) => idx !== i));
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-ink-900/30 backdrop-blur-sm flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-xl shadow-lift w-full max-w-md max-h-[80vh] flex flex-col overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <header className="flex items-center justify-between px-4 py-3 border-b border-ink-200">
+          <h3 className="text-sm font-semibold text-ink-900">
+            אפשרויות לעמודה: {field.field_label}
+          </h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1 rounded hover:bg-ink-100 text-ink-500"
+            aria-label="סגרי"
+          >
+            ×
+          </button>
+        </header>
+        <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-2">
+          {options.length === 0 ? (
+            <p className="text-xs text-ink-500 text-center py-4">
+              עוד אין אפשרויות. לחצי "+ הוסיפי" למטה.
+            </p>
+          ) : (
+            options.map((o, i) => {
+              const colors = getOptionColor(o.color);
+              return (
+                <div
+                  key={o.value}
+                  className="flex items-center gap-2 p-2 border border-ink-200 rounded-md"
+                >
+                  <input
+                    value={o.label}
+                    onChange={(e) => updateAt(i, { label: e.target.value })}
+                    placeholder="שם אופציה"
+                    className="field py-1 text-xs flex-1"
+                    style={{ background: colors.bg, color: colors.fg }}
+                  />
+                  <div className="flex items-center gap-0.5 shrink-0">
+                    {STATUS_COLORS.map((c) => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => updateAt(i, { color: c.id })}
+                        className={
+                          "w-4 h-4 rounded-full transition-transform " +
+                          (o.color === c.id
+                            ? "ring-2 ring-offset-1 ring-ink-900 scale-110"
+                            : "hover:scale-110")
+                        }
+                        style={{ background: c.fg }}
+                        aria-label={`צבע ${c.id}`}
+                        title={c.id}
+                      />
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => removeAt(i)}
+                    className="p-1 rounded hover:bg-ink-100 text-ink-400 hover:text-danger shrink-0"
+                    aria-label="מחקי"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                </div>
+              );
+            })
+          )}
+          <button
+            type="button"
+            onClick={addOption}
+            className="btn-outline text-xs w-full"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            הוסיפי אפשרות
+          </button>
+        </div>
+        <footer className="px-4 py-3 border-t border-ink-200 flex items-center justify-end gap-1.5">
+          <button
+            type="button"
+            onClick={onClose}
+            className="btn-ghost text-xs"
+          >
+            ביטול
+          </button>
+          <button
+            type="button"
+            onClick={() => onSave(options.filter((o) => o.label.trim()))}
+            className="btn-accent text-xs"
+          >
+            שמרי
+          </button>
+        </footer>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Status palette for select-option chips (mirrors the brand color tokens). Each
+ * key maps to a soft background + a saturated foreground for legible chips.
+ */
+const STATUS_COLORS: { id: string; bg: string; fg: string }[] = [
+  { id: "yellow", bg: "rgba(250, 204, 21, 0.18)", fg: "#a16207" },
+  { id: "orange", bg: "rgba(249, 115, 22, 0.16)", fg: "#c2410c" },
+  { id: "rose", bg: "rgba(225, 29, 72, 0.14)", fg: "#be123c" },
+  { id: "pink", bg: "rgba(236, 72, 153, 0.14)", fg: "#be185d" },
+  { id: "purple", bg: "rgba(168, 85, 247, 0.14)", fg: "#7e22ce" },
+  { id: "indigo", bg: "rgba(99, 102, 241, 0.14)", fg: "#4338ca" },
+  { id: "blue", bg: "rgba(59, 130, 246, 0.14)", fg: "#1d4ed8" },
+  { id: "sky", bg: "rgba(14, 165, 233, 0.14)", fg: "#0369a1" },
+  { id: "teal", bg: "rgba(20, 184, 166, 0.16)", fg: "#0f766e" },
+  { id: "green", bg: "rgba(16, 185, 129, 0.16)", fg: "#047857" },
+  { id: "gray", bg: "rgba(107, 114, 128, 0.16)", fg: "#374151" },
+];
+
+interface SelectOption {
+  value: string;
+  label: string;
+  color?: string;
+}
+
+function getOptionColor(color: string | undefined) {
+  return (
+    STATUS_COLORS.find((c) => c.id === color) ?? STATUS_COLORS[10] // gray fallback
+  );
+}
+
 function DynSelectCell({
   value,
   options,
   onSave,
 }: {
   value: string;
-  options: { value: string; label: string }[];
+  options: SelectOption[];
   onSave: (v: string | null) => void;
 }) {
+  const [open, setOpen] = useState(false);
+  const current = options.find((o) => o.value === value);
+  const colors = getOptionColor(current?.color);
+
   return (
-    <select
-      value={value}
-      onChange={(e) => onSave(e.target.value || null)}
-      className="w-full bg-transparent border-0 outline-none text-[11px] text-ink-700 px-1 py-0.5 rounded hover:bg-white focus:bg-white focus:ring-1 focus:ring-primary-500/40"
-    >
-      <option value=""></option>
-      {options.map((o) => (
-        <option key={o.value} value={o.value}>
-          {o.label}
-        </option>
-      ))}
-    </select>
+    <div className="relative w-full">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full text-[11px] px-1.5 py-0.5 rounded truncate text-start hover:ring-1 hover:ring-primary-500/40 transition-shadow"
+        style={{
+          background: current ? colors.bg : "transparent",
+          color: current ? colors.fg : undefined,
+        }}
+      >
+        {current?.label ?? <span className="text-ink-300">—</span>}
+      </button>
+      {open && (
+        <>
+          <div
+            className="fixed inset-0 z-30"
+            onClick={() => setOpen(false)}
+          />
+          <ul className="absolute end-0 top-full mt-1 z-40 bg-white border border-ink-200 rounded-md shadow-lift min-w-[140px] py-1">
+            <li>
+              <button
+                type="button"
+                onClick={() => {
+                  onSave(null);
+                  setOpen(false);
+                }}
+                className="w-full text-start text-[10px] text-ink-400 hover:bg-ink-50 px-2 py-1"
+              >
+                — ללא —
+              </button>
+            </li>
+            {options.map((o) => {
+              const c = getOptionColor(o.color);
+              return (
+                <li key={o.value}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onSave(o.value);
+                      setOpen(false);
+                    }}
+                    className="w-full text-start text-[11px] hover:bg-ink-50 px-2 py-1"
+                  >
+                    <span
+                      className="inline-block px-1.5 py-0.5 rounded text-[10px]"
+                      style={{ background: c.bg, color: c.fg }}
+                    >
+                      {o.label}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+            {options.length === 0 && (
+              <li className="px-2 py-1 text-[10px] text-ink-400">
+                אין אפשרויות עדיין. דאבל-קליק על שם העמודה ואז ⚙ לעריכה.
+              </li>
+            )}
+          </ul>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -1742,6 +2007,12 @@ function DynLocationCell({
   );
 }
 
+/**
+ * Person picker — first tries to match the value to a known org member; if no
+ * match (free-typed name), still renders the initial chip but won't show a
+ * profile-tinted highlight. Click opens a dropdown with current org members
+ * + a free-text fallback.
+ */
 function DynPersonCell({
   value,
   onSave,
@@ -1749,28 +2020,112 @@ function DynPersonCell({
   value: string;
   onSave: (v: string | null) => void;
 }) {
-  const [draft, setDraft] = useState(value);
-  useEffect(() => setDraft(value), [value]);
+  const { data: members = [] } = useOrgMembers();
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+
+  const matched = members.find(
+    (m) => m.profile?.full_name === value || m.profile?.id === value
+  );
+  const display = matched?.profile?.full_name ?? value;
+
+  const filtered = useMemo(() => {
+    if (!search.trim()) return members;
+    const q = search.trim().toLowerCase();
+    return members.filter((m) =>
+      (m.profile?.full_name ?? "").toLowerCase().includes(q)
+    );
+  }, [members, search]);
+
   return (
-    <div className="flex items-center gap-1 min-w-0">
-      {value && (
-        <span
-          className="shrink-0 w-4 h-4 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center text-[9px] font-semibold"
-          aria-hidden
-        >
-          {value.charAt(0).toUpperCase()}
-        </span>
+    <div className="relative w-full">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full text-[11px] flex items-center gap-1 px-1 py-0.5 rounded hover:bg-white focus:bg-white focus:ring-1 focus:ring-primary-500/40 truncate"
+      >
+        {display ? (
+          <>
+            <span
+              className="shrink-0 w-4 h-4 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center text-[9px] font-semibold"
+              aria-hidden
+            >
+              {display.charAt(0).toUpperCase()}
+            </span>
+            <span className="text-ink-700 truncate">{display}</span>
+          </>
+        ) : (
+          <span className="text-ink-300">+ שיוך</span>
+        )}
+      </button>
+      {open && (
+        <>
+          <div
+            className="fixed inset-0 z-30"
+            onClick={() => setOpen(false)}
+          />
+          <div className="absolute end-0 top-full mt-1 z-40 bg-white border border-ink-200 rounded-md shadow-lift min-w-[180px] py-1">
+            <input
+              autoFocus
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && search.trim()) {
+                  onSave(search.trim());
+                  setSearch("");
+                  setOpen(false);
+                }
+                if (e.key === "Escape") setOpen(false);
+              }}
+              placeholder="חפשי / הקלידי שם…"
+              className="w-full px-2 py-1 border-b border-ink-200 text-[11px] outline-none"
+            />
+            {value && (
+              <button
+                type="button"
+                onClick={() => {
+                  onSave(null);
+                  setOpen(false);
+                }}
+                className="w-full text-start text-[10px] text-ink-400 hover:bg-ink-50 px-2 py-1"
+              >
+                — נקי שיוך —
+              </button>
+            )}
+            {filtered.length === 0 && search.trim() && (
+              <button
+                type="button"
+                onClick={() => {
+                  onSave(search.trim());
+                  setSearch("");
+                  setOpen(false);
+                }}
+                className="w-full text-start text-[11px] hover:bg-ink-50 px-2 py-1"
+              >
+                שיוך ל"{search.trim()}"
+              </button>
+            )}
+            {filtered.map((m) => (
+              <button
+                key={m.membership.user_id}
+                type="button"
+                onClick={() => {
+                  const name = m.profile?.full_name ?? m.profile?.id ?? "";
+                  if (name) onSave(name);
+                  setSearch("");
+                  setOpen(false);
+                }}
+                className="w-full text-start text-[11px] flex items-center gap-1.5 hover:bg-ink-50 px-2 py-1"
+              >
+                <span className="w-4 h-4 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center text-[9px] font-semibold">
+                  {(m.profile?.full_name ?? "?").charAt(0).toUpperCase()}
+                </span>
+                <span>{m.profile?.full_name ?? "(ללא שם)"}</span>
+              </button>
+            ))}
+          </div>
+        </>
       )}
-      <input
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={() => draft !== value && onSave(draft || null)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-        }}
-        placeholder="שם…"
-        className="w-full min-w-0 bg-transparent border-0 outline-none text-[11px] text-ink-700 px-1 py-0.5 rounded hover:bg-white focus:bg-white focus:ring-1 focus:ring-primary-500/40 truncate"
-      />
     </div>
   );
 }

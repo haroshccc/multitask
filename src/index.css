@@ -153,6 +153,25 @@
     @apply w-4 h-4 rounded-full bg-white shadow-soft;
     border: 2px solid #111118;
   }
+
+  /* Edit mode for DashboardGrid — when the wrapper is in `.grid-locked`
+     state we hide every drag handle so the layout reads as a static
+     dashboard. Both chrome variants (framed + bare) carry
+     `.widget-drag-handle` on their grip element, so a single rule covers
+     both. The grid container also gets `pointer-events: auto` on resize
+     handles only when editing. */
+  .grid-locked .widget-drag-handle {
+    display: none !important;
+  }
+  .grid-locked .react-resizable-handle {
+    display: none !important;
+  }
+  .grid-editing .react-resizable-handle {
+    /* Tiny bottom-end resize affordance, only when editing. */
+    background: transparent;
+    bottom: 4px;
+    inset-inline-end: 4px;
+  }
 }
 
 /* Global keyframes (Tailwind's @keyframes block lives in the config;

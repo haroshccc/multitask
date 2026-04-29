@@ -39,6 +39,10 @@ const BREAKPOINTS = { lg: 1200, md: 768, sm: 0 };
 const COLS = { lg: 12, md: 8, sm: 4 };
 const ROW_HEIGHT = 80;
 const MARGIN: [number, number] = [16, 16];
+// ScreenScaffold already applies p-4/sm:p-5/md:p-6 around the grid; keep the
+// grid's own container padding at zero so widgets reach the screen edges
+// on mobile (only the outer padding constrains them).
+const CONTAINER_PADDING: [number, number] = [0, 0];
 
 function defaultLayouts(widgets: WidgetDefinition[]): Layouts {
   const lg: Layout[] = [];
@@ -172,6 +176,7 @@ export function DashboardGrid({
         cols={COLS}
         rowHeight={ROW_HEIGHT}
         margin={MARGIN}
+        containerPadding={CONTAINER_PADDING}
         draggableHandle=".widget-drag-handle"
         compactType="vertical"
         onLayoutChange={handleLayoutChange}

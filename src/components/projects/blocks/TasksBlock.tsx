@@ -25,6 +25,7 @@ import {
   SortableContext,
   useSortable,
   verticalListSortingStrategy,
+  horizontalListSortingStrategy,
   arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -432,6 +433,23 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
     updateField.mutate({ fieldId, patch: { field_label: label } });
   };
 
+  /**
+   * Drop on a column header → renumber sort_order on every column so the new
+   * left-to-right order persists. We bulk-update via individual mutations
+   * since there's no batch endpoint.
+   */
+  const handleReorderFields = (newOrder: TaskCustomField[]) => {
+    newOrder.forEach((field, i) => {
+      const next = (i + 1) * 1000;
+      if (field.sort_order !== next) {
+        updateField.mutate({
+          fieldId: field.id,
+          patch: { sort_order: next },
+        });
+      }
+    });
+  };
+
   const gridCols = useMemo(
     () => buildGridCols(customFields.length),
     [customFields.length]
@@ -497,6 +515,7 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
               onAddField={handleAddField}
               onDeleteField={handleDeleteField}
               onRenameField={handleRenameField}
+              onReorderFields={handleReorderFields}
             />
             <SortableTaskList
               nodes={filteredOpen}
@@ -559,6 +578,7 @@ function TableHeader({
   onAddField,
   onDeleteField,
   onRenameField,
+  onReorderFields,
 }: {
   gridCols: string;
   customFields: TaskCustomField[];
@@ -568,7 +588,20 @@ function TableHeader({
   onAddField: (type: CustomFieldType, label: string) => void;
   onDeleteField: (fieldId: string) => void;
   onRenameField: (fieldId: string, label: string) => void;
+  onReorderFields: (newOrder: TaskCustomField[]) => void;
 }) {
+  const colDragSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } })
+  );
+  const handleColumnDragEnd = (e: DragEndEvent) => {
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    const fromIdx = customFields.findIndex((f) => f.id === active.id);
+    const toIdx = customFields.findIndex((f) => f.id === over.id);
+    if (fromIdx === -1 || toIdx === -1) return;
+    onReorderFields(arrayMove(customFields, fromIdx, toIdx));
+  };
+  const dynIds = customFields.map((f) => f.id);
   const arrow = (key: string, align: "start" | "end" | "center") => {
     if (sortKey !== key) return null;
     const cls =
@@ -621,17 +654,25 @@ function TableHeader({
       <span className="text-center">סטופר</span>
       {headerBtn("בפועל", "actual_seconds", "end")}
       <span>הערות</span>
-      {customFields.map((f) => (
-        <DynColumnHeader
-          key={f.id}
-          field={f}
-          sortActive={sortKey === `cf:${f.field_key}`}
-          sortDir={sortDir}
-          onSort={() => onSort(`cf:${f.field_key}`)}
-          onRename={(label) => onRenameField(f.id, label)}
-          onDelete={() => onDeleteField(f.id)}
-        />
-      ))}
+      <DndContext
+        sensors={colDragSensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleColumnDragEnd}
+      >
+        <SortableContext items={dynIds} strategy={horizontalListSortingStrategy}>
+          {customFields.map((f) => (
+            <DynColumnHeader
+              key={f.id}
+              field={f}
+              sortActive={sortKey === `cf:${f.field_key}`}
+              sortDir={sortDir}
+              onSort={() => onSort(`cf:${f.field_key}`)}
+              onRename={(label) => onRenameField(f.id, label)}
+              onDelete={() => onDeleteField(f.id)}
+            />
+          ))}
+        </SortableContext>
+      </DndContext>
       <AddColumnButton onAdd={onAddField} />
     </div>
   );
@@ -655,6 +696,13 @@ function DynColumnHeader({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(field.field_label);
   useEffect(() => setDraft(field.field_label), [field.field_label]);
+
+  const sortable = useSortable({ id: field.id, disabled: editing });
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(sortable.transform),
+    transition: sortable.transition,
+    opacity: sortable.isDragging ? 0.4 : 1,
+  };
 
   const commit = () => {
     const v = draft.trim();
@@ -683,13 +731,20 @@ function DynColumnHeader({
   }
 
   return (
-    <span className="group/dyn flex items-center justify-between gap-1 px-1 truncate">
+    <span
+      ref={sortable.setNodeRef}
+      style={style}
+      {...sortable.attributes}
+      {...sortable.listeners}
+      className="group/dyn flex items-center justify-between gap-1 px-1 truncate cursor-grab active:cursor-grabbing"
+    >
       <button
         type="button"
         onClick={onSort}
         onDoubleClick={() => setEditing(true)}
+        onPointerDown={(e) => e.stopPropagation()}
         className="truncate hover:text-ink-900 transition-colors flex-1 text-start"
-        title={`${field.field_label} — קליק למיון, דאבל-קליק לשינוי שם`}
+        title={`${field.field_label} — קליק למיון, דאבל-קליק לשינוי שם, גרירה לסידור מחדש`}
       >
         {field.field_label}
         {sortActive &&
@@ -704,6 +759,7 @@ function DynColumnHeader({
         onClick={() => {
           if (confirm(`למחוק את עמודת "${field.field_label}"?`)) onDelete();
         }}
+        onPointerDown={(e) => e.stopPropagation()}
         className="opacity-0 group-hover/dyn:opacity-100 text-ink-400 hover:text-danger transition-opacity"
         aria-label="מחקי עמודה"
         title="מחקי עמודה"

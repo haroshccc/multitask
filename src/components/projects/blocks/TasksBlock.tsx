@@ -10,6 +10,8 @@ import {
   Play,
   Square,
   GripVertical,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import {
   DndContext,
@@ -41,6 +43,7 @@ import {
   useReorderTasks,
   useProjectCustomFields,
   useCreateCustomField,
+  useUpdateCustomField,
   useDeleteCustomField,
 } from "@/lib/hooks";
 import type {
@@ -89,6 +92,60 @@ function buildTree(tasks: Task[]): TaskNode[] {
   return make(null);
 }
 
+/**
+ * Sort siblings at every level by the given key. Sub-task ordering inside a
+ * parent is sorted independently of the level above it.
+ *
+ * Supported keys: 'title' | 'estimated_hours' | 'spare_hours' | 'urgency' |
+ * 'actual_seconds' | 'cf:<field_key>' (dynamic columns).
+ */
+function sortTree(
+  nodes: TaskNode[],
+  key: string | null,
+  dir: "asc" | "desc"
+): TaskNode[] {
+  if (!key) return nodes;
+  const mul = dir === "asc" ? 1 : -1;
+  const cmp = (a: TaskNode, b: TaskNode) => {
+    const va = readSortValue(a.task, key);
+    const vb = readSortValue(b.task, key);
+    if (va === vb) return 0;
+    // null/undefined sort to the bottom regardless of direction so users see
+    // their populated rows first.
+    if (va == null) return 1;
+    if (vb == null) return -1;
+    if (typeof va === "number" && typeof vb === "number") return (va - vb) * mul;
+    return String(va).localeCompare(String(vb), "he") * mul;
+  };
+  return nodes
+    .slice()
+    .sort(cmp)
+    .map((n) => ({ task: n.task, children: sortTree(n.children, key, dir) }));
+}
+
+function readSortValue(task: Task, key: string): unknown {
+  if (key.startsWith("cf:")) {
+    const fk = key.slice(3);
+    const cf = task.custom_fields as Record<string, unknown> | null;
+    return cf?.[fk] ?? null;
+  }
+  // Map key → typed Task field
+  switch (key) {
+    case "title":
+      return task.title.toLowerCase();
+    case "estimated_hours":
+      return task.estimated_hours;
+    case "spare_hours":
+      return task.spare_hours;
+    case "urgency":
+      return task.urgency;
+    case "actual_seconds":
+      return task.actual_seconds;
+    default:
+      return null;
+  }
+}
+
 function filterTree(nodes: TaskNode[], query: string): TaskNode[] {
   if (!query.trim()) return nodes;
   const q = query.trim().toLowerCase();
@@ -125,10 +182,13 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
   const stopTimer = useStopTimer();
   const { data: customFields = [] } = useProjectCustomFields(projectId);
   const createField = useCreateCustomField();
+  const updateField = useUpdateCustomField();
   const deleteField = useDeleteCustomField();
 
   const [search, setSearch] = useState("");
   const [focusTaskId, setFocusTaskId] = useState<string | null>(null);
+  const [sortKey, setSortKey] = useState<string | null>(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
   const projectLists = useMemo(
     () => lists.filter((l) => l.project_id === projectId),
@@ -148,13 +208,29 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
   const openTree = useMemo(() => buildTree(open), [open]);
   const doneTree = useMemo(() => buildTree(done), [done]);
   const filteredOpen = useMemo(
-    () => filterTree(openTree, search),
-    [openTree, search]
+    () => sortTree(filterTree(openTree, search), sortKey, sortDir),
+    [openTree, search, sortKey, sortDir]
   );
   const filteredDone = useMemo(
-    () => filterTree(doneTree, search),
-    [doneTree, search]
+    () => sortTree(filterTree(doneTree, search), sortKey, sortDir),
+    [doneTree, search, sortKey, sortDir]
   );
+
+  const handleHeaderSort = (key: string) => {
+    setSortKey((prev) => {
+      if (prev !== key) {
+        setSortDir("asc");
+        return key;
+      }
+      // same column: asc → desc → off
+      if (sortDir === "asc") {
+        setSortDir("desc");
+        return key;
+      }
+      setSortDir("asc");
+      return null;
+    });
+  };
 
   const ensureList = async (): Promise<string> => {
     if (projectLists.length > 0) return projectLists[0].id;
@@ -271,6 +347,10 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
     deleteField.mutate(fieldId);
   };
 
+  const handleRenameField = (fieldId: string, label: string) => {
+    updateField.mutate({ fieldId, patch: { field_label: label } });
+  };
+
   const gridCols = useMemo(
     () => buildGridCols(customFields.length),
     [customFields.length]
@@ -327,8 +407,12 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
             <TableHeader
               gridCols={gridCols}
               customFields={customFields}
+              sortKey={sortKey}
+              sortDir={sortDir}
+              onSort={handleHeaderSort}
               onAddField={handleAddField}
               onDeleteField={handleDeleteField}
+              onRenameField={handleRenameField}
             />
             <SortableTaskList
               nodes={filteredOpen}
@@ -391,14 +475,59 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
 function TableHeader({
   gridCols,
   customFields,
+  sortKey,
+  sortDir,
+  onSort,
   onAddField,
   onDeleteField,
+  onRenameField,
 }: {
   gridCols: string;
   customFields: TaskCustomField[];
+  sortKey: string | null;
+  sortDir: "asc" | "desc";
+  onSort: (key: string) => void;
   onAddField: (type: CustomFieldType, label: string) => void;
   onDeleteField: (fieldId: string) => void;
+  onRenameField: (fieldId: string, label: string) => void;
 }) {
+  const arrow = (key: string, align: "start" | "end" | "center") => {
+    if (sortKey !== key) return null;
+    const cls =
+      "w-2.5 h-2.5 inline-block " +
+      (align === "end"
+        ? "ms-0.5"
+        : align === "center"
+        ? "mx-0.5"
+        : "me-0.5");
+    return sortDir === "asc" ? (
+      <ArrowUp className={cls} />
+    ) : (
+      <ArrowDown className={cls} />
+    );
+  };
+  const headerBtn = (
+    label: string,
+    key: string,
+    align: "start" | "end" | "center" = "start"
+  ) => (
+    <button
+      type="button"
+      onClick={() => onSort(key)}
+      className={
+        "select-none hover:text-ink-900 transition-colors " +
+        (align === "end"
+          ? "text-end"
+          : align === "center"
+          ? "text-center"
+          : "text-start")
+      }
+      title={`מיון לפי ${label}`}
+    >
+      {label}
+      {arrow(key, align)}
+    </button>
+  );
   return (
     <div
       className="grid items-center gap-1 px-1.5 py-1.5 sticky top-0 bg-ink-50/80 backdrop-blur z-10 text-[10px] font-semibold uppercase tracking-wider text-ink-500 border-b border-ink-200"
@@ -407,17 +536,21 @@ function TableHeader({
       <span></span>
       <span></span>
       <span></span>
-      <span>משימה</span>
-      <span className="text-end">שעות</span>
-      <span className="text-end">ספייר</span>
-      <span className="text-center">דחיפות</span>
+      {headerBtn("משימה", "title", "start")}
+      {headerBtn("שעות", "estimated_hours", "end")}
+      {headerBtn("ספייר", "spare_hours", "end")}
+      {headerBtn("דחיפות", "urgency", "center")}
       <span className="text-center">סטופר</span>
-      <span className="text-end">בפועל</span>
+      {headerBtn("בפועל", "actual_seconds", "end")}
       <span>הערות</span>
       {customFields.map((f) => (
         <DynColumnHeader
           key={f.id}
           field={f}
+          sortActive={sortKey === `cf:${f.field_key}`}
+          sortDir={sortDir}
+          onSort={() => onSort(`cf:${f.field_key}`)}
+          onRename={(label) => onRenameField(f.id, label)}
           onDelete={() => onDeleteField(f.id)}
         />
       ))}
@@ -428,16 +561,66 @@ function TableHeader({
 
 function DynColumnHeader({
   field,
+  sortActive,
+  sortDir,
+  onSort,
+  onRename,
   onDelete,
 }: {
   field: TaskCustomField;
+  sortActive: boolean;
+  sortDir: "asc" | "desc";
+  onSort: () => void;
+  onRename: (label: string) => void;
   onDelete: () => void;
 }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(field.field_label);
+  useEffect(() => setDraft(field.field_label), [field.field_label]);
+
+  const commit = () => {
+    const v = draft.trim();
+    setEditing(false);
+    if (v && v !== field.field_label) onRename(v);
+    else setDraft(field.field_label);
+  };
+
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+          if (e.key === "Escape") {
+            setDraft(field.field_label);
+            setEditing(false);
+          }
+        }}
+        className="w-full bg-white border border-primary-500 rounded px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-ink-700 outline-none"
+      />
+    );
+  }
+
   return (
     <span className="group/dyn flex items-center justify-between gap-1 px-1 truncate">
-      <span className="truncate" title={field.field_label}>
+      <button
+        type="button"
+        onClick={onSort}
+        onDoubleClick={() => setEditing(true)}
+        className="truncate hover:text-ink-900 transition-colors flex-1 text-start"
+        title={`${field.field_label} — קליק למיון, דאבל-קליק לשינוי שם`}
+      >
         {field.field_label}
-      </span>
+        {sortActive &&
+          (sortDir === "asc" ? (
+            <ArrowUp className="w-2.5 h-2.5 inline-block ms-0.5" />
+          ) : (
+            <ArrowDown className="w-2.5 h-2.5 inline-block ms-0.5" />
+          ))}
+      </button>
       <button
         type="button"
         onClick={() => {

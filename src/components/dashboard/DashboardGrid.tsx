@@ -1,4 +1,5 @@
 import {
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -6,7 +7,15 @@ import {
   type ComponentType,
 } from "react";
 import { Responsive, WidthProvider, type Layout, type Layouts } from "react-grid-layout";
-import { ChevronDown, ChevronUp, X, Plus, GripVertical } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronUp,
+  X,
+  Plus,
+  GripVertical,
+  Lock,
+  Pencil,
+} from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { useDashboardLayout, useDebouncedLayoutSave } from "@/lib/hooks/useDashboardLayout";
 import type {
@@ -16,6 +25,26 @@ import type {
 } from "@/lib/types/domain";
 
 const ResponsiveGridLayout = WidthProvider(Responsive);
+
+/**
+ * Globally tracks "edit mode" — a single boolean shared across all grids on
+ * the page. Default = false (locked, drag/resize disabled, drag handles
+ * hidden). Toggling is per-screen so the user can, say, edit the project
+ * page layout without touching the dashboard's saved arrangement.
+ *
+ * Persisted to localStorage so the choice survives reloads.
+ */
+function useEditMode(screenKey: DashboardScreen) {
+  const storageKey = `multitask:editmode:${screenKey}`;
+  const [editing, setEditing] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem(storageKey) === "1";
+  });
+  useEffect(() => {
+    localStorage.setItem(storageKey, editing ? "1" : "0");
+  }, [editing, storageKey]);
+  return [editing, setEditing] as const;
+}
 
 export interface WidgetDefinition {
   key: string;
@@ -81,6 +110,7 @@ export function DashboardGrid({
 }: DashboardGridProps) {
   const { data: savedLayout } = useDashboardLayout(screenKey, scopeId);
   const { scheduleSave } = useDebouncedLayoutSave(screenKey, scopeId);
+  const [isEditing, setIsEditing] = useEditMode(screenKey);
 
   const fallback = useMemo(() => defaultLayouts(widgets), [widgets]);
 
@@ -181,13 +211,23 @@ export function DashboardGrid({
   const hiddenWidgets = widgets.filter((w) => widgetState[w.key]?.hidden);
 
   return (
-    <div className={cn("relative", className)}>
-      {hiddenWidgets.length > 0 && (
-        <AddHiddenWidget
-          hiddenWidgets={hiddenWidgets}
-          onShow={showWidget}
-        />
+    <div
+      className={cn(
+        "relative",
+        // Class hook for the global CSS rule that hides drag handles when
+        // not editing — keeps every chrome variant consistent without
+        // threading isEditing into each chrome component.
+        isEditing ? "grid-editing" : "grid-locked",
+        className
       )}
+    >
+      <EditModeToggle
+        editing={isEditing}
+        onToggle={() => setIsEditing((v) => !v)}
+        hasHiddenWidgets={hiddenWidgets.length > 0}
+        hiddenWidgets={hiddenWidgets}
+        onShow={showWidget}
+      />
       <ResponsiveGridLayout
         className="layout"
         layouts={filteredLayouts}
@@ -198,6 +238,8 @@ export function DashboardGrid({
         containerPadding={CONTAINER_PADDING}
         draggableHandle=".widget-drag-handle"
         compactType="vertical"
+        isDraggable={isEditing}
+        isResizable={isEditing}
         onLayoutChange={handleLayoutChange}
       >
         {visibleWidgets.map((w) => {
@@ -337,39 +379,81 @@ function BareChrome({
   );
 }
 
-function AddHiddenWidget({
+/**
+ * Single toolbar row above every grid: edit-mode toggle + (when editing) the
+ * "show hidden widget" picker. Sits above the grid with negative top so it
+ * doesn't push content down — there's already room above DashboardGrid in
+ * every page where the ScreenScaffold header sits.
+ */
+function EditModeToggle({
+  editing,
+  onToggle,
+  hasHiddenWidgets,
   hiddenWidgets,
   onShow,
 }: {
+  editing: boolean;
+  onToggle: () => void;
+  hasHiddenWidgets: boolean;
   hiddenWidgets: WidgetDefinition[];
   onShow: (key: string) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
   return (
-    <div className="absolute -top-12 end-0 z-10">
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="btn-outline text-xs"
-      >
-        <Plus className="w-4 h-4" />
-        הוסף ווידג'ט ({hiddenWidgets.length})
-      </button>
-      {open && (
-        <div className="absolute end-0 top-full mt-1 bg-white border border-ink-200 rounded-xl shadow-lift w-56 py-1 max-h-64 overflow-auto">
-          {hiddenWidgets.map((w) => (
-            <button
-              key={w.key}
-              onClick={() => {
-                onShow(w.key);
-                setOpen(false);
-              }}
-              className="w-full text-start px-3 py-2 text-sm hover:bg-ink-50 text-ink-900"
-            >
-              {w.title}
-            </button>
-          ))}
+    <div className="absolute -top-11 end-0 z-10 flex items-center gap-1.5">
+      {editing && hasHiddenWidgets && (
+        <div className="relative">
+          <button
+            onClick={() => setPickerOpen((v) => !v)}
+            className="btn-outline text-xs"
+          >
+            <Plus className="w-4 h-4" />
+            הוסיפי באנר ({hiddenWidgets.length})
+          </button>
+          {pickerOpen && (
+            <div className="absolute end-0 top-full mt-1 bg-white border border-ink-200 rounded-xl shadow-lift w-56 py-1 max-h-64 overflow-auto">
+              {hiddenWidgets.map((w) => (
+                <button
+                  key={w.key}
+                  onClick={() => {
+                    onShow(w.key);
+                    setPickerOpen(false);
+                  }}
+                  className="w-full text-start px-3 py-2 text-sm hover:bg-ink-50 text-ink-900"
+                >
+                  {w.title}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
+      <button
+        type="button"
+        onClick={onToggle}
+        className={cn(
+          "text-xs flex items-center gap-1",
+          editing ? "btn-accent" : "btn-outline"
+        )}
+        aria-pressed={editing}
+        title={
+          editing
+            ? "סיימי עריכת באנרים — הגרירה תינעל"
+            : "ערכי באנרים — הפעלת גרירה"
+        }
+      >
+        {editing ? (
+          <>
+            <Pencil className="w-4 h-4" />
+            במצב עריכה — סגרי
+          </>
+        ) : (
+          <>
+            <Lock className="w-4 h-4" />
+            ערכי באנרים
+          </>
+        )}
+      </button>
     </div>
   );
 }

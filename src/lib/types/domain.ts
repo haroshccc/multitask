@@ -23,6 +23,7 @@ export type Project = Tables["projects"]["Row"];
 export type ProjectInsert = Tables["projects"]["Insert"];
 export type ProjectUpdate = Tables["projects"]["Update"];
 
+
 export type ProjectExpense = Tables["project_expenses"]["Row"];
 export type ProjectExpenseInsert = Tables["project_expenses"]["Insert"];
 
@@ -42,6 +43,8 @@ export type TaskDependency = Tables["task_dependencies"]["Row"];
 export type TimeEntry = Tables["time_entries"]["Row"];
 export type TaskAttachment = Tables["task_attachments"]["Row"];
 export type TaskCustomField = Tables["task_custom_fields"]["Row"];
+export type TaskCustomFieldInsert = Tables["task_custom_fields"]["Insert"];
+export type TaskCustomFieldUpdate = Tables["task_custom_fields"]["Update"];
 
 export type EventRow = Tables["events"]["Row"];
 export type EventInsert = Tables["events"]["Insert"];

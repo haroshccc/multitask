@@ -9,7 +9,23 @@ import {
   Loader2,
   Play,
   Square,
+  GripVertical,
 } from "lucide-react";
+import {
+  DndContext,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  closestCenter,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+  arrayMove,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import {
   useTasksByProject,
   useCreateTask,
@@ -22,20 +38,38 @@ import {
   useActiveTimer,
   useStartTimer,
   useStopTimer,
+  useReorderTasks,
+  useProjectCustomFields,
+  useCreateCustomField,
+  useDeleteCustomField,
 } from "@/lib/hooks";
-import type { Task, TimeEntry } from "@/lib/types/domain";
+import type {
+  Task,
+  TimeEntry,
+  TaskCustomField,
+  CustomFieldType,
+} from "@/lib/types/domain";
 
 interface TaskNode {
   task: Task;
   children: TaskNode[];
 }
 
-// Column template for the tasks grid — applied to both header and rows so
-// columns line up. RTL-readable in source order: expand · checkbox · title ·
-// hours · spare · urgency · timer · actual · notes · actions.
-const TASKS_GRID_COLS =
-  "24px 24px minmax(140px, 1fr) 60px 60px 56px 32px 60px 140px 60px";
-const TASKS_GRID_MIN_WIDTH = 640;
+// Column template — RTL-readable in source order: drag · expand · checkbox ·
+// title · hours · spare · urgency · timer · actual · notes · [N×dyn-cols] ·
+// actions. Dynamic columns are inserted between notes and actions.
+const FIXED_GRID_COLS =
+  "20px 20px 20px minmax(140px, 1fr) 60px 60px 56px 32px 60px 140px";
+const ACTIONS_COL = "72px";
+const DYN_COL_WIDTH = 110;
+const FIXED_GRID_MIN_WIDTH = 660;
+
+function buildGridCols(dynColCount: number): string {
+  const dyn = Array.from({ length: dynColCount }, () => `${DYN_COL_WIDTH}px`).join(
+    " "
+  );
+  return [FIXED_GRID_COLS, dyn, ACTIONS_COL].filter(Boolean).join(" ");
+}
 
 function buildTree(tasks: Task[]): TaskNode[] {
   const byParent = new Map<string | null, Task[]>();
@@ -85,11 +119,16 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
   const update = useUpdateTask();
   const complete = useCompleteTask();
   const del = useDeleteTask();
+  const reorder = useReorderTasks();
   const { data: activeTimer } = useActiveTimer();
   const startTimer = useStartTimer();
   const stopTimer = useStopTimer();
+  const { data: customFields = [] } = useProjectCustomFields(projectId);
+  const createField = useCreateCustomField();
+  const deleteField = useDeleteCustomField();
 
   const [search, setSearch] = useState("");
+  const [focusTaskId, setFocusTaskId] = useState<string | null>(null);
 
   const projectLists = useMemo(
     () => lists.filter((l) => l.project_id === projectId),
@@ -131,23 +170,112 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
   const handleAddTopLevel = async () => {
     if (!projectId) return;
     const listId = await ensureList();
-    await create.mutateAsync({
+    const newTask = await create.mutateAsync({
       task_list_id: listId,
-      title: "משימה חדשה",
+      title: "",
       parent_task_id: null,
       status: "todo",
     });
+    setFocusTaskId(newTask.id);
   };
 
   const handleAddSub = async (parent: Task) => {
     const listId = parent.task_list_id ?? (await ensureList());
-    await create.mutateAsync({
+    const newTask = await create.mutateAsync({
       task_list_id: listId,
-      title: "תת-משימה",
+      title: "",
       parent_task_id: parent.id,
       status: "todo",
     });
+    setFocusTaskId(newTask.id);
   };
+
+  // Enter on a row → create a sibling right after it (same parent, between
+  // the current row and its next sibling) and focus the new title.
+  const handleAddAfter = async (current: Task) => {
+    const listId = current.task_list_id ?? (await ensureList());
+    const siblings = tasks
+      .filter((t) => t.parent_task_id === current.parent_task_id)
+      .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+    const idx = siblings.findIndex((t) => t.id === current.id);
+    let nextSortOrder: number;
+    if (idx === -1 || idx === siblings.length - 1) {
+      nextSortOrder = (current.sort_order ?? 0) + 1000;
+    } else {
+      const a = current.sort_order ?? 0;
+      const b = siblings[idx + 1].sort_order ?? 0;
+      nextSortOrder = (a + b) / 2;
+    }
+    const newTask = await create.mutateAsync({
+      task_list_id: listId,
+      title: "",
+      parent_task_id: current.parent_task_id,
+      status: "todo",
+      sort_order: nextSortOrder,
+    });
+    setFocusTaskId(newTask.id);
+  };
+
+  // Tab → become a sub-task of the previous sibling.
+  const handleIndent = (current: Task) => {
+    const siblings = tasks
+      .filter((t) => t.parent_task_id === current.parent_task_id)
+      .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+    const idx = siblings.findIndex((t) => t.id === current.id);
+    if (idx <= 0) return; // need a previous sibling
+    const newParent = siblings[idx - 1];
+    update.mutate({
+      taskId: current.id,
+      patch: { parent_task_id: newParent.id },
+    });
+    setFocusTaskId(current.id);
+  };
+
+  // Shift+Tab → move out one level (parent's parent becomes parent).
+  const handleOutdent = (current: Task) => {
+    if (!current.parent_task_id) return;
+    const parent = tasks.find((t) => t.id === current.parent_task_id);
+    if (!parent) return;
+    update.mutate({
+      taskId: current.id,
+      patch: { parent_task_id: parent.parent_task_id ?? null },
+    });
+    setFocusTaskId(current.id);
+  };
+
+  // Drop → renumber sort_order on the affected top-level tasks. We bulk-update
+  // every node with a fresh evenly-spaced index so future inserts have room.
+  const handleReorderTopLevel = (newOrder: TaskNode[]) => {
+    const updates = newOrder.map((n, i) => ({
+      id: n.task.id,
+      sort_order: (i + 1) * 1000,
+    }));
+    reorder.mutate(updates);
+  };
+
+  const handleAddField = (type: CustomFieldType, label: string) => {
+    if (!projectId) return;
+    const fieldKey = `f_${Date.now().toString(36)}_${Math.random()
+      .toString(36)
+      .slice(2, 6)}`;
+    createField.mutate({
+      project_id: projectId,
+      field_key: fieldKey,
+      field_label: label,
+      field_type: type,
+      is_visible: true,
+    });
+  };
+
+  const handleDeleteField = (fieldId: string) => {
+    deleteField.mutate(fieldId);
+  };
+
+  const gridCols = useMemo(
+    () => buildGridCols(customFields.length),
+    [customFields.length]
+  );
+  const gridMinWidth = FIXED_GRID_MIN_WIDTH + customFields.length * DYN_COL_WIDTH;
 
   const isPending = create.isPending || createList.isPending;
 
@@ -195,12 +323,21 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
         ) : tasks.length === 0 ? (
           <EmptyState onAdd={handleAddTopLevel} pending={isPending} />
         ) : (
-          <div style={{ minWidth: TASKS_GRID_MIN_WIDTH }}>
-            <TableHeader />
-            <TaskList
+          <div style={{ minWidth: gridMinWidth }}>
+            <TableHeader
+              gridCols={gridCols}
+              customFields={customFields}
+              onAddField={handleAddField}
+              onDeleteField={handleDeleteField}
+            />
+            <SortableTaskList
               nodes={filteredOpen}
-              level={0}
               activeTimer={activeTimer ?? null}
+              focusTaskId={focusTaskId}
+              onFocusHandled={() => setFocusTaskId(null)}
+              customFields={customFields}
+              gridCols={gridCols}
+              onReorder={handleReorderTopLevel}
               onUpdate={(id, patch) =>
                 update.mutate({ taskId: id, patch })
               }
@@ -213,11 +350,18 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
                 if (isCurrentlyActive) stopTimer.mutate();
                 else startTimer.mutate({ taskId });
               }}
+              onAddAfter={handleAddAfter}
+              onIndent={handleIndent}
+              onOutdent={handleOutdent}
             />
             {filteredDone.length > 0 && (
               <DoneSection
                 nodes={filteredDone}
                 activeTimer={activeTimer ?? null}
+                focusTaskId={focusTaskId}
+                onFocusHandled={() => setFocusTaskId(null)}
+                customFields={customFields}
+                gridCols={gridCols}
                 onUpdate={(id, patch) =>
                   update.mutate({ taskId: id, patch })
                 }
@@ -230,6 +374,9 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
                   if (isCurrentlyActive) stopTimer.mutate();
                   else startTimer.mutate({ taskId });
                 }}
+                onAddAfter={handleAddAfter}
+                onIndent={handleIndent}
+                onOutdent={handleOutdent}
               />
             )}
           </div>
@@ -241,12 +388,23 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
 
 // ─── Table header ───────────────────────────────────────────────────────────
 
-function TableHeader() {
+function TableHeader({
+  gridCols,
+  customFields,
+  onAddField,
+  onDeleteField,
+}: {
+  gridCols: string;
+  customFields: TaskCustomField[];
+  onAddField: (type: CustomFieldType, label: string) => void;
+  onDeleteField: (fieldId: string) => void;
+}) {
   return (
     <div
       className="grid items-center gap-1 px-1.5 py-1.5 sticky top-0 bg-ink-50/80 backdrop-blur z-10 text-[10px] font-semibold uppercase tracking-wider text-ink-500 border-b border-ink-200"
-      style={{ gridTemplateColumns: TASKS_GRID_COLS }}
+      style={{ gridTemplateColumns: gridCols }}
     >
+      <span></span>
       <span></span>
       <span></span>
       <span>משימה</span>
@@ -256,7 +414,121 @@ function TableHeader() {
       <span className="text-center">סטופר</span>
       <span className="text-end">בפועל</span>
       <span>הערות</span>
-      <span></span>
+      {customFields.map((f) => (
+        <DynColumnHeader
+          key={f.id}
+          field={f}
+          onDelete={() => onDeleteField(f.id)}
+        />
+      ))}
+      <AddColumnButton onAdd={onAddField} />
+    </div>
+  );
+}
+
+function DynColumnHeader({
+  field,
+  onDelete,
+}: {
+  field: TaskCustomField;
+  onDelete: () => void;
+}) {
+  return (
+    <span className="group/dyn flex items-center justify-between gap-1 px-1 truncate">
+      <span className="truncate" title={field.field_label}>
+        {field.field_label}
+      </span>
+      <button
+        type="button"
+        onClick={() => {
+          if (confirm(`למחוק את עמודת "${field.field_label}"?`)) onDelete();
+        }}
+        className="opacity-0 group-hover/dyn:opacity-100 text-ink-400 hover:text-danger transition-opacity"
+        aria-label="מחקי עמודה"
+        title="מחקי עמודה"
+      >
+        <Trash2 className="w-2.5 h-2.5" />
+      </button>
+    </span>
+  );
+}
+
+function AddColumnButton({
+  onAdd,
+}: {
+  onAdd: (type: CustomFieldType, label: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [type, setType] = useState<CustomFieldType>("text");
+  const [label, setLabel] = useState("");
+
+  const submit = () => {
+    const v = label.trim();
+    if (!v) return;
+    onAdd(type, v);
+    setLabel("");
+    setOpen(false);
+  };
+
+  return (
+    <div className="relative flex justify-end">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="text-ink-400 hover:text-primary-600 p-1 rounded hover:bg-primary-50"
+        title="הוסיפי עמודה"
+        aria-label="הוסיפי עמודה"
+      >
+        <Plus className="w-3.5 h-3.5" />
+      </button>
+      {open && (
+        <>
+          <div
+            className="fixed inset-0 z-20"
+            onClick={() => setOpen(false)}
+          />
+          <div className="absolute end-0 top-full mt-1 z-30 bg-white border border-ink-200 rounded-xl shadow-lift p-3 w-56 space-y-2 normal-case font-normal tracking-normal text-ink-900">
+            <div>
+              <label className="eyebrow mb-1 block text-[10px]">סוג עמודה</label>
+              <select
+                value={type}
+                onChange={(e) => setType(e.target.value as CustomFieldType)}
+                className="field py-1 text-xs"
+              >
+                <option value="text">טקסט</option>
+                <option value="number">מספר</option>
+                <option value="date">תאריך</option>
+                <option value="url">קישור</option>
+                <option value="checkbox">תיבת סימון</option>
+                <option value="select">בחירה</option>
+                <option value="stars">דירוג</option>
+              </select>
+            </div>
+            <div>
+              <label className="eyebrow mb-1 block text-[10px]">שם</label>
+              <input
+                value={label}
+                onChange={(e) => setLabel(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") submit();
+                  if (e.key === "Escape") setOpen(false);
+                }}
+                placeholder="למשל: ספרינט"
+                className="field py-1 text-xs"
+                autoFocus
+              />
+            </div>
+            <button
+              type="button"
+              onClick={submit}
+              disabled={!label.trim()}
+              className="btn-accent text-xs w-full disabled:opacity-50"
+            >
+              הוסיפי
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -269,18 +541,29 @@ interface RowHandlers {
   onDelete: (id: string) => void;
   onAddSub: (parent: Task) => void;
   onToggleTimer: (taskId: string, isCurrentlyActive: boolean) => void;
+  onAddAfter: (current: Task) => void;
+  onIndent: (current: Task) => void;
+  onOutdent: (current: Task) => void;
 }
 
 interface TaskListProps {
   nodes: TaskNode[];
   level: number;
   activeTimer: TimeEntry | null;
+  focusTaskId: string | null;
+  onFocusHandled: () => void;
+  customFields: TaskCustomField[];
+  gridCols: string;
 }
 
 function TaskList({
   nodes,
   level,
   activeTimer,
+  focusTaskId,
+  onFocusHandled,
+  customFields,
+  gridCols,
   ...handlers
 }: TaskListProps & RowHandlers) {
   if (nodes.length === 0) return null;
@@ -292,6 +575,10 @@ function TaskList({
           node={node}
           level={level}
           activeTimer={activeTimer}
+          focusTaskId={focusTaskId}
+          onFocusHandled={onFocusHandled}
+          customFields={customFields}
+          gridCols={gridCols}
           {...handlers}
         />
       ))}
@@ -299,12 +586,145 @@ function TaskList({
   );
 }
 
+/**
+ * Top-level list with row drag-to-reorder. Sub-tasks render in their normal
+ * order (no drag) — reordering siblings within a parent is enough for now.
+ */
+function SortableTaskList({
+  nodes,
+  activeTimer,
+  focusTaskId,
+  onFocusHandled,
+  customFields,
+  gridCols,
+  onReorder,
+  ...handlers
+}: {
+  nodes: TaskNode[];
+  activeTimer: TimeEntry | null;
+  focusTaskId: string | null;
+  onFocusHandled: () => void;
+  customFields: TaskCustomField[];
+  gridCols: string;
+  onReorder: (newOrder: TaskNode[]) => void;
+} & RowHandlers) {
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } })
+  );
+  const ids = nodes.map((n) => n.task.id);
+  const handleDragEnd = (e: DragEndEvent) => {
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    const fromIdx = ids.indexOf(active.id as string);
+    const toIdx = ids.indexOf(over.id as string);
+    if (fromIdx === -1 || toIdx === -1) return;
+    onReorder(arrayMove(nodes, fromIdx, toIdx));
+  };
+
+  if (nodes.length === 0) return null;
+
+  return (
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragEnd={handleDragEnd}
+    >
+      <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+        <ul>
+          {nodes.map((node) => (
+            <SortableTaskItem
+              key={node.task.id}
+              node={node}
+              activeTimer={activeTimer}
+              focusTaskId={focusTaskId}
+              onFocusHandled={onFocusHandled}
+              customFields={customFields}
+              gridCols={gridCols}
+              {...handlers}
+            />
+          ))}
+        </ul>
+      </SortableContext>
+    </DndContext>
+  );
+}
+
+function SortableTaskItem({
+  node,
+  activeTimer,
+  focusTaskId,
+  onFocusHandled,
+  customFields,
+  gridCols,
+  ...handlers
+}: {
+  node: TaskNode;
+  activeTimer: TimeEntry | null;
+  focusTaskId: string | null;
+  onFocusHandled: () => void;
+  customFields: TaskCustomField[];
+  gridCols: string;
+} & RowHandlers) {
+  const sortable = useSortable({ id: node.task.id });
+  const [expanded, setExpanded] = useState(true);
+  const hasChildren = node.children.length > 0;
+
+  const style = {
+    transform: CSS.Transform.toString(sortable.transform),
+    transition: sortable.transition,
+    opacity: sortable.isDragging ? 0.4 : 1,
+  };
+
+  return (
+    <li ref={sortable.setNodeRef} style={style} {...sortable.attributes}>
+      <TaskRow
+        task={node.task}
+        level={0}
+        expanded={expanded}
+        hasChildren={hasChildren}
+        activeTimer={activeTimer}
+        shouldFocus={focusTaskId === node.task.id}
+        onFocusHandled={onFocusHandled}
+        customFields={customFields}
+        gridCols={gridCols}
+        onToggleExpand={() => setExpanded((v) => !v)}
+        dragHandleProps={sortable.listeners}
+        {...handlers}
+      />
+      {hasChildren && expanded && (
+        <TaskList
+          nodes={node.children}
+          level={1}
+          activeTimer={activeTimer}
+          focusTaskId={focusTaskId}
+          onFocusHandled={onFocusHandled}
+          customFields={customFields}
+          gridCols={gridCols}
+          {...handlers}
+        />
+      )}
+    </li>
+  );
+}
+
 function TaskItem({
   node,
   level,
   activeTimer,
+  focusTaskId,
+  onFocusHandled,
+  customFields,
+  gridCols,
   ...handlers
-}: { node: TaskNode; level: number; activeTimer: TimeEntry | null } & RowHandlers) {
+}: {
+  node: TaskNode;
+  level: number;
+  activeTimer: TimeEntry | null;
+  focusTaskId: string | null;
+  onFocusHandled: () => void;
+  customFields: TaskCustomField[];
+  gridCols: string;
+} & RowHandlers) {
   const [expanded, setExpanded] = useState(true);
   const hasChildren = node.children.length > 0;
 
@@ -316,6 +736,10 @@ function TaskItem({
         expanded={expanded}
         hasChildren={hasChildren}
         activeTimer={activeTimer}
+        shouldFocus={focusTaskId === node.task.id}
+        onFocusHandled={onFocusHandled}
+        customFields={customFields}
+        gridCols={gridCols}
         onToggleExpand={() => setExpanded((v) => !v)}
         {...handlers}
       />
@@ -324,6 +748,10 @@ function TaskItem({
           nodes={node.children}
           level={level + 1}
           activeTimer={activeTimer}
+          focusTaskId={focusTaskId}
+          onFocusHandled={onFocusHandled}
+          customFields={customFields}
+          gridCols={gridCols}
           {...handlers}
         />
       )}
@@ -337,19 +765,32 @@ function TaskRow({
   expanded,
   hasChildren,
   activeTimer,
+  shouldFocus,
+  onFocusHandled,
   onToggleExpand,
+  dragHandleProps,
+  customFields,
+  gridCols,
   onUpdate,
   onComplete,
   onDelete,
   onAddSub,
   onToggleTimer,
+  onAddAfter,
+  onIndent,
+  onOutdent,
 }: {
   task: Task;
   level: number;
   expanded: boolean;
   hasChildren: boolean;
   activeTimer: TimeEntry | null;
+  shouldFocus: boolean;
+  onFocusHandled: () => void;
   onToggleExpand: () => void;
+  dragHandleProps?: React.HTMLAttributes<HTMLElement>;
+  customFields: TaskCustomField[];
+  gridCols: string;
 } & RowHandlers) {
   const isDone = task.status === "done" || !!task.completed_at;
   const isTimerActive = activeTimer?.task_id === task.id;
@@ -359,8 +800,22 @@ function TaskRow({
   return (
     <div
       className="group/row grid items-center gap-1 py-1 hover:bg-ink-50 px-1.5 transition-colors border-b border-ink-100/80"
-      style={{ gridTemplateColumns: TASKS_GRID_COLS }}
+      style={{ gridTemplateColumns: gridCols }}
     >
+      {/* Drag handle (top-level only — sub-tasks get an empty cell) */}
+      <button
+        type="button"
+        className={
+          "w-5 h-5 flex items-center justify-center text-ink-300 hover:text-ink-700 " +
+          (dragHandleProps ? "cursor-grab active:cursor-grabbing" : "invisible")
+        }
+        aria-label="גררי לשינוי סדר"
+        title="גררי לשינוי סדר"
+        {...(dragHandleProps ?? {})}
+      >
+        <GripVertical className="w-3 h-3" />
+      </button>
+
       {/* Expand chevron / spacer */}
       <button
         type="button"
@@ -401,7 +856,12 @@ function TaskRow({
         <EditableTitle
           value={task.title}
           done={isDone}
+          shouldFocus={shouldFocus}
+          onFocusHandled={onFocusHandled}
           onSave={(v) => onUpdate(task.id, { title: v })}
+          onEnter={() => onAddAfter(task)}
+          onTab={() => onIndent(task)}
+          onShiftTab={() => onOutdent(task)}
         />
       </div>
 
@@ -468,6 +928,26 @@ function TaskRow({
         onSave={(v) => onUpdate(task.id, { notes: v || null })}
       />
 
+      {/* Dynamic columns */}
+      {customFields.map((f) => (
+        <DynCell
+          key={f.id}
+          field={f}
+          value={readCustomField(task, f.field_key)}
+          onSave={(v) =>
+            onUpdate(task.id, {
+              // custom_fields is jsonb — TypeScript's generated Json type
+              // tightly types it; we cast our looser record back here.
+              custom_fields: writeCustomField(
+                task,
+                f.field_key,
+                v
+              ) as Task["custom_fields"],
+            })
+          }
+        />
+      ))}
+
       {/* Actions (visible on hover) */}
       <div className="flex items-center justify-end gap-0.5 opacity-0 group-hover/row:opacity-100 transition-opacity">
         <button
@@ -492,6 +972,245 @@ function TaskRow({
         </button>
       </div>
     </div>
+  );
+}
+
+// ─── Dynamic column cell ────────────────────────────────────────────────────
+
+function readCustomField(task: Task, key: string): unknown {
+  const cf = task.custom_fields as Record<string, unknown> | null;
+  if (!cf || typeof cf !== "object") return null;
+  return cf[key] ?? null;
+}
+
+function writeCustomField(
+  task: Task,
+  key: string,
+  value: unknown
+): Record<string, unknown> {
+  const cf = (task.custom_fields as Record<string, unknown> | null) ?? {};
+  return { ...cf, [key]: value };
+}
+
+function DynCell({
+  field,
+  value,
+  onSave,
+}: {
+  field: TaskCustomField;
+  value: unknown;
+  onSave: (v: unknown) => void;
+}) {
+  switch (field.field_type) {
+    case "text":
+      return <DynTextCell value={(value as string) ?? ""} onSave={onSave} />;
+    case "number":
+      return <DynNumberCell value={value as number | null} onSave={onSave} />;
+    case "date":
+      return <DynDateCell value={(value as string) ?? ""} onSave={onSave} />;
+    case "url":
+      return <DynUrlCell value={(value as string) ?? ""} onSave={onSave} />;
+    case "checkbox":
+      return <DynCheckboxCell value={!!value} onSave={onSave} />;
+    case "stars":
+      return <DynStarsCell value={(value as number) ?? 0} onSave={onSave} />;
+    case "select": {
+      const opts =
+        (field.options as { value: string; label: string }[] | null) ?? [];
+      return (
+        <DynSelectCell
+          value={(value as string) ?? ""}
+          options={opts}
+          onSave={onSave}
+        />
+      );
+    }
+    default:
+      return (
+        <span className="text-[10px] text-ink-300 truncate">
+          (לא נתמך)
+        </span>
+      );
+  }
+}
+
+function DynTextCell({
+  value,
+  onSave,
+}: {
+  value: string;
+  onSave: (v: string) => void;
+}) {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => setDraft(value), [value]);
+  return (
+    <input
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => draft !== value && onSave(draft)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+      }}
+      className="w-full bg-transparent border-0 outline-none text-[11px] text-ink-700 px-1 py-0.5 rounded hover:bg-white focus:bg-white focus:ring-1 focus:ring-primary-500/40"
+    />
+  );
+}
+
+function DynNumberCell({
+  value,
+  onSave,
+}: {
+  value: number | null;
+  onSave: (v: number | null) => void;
+}) {
+  const [draft, setDraft] = useState(value?.toString() ?? "");
+  useEffect(() => setDraft(value?.toString() ?? ""), [value]);
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => {
+        if (draft === "") {
+          if (value !== null) onSave(null);
+          return;
+        }
+        const n = parseFloat(draft);
+        if (isFinite(n) && n !== value) onSave(n);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+      }}
+      className="w-full bg-transparent border-0 outline-none text-[11px] text-ink-700 tabular-nums text-end px-1 py-0.5 rounded hover:bg-white focus:bg-white focus:ring-1 focus:ring-primary-500/40"
+    />
+  );
+}
+
+function DynDateCell({
+  value,
+  onSave,
+}: {
+  value: string;
+  onSave: (v: string | null) => void;
+}) {
+  return (
+    <input
+      type="date"
+      value={value}
+      onChange={(e) => onSave(e.target.value || null)}
+      className="w-full bg-transparent border-0 outline-none text-[11px] text-ink-700 px-1 py-0.5 rounded hover:bg-white focus:bg-white focus:ring-1 focus:ring-primary-500/40"
+    />
+  );
+}
+
+function DynUrlCell({
+  value,
+  onSave,
+}: {
+  value: string;
+  onSave: (v: string | null) => void;
+}) {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => setDraft(value), [value]);
+  const isValid = !draft || /^https?:\/\//.test(draft);
+  return (
+    <div className="flex items-center gap-0.5 min-w-0">
+      <input
+        type="url"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => draft !== value && onSave(draft || null)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+        }}
+        placeholder="https://"
+        className="w-full min-w-0 bg-transparent border-0 outline-none text-[11px] text-ink-700 px-1 py-0.5 rounded hover:bg-white focus:bg-white focus:ring-1 focus:ring-primary-500/40 truncate"
+      />
+      {value && isValid && (
+        <a
+          href={value}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="shrink-0 text-primary-600 hover:text-primary-700"
+          title="פתח בלשונית חדשה"
+        >
+          ↗
+        </a>
+      )}
+    </div>
+  );
+}
+
+function DynCheckboxCell({
+  value,
+  onSave,
+}: {
+  value: boolean;
+  onSave: (v: boolean) => void;
+}) {
+  return (
+    <div className="flex justify-center">
+      <input
+        type="checkbox"
+        checked={value}
+        onChange={(e) => onSave(e.target.checked)}
+        className="w-3.5 h-3.5"
+      />
+    </div>
+  );
+}
+
+function DynStarsCell({
+  value,
+  onSave,
+}: {
+  value: number;
+  onSave: (v: number) => void;
+}) {
+  return (
+    <div className="flex items-center justify-center gap-0.5">
+      {[1, 2, 3, 4, 5].map((n) => (
+        <button
+          key={n}
+          type="button"
+          onClick={() => onSave(value === n ? 0 : n)}
+          className="text-[12px] leading-none"
+          aria-label={`${n}/5`}
+        >
+          <span
+            className={n <= value ? "text-primary-500" : "text-ink-300"}
+          >
+            ★
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function DynSelectCell({
+  value,
+  options,
+  onSave,
+}: {
+  value: string;
+  options: { value: string; label: string }[];
+  onSave: (v: string | null) => void;
+}) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onSave(e.target.value || null)}
+      className="w-full bg-transparent border-0 outline-none text-[11px] text-ink-700 px-1 py-0.5 rounded hover:bg-white focus:bg-white focus:ring-1 focus:ring-primary-500/40"
+    >
+      <option value=""></option>
+      {options.map((o) => (
+        <option key={o.value} value={o.value}>
+          {o.label}
+        </option>
+      ))}
+    </select>
   );
 }
 
@@ -532,38 +1251,67 @@ function NotesCell({
 function EditableTitle({
   value,
   done,
+  shouldFocus,
+  onFocusHandled,
   onSave,
+  onEnter,
+  onTab,
+  onShiftTab,
 }: {
   value: string;
   done: boolean;
+  shouldFocus?: boolean;
+  onFocusHandled?: () => void;
   onSave: (v: string) => void;
+  onEnter?: () => void;
+  onTab?: () => void;
+  onShiftTab?: () => void;
 }) {
   const [draft, setDraft] = useState(value);
+  const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     setDraft(value);
   }, [value]);
 
+  // Auto-focus when the parent flagged this row for focus (just-created or
+  // just-indented). Calls back so the parent clears the flag.
+  useEffect(() => {
+    if (shouldFocus) {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+      onFocusHandled?.();
+    }
+  }, [shouldFocus, onFocusHandled]);
+
   const commit = () => {
     const trimmed = draft.trim();
-    if (!trimmed) {
-      setDraft(value);
-      return;
-    }
-    if (trimmed !== value) onSave(trimmed);
+    if (trimmed === value) return;
+    // allow empty title — fresh-created rows often start blank.
+    onSave(trimmed);
   };
 
   return (
     <input
+      ref={inputRef}
       value={draft}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={commit}
       onKeyDown={(e) => {
-        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-        if (e.key === "Escape") {
+        if (e.key === "Enter" && !e.shiftKey) {
+          e.preventDefault();
+          commit();
+          onEnter?.();
+        } else if (e.key === "Tab") {
+          e.preventDefault();
+          commit();
+          if (e.shiftKey) onShiftTab?.();
+          else onTab?.();
+        } else if (e.key === "Escape") {
           setDraft(value);
           (e.target as HTMLInputElement).blur();
         }
       }}
+      placeholder="משימה חדשה…"
       className={
         "w-full min-w-0 bg-transparent border-0 outline-none text-sm px-1.5 py-1 rounded hover:bg-white focus:bg-white focus:ring-1 focus:ring-primary-500/40 transition-colors " +
         (done ? "line-through text-ink-400" : "text-ink-900")
@@ -664,8 +1412,19 @@ function UrgencyBars({
 function DoneSection({
   nodes,
   activeTimer,
+  focusTaskId,
+  onFocusHandled,
+  customFields,
+  gridCols,
   ...handlers
-}: { nodes: TaskNode[]; activeTimer: TimeEntry | null } & RowHandlers) {
+}: {
+  nodes: TaskNode[];
+  activeTimer: TimeEntry | null;
+  focusTaskId: string | null;
+  onFocusHandled: () => void;
+  customFields: TaskCustomField[];
+  gridCols: string;
+} & RowHandlers) {
   const [open, setOpen] = useState(false);
   const count = useMemo(() => countTree(nodes), [nodes]);
   return (
@@ -687,6 +1446,10 @@ function DoneSection({
           nodes={nodes}
           level={0}
           activeTimer={activeTimer}
+          focusTaskId={focusTaskId}
+          onFocusHandled={onFocusHandled}
+          customFields={customFields}
+          gridCols={gridCols}
           {...handlers}
         />
       )}

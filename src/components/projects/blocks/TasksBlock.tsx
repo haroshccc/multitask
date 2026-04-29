@@ -29,6 +29,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { TimerLogPopup } from "@/components/projects/blocks/TimerLogPopup";
+import { pushUndo } from "@/lib/undo/store";
 import {
   useTasksByProject,
   useCreateTask,
@@ -325,14 +326,88 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
     setFocusTaskId(current.id);
   };
 
+  /**
+   * Wraps a field-update with undo/redo. Captures the previous values for the
+   * keys in `patch` and registers a reversible action with the global store —
+   * Ctrl+Z reverts, Ctrl+Y reapplies. Used for inline cell edits.
+   */
+  const handleTaskUpdate = (taskId: string, patch: Partial<Task>) => {
+    const before = tasks.find((t) => t.id === taskId);
+    if (!before) {
+      update.mutate({ taskId, patch });
+      return;
+    }
+    const oldPatch: Partial<Task> = {};
+    for (const key of Object.keys(patch) as (keyof Task)[]) {
+      // structuredClone keeps nested objects (e.g. custom_fields) independent.
+      const v = (before as Task)[key];
+      (oldPatch as Record<string, unknown>)[key] =
+        typeof v === "object" && v !== null
+          ? structuredClone(v)
+          : v;
+    }
+    update.mutate({ taskId, patch });
+    pushUndo({
+      description: "שינוי משימה",
+      undo: () => update.mutate({ taskId, patch: oldPatch }),
+      redo: () => update.mutate({ taskId, patch }),
+    });
+  };
+
+  const handleCompleteWithUndo = (taskId: string, completed: boolean) => {
+    complete.mutate({ taskId, completed });
+    pushUndo({
+      description: completed ? "סימון כהושלם" : "החזרה לפעיל",
+      undo: () => complete.mutate({ taskId, completed: !completed }),
+      redo: () => complete.mutate({ taskId, completed }),
+    });
+  };
+
+  const handleIndentWithUndo = (current: Task) => {
+    const beforeParent = current.parent_task_id;
+    handleIndent(current);
+    pushUndo({
+      description: "קינון משימה",
+      undo: () =>
+        update.mutate({
+          taskId: current.id,
+          patch: { parent_task_id: beforeParent },
+        }),
+      redo: () => handleIndent(current),
+    });
+  };
+
+  const handleOutdentWithUndo = (current: Task) => {
+    const beforeParent = current.parent_task_id;
+    handleOutdent(current);
+    pushUndo({
+      description: "יציאת משימה לרמה למעלה",
+      undo: () =>
+        update.mutate({
+          taskId: current.id,
+          patch: { parent_task_id: beforeParent },
+        }),
+      redo: () => handleOutdent(current),
+    });
+  };
+
   // Drop → renumber sort_order on the affected top-level tasks. We bulk-update
   // every node with a fresh evenly-spaced index so future inserts have room.
   const handleReorderTopLevel = (newOrder: TaskNode[]) => {
-    const updates = newOrder.map((n, i) => ({
+    const before = newOrder.map((n) => ({
+      id: n.task.id,
+      sort_order: n.task.sort_order ?? 0,
+    }));
+    const after = newOrder.map((n, i) => ({
       id: n.task.id,
       sort_order: (i + 1) * 1000,
     }));
-    reorder.mutate(updates);
+    reorder.mutate(after);
+    pushUndo({
+      description: "שינוי סדר משימות",
+      undo: () => reorder.mutate(before),
+      redo: () => reorder.mutate(after),
+    });
   };
 
   const handleAddField = (type: CustomFieldType, label: string) => {
@@ -431,12 +506,8 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
               customFields={customFields}
               gridCols={gridCols}
               onReorder={handleReorderTopLevel}
-              onUpdate={(id, patch) =>
-                update.mutate({ taskId: id, patch })
-              }
-              onComplete={(id, done) =>
-                complete.mutate({ taskId: id, completed: done })
-              }
+              onUpdate={handleTaskUpdate}
+              onComplete={handleCompleteWithUndo}
               onDelete={(id) => del.mutate(id)}
               onAddSub={handleAddSub}
               onToggleTimer={(taskId, isCurrentlyActive) => {
@@ -445,8 +516,8 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
               }}
               onOpenLog={(taskId) => setLogTaskId(taskId)}
               onAddAfter={handleAddAfter}
-              onIndent={handleIndent}
-              onOutdent={handleOutdent}
+              onIndent={handleIndentWithUndo}
+              onOutdent={handleOutdentWithUndo}
             />
             {filteredDone.length > 0 && (
               <DoneSection
@@ -456,12 +527,8 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
                 onFocusHandled={() => setFocusTaskId(null)}
                 customFields={customFields}
                 gridCols={gridCols}
-                onUpdate={(id, patch) =>
-                  update.mutate({ taskId: id, patch })
-                }
-                onComplete={(id, doneVal) =>
-                  complete.mutate({ taskId: id, completed: doneVal })
-                }
+                onUpdate={handleTaskUpdate}
+                onComplete={handleCompleteWithUndo}
                 onDelete={(id) => del.mutate(id)}
                 onAddSub={handleAddSub}
                 onToggleTimer={(taskId, isCurrentlyActive) => {
@@ -470,8 +537,8 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
                 }}
                 onOpenLog={(taskId) => setLogTaskId(taskId)}
                 onAddAfter={handleAddAfter}
-                onIndent={handleIndent}
-                onOutdent={handleOutdent}
+                onIndent={handleIndentWithUndo}
+                onOutdent={handleOutdentWithUndo}
               />
             )}
           </div>

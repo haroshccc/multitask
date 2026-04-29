@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useRef } from "react";
+import { useMemo, useState, useEffect, useRef, Fragment } from "react";
 import {
   Check,
   Plus,
@@ -78,19 +78,119 @@ interface TaskNode {
 }
 
 // Column template — RTL-readable in source order: drag · expand · checkbox ·
-// title · hours · spare · urgency · timer · actual · notes · [N×dyn-cols] ·
-// actions. Dynamic columns are inserted between notes and actions.
-const FIXED_GRID_COLS =
-  "20px 20px 20px minmax(140px, 1fr) 60px 60px 56px 32px 60px 140px";
+// Fixed columns are configurable per-project: the user can rename them
+// (project.column_labels) AND reorder them (project.column_order). The 3
+// control columns at the start (drag · expand · checkbox) and the actions
+// column at the end stay in place — they're chrome, not data.
+type FixedColumnKey =
+  | "title"
+  | "estimated_hours"
+  | "spare_hours"
+  | "urgency"
+  | "timer"
+  | "actual_seconds"
+  | "notes";
+
+const DEFAULT_FIXED_ORDER: FixedColumnKey[] = [
+  "title",
+  "estimated_hours",
+  "spare_hours",
+  "urgency",
+  "timer",
+  "actual_seconds",
+  "notes",
+];
+
+const FIXED_COLUMN_WIDTHS: Record<FixedColumnKey, string> = {
+  title: "minmax(140px, 1fr)",
+  estimated_hours: "60px",
+  spare_hours: "60px",
+  urgency: "56px",
+  timer: "32px",
+  actual_seconds: "60px",
+  notes: "140px",
+};
+
+const FIXED_COLUMN_DEFAULT_LABELS: Record<FixedColumnKey, string> = {
+  title: "משימה",
+  estimated_hours: "שעות",
+  spare_hours: "ספייר",
+  urgency: "דחיפות",
+  timer: "סטופר",
+  actual_seconds: "בפועל",
+  notes: "הערות",
+};
+
+const FIXED_COLUMN_ALIGN: Record<FixedColumnKey, "start" | "end" | "center"> = {
+  title: "start",
+  estimated_hours: "end",
+  spare_hours: "end",
+  urgency: "center",
+  timer: "center",
+  actual_seconds: "end",
+  notes: "start",
+};
+
+const FIXED_COLUMN_SORTABLE: Record<FixedColumnKey, boolean> = {
+  title: true,
+  estimated_hours: true,
+  spare_hours: true,
+  urgency: true,
+  timer: false,
+  actual_seconds: true,
+  notes: false,
+};
+
+const SORT_KEY_OF_FIXED: Record<FixedColumnKey, string | null> = {
+  title: "title",
+  estimated_hours: "estimated_hours",
+  spare_hours: "spare_hours",
+  urgency: "urgency",
+  timer: null,
+  actual_seconds: "actual_seconds",
+  notes: null,
+};
+
+const CONTROL_COLS = "20px 20px 20px"; // drag · expand · checkbox
 const ACTIONS_COL = "72px";
 const DYN_COL_WIDTH = 110;
-const FIXED_GRID_MIN_WIDTH = 660;
+const CONTROL_AND_ACTIONS_WIDTH = 60 + 72; // approx baseline minus content
 
-function buildGridCols(dynColCount: number): string {
-  const dyn = Array.from({ length: dynColCount }, () => `${DYN_COL_WIDTH}px`).join(
-    " "
+function buildGridCols(
+  orderedFixedKeys: FixedColumnKey[],
+  dynColCount: number
+): string {
+  const fixed = orderedFixedKeys.map((k) => FIXED_COLUMN_WIDTHS[k]).join(" ");
+  const dyn = Array.from(
+    { length: dynColCount },
+    () => `${DYN_COL_WIDTH}px`
+  ).join(" ");
+  return [CONTROL_COLS, fixed, dyn, ACTIONS_COL].filter(Boolean).join(" ");
+}
+
+function buildGridMinWidth(
+  orderedFixedKeys: FixedColumnKey[],
+  dynColCount: number
+): number {
+  // Sum widths roughly: title contributes ~200, others their fixed pixel.
+  const fixedTotal = orderedFixedKeys.reduce((sum, k) => {
+    const w = FIXED_COLUMN_WIDTHS[k];
+    if (w.includes("minmax")) return sum + 200;
+    return sum + parseInt(w, 10);
+  }, 0);
+  return CONTROL_AND_ACTIONS_WIDTH + fixedTotal + dynColCount * DYN_COL_WIDTH;
+}
+
+function normalizeFixedOrder(raw: unknown): FixedColumnKey[] {
+  if (!Array.isArray(raw) || raw.length === 0) return DEFAULT_FIXED_ORDER;
+  const valid = raw.filter((k): k is FixedColumnKey =>
+    DEFAULT_FIXED_ORDER.includes(k as FixedColumnKey)
   );
-  return [FIXED_GRID_COLS, dyn, ACTIONS_COL].filter(Boolean).join(" ");
+  // Append any default keys missing from the saved order so a future column
+  // addition is still discoverable.
+  const present = new Set(valid);
+  for (const k of DEFAULT_FIXED_ORDER) if (!present.has(k)) valid.push(k);
+  return valid;
 }
 
 function buildTree(tasks: Task[]): TaskNode[] {
@@ -501,11 +601,24 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
     });
   };
 
-  const gridCols = useMemo(
-    () => buildGridCols(customFields.length),
-    [customFields.length]
+  const orderedFixedKeys = useMemo(
+    () => normalizeFixedOrder(project?.column_order),
+    [project?.column_order]
   );
-  const gridMinWidth = FIXED_GRID_MIN_WIDTH + customFields.length * DYN_COL_WIDTH;
+
+  const gridCols = useMemo(
+    () => buildGridCols(orderedFixedKeys, customFields.length),
+    [orderedFixedKeys, customFields.length]
+  );
+  const gridMinWidth = buildGridMinWidth(orderedFixedKeys, customFields.length);
+
+  const handleReorderFixed = (newOrder: FixedColumnKey[]) => {
+    if (!projectId) return;
+    updateProject.mutate({
+      projectId,
+      patch: { column_order: newOrder as unknown as Project["column_order"] },
+    });
+  };
 
   const isPending = create.isPending || createList.isPending;
 
@@ -568,10 +681,12 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
               gridCols={gridCols}
               customFields={customFields}
               fixedLabels={fixedLabels}
+              orderedFixedKeys={orderedFixedKeys}
               sortKey={sortKey}
               sortDir={sortDir}
               onSort={handleHeaderSort}
               onRenameFixed={handleRenameFixedColumn}
+              onReorderFixed={handleReorderFixed}
               onAddField={handleAddField}
               onDeleteField={handleDeleteField}
               onRenameField={handleRenameField}
@@ -585,6 +700,7 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
               onFocusHandled={() => setFocusTaskId(null)}
               customFields={customFields}
               gridCols={gridCols}
+              orderedFixedKeys={orderedFixedKeys}
               onReorder={handleReorderTopLevel}
               onUpdate={handleTaskUpdate}
               onComplete={handleCompleteWithUndo}
@@ -607,6 +723,7 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
                 onFocusHandled={() => setFocusTaskId(null)}
                 customFields={customFields}
                 gridCols={gridCols}
+                orderedFixedKeys={orderedFixedKeys}
                 onUpdate={handleTaskUpdate}
                 onComplete={handleCompleteWithUndo}
                 onDelete={(id) => del.mutate(id)}
@@ -634,10 +751,12 @@ function TableHeader({
   gridCols,
   customFields,
   fixedLabels,
+  orderedFixedKeys,
   sortKey,
   sortDir,
   onSort,
   onRenameFixed,
+  onReorderFixed,
   onAddField,
   onDeleteField,
   onRenameField,
@@ -647,10 +766,12 @@ function TableHeader({
   gridCols: string;
   customFields: TaskCustomField[];
   fixedLabels: Record<string, string>;
+  orderedFixedKeys: FixedColumnKey[];
   sortKey: string | null;
   sortDir: "asc" | "desc";
   onSort: (key: string) => void;
   onRenameFixed: (key: string, label: string) => void;
+  onReorderFixed: (newOrder: FixedColumnKey[]) => void;
   onAddField: (type: CustomFieldType, label: string) => void;
   onDeleteField: (fieldId: string) => void;
   onRenameField: (fieldId: string, label: string) => void;
@@ -684,27 +805,13 @@ function TableHeader({
       <ArrowDown className={cls} />
     );
   };
-  const renderFixed = (
-    defaultLabel: string,
-    key: string,
-    options: {
-      align?: "start" | "end" | "center";
-      sortable?: boolean;
-    } = {}
-  ) => {
-    const align = options.align ?? "start";
-    const label = fixedLabels[key] ?? defaultLabel;
-    return (
-      <FixedColumnHeader
-        label={label}
-        defaultLabel={defaultLabel}
-        align={align}
-        sortable={options.sortable ?? true}
-        sortArrow={arrow(key, align)}
-        onSort={options.sortable === false ? undefined : () => onSort(key)}
-        onRename={(v) => onRenameFixed(key, v)}
-      />
-    );
+  const handleFixedDragEnd = (e: DragEndEvent) => {
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    const fromIdx = orderedFixedKeys.indexOf(active.id as FixedColumnKey);
+    const toIdx = orderedFixedKeys.indexOf(over.id as FixedColumnKey);
+    if (fromIdx === -1 || toIdx === -1) return;
+    onReorderFixed(arrayMove(orderedFixedKeys, fromIdx, toIdx));
   };
   return (
     <div
@@ -714,13 +821,41 @@ function TableHeader({
       <span></span>
       <span></span>
       <span></span>
-      {renderFixed("משימה", "title", { align: "start" })}
-      {renderFixed("שעות", "estimated_hours", { align: "end" })}
-      {renderFixed("ספייר", "spare_hours", { align: "end" })}
-      {renderFixed("דחיפות", "urgency", { align: "center" })}
-      {renderFixed("סטופר", "timer", { align: "center", sortable: false })}
-      {renderFixed("בפועל", "actual_seconds", { align: "end" })}
-      {renderFixed("הערות", "notes", { align: "start", sortable: false })}
+      <DndContext
+        sensors={colDragSensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleFixedDragEnd}
+      >
+        <SortableContext
+          items={orderedFixedKeys}
+          strategy={horizontalListSortingStrategy}
+        >
+          {orderedFixedKeys.map((key) => {
+            const align = FIXED_COLUMN_ALIGN[key];
+            const defaultLabel = FIXED_COLUMN_DEFAULT_LABELS[key];
+            const label = fixedLabels[key] ?? defaultLabel;
+            const sortable = FIXED_COLUMN_SORTABLE[key];
+            const sortKeyOf = SORT_KEY_OF_FIXED[key];
+            return (
+              <SortableFixedHeader
+                key={key}
+                colKey={key}
+                label={label}
+                defaultLabel={defaultLabel}
+                align={align}
+                sortable={sortable}
+                sortArrow={
+                  sortKeyOf && sortKey === sortKeyOf ? arrow(sortKeyOf, align) : null
+                }
+                onSort={
+                  sortable && sortKeyOf ? () => onSort(sortKeyOf) : undefined
+                }
+                onRename={(v) => onRenameFixed(key, v)}
+              />
+            );
+          })}
+        </SortableContext>
+      </DndContext>
       <DndContext
         sensors={colDragSensors}
         collisionDetection={closestCenter}
@@ -747,6 +882,61 @@ function TableHeader({
 }
 
 /**
+ * Wraps `FixedColumnHeader` with @dnd-kit/useSortable so the user can drag the
+ * column to reorder it. Drag is disabled while editing the column label so
+ * the input doesn't compete with drag gestures.
+ */
+function SortableFixedHeader({
+  colKey,
+  label,
+  defaultLabel,
+  align,
+  sortable,
+  sortArrow,
+  onSort,
+  onRename,
+}: {
+  colKey: FixedColumnKey;
+  label: string;
+  defaultLabel: string;
+  align: "start" | "end" | "center";
+  sortable: boolean;
+  sortArrow: React.ReactNode;
+  onSort?: () => void;
+  onRename: (label: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const sortableHandle = useSortable({ id: colKey, disabled: editing });
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(sortableHandle.transform),
+    transition: sortableHandle.transition,
+    opacity: sortableHandle.isDragging ? 0.4 : 1,
+  };
+  return (
+    <span
+      ref={sortableHandle.setNodeRef}
+      style={style}
+      {...sortableHandle.attributes}
+      {...sortableHandle.listeners}
+      className="cursor-grab active:cursor-grabbing"
+    >
+      <FixedColumnHeader
+        label={label}
+        defaultLabel={defaultLabel}
+        align={align}
+        sortable={sortable}
+        sortArrow={sortArrow}
+        editing={editing}
+        onStartEdit={() => setEditing(true)}
+        onStopEdit={() => setEditing(false)}
+        onSort={onSort}
+        onRename={onRename}
+      />
+    </span>
+  );
+}
+
+/**
  * Fixed-column header: sortable on click (when `sortable=true`), renamable
  * on double-click. The user-supplied label persists on the project so the
  * project's vocabulary survives reloads.
@@ -757,6 +947,9 @@ function FixedColumnHeader({
   align,
   sortable,
   sortArrow,
+  editing,
+  onStartEdit,
+  onStopEdit,
   onSort,
   onRename,
 }: {
@@ -765,16 +958,18 @@ function FixedColumnHeader({
   align: "start" | "end" | "center";
   sortable: boolean;
   sortArrow: React.ReactNode;
+  editing: boolean;
+  onStartEdit: () => void;
+  onStopEdit: () => void;
   onSort?: () => void;
   onRename: (label: string) => void;
 }) {
-  const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(label);
   useEffect(() => setDraft(label), [label]);
 
   const commit = () => {
     const v = draft.trim();
-    setEditing(false);
+    onStopEdit();
     if (!v) {
       // Reverting to default = clearing the override.
       if (label !== defaultLabel) onRename("");
@@ -798,7 +993,7 @@ function FixedColumnHeader({
           if (e.key === "Enter") (e.target as HTMLInputElement).blur();
           if (e.key === "Escape") {
             setDraft(label);
-            setEditing(false);
+            onStopEdit();
           }
         }}
         placeholder={defaultLabel}
@@ -815,11 +1010,12 @@ function FixedColumnHeader({
       <button
         type="button"
         onClick={onSort}
-        onDoubleClick={() => setEditing(true)}
+        onDoubleClick={onStartEdit}
+        onPointerDown={(e) => e.stopPropagation()}
         className={
           "select-none hover:text-ink-900 transition-colors " + alignCls
         }
-        title={`${label} — קליק למיון, דאבל-קליק לשינוי שם`}
+        title={`${label} — קליק למיון, דאבל-קליק לשינוי שם, גרירה לסידור מחדש`}
       >
         {label}
         {sortArrow}
@@ -829,9 +1025,9 @@ function FixedColumnHeader({
 
   return (
     <span
-      onDoubleClick={() => setEditing(true)}
+      onDoubleClick={onStartEdit}
       className={"select-none cursor-text " + alignCls}
-      title="דאבל-קליק לשינוי שם"
+      title="דאבל-קליק לשינוי שם · גרירה לסידור מחדש"
     >
       {label}
     </span>
@@ -1050,6 +1246,7 @@ interface TaskListProps {
   onFocusHandled: () => void;
   customFields: TaskCustomField[];
   gridCols: string;
+  orderedFixedKeys: FixedColumnKey[];
 }
 
 function TaskList({
@@ -1060,6 +1257,7 @@ function TaskList({
   onFocusHandled,
   customFields,
   gridCols,
+  orderedFixedKeys,
   ...handlers
 }: TaskListProps & RowHandlers) {
   if (nodes.length === 0) return null;
@@ -1075,6 +1273,7 @@ function TaskList({
           onFocusHandled={onFocusHandled}
           customFields={customFields}
           gridCols={gridCols}
+          orderedFixedKeys={orderedFixedKeys}
           {...handlers}
         />
       ))}
@@ -1093,6 +1292,7 @@ function SortableTaskList({
   onFocusHandled,
   customFields,
   gridCols,
+  orderedFixedKeys,
   onReorder,
   ...handlers
 }: {
@@ -1102,6 +1302,7 @@ function SortableTaskList({
   onFocusHandled: () => void;
   customFields: TaskCustomField[];
   gridCols: string;
+  orderedFixedKeys: FixedColumnKey[];
   onReorder: (newOrder: TaskNode[]) => void;
 } & RowHandlers) {
   const sensors = useSensors(
@@ -1136,6 +1337,7 @@ function SortableTaskList({
               onFocusHandled={onFocusHandled}
               customFields={customFields}
               gridCols={gridCols}
+              orderedFixedKeys={orderedFixedKeys}
               {...handlers}
             />
           ))}
@@ -1152,6 +1354,7 @@ function SortableTaskItem({
   onFocusHandled,
   customFields,
   gridCols,
+  orderedFixedKeys,
   ...handlers
 }: {
   node: TaskNode;
@@ -1160,6 +1363,7 @@ function SortableTaskItem({
   onFocusHandled: () => void;
   customFields: TaskCustomField[];
   gridCols: string;
+  orderedFixedKeys: FixedColumnKey[];
 } & RowHandlers) {
   const sortable = useSortable({ id: node.task.id });
   const [expanded, setExpanded] = useState(true);
@@ -1183,6 +1387,7 @@ function SortableTaskItem({
         onFocusHandled={onFocusHandled}
         customFields={customFields}
         gridCols={gridCols}
+        orderedFixedKeys={orderedFixedKeys}
         onToggleExpand={() => setExpanded((v) => !v)}
         dragHandleProps={sortable.listeners}
         {...handlers}
@@ -1196,6 +1401,7 @@ function SortableTaskItem({
           onFocusHandled={onFocusHandled}
           customFields={customFields}
           gridCols={gridCols}
+          orderedFixedKeys={orderedFixedKeys}
           {...handlers}
         />
       )}
@@ -1211,6 +1417,7 @@ function TaskItem({
   onFocusHandled,
   customFields,
   gridCols,
+  orderedFixedKeys,
   ...handlers
 }: {
   node: TaskNode;
@@ -1220,6 +1427,7 @@ function TaskItem({
   onFocusHandled: () => void;
   customFields: TaskCustomField[];
   gridCols: string;
+  orderedFixedKeys: FixedColumnKey[];
 } & RowHandlers) {
   const [expanded, setExpanded] = useState(true);
   const hasChildren = node.children.length > 0;
@@ -1236,6 +1444,7 @@ function TaskItem({
         onFocusHandled={onFocusHandled}
         customFields={customFields}
         gridCols={gridCols}
+        orderedFixedKeys={orderedFixedKeys}
         onToggleExpand={() => setExpanded((v) => !v)}
         {...handlers}
       />
@@ -1248,6 +1457,7 @@ function TaskItem({
           onFocusHandled={onFocusHandled}
           customFields={customFields}
           gridCols={gridCols}
+          orderedFixedKeys={orderedFixedKeys}
           {...handlers}
         />
       )}
@@ -1267,6 +1477,7 @@ function TaskRow({
   dragHandleProps,
   customFields,
   gridCols,
+  orderedFixedKeys,
   onUpdate,
   onComplete,
   onDelete,
@@ -1288,11 +1499,112 @@ function TaskRow({
   dragHandleProps?: React.HTMLAttributes<HTMLElement>;
   customFields: TaskCustomField[];
   gridCols: string;
+  orderedFixedKeys: FixedColumnKey[];
 } & RowHandlers) {
   const isDone = task.status === "done" || !!task.completed_at;
   const isTimerActive = activeTimer?.task_id === task.id;
   const liveSeconds = useLiveActualSeconds(task, activeTimer);
   const indentPx = level * 16;
+
+  const renderFixedCell = (key: FixedColumnKey): React.ReactNode => {
+    switch (key) {
+      case "title":
+        return (
+          <div
+            className="min-w-0"
+            style={{ paddingInlineStart: `${indentPx}px` }}
+          >
+            <EditableTitle
+              value={task.title}
+              done={isDone}
+              shouldFocus={shouldFocus}
+              onFocusHandled={onFocusHandled}
+              onSave={(v) => onUpdate(task.id, { title: v })}
+              onEnter={() => onAddAfter(task)}
+              onTab={() => onIndent(task)}
+              onShiftTab={() => onOutdent(task)}
+            />
+          </div>
+        );
+      case "estimated_hours":
+        return (
+          <NumberCell
+            title="שעות"
+            value={task.estimated_hours}
+            suffix="ש"
+            onSave={(v) => onUpdate(task.id, { estimated_hours: v })}
+          />
+        );
+      case "spare_hours":
+        return (
+          <NumberCell
+            title="ספייר"
+            value={task.spare_hours}
+            suffix="ס"
+            onSave={(v) => onUpdate(task.id, { spare_hours: v })}
+          />
+        );
+      case "urgency":
+        return (
+          <div className="flex items-center justify-center">
+            <UrgencyBars
+              value={task.urgency ?? 0}
+              onChange={(v) => onUpdate(task.id, { urgency: v })}
+            />
+          </div>
+        );
+      case "timer":
+        return (
+          <div className="flex items-center justify-center">
+            <button
+              type="button"
+              onClick={() => onToggleTimer(task.id, isTimerActive)}
+              className={
+                "p-1 rounded transition-colors " +
+                (isTimerActive
+                  ? "bg-danger/10 text-danger animate-pulse"
+                  : "text-ink-400 hover:text-primary-600 hover:bg-primary-50")
+              }
+              title={isTimerActive ? "עצור סטופר" : "התחל סטופר"}
+              aria-label={isTimerActive ? "עצור סטופר" : "התחל סטופר"}
+            >
+              {isTimerActive ? (
+                <Square className="w-3 h-3" strokeWidth={3} />
+              ) : (
+                <Play className="w-3 h-3" />
+              )}
+            </button>
+          </div>
+        );
+      case "actual_seconds":
+        return (
+          <button
+            type="button"
+            onClick={() => onOpenLog(task.id)}
+            className={
+              "text-[10px] tabular-nums text-end px-1 py-0.5 rounded hover:bg-ink-100 transition-colors " +
+              (isTimerActive
+                ? "text-danger font-semibold"
+                : liveSeconds > 0
+                ? "text-ink-700 hover:text-ink-900"
+                : "text-ink-400 hover:text-ink-700")
+            }
+            title="היסטוריית סטופר"
+          >
+            {fmtHours(liveSeconds)}
+          </button>
+        );
+      case "notes":
+        return (
+          <NotesCell
+            value={task.notes ?? ""}
+            onSave={(v) => onUpdate(task.id, { notes: v || null })}
+          />
+        );
+      default:
+        return null;
+    }
+  };
 
   return (
     <div
@@ -1345,91 +1657,10 @@ function TaskRow({
         {isDone && <Check className="w-3 h-3" strokeWidth={3} />}
       </button>
 
-      {/* Title (editable, indented per level) */}
-      <div
-        className="min-w-0"
-        style={{ paddingInlineStart: `${indentPx}px` }}
-      >
-        <EditableTitle
-          value={task.title}
-          done={isDone}
-          shouldFocus={shouldFocus}
-          onFocusHandled={onFocusHandled}
-          onSave={(v) => onUpdate(task.id, { title: v })}
-          onEnter={() => onAddAfter(task)}
-          onTab={() => onIndent(task)}
-          onShiftTab={() => onOutdent(task)}
-        />
-      </div>
-
-      {/* Estimated hours */}
-      <NumberCell
-        title="שעות"
-        value={task.estimated_hours}
-        suffix="ש"
-        onSave={(v) => onUpdate(task.id, { estimated_hours: v })}
-      />
-
-      {/* Spare hours */}
-      <NumberCell
-        title="ספייר"
-        value={task.spare_hours}
-        suffix="ס"
-        onSave={(v) => onUpdate(task.id, { spare_hours: v })}
-      />
-
-      {/* Urgency bars */}
-      <div className="flex items-center justify-center">
-        <UrgencyBars
-          value={task.urgency ?? 0}
-          onChange={(v) => onUpdate(task.id, { urgency: v })}
-        />
-      </div>
-
-      {/* Timer toggle */}
-      <div className="flex items-center justify-center">
-        <button
-          type="button"
-          onClick={() => onToggleTimer(task.id, isTimerActive)}
-          className={
-            "p-1 rounded transition-colors " +
-            (isTimerActive
-              ? "bg-danger/10 text-danger animate-pulse"
-              : "text-ink-400 hover:text-primary-600 hover:bg-primary-50")
-          }
-          title={isTimerActive ? "עצור סטופר" : "התחל סטופר"}
-          aria-label={isTimerActive ? "עצור סטופר" : "התחל סטופר"}
-        >
-          {isTimerActive ? (
-            <Square className="w-3 h-3" strokeWidth={3} />
-          ) : (
-            <Play className="w-3 h-3" />
-          )}
-        </button>
-      </div>
-
-      {/* Actual seconds — click to open log popup (history of sessions) */}
-      <button
-        type="button"
-        onClick={() => onOpenLog(task.id)}
-        className={
-          "text-[10px] tabular-nums text-end px-1 py-0.5 rounded hover:bg-ink-100 transition-colors " +
-          (isTimerActive
-            ? "text-danger font-semibold"
-            : liveSeconds > 0
-            ? "text-ink-700 hover:text-ink-900"
-            : "text-ink-400 hover:text-ink-700")
-        }
-        title="היסטוריית סטופר"
-      >
-        {fmtHours(liveSeconds)}
-      </button>
-
-      {/* Notes (editable) */}
-      <NotesCell
-        value={task.notes ?? ""}
-        onSave={(v) => onUpdate(task.id, { notes: v || null })}
-      />
+      {/* Fixed cells in user-defined order */}
+      {orderedFixedKeys.map((key) => (
+        <Fragment key={key}>{renderFixedCell(key)}</Fragment>
+      ))}
 
       {/* Dynamic columns */}
       {customFields.map((f) => (
@@ -2395,6 +2626,7 @@ function DoneSection({
   onFocusHandled,
   customFields,
   gridCols,
+  orderedFixedKeys,
   ...handlers
 }: {
   nodes: TaskNode[];
@@ -2403,6 +2635,7 @@ function DoneSection({
   onFocusHandled: () => void;
   customFields: TaskCustomField[];
   gridCols: string;
+  orderedFixedKeys: FixedColumnKey[];
 } & RowHandlers) {
   const [open, setOpen] = useState(false);
   const count = useMemo(() => countTree(nodes), [nodes]);
@@ -2429,6 +2662,7 @@ function DoneSection({
           onFocusHandled={onFocusHandled}
           customFields={customFields}
           gridCols={gridCols}
+          orderedFixedKeys={orderedFixedKeys}
           {...handlers}
         />
       )}

@@ -3,11 +3,12 @@ import {
   Check,
   Plus,
   Trash2,
-  Star,
   ChevronDown,
   ChevronLeft,
   Search,
   Loader2,
+  Play,
+  Square,
 } from "lucide-react";
 import {
   useTasksByProject,
@@ -18,8 +19,11 @@ import {
   useTaskLists,
   useCreateTaskList,
   useProject,
+  useActiveTimer,
+  useStartTimer,
+  useStopTimer,
 } from "@/lib/hooks";
-import type { Task } from "@/lib/types/domain";
+import type { Task, TimeEntry } from "@/lib/types/domain";
 
 interface TaskNode {
   task: Task;
@@ -74,6 +78,9 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
   const update = useUpdateTask();
   const complete = useCompleteTask();
   const del = useDeleteTask();
+  const { data: activeTimer } = useActiveTimer();
+  const startTimer = useStartTimer();
+  const stopTimer = useStopTimer();
 
   const [search, setSearch] = useState("");
 
@@ -185,6 +192,7 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
             <TaskList
               nodes={filteredOpen}
               level={0}
+              activeTimer={activeTimer ?? null}
               onUpdate={(id, patch) =>
                 update.mutate({ taskId: id, patch })
               }
@@ -193,10 +201,15 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
               }
               onDelete={(id) => del.mutate(id)}
               onAddSub={handleAddSub}
+              onToggleTimer={(taskId, isCurrentlyActive) => {
+                if (isCurrentlyActive) stopTimer.mutate();
+                else startTimer.mutate({ taskId });
+              }}
             />
             {filteredDone.length > 0 && (
               <DoneSection
                 nodes={filteredDone}
+                activeTimer={activeTimer ?? null}
                 onUpdate={(id, patch) =>
                   update.mutate({ taskId: id, patch })
                 }
@@ -205,6 +218,10 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
                 }
                 onDelete={(id) => del.mutate(id)}
                 onAddSub={handleAddSub}
+                onToggleTimer={(taskId, isCurrentlyActive) => {
+                  if (isCurrentlyActive) stopTimer.mutate();
+                  else startTimer.mutate({ taskId });
+                }}
               />
             )}
           </>
@@ -221,18 +238,32 @@ interface RowHandlers {
   onComplete: (id: string, done: boolean) => void;
   onDelete: (id: string) => void;
   onAddSub: (parent: Task) => void;
+  onToggleTimer: (taskId: string, isCurrentlyActive: boolean) => void;
+}
+
+interface TaskListProps {
+  nodes: TaskNode[];
+  level: number;
+  activeTimer: TimeEntry | null;
 }
 
 function TaskList({
   nodes,
   level,
+  activeTimer,
   ...handlers
-}: { nodes: TaskNode[]; level: number } & RowHandlers) {
+}: TaskListProps & RowHandlers) {
   if (nodes.length === 0) return null;
   return (
     <ul className="divide-y divide-ink-200/60">
       {nodes.map((node) => (
-        <TaskItem key={node.task.id} node={node} level={level} {...handlers} />
+        <TaskItem
+          key={node.task.id}
+          node={node}
+          level={level}
+          activeTimer={activeTimer}
+          {...handlers}
+        />
       ))}
     </ul>
   );
@@ -241,8 +272,9 @@ function TaskList({
 function TaskItem({
   node,
   level,
+  activeTimer,
   ...handlers
-}: { node: TaskNode; level: number } & RowHandlers) {
+}: { node: TaskNode; level: number; activeTimer: TimeEntry | null } & RowHandlers) {
   const [expanded, setExpanded] = useState(true);
   const hasChildren = node.children.length > 0;
 
@@ -253,11 +285,17 @@ function TaskItem({
         level={level}
         expanded={expanded}
         hasChildren={hasChildren}
+        activeTimer={activeTimer}
         onToggleExpand={() => setExpanded((v) => !v)}
         {...handlers}
       />
       {hasChildren && expanded && (
-        <TaskList nodes={node.children} level={level + 1} {...handlers} />
+        <TaskList
+          nodes={node.children}
+          level={level + 1}
+          activeTimer={activeTimer}
+          {...handlers}
+        />
       )}
     </li>
   );
@@ -268,19 +306,24 @@ function TaskRow({
   level,
   expanded,
   hasChildren,
+  activeTimer,
   onToggleExpand,
   onUpdate,
   onComplete,
   onDelete,
   onAddSub,
+  onToggleTimer,
 }: {
   task: Task;
   level: number;
   expanded: boolean;
   hasChildren: boolean;
+  activeTimer: TimeEntry | null;
   onToggleExpand: () => void;
 } & RowHandlers) {
   const isDone = task.status === "done" || !!task.completed_at;
+  const isTimerActive = activeTimer?.task_id === task.id;
+  const liveSeconds = useLiveActualSeconds(task, activeTimer);
   const indentPx = level * 20;
 
   return (
@@ -343,18 +386,41 @@ function TaskRow({
         onSave={(v) => onUpdate(task.id, { spare_hours: v })}
       />
 
-      {/* Urgency stars */}
-      <UrgencyStars
+      {/* Urgency bars (3-level, click to cycle 0→1→2→3→0) */}
+      <UrgencyBars
         value={task.urgency ?? 0}
         onChange={(v) => onUpdate(task.id, { urgency: v })}
       />
 
-      {/* Actual seconds (read-only) */}
+      {/* Timer toggle */}
+      <button
+        type="button"
+        onClick={() => onToggleTimer(task.id, isTimerActive)}
+        className={
+          "p-1 rounded shrink-0 transition-colors " +
+          (isTimerActive
+            ? "bg-danger/10 text-danger animate-pulse"
+            : "text-ink-400 hover:text-primary-600 hover:bg-primary-50")
+        }
+        title={isTimerActive ? "עצור סטופר" : "התחל סטופר"}
+        aria-label={isTimerActive ? "עצור סטופר" : "התחל סטופר"}
+      >
+        {isTimerActive ? (
+          <Square className="w-3 h-3" strokeWidth={3} />
+        ) : (
+          <Play className="w-3 h-3" />
+        )}
+      </button>
+
+      {/* Actual seconds (live ticking when timer is active) */}
       <span
-        className="text-[10px] text-ink-400 tabular-nums w-12 text-end shrink-0"
+        className={
+          "text-[10px] tabular-nums w-12 text-end shrink-0 " +
+          (isTimerActive ? "text-danger font-semibold" : "text-ink-400")
+        }
         title="שעות בפועל"
       >
-        {fmtHours(task.actual_seconds)}
+        {fmtHours(liveSeconds)}
       </span>
 
       {/* Actions (visible on hover) */}
@@ -486,40 +552,36 @@ function NumberCell({
   );
 }
 
-function UrgencyStars({
+/**
+ * 3-bar urgency control matching the pattern in `TaskRow.tsx`. Click cycles
+ * 0→1→2→3→0; bars fill bottom-up.
+ */
+function UrgencyBars({
   value,
   onChange,
 }: {
   value: number;
   onChange: (v: number) => void;
 }) {
-  const [hover, setHover] = useState<number | null>(null);
-  const display = hover ?? value;
+  const filled = Math.min(3, Math.max(0, value));
   return (
-    <div
-      className="flex items-center gap-0.5 shrink-0"
-      onMouseLeave={() => setHover(null)}
+    <button
+      type="button"
+      onClick={() => onChange((filled + 1) % 4)}
+      aria-label={`דחיפות ${filled}/3`}
+      title={`דחיפות ${filled}/3 — לחיצה לשינוי`}
+      className="shrink-0 flex flex-col items-center justify-center gap-[2px] px-1 py-1 rounded-md hover:bg-ink-200 transition-colors"
     >
-      {[1, 2, 3, 4, 5].map((i) => (
-        <button
-          key={i}
-          type="button"
-          onClick={() => onChange(value === i ? 0 : i)}
-          onMouseEnter={() => setHover(i)}
-          className="p-0.5 transition-transform hover:scale-110"
-          aria-label={`דחיפות ${i}`}
-        >
-          <Star
-            className={
-              "w-3 h-3 " +
-              (i <= display
-                ? "fill-primary-500 text-primary-500"
-                : "text-ink-300")
-            }
-          />
-        </button>
+      {[3, 2, 1].map((n) => (
+        <span
+          key={n}
+          className={
+            "h-[2px] w-3 rounded-sm transition-colors " +
+            (n <= filled ? "bg-ink-900" : "bg-ink-200")
+          }
+        />
       ))}
-    </div>
+    </button>
   );
 }
 
@@ -527,8 +589,9 @@ function UrgencyStars({
 
 function DoneSection({
   nodes,
+  activeTimer,
   ...handlers
-}: { nodes: TaskNode[] } & RowHandlers) {
+}: { nodes: TaskNode[]; activeTimer: TimeEntry | null } & RowHandlers) {
   const [open, setOpen] = useState(false);
   const count = useMemo(() => countTree(nodes), [nodes]);
   return (
@@ -545,7 +608,14 @@ function DoneSection({
         )}
         הושלמו ({count})
       </button>
-      {open && <TaskList nodes={nodes} level={0} {...handlers} />}
+      {open && (
+        <TaskList
+          nodes={nodes}
+          level={0}
+          activeTimer={activeTimer}
+          {...handlers}
+        />
+      )}
     </div>
   );
 }
@@ -596,4 +666,30 @@ function fmtHours(seconds: number): string {
   const h = seconds / 3600;
   if (h < 1) return `${Math.round(h * 60)}ד'`;
   return `${h.toFixed(1)}ש`;
+}
+
+/**
+ * Returns task.actual_seconds + the live elapsed delta if a timer is currently
+ * running for this task. Re-renders every second only while the timer is
+ * active for this row (no global ticker overhead).
+ */
+function useLiveActualSeconds(
+  task: Task,
+  activeTimer: TimeEntry | null
+): number {
+  const isActive = activeTimer?.task_id === task.id;
+  const startedAt = isActive && activeTimer?.started_at
+    ? new Date(activeTimer.started_at).getTime()
+    : null;
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!isActive) return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [isActive]);
+
+  if (!isActive || !startedAt) return task.actual_seconds ?? 0;
+  const liveDelta = Math.max(0, Math.round((now - startedAt) / 1000));
+  return (task.actual_seconds ?? 0) + liveDelta;
 }

@@ -188,12 +188,14 @@
      and items at x=0 visually land at the END of the row. Forcing the grid
      container itself to LTR fixes the math (x=0 = visual left, x=cols = visual
      right). The widget content inside still inherits the page's RTL via an
-     explicit override on each item. */
+     explicit override on each item — !important so it beats anything RGL
+     might inline. The per-item wrapper also carries `dir="rtl"` (see
+     DashboardGrid.tsx) for belt-and-suspenders. */
   .react-grid-layout {
     direction: ltr;
   }
-  .react-grid-item {
-    direction: rtl;
+  .react-grid-layout > .react-grid-item {
+    direction: rtl !important;
   }
 }
 

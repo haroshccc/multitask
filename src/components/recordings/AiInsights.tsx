@@ -308,6 +308,18 @@ function AiTabButton({
   filled: boolean;
   onClick: () => void;
 }) {
+  // Underline rule (per design feedback):
+  //  - selected → yellow bar (overrides orange)
+  //  - filled but not selected → orange bar
+  //  - empty → no bar
+  // Counts as "filled" when a list section has items, OR when a text section
+  // has any non-blank content (handled by the caller).
+  const showFilled = filled || (count !== undefined && count > 0);
+  const underlineClass = active
+    ? "bg-accent-yellow"
+    : showFilled
+    ? "bg-accent-orange"
+    : "bg-transparent";
   return (
     <button
       type="button"
@@ -316,10 +328,10 @@ function AiTabButton({
       aria-label={label}
       aria-pressed={active}
       className={cn(
-        "relative inline-flex items-center justify-center gap-1 px-2 py-1 rounded-md text-[11px] transition-colors",
+        "relative inline-flex items-center justify-center gap-1 px-2 py-1.5 text-[11px] transition-colors",
         active
-          ? "bg-primary-100 text-primary-800 ring-1 ring-primary-300"
-          : "text-ink-600 hover:bg-ink-100 hover:text-ink-900"
+          ? "text-ink-900"
+          : "text-ink-600 hover:text-ink-900"
       )}
     >
       {icon}
@@ -336,12 +348,13 @@ function AiTabButton({
           {count}
         </span>
       )}
-      {filled && count === undefined && !active && (
-        <span
-          className="absolute -top-0.5 -end-0.5 w-1.5 h-1.5 rounded-full bg-primary-500"
-          aria-hidden
-        />
-      )}
+      <span
+        className={cn(
+          "absolute inset-x-1 -bottom-0.5 h-0.5 rounded-full transition-colors",
+          underlineClass
+        )}
+        aria-hidden
+      />
     </button>
   );
 }

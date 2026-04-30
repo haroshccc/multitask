@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { AlertCircle, Sparkles, Loader2, GitMerge, Trash2 } from "lucide-react";
+import { AlertCircle, ChevronDown, Sparkles, Loader2, GitMerge, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { he } from "date-fns/locale";
 import {
@@ -101,7 +101,7 @@ export function RecordingPlayer({ recording }: Props) {
       <section className="space-y-2">
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-xs">
           <StatusMeta recording={recording} />
-          <Meta label="מקור" value={sourceLabel(recording.source)} />
+          <SourceMeta recording={recording} />
           <ProjectLinkMeta recording={recording} />
           <EventCalendarLinkMeta recording={recording} />
           <TaskListLinkMeta recording={recording} />
@@ -357,9 +357,10 @@ function LinkMeta<T extends { id: string }>({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="bg-transparent text-xs text-ink-800 mt-0.5 w-full text-start outline-none cursor-pointer hover:text-primary-700 truncate"
+        className="bg-transparent text-xs text-ink-800 mt-0.5 w-full text-start outline-none cursor-pointer hover:text-primary-700 inline-flex items-center gap-1"
       >
-        {current ? renderOption(current) : "—"}
+        <span className="flex-1 truncate min-w-0">{current ? renderOption(current) : "—"}</span>
+        <ChevronDown className="w-3 h-3 shrink-0 text-ink-400" />
       </button>
       {open && (
         <div className="absolute z-30 top-full mt-1 start-0 w-56 bg-white border border-ink-200 rounded-md shadow-lift overflow-hidden text-xs">
@@ -580,12 +581,13 @@ function RecordingListsLinkMeta({ recording }: { recording: Recording }) {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="bg-transparent text-xs text-ink-800 mt-0.5 w-full text-start outline-none cursor-pointer hover:text-primary-700 inline-flex items-center gap-1 truncate"
+        className="bg-transparent text-xs text-ink-800 mt-0.5 w-full text-start outline-none cursor-pointer hover:text-primary-700 inline-flex items-center gap-1"
       >
         {myLists.length === 1 && (
-          <ListIcon emoji={myLists[0].emoji} className="w-3 h-3" />
+          <ListIcon emoji={myLists[0].emoji} className="w-3 h-3 shrink-0" />
         )}
-        <span className="truncate">{summary ?? "—"}</span>
+        <span className="flex-1 truncate min-w-0">{summary ?? "—"}</span>
+        <ChevronDown className="w-3 h-3 shrink-0 text-ink-400" />
       </button>
       {open && (
         <div className="absolute z-30 top-full mt-1 start-0 w-56 bg-white border border-ink-200 rounded-md shadow-lift overflow-hidden text-xs">
@@ -682,6 +684,31 @@ function Meta({
         {valueIcon}
         <span className="truncate">{value ?? "—"}</span>
       </div>
+    </div>
+  );
+}
+
+function SourceMeta({ recording }: { recording: Recording }) {
+  const update = useUpdateRecording();
+  return (
+    <div className="rounded-md bg-ink-50 px-2.5 py-2">
+      <div className="text-[10px] uppercase tracking-wider text-ink-400">מקור</div>
+      <select
+        value={recording.source}
+        onChange={(e) =>
+          update.mutate({
+            recordingId: recording.id,
+            patch: { source: e.target.value as Recording["source"] },
+          })
+        }
+        disabled={update.isPending}
+        className="bg-transparent text-xs text-ink-800 mt-0.5 w-full outline-none cursor-pointer hover:text-primary-700 disabled:cursor-wait"
+      >
+        <option value="thought">מחשבה</option>
+        <option value="call">שיחה</option>
+        <option value="meeting">פגישה</option>
+        <option value="other">אחר</option>
+      </select>
     </div>
   );
 }

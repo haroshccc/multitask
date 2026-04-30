@@ -1,25 +1,23 @@
 import {
   useMemo,
-  useRef,
+  useState,
   type ReactNode,
   type ComponentType,
 } from "react";
 import { Responsive, WidthProvider, type Layout, type Layouts } from "react-grid-layout";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
-import { useDashboardLayout, useDebouncedLayoutSave } from "@/lib/hooks/useDashboardLayout";
-import type {
-  DashboardScreen,
-  WidgetLayout,
-  WidgetState,
-} from "@/lib/types/domain";
+import type { DashboardScreen } from "@/lib/types/domain";
 
 const ResponsiveGridLayout = WidthProvider(Responsive);
 
-// Layouts are always locked — drag/resize/hide of banners caused regressions
-// per user feedback. Saved positions still load from the DB so every user
-// keeps the layout the migrations seed for them, but interactive editing of
-// banner positions has been removed everywhere.
+// Layouts are fully locked and driven by the per-widget defaults defined in
+// each screen's WidgetDefinition[]. We deliberately ignore any saved
+// `user_dashboard_layouts` rows: there's no UI to edit the layout, no
+// hide / show, no drag, no resize — so anything in storage is necessarily
+// stale state from before the editing UI was removed (and was the cause of
+// at least one widget vanishing for users with old `widget_state.hidden`
+// flags). The DB columns stay for now in case we ever bring editing back.
 
 export interface WidgetDefinition {
   key: string;
@@ -109,96 +107,30 @@ function defaultLayouts(widgets: WidgetDefinition[]): Layouts {
 }
 
 export function DashboardGrid({
-  screenKey,
   scopeId = null,
   widgets,
   className,
 }: DashboardGridProps) {
-  const { data: savedLayout } = useDashboardLayout(screenKey, scopeId);
-  const { scheduleSave } = useDebouncedLayoutSave(screenKey, scopeId);
-
-  const fallback = useMemo(() => defaultLayouts(widgets), [widgets]);
-
-  const layouts = useMemo<Layouts>(() => {
-    if (!savedLayout) return fallback;
-    const saved = {
-      lg: (savedLayout.layout_desktop as unknown as Layout[]) ?? [],
-      md: (savedLayout.layout_tablet as unknown as Layout[]) ?? [],
-      sm: (savedLayout.layout_mobile as unknown as Layout[]) ?? [],
-    };
-    // For any widget not present in the saved layout, fall back to its default.
-    const merge = (savedArr: Layout[], defaultArr: Layout[]): Layout[] => {
-      const present = new Set(savedArr.map((l) => l.i));
-      return [...savedArr, ...defaultArr.filter((l) => !present.has(l.i))];
-    };
-    return {
-      lg: merge(saved.lg, fallback.lg),
-      md: merge(saved.md, fallback.md),
-      sm: merge(saved.sm, fallback.sm),
-    };
-  }, [savedLayout, fallback]);
-
-  const widgetState = useMemo<WidgetState>(
-    () => ((savedLayout?.widget_state as unknown as WidgetState) ?? {}),
-    [savedLayout]
+  // The visual layout is the code defaults flipped from intent (x=0 = visual
+  // right, RTL) to RGL's frame (x=0 = visual left). No persistence, no merge,
+  // no per-user customization.
+  const layouts = useMemo<Layouts>(
+    () => flipLayouts(defaultLayouts(widgets)),
+    [widgets]
   );
 
-  // Visible = not explicitly hidden
-  const visibleWidgets = widgets.filter((w) => !widgetState[w.key]?.hidden);
-
-  const filteredLayouts = useMemo<Layouts>(() => {
-    const visibleKeys = new Set(visibleWidgets.map((w) => w.key));
-    const filtered: Layouts = {
-      lg: layouts.lg.filter((l) => visibleKeys.has(l.i)),
-      md: layouts.md.filter((l) => visibleKeys.has(l.i)),
-      sm: layouts.sm.filter((l) => visibleKeys.has(l.i)),
-    };
-    // Mirror to visual frame for react-grid-layout (x=0 → visual LEFT).
-    // We keep the intent frame (x=0 → visual RIGHT for RTL users) for
-    // storage and widget defaults.
-    return flipLayouts(filtered);
-  }, [layouts, visibleWidgets]);
-
-  // react-grid-layout fires onLayoutChange immediately on mount with the
-  // initial defaults. We skip the very first call so opening the page never
-  // freezes the current defaults into the DB — a real user drag is what
-  // should persist, not a synthetic "page just loaded" event.
-  const isFirstLayoutChange = useRef(true);
-
-  const handleLayoutChange = (_current: Layout[], all: Layouts) => {
-    if (isFirstLayoutChange.current) {
-      isFirstLayoutChange.current = false;
-      return;
-    }
-    // react-grid-layout reports positions in the visual frame; un-flip
-    // back to the intent frame (x=0 = visual right) before persisting.
-    const persisted = flipLayouts(all);
-    scheduleSave({
-      layout_desktop: persisted.lg as unknown as WidgetLayout,
-      layout_tablet: persisted.md as unknown as WidgetLayout,
-      layout_mobile: persisted.sm as unknown as WidgetLayout,
-      widget_state: widgetState,
-    });
-  };
-
-  const toggleCollapsed = (key: string) => {
-    const next: WidgetState = {
-      ...widgetState,
-      [key]: { ...widgetState[key], collapsed: !widgetState[key]?.collapsed },
-    };
-    scheduleSave({
-      layout_desktop: layouts.lg as unknown as WidgetLayout,
-      layout_tablet: layouts.md as unknown as WidgetLayout,
-      layout_mobile: layouts.sm as unknown as WidgetLayout,
-      widget_state: next,
-    });
-  };
+  // Local-only collapse state. Resets on reload — that's intentional, since
+  // the chrome's collapse button is just a quick toggle and persisting it
+  // caused the same kind of drift we saw with widget_state.hidden.
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const toggleCollapsed = (key: string) =>
+    setCollapsed((prev) => ({ ...prev, [key]: !prev[key] }));
 
   return (
     <div className={cn("relative grid-locked", className)}>
       <ResponsiveGridLayout
         className="layout"
-        layouts={filteredLayouts}
+        layouts={layouts}
         breakpoints={BREAKPOINTS}
         cols={COLS}
         rowHeight={ROW_HEIGHT}
@@ -207,11 +139,10 @@ export function DashboardGrid({
         compactType="vertical"
         isDraggable={false}
         isResizable={false}
-        onLayoutChange={handleLayoutChange}
       >
-        {visibleWidgets.map((w) => {
+        {widgets.map((w) => {
           const Component = w.component;
-          const collapsed = widgetState[w.key]?.collapsed ?? false;
+          const isCollapsed = !!collapsed[w.key];
           const Chrome = w.chromeStyle === "bare" ? BareChrome : WidgetChrome;
           return (
             // The grid container forces direction:ltr so RGL's pixel math
@@ -222,10 +153,10 @@ export function DashboardGrid({
             <div key={w.key} dir="rtl">
               <Chrome
                 title={w.title}
-                collapsed={collapsed}
+                collapsed={isCollapsed}
                 onToggleCollapse={() => toggleCollapsed(w.key)}
               >
-                {!collapsed && <Component scopeId={scopeId} />}
+                {!isCollapsed && <Component scopeId={scopeId} />}
               </Chrome>
             </div>
           );

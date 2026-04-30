@@ -88,6 +88,37 @@ const MARGIN: [number, number] = [16, 16];
 // on mobile (only the outer padding constrains them).
 const CONTAINER_PADDING: [number, number] = [0, 0];
 
+/**
+ * react-grid-layout positions items via `position: absolute` + pixel
+ * `transform: translate(x, ...)`. With direction:rtl that math anchors items
+ * on the wrong edge and they fall off-screen, so we force the grid container
+ * to direction:ltr (see index.css).
+ *
+ * The cost: the grid renders LTR, so a widget at x=0 lands on the visual
+ * LEFT — but the page is Hebrew RTL, where users expect the FIRST item (the
+ * "x=0" item) to be on the visual RIGHT.
+ *
+ * Fix: store widget positions in the *intent* frame (x=0 = visual right) and
+ * mirror to the *visual* frame (x=0 = visual left) only when handing off to
+ * react-grid-layout. The user's saved layout, the widget defaults, and the
+ * onLayoutChange callbacks all stay in the intent frame — the visual flip
+ * is purely a render concern. Flipping is its own inverse.
+ */
+function flipX(
+  layout: Layout[],
+  cols: number
+): Layout[] {
+  return layout.map((l) => ({ ...l, x: Math.max(0, cols - l.x - l.w) }));
+}
+
+function flipLayouts(layouts: Layouts): Layouts {
+  return {
+    lg: flipX(layouts.lg ?? [], COLS.lg),
+    md: flipX(layouts.md ?? [], COLS.md),
+    sm: flipX(layouts.sm ?? [], COLS.sm),
+  };
+}
+
 function defaultLayouts(widgets: WidgetDefinition[]): Layouts {
   const lg: Layout[] = [];
   const md: Layout[] = [];
@@ -151,11 +182,15 @@ export function DashboardGrid({
 
   const filteredLayouts = useMemo<Layouts>(() => {
     const visibleKeys = new Set(visibleWidgets.map((w) => w.key));
-    return {
+    const filtered: Layouts = {
       lg: layouts.lg.filter((l) => visibleKeys.has(l.i)),
       md: layouts.md.filter((l) => visibleKeys.has(l.i)),
       sm: layouts.sm.filter((l) => visibleKeys.has(l.i)),
     };
+    // Mirror to visual frame for react-grid-layout (x=0 → visual LEFT).
+    // We keep the intent frame (x=0 → visual RIGHT for RTL users) for
+    // storage and widget defaults.
+    return flipLayouts(filtered);
   }, [layouts, visibleWidgets]);
 
   // react-grid-layout fires onLayoutChange immediately on mount with the
@@ -169,10 +204,13 @@ export function DashboardGrid({
       isFirstLayoutChange.current = false;
       return;
     }
+    // react-grid-layout reports positions in the visual frame; un-flip
+    // back to the intent frame (x=0 = visual right) before persisting.
+    const persisted = flipLayouts(all);
     scheduleSave({
-      layout_desktop: all.lg as unknown as WidgetLayout,
-      layout_tablet: all.md as unknown as WidgetLayout,
-      layout_mobile: all.sm as unknown as WidgetLayout,
+      layout_desktop: persisted.lg as unknown as WidgetLayout,
+      layout_tablet: persisted.md as unknown as WidgetLayout,
+      layout_mobile: persisted.sm as unknown as WidgetLayout,
       widget_state: widgetState,
     });
   };

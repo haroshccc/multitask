@@ -99,36 +99,34 @@ export function StatsTallWidget() {
   const max = buckets.reduce((m, b) => Math.max(m, b.count), 0) || 1;
 
   return (
-    // When collapsed we drop `h-full` so the card shrinks to just the header
-    // height — otherwise it would fill the whole grid cell with empty white
-    // space below the header (the cell is a fixed h=2 either way, but the
-    // card itself reads as a tight chip when closed). When open the card
-    // takes the full cell so its expanded body has room to scroll.
-    <div
-      className={cn(
-        "card flex flex-col overflow-hidden",
-        open && "h-full",
-        !open && "self-start"
-      )}
-    >
+    // The card always fills its grid cell so the closed state visually
+    // matches the Quick Record / Upload banners next to it (per user
+    // request). When open it scrolls internally; when closed only the
+    // header strip is visible and the rest of the card is empty card
+    // surface — same height as its neighbours.
+    <div className="card h-full flex flex-col overflow-hidden">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         className={cn(
-          "flex w-full items-center justify-between gap-2 px-3 py-2",
+          "flex w-full items-center gap-3 px-3",
           "text-sm text-ink-700 hover:bg-ink-50 transition-colors",
-          open && "border-b border-ink-200",
+          // When closed, fill the full card height so the header strip
+          // visually matches the icon+label+button rows in the sibling
+          // Quick / Upload banners. When open, the header is just a
+          // header — the body below holds the chart.
+          open ? "py-2 border-b border-ink-200" : "h-full"
         )}
       >
-        <span className="inline-flex items-center gap-1.5 font-medium">
-          <BarChart3 className="w-3.5 h-3.5 text-ink-600" />
+        <BarChart3 className="w-4 h-4 shrink-0 text-ink-600" />
+        <span className="flex-1 min-w-0 text-start font-medium truncate">
           סטטיסטיקה
         </span>
         {open ? (
-          <ChevronUp className="w-4 h-4 text-ink-500" />
+          <ChevronUp className="w-4 h-4 shrink-0 text-ink-500" />
         ) : (
-          <ChevronDown className="w-4 h-4 text-ink-500" />
+          <ChevronDown className="w-4 h-4 shrink-0 text-ink-500" />
         )}
       </button>
 

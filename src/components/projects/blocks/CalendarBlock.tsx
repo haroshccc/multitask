@@ -339,8 +339,14 @@ function WeekGrid({
     scheduled.some((t) => !!t.scheduled_at);
 
   return (
-    <div className="flex flex-col h-full min-h-0">
-      {/* Header row: 7 day columns + hour-gutter spacer (right side in RTL) */}
+    // The whole week view is force-RTL — the surrounding DashboardGrid
+    // container is direction:ltr so RGL's pixel math works, and that was
+    // leaking down to the calendar grids and laying out days Sun→Sat
+    // left-to-right (the user reported this as "left-to-right, should be
+    // right-to-left").
+    <div className="flex flex-col h-full min-h-0" dir="rtl">
+      {/* Header row: 7 day columns + hour-gutter spacer (last column → left
+          edge in RTL). */}
       <div className="grid sticky top-0 z-10 bg-white border-b border-ink-200"
            style={{ gridTemplateColumns: `repeat(7, minmax(0, 1fr)) 28px` }}>
         {days.map((d, i) => {

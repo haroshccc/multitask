@@ -13,6 +13,8 @@ import {
   Lightbulb,
   Send,
   Save,
+  FileText,
+  AlignLeft,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import {
@@ -87,6 +89,17 @@ export function AiInsights({ recording }: Props) {
     () => !sameOutput(draft, serverOutput),
     [draft, serverOutput]
   );
+
+  // Toolbar tab — which AI section is expanded as the "main banner". One at
+  // a time keeps the UI compact instead of stacking 6 long sections.
+  type AiTab =
+    | "short_summary"
+    | "long_summary"
+    | "whatsapp"
+    | "email"
+    | "tasks"
+    | "events";
+  const [activeTab, setActiveTab] = useState<AiTab>("short_summary");
 
   const onTrigger = () => trigger.mutate(recording.id);
   const onSave = () => {
@@ -171,47 +184,165 @@ export function AiInsights({ recording }: Props) {
 
       {errorBanner}
 
-      <SummaryTextSection
-        label="סיכום קצר"
-        placeholder="משפט-שניים שמסכמים את השיחה"
-        rowsHint={3}
-        value={draft.short_summary}
-        onChange={(v) => setDraft((d) => ({ ...d, short_summary: v }))}
-      />
+      {/* Tab toolbar — one icon per AI section. Click expands that section
+          as the main banner; the others fold away to keep the surface tidy. */}
+      <div className="flex items-center gap-1 flex-wrap border-b border-ink-200 pb-2">
+        <AiTabButton
+          icon={<FileText className="w-3.5 h-3.5" />}
+          label="סיכום קצר"
+          active={activeTab === "short_summary"}
+          filled={!!draft.short_summary.trim()}
+          onClick={() => setActiveTab("short_summary")}
+        />
+        <AiTabButton
+          icon={<AlignLeft className="w-3.5 h-3.5" />}
+          label="סיכום ארוך"
+          active={activeTab === "long_summary"}
+          filled={!!draft.long_summary.trim()}
+          onClick={() => setActiveTab("long_summary")}
+        />
+        <AiTabButton
+          icon={<MessageCircle className="w-3.5 h-3.5" />}
+          label="WhatsApp"
+          active={activeTab === "whatsapp"}
+          filled={!!draft.whatsapp_message.trim()}
+          onClick={() => setActiveTab("whatsapp")}
+        />
+        <AiTabButton
+          icon={<Mail className="w-3.5 h-3.5" />}
+          label="מייל"
+          active={activeTab === "email"}
+          filled={!!(draft.email.subject.trim() || draft.email.body.trim())}
+          onClick={() => setActiveTab("email")}
+        />
+        <AiTabButton
+          icon={<CheckSquare className="w-3.5 h-3.5" />}
+          label="משימות"
+          count={draft.tasks.length}
+          active={activeTab === "tasks"}
+          filled={draft.tasks.length > 0}
+          onClick={() => setActiveTab("tasks")}
+        />
+        <AiTabButton
+          icon={<CalendarPlus className="w-3.5 h-3.5" />}
+          label="אירועים"
+          count={draft.events.length}
+          active={activeTab === "events"}
+          filled={draft.events.length > 0}
+          onClick={() => setActiveTab("events")}
+        />
+      </div>
 
-      <SummaryTextSection
-        label="סיכום ארוך"
-        placeholder="סיכום מפורט — נקודות מרכזיות, החלטות, שאלות פתוחות"
-        rowsHint={6}
-        value={draft.long_summary}
-        onChange={(v) => setDraft((d) => ({ ...d, long_summary: v }))}
-      />
-
-      <WhatsAppSection
-        value={draft.whatsapp_message}
-        onChange={(v) => setDraft((d) => ({ ...d, whatsapp_message: v }))}
-      />
-
-      <EmailSection
-        subject={draft.email.subject}
-        body={draft.email.body}
-        onChange={(subject, body) =>
-          setDraft((d) => ({ ...d, email: { subject, body } }))
-        }
-      />
-
-      <TasksSection
-        recording={recording}
-        items={draft.tasks}
-        onChange={(items) => setDraft((d) => ({ ...d, tasks: items }))}
-      />
-
-      <EventsSection
-        recording={recording}
-        items={draft.events}
-        onChange={(items) => setDraft((d) => ({ ...d, events: items }))}
-      />
+      {activeTab === "short_summary" && (
+        <SummaryTextSection
+          label="סיכום קצר"
+          placeholder="משפט-שניים שמסכמים את השיחה"
+          rowsHint={3}
+          value={draft.short_summary}
+          onChange={(v) => setDraft((d) => ({ ...d, short_summary: v }))}
+        />
+      )}
+      {activeTab === "long_summary" && (
+        <SummaryTextSection
+          label="סיכום ארוך"
+          placeholder="סיכום מפורט — נקודות מרכזיות, החלטות, שאלות פתוחות"
+          rowsHint={6}
+          value={draft.long_summary}
+          onChange={(v) => setDraft((d) => ({ ...d, long_summary: v }))}
+        />
+      )}
+      {activeTab === "whatsapp" && (
+        <WhatsAppSection
+          value={draft.whatsapp_message}
+          onChange={(v) => setDraft((d) => ({ ...d, whatsapp_message: v }))}
+        />
+      )}
+      {activeTab === "email" && (
+        <EmailSection
+          subject={draft.email.subject}
+          body={draft.email.body}
+          onChange={(subject, body) =>
+            setDraft((d) => ({ ...d, email: { subject, body } }))
+          }
+        />
+      )}
+      {activeTab === "tasks" && (
+        <TasksSection
+          recording={recording}
+          items={draft.tasks}
+          onChange={(items) => setDraft((d) => ({ ...d, tasks: items }))}
+        />
+      )}
+      {activeTab === "events" && (
+        <EventsSection
+          recording={recording}
+          items={draft.events}
+          onChange={(items) => setDraft((d) => ({ ...d, events: items }))}
+        />
+      )}
     </section>
+  );
+}
+
+/**
+ * Small toolbar button for the AI section tabs. Has 3 visual states:
+ *  - `active`: ring + bg, used on the currently-open section
+ *  - `filled`: blue dot indicator showing the section already has content
+ *  - default: muted icon
+ *
+ * `count` is shown as a tiny number badge for sections that hold a list
+ * (tasks, events).
+ */
+function AiTabButton({
+  icon,
+  label,
+  count,
+  active,
+  filled,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  count?: number;
+  active: boolean;
+  filled: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={label}
+      aria-label={label}
+      aria-pressed={active}
+      className={cn(
+        "relative inline-flex items-center justify-center gap-1 px-2 py-1 rounded-md text-[11px] transition-colors",
+        active
+          ? "bg-primary-100 text-primary-800 ring-1 ring-primary-300"
+          : "text-ink-600 hover:bg-ink-100 hover:text-ink-900"
+      )}
+    >
+      {icon}
+      <span className="hidden sm:inline">{label}</span>
+      {count !== undefined && count > 0 && (
+        <span
+          className={cn(
+            "ms-0.5 inline-flex items-center justify-center min-w-[16px] h-4 rounded-full text-[9px] font-semibold tabular-nums px-1",
+            active
+              ? "bg-primary-500 text-white"
+              : "bg-ink-200 text-ink-700"
+          )}
+        >
+          {count}
+        </span>
+      )}
+      {filled && count === undefined && !active && (
+        <span
+          className="absolute -top-0.5 -end-0.5 w-1.5 h-1.5 rounded-full bg-primary-500"
+          aria-hidden
+        />
+      )}
+    </button>
   );
 }
 

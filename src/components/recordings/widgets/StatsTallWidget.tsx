@@ -54,12 +54,13 @@ const SOURCE_LABEL: Record<RecordingSource, string> = {
  */
 export function StatsTallWidget() {
   const ctx = useRecordingsPageCtx();
-  // Default open so the bars are visible on first paint. Persisted to
-  // localStorage so the user's choice sticks.
+  // Default closed — the layout is locked to a short top row, so the
+  // expanded chart would always overflow. Persisted to localStorage so
+  // the user's choice sticks.
   const [open, setOpen] = useState<boolean>(() => {
-    if (typeof window === "undefined") return true;
+    if (typeof window === "undefined") return false;
     const raw = localStorage.getItem("multitask.recordings.statsOpen");
-    return raw === null ? true : raw === "true";
+    return raw === "true";
   });
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -98,7 +99,18 @@ export function StatsTallWidget() {
   const max = buckets.reduce((m, b) => Math.max(m, b.count), 0) || 1;
 
   return (
-    <div className="card h-full flex flex-col overflow-hidden">
+    // When collapsed we drop `h-full` so the card shrinks to just the header
+    // height — otherwise it would fill the whole grid cell with empty white
+    // space below the header (the cell is a fixed h=2 either way, but the
+    // card itself reads as a tight chip when closed). When open the card
+    // takes the full cell so its expanded body has room to scroll.
+    <div
+      className={cn(
+        "card flex flex-col overflow-hidden",
+        open && "h-full",
+        !open && "self-start"
+      )}
+    >
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}

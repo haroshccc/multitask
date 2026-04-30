@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { BarChart3, ChevronDown, ChevronUp, Filter, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { BarChart3, ChevronDown, ChevronUp, Filter, List, X } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { RecordingFilters } from "@/components/recordings/RecordingFilters";
 import { RecordingCard } from "@/components/recordings/RecordingCard";
@@ -125,15 +125,33 @@ function bucketize({
   return buckets.sort((a, b) => b.count - a.count);
 }
 
+// ── Mobile detection ────────────────────────────────────────────────────────
+
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(
+    () => typeof window !== "undefined" && window.innerWidth < 640,
+  );
+  useEffect(() => {
+    const update = () => setIsMobile(window.innerWidth < 640);
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
+  return isMobile;
+}
+
 // ── Main widget ─────────────────────────────────────────────────────────────
 
 /**
  * Right-side panel: stats (collapsed by default) → filters (collapsed by
  * default) → recordings list. Each collapsible section pushes the list
  * down when expanded, exactly like the filter banner does to the list.
+ *
+ * On mobile (<640px), renders as a compact collapsible picker: tapping the
+ * header reveals the list; selecting a recording closes it immediately.
  */
 export function FiltersAndListWidget() {
   const ctx = useRecordingsPageCtx();
+  const isMobile = useIsMobile();
 
   // Stats state
   const [statsOpen, setStatsOpen] = useState(false);
@@ -162,10 +180,77 @@ export function FiltersAndListWidget() {
 
   // Filters state
   const [filtersOpen, setFiltersOpen] = useState(false);
+  // Mobile list open state
+  const [mobileOpen, setMobileOpen] = useState(false);
   const recordings = ctx.filteredRecordings;
   const total = ctx.allRecordings.length;
   const hidden = total - recordings.length;
 
+  // ── Mobile compact picker ──────────────────────────────────────────────────
+  if (isMobile) {
+    const selected = recordings.find((r) => r.id === ctx.selectedId);
+    return (
+      <div className="card flex flex-col overflow-hidden">
+        {/* Trigger row */}
+        <button
+          type="button"
+          onClick={() => setMobileOpen((v) => !v)}
+          className={cn(
+            "flex w-full items-center gap-2 px-3 py-2.5",
+            "text-sm text-ink-700 hover:bg-ink-50 transition-colors",
+            mobileOpen && "border-b border-ink-200",
+          )}
+        >
+          <List className="w-4 h-4 shrink-0 text-ink-500" />
+          <span className="flex-1 min-w-0 text-start truncate font-medium">
+            {selected
+              ? (selected.title || "ללא כותרת")
+              : `${total} הקלטות`}
+          </span>
+          <span className="text-[11px] text-ink-400 tabular-nums shrink-0">
+            {total > 0 && `${recordings.length}/${total}`}
+          </span>
+          {mobileOpen ? (
+            <ChevronUp className="w-4 h-4 shrink-0 text-ink-400" />
+          ) : (
+            <ChevronDown className="w-4 h-4 shrink-0 text-ink-400" />
+          )}
+        </button>
+
+        {/* Collapsed list */}
+        {mobileOpen && (
+          <div className="overflow-auto max-h-64 p-2 space-y-1 scrollbar-thin">
+            {ctx.isLoading ? (
+              <p className="text-center text-xs text-ink-500 py-3">טוענת…</p>
+            ) : recordings.length === 0 ? (
+              <p className="text-center text-xs text-ink-500 py-3">אין הקלטות</p>
+            ) : (
+              recordings.map((r) => (
+                <button
+                  key={r.id}
+                  type="button"
+                  onClick={() => {
+                    ctx.setSelectedId(r.id);
+                    setMobileOpen(false);
+                  }}
+                  className={cn(
+                    "w-full text-start rounded-lg border px-3 py-2 text-sm transition-all",
+                    r.id === ctx.selectedId
+                      ? "border-primary-500 bg-primary-50 font-medium text-ink-900"
+                      : "border-ink-200 bg-white text-ink-700 hover:border-ink-400",
+                  )}
+                >
+                  <span className="block truncate">{r.title || "ללא כותרת"}</span>
+                </button>
+              ))
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ── Desktop layout ─────────────────────────────────────────────────────────
   return (
     <div className="card h-full flex flex-col overflow-hidden">
 

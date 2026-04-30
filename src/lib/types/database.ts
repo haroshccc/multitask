@@ -884,6 +884,7 @@ export type Database = {
           search_tsv: unknown
           size_bytes: number
           source: Database["public"]["Enums"]["recording_source"]
+          source_custom: string | null
           speakers_count: number | null
           status: Database["public"]["Enums"]["recording_status"]
           storage_key: string
@@ -920,6 +921,7 @@ export type Database = {
           search_tsv?: unknown
           size_bytes?: number
           source?: Database["public"]["Enums"]["recording_source"]
+          source_custom?: string | null
           speakers_count?: number | null
           status?: Database["public"]["Enums"]["recording_status"]
           storage_key: string
@@ -956,6 +958,7 @@ export type Database = {
           search_tsv?: unknown
           size_bytes?: number
           source?: Database["public"]["Enums"]["recording_source"]
+          source_custom?: string | null
           speakers_count?: number | null
           status?: Database["public"]["Enums"]["recording_status"]
           storage_key?: string
@@ -2280,7 +2283,7 @@ export type Database = {
       project_pricing_mode: "fixed_price" | "hourly" | "quote"
       project_spare_mode: "percent" | "hours"
       push_platform: "web" | "ios" | "android"
-      recording_source: "thought" | "call" | "meeting" | "other"
+      recording_source: "thought" | "call" | "meeting" | "other" | "recording" | "whatsapp" | "upload"
       recording_status:
         | "recording"
         | "uploaded"
@@ -2517,7 +2520,7 @@ export const Constants = {
       project_pricing_mode: ["fixed_price", "hourly", "quote"],
       project_spare_mode: ["percent", "hours"],
       push_platform: ["web", "ios", "android"],
-      recording_source: ["thought", "call", "meeting", "other"],
+      recording_source: ["thought", "call", "meeting", "other", "recording", "whatsapp", "upload"],
       recording_status: [
         "recording",
         "uploaded",

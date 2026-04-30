@@ -670,25 +670,51 @@ function RecordingListsLinkMeta({ recording }: { recording: Recording }) {
 
 function SourceMeta({ recording }: { recording: Recording }) {
   const update = useUpdateRecording();
+  const [customDraft, setCustomDraft] = useState(recording.source_custom ?? "");
+  useEffect(() => {
+    setCustomDraft(recording.source_custom ?? "");
+  }, [recording.source_custom, recording.id]);
+
+  const commitCustom = () => {
+    const next = customDraft.trim();
+    if (next === (recording.source_custom ?? "")) return;
+    update.mutate({ recordingId: recording.id, patch: { source_custom: next || null } });
+  };
+
   return (
-    <div className="rounded-md bg-ink-50 px-2.5 py-2">
+    <div className="rounded-md bg-ink-50 px-2.5 py-2 space-y-1">
       <div className="text-[10px] uppercase tracking-wider text-ink-400">מקור</div>
       <select
         value={recording.source}
-        onChange={(e) =>
-          update.mutate({
-            recordingId: recording.id,
-            patch: { source: e.target.value as Recording["source"] },
-          })
-        }
+        onChange={(e) => {
+          const src = e.target.value as Recording["source"];
+          update.mutate({ recordingId: recording.id, patch: { source: src } });
+        }}
         disabled={update.isPending}
-        className="bg-transparent text-xs text-ink-800 mt-0.5 w-full outline-none cursor-pointer hover:text-primary-700 disabled:cursor-wait"
+        className="bg-transparent text-xs text-ink-800 w-full outline-none cursor-pointer hover:text-primary-700 disabled:cursor-wait"
       >
         <option value="thought">מחשבה</option>
         <option value="call">שיחה</option>
         <option value="meeting">פגישה</option>
+        <option value="recording">מהקלטה</option>
+        <option value="whatsapp">מוואטספ</option>
+        <option value="upload">מהעלאה</option>
         <option value="other">אחר</option>
       </select>
+      {recording.source === "other" && (
+        <input
+          type="text"
+          value={customDraft}
+          onChange={(e) => setCustomDraft(e.target.value)}
+          onBlur={commitCustom}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") { e.preventDefault(); commitCustom(); }
+            if (e.key === "Escape") setCustomDraft(recording.source_custom ?? "");
+          }}
+          placeholder="פרט..."
+          className="field !py-0.5 !px-1.5 !text-xs w-full"
+        />
+      )}
     </div>
   );
 }

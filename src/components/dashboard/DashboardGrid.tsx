@@ -43,10 +43,11 @@ interface DashboardGridProps {
   className?: string;
 }
 
-// `lg` raised from 1200 to 1400 so phones in "request desktop site" mode
-// (typically reports ~1024-1080px) land in `md` (single-column) instead of
-// the cramped 2-column desktop layout.
-const BREAKPOINTS = { lg: 1400, md: 768, sm: 0 };
+// `lg` lowered to 900 so common laptops (1366×768 Windows, 1440×900 Mac,
+// browser windows ~1280px on 4K displays) actually get the desktop layout
+// instead of the stacked tablet layout. md catches smaller tablets, sm
+// is the mobile single-column stack.
+const BREAKPOINTS = { lg: 900, md: 600, sm: 0 };
 const COLS = { lg: 12, md: 8, sm: 4 };
 const ROW_HEIGHT = 80;
 const MARGIN: [number, number] = [16, 16];

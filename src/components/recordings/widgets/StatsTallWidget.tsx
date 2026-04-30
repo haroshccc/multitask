@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { BarChart3, ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { useProjects } from "@/lib/hooks/useProjects";
@@ -54,7 +54,17 @@ const SOURCE_LABEL: Record<RecordingSource, string> = {
  */
 export function StatsTallWidget() {
   const ctx = useRecordingsPageCtx();
-  const [open, setOpen] = useState(false);
+  // Default open so the bars are visible on first paint. Persisted to
+  // localStorage so the user's choice sticks.
+  const [open, setOpen] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true;
+    const raw = localStorage.getItem("multitask.recordings.statsOpen");
+    return raw === null ? true : raw === "true";
+  });
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem("multitask.recordings.statsOpen", String(open));
+  }, [open]);
   const [dim, setDim] = useState<Dimension>("status");
   const { data: projects = [] } = useProjects();
   const { data: taskLists = [] } = useTaskLists();

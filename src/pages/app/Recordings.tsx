@@ -1,7 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, createContext, useContext } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Mic, ArrowLeft, Settings as SettingsIcon } from "lucide-react";
 import { ScreenScaffold } from "@/components/layout/ScreenScaffold";
+import {
+  DashboardGrid,
+  type WidgetDefinition,
+} from "@/components/dashboard/DashboardGrid";
 import { RecordingDropZone } from "@/components/recordings/RecordingDropZone";
 import { RecordingCard } from "@/components/recordings/RecordingCard";
 import { RecordingPlayer } from "@/components/recordings/RecordingPlayer";
@@ -22,6 +26,76 @@ import {
 } from "@/components/recordings/RecordingsListBanner";
 import { useRecordings } from "@/lib/hooks/useRecordings";
 import { useAllRecordingAssignments } from "@/lib/hooks/useRecordingLists";
+
+/**
+ * The 3 top widgets (filters / quick-record / drop-zone) all need access to
+ * the page's shared state. Putting them in a DashboardGrid means each widget
+ * gets a `scopeId` only — they pull the rest from this context.
+ */
+interface RecordingsTopBarCtx {
+  filters: RecordingsFilterState;
+  setFilters: (f: RecordingsFilterState) => void;
+  grouping: ListGroupingState;
+  setGrouping: (g: ListGroupingState) => void;
+  onStartRecording: () => void;
+  onUploaded: (id: string) => void;
+}
+const RecordingsTopBarContext = createContext<RecordingsTopBarCtx | null>(null);
+function useRecordingsTopBarCtx(): RecordingsTopBarCtx {
+  const v = useContext(RecordingsTopBarContext);
+  if (!v) throw new Error("RecordingsTopBarContext missing");
+  return v;
+}
+
+function FiltersWidget() {
+  const ctx = useRecordingsTopBarCtx();
+  return (
+    <RecordingFilters
+      filters={ctx.filters}
+      onFiltersChange={ctx.setFilters}
+      grouping={ctx.grouping}
+      onGroupingChange={ctx.setGrouping}
+    />
+  );
+}
+function QuickRecordWidget() {
+  const ctx = useRecordingsTopBarCtx();
+  return <QuickRecordCard onStart={ctx.onStartRecording} />;
+}
+function DropZoneWidget() {
+  const ctx = useRecordingsTopBarCtx();
+  return <RecordingDropZone source="other" onUploaded={ctx.onUploaded} />;
+}
+
+const RECORDINGS_TOP_WIDGETS: WidgetDefinition[] = [
+  {
+    key: "filters",
+    title: "סינון והגדרות",
+    component: FiltersWidget,
+    chromeStyle: "bare",
+    defaultDesktop: { x: 0, y: 0, w: 6, h: 3, minW: 4, minH: 2 },
+    defaultTablet: { x: 0, y: 0, w: 8, h: 3 },
+    defaultMobile: { x: 0, y: 4, w: 4, h: 3 },
+  },
+  {
+    key: "quick_record",
+    title: "הקלטה מהירה",
+    component: QuickRecordWidget,
+    chromeStyle: "bare",
+    defaultDesktop: { x: 6, y: 0, w: 3, h: 3, minW: 2, minH: 2 },
+    defaultTablet: { x: 0, y: 3, w: 4, h: 3 },
+    defaultMobile: { x: 0, y: 0, w: 4, h: 3 },
+  },
+  {
+    key: "drop_zone",
+    title: "העלאת קובץ",
+    component: DropZoneWidget,
+    chromeStyle: "bare",
+    defaultDesktop: { x: 9, y: 0, w: 3, h: 3, minW: 2, minH: 2 },
+    defaultTablet: { x: 4, y: 3, w: 4, h: 3 },
+    defaultMobile: { x: 0, y: 7, w: 4, h: 3 },
+  },
+];
 
 export function Recordings() {
   const [filters, setFilters] = useState<RecordingsFilterState>(
@@ -98,7 +172,20 @@ export function Recordings() {
     setGrouping(DEFAULT_GROUPING);
   };
 
+  const topBarCtx = useMemo<RecordingsTopBarCtx>(
+    () => ({
+      filters,
+      setFilters,
+      grouping,
+      setGrouping,
+      onStartRecording: () => setRecorderOpen(true),
+      onUploaded: (id: string) => setSelectedId(id),
+    }),
+    [filters, grouping]
+  );
+
   return (
+    <RecordingsTopBarContext.Provider value={topBarCtx}>
     <ScreenScaffold
       title="הקלטות"
       subtitle="הקלטה ישירה, גרירת קובץ, ניגון, הורדה ושיוך לפרויקט. תמלול עברית בפאזה הבאה."
@@ -133,120 +220,81 @@ export function Recordings() {
         source="other"
       />
 
-      {/* Mobile / tablet (< lg) — completely separate layout the user signed
-          off on: top row of QuickRecord + DropZone side by side, then the
-          recordings dropdown, then the player, then the filters card. */}
-      <div className="lg:hidden space-y-3">
-        <div className="grid grid-cols-2 gap-3">
-          <QuickRecordCard onStart={() => setRecorderOpen(true)} />
-          <RecordingDropZone
-            source="other"
-            onUploaded={(id) => setSelectedId(id)}
-          />
-        </div>
+      {/* Top toolbar — 3 banners managed by DashboardGrid. Locked by default;
+          the user can click "ערכי באנרים" to drag/resize/swap. State (filters,
+          start-recording, upload-callback) flows through context. */}
+      <div className="mt-10">
+        <DashboardGrid
+          screenKey="recordings"
+          widgets={RECORDINGS_TOP_WIDGETS}
+        />
+      </div>
 
+      <div className="mt-5">
         {isLoading ? (
           <div className="card p-8 text-center text-sm text-ink-500">טוענת…</div>
         ) : allRecordings.length === 0 ? (
           <EmptyState />
         ) : (
           <>
-            <RecordingsMobileDropdown
-              recordings={recordings}
-              selectedId={selectedId}
-              onSelect={setSelectedId}
-              totalCount={allRecordings.length}
-            />
-
-            {recordings.length === 0 ? (
-              <FilteredEmpty
-                total={allRecordings.length}
-                hidden={filteredOutCount}
-                onClear={clearFiltersAndGrouping}
+            {/* Mobile / tablet — dropdown + selected player. */}
+            <div className="lg:hidden space-y-3">
+              <RecordingsMobileDropdown
+                recordings={recordings}
+                selectedId={selectedId}
+                onSelect={setSelectedId}
+                totalCount={allRecordings.length}
               />
-            ) : selected ? (
-              <RecordingPlayer key={selected.id} recording={selected} />
-            ) : (
-              <div className="card p-6 text-center text-sm text-ink-500">
-                בחרי הקלטה מהרשימה
-              </div>
-            )}
-          </>
-        )}
-
-        <RecordingFilters
-          filters={filters}
-          onFiltersChange={setFilters}
-          grouping={grouping}
-          onGroupingChange={setGrouping}
-        />
-      </div>
-
-      {/* Desktop (lg+) — original layout: filters + 2 cards on top, list +
-          player below. */}
-      <div className="hidden lg:flex lg:flex-col gap-5">
-        {/* Top row — filters card sized to its content (grows leftward only
-            when the active grouping mode actually needs more horizontal
-            room). QuickRecord + DropZone stay at 220 px each so the upload
-            and recording entry points are always reachable. items-stretch
-            keeps all three cards the same height, with QuickRecord and
-            DropZone centering their content vertically. */}
-        <div className="flex flex-wrap gap-3 items-stretch">
-          <RecordingFilters
-            filters={filters}
-            onFiltersChange={setFilters}
-            grouping={grouping}
-            onGroupingChange={setGrouping}
-          />
-          <QuickRecordCard
-            className="w-[220px] shrink-0"
-            onStart={() => setRecorderOpen(true)}
-          />
-          <RecordingDropZone
-            className="w-[220px] shrink-0"
-            source="other"
-            onUploaded={(id) => setSelectedId(id)}
-          />
-        </div>
-
-        {isLoading ? (
-          <div className="card p-8 text-center text-sm text-ink-500">טוענת…</div>
-        ) : allRecordings.length === 0 ? (
-          <EmptyState />
-        ) : (
-          <div className="grid grid-cols-[minmax(0,360px)_1fr] gap-4">
-            <aside className="space-y-2">
               {recordings.length === 0 ? (
                 <FilteredEmpty
                   total={allRecordings.length}
                   hidden={filteredOutCount}
                   onClear={clearFiltersAndGrouping}
                 />
-              ) : (
-                recordings.map((r) => (
-                  <RecordingCard
-                    key={r.id}
-                    recording={r}
-                    isActive={r.id === selectedId}
-                    onSelect={() => setSelectedId(r.id)}
-                  />
-                ))
-              )}
-            </aside>
-
-            <section>
-              {selected ? (
+              ) : selected ? (
                 <RecordingPlayer key={selected.id} recording={selected} />
               ) : (
                 <div className="card p-6 text-center text-sm text-ink-500">
                   בחרי הקלטה מהרשימה
                 </div>
               )}
-            </section>
-          </div>
+            </div>
+
+            {/* Desktop — sidebar list + selected details. */}
+            <div className="hidden lg:grid lg:grid-cols-[minmax(0,360px)_1fr] gap-4">
+              <aside className="space-y-2">
+                {recordings.length === 0 ? (
+                  <FilteredEmpty
+                    total={allRecordings.length}
+                    hidden={filteredOutCount}
+                    onClear={clearFiltersAndGrouping}
+                  />
+                ) : (
+                  recordings.map((r) => (
+                    <RecordingCard
+                      key={r.id}
+                      recording={r}
+                      isActive={r.id === selectedId}
+                      onSelect={() => setSelectedId(r.id)}
+                    />
+                  ))
+                )}
+              </aside>
+              <section>
+                {selected ? (
+                  <RecordingPlayer key={selected.id} recording={selected} />
+                ) : (
+                  <div className="card p-6 text-center text-sm text-ink-500">
+                    בחרי הקלטה מהרשימה
+                  </div>
+                )}
+              </section>
+            </div>
+          </>
         )}
       </div>
     </ScreenScaffold>
+    </RecordingsTopBarContext.Provider>
   );
 }
 

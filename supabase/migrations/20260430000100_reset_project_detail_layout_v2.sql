@@ -1,0 +1,11 @@
+-- Project detail page widget layout was restructured per the user's
+-- reference design:
+--   ROW 1: [calendar w=4] [pricing w=4] [stats w=4]   (3 banners side-by-side)
+--   ROW 2: [tasks w=12]                               (full-width table)
+--   ROW 3: [summary w=12 — collapsed by default]      (real-time totals)
+--   ROW 4: [upload w=4] [quote w=4] [templates w=4]   (3 banners side-by-side)
+--   ROW 5: [questions w=12]
+-- Old layouts had 6-wide banners at different y positions, so saved layouts
+-- would cause overlapping/cramped rendering. Wipe to land everyone on the
+-- new defaults.
+DELETE FROM user_dashboard_layouts WHERE screen_key = 'project_detail';

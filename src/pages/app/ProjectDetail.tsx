@@ -7,6 +7,9 @@ import {
   Loader2,
   Plus,
   X,
+  FileText,
+  Save,
+  Check,
 } from "lucide-react";
 import { ScreenScaffold } from "@/components/layout/ScreenScaffold";
 import { DashboardGrid } from "@/components/dashboard/DashboardGrid";
@@ -16,8 +19,9 @@ import {
   useRestoreProject,
   useDebouncedProjectUpdate,
 } from "@/lib/hooks/useProjects";
-import type { Project } from "@/lib/types/domain";
+import type { Project, ProjectPricingMode } from "@/lib/types/domain";
 import { PROJECT_WIDGETS } from "@/components/projects/ProjectBlocks";
+import { cn } from "@/lib/utils/cn";
 
 const STATUS_LABEL: Record<string, string> = {
   active: "פעיל",
@@ -208,13 +212,111 @@ function ProjectHeader({
           />
         </div>
 
-        <span className="chip mt-2 shrink-0">
-          {STATUS_LABEL[project.status] ?? project.status}
-        </span>
+        <PricingActions project={project} projectId={projectId} />
       </div>
 
-      <TagsRow tags={tags} onRemove={removeTag} onAdd={addTag} />
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="chip">
+          {STATUS_LABEL[project.status] ?? project.status}
+        </span>
+        <TagsRow tags={tags} onRemove={removeTag} onAdd={addTag} />
+      </div>
     </header>
+  );
+}
+
+// ─── Pricing actions (mode toggle + שמרי) ────────────────────────────────
+
+function PricingActions({
+  project,
+  projectId,
+}: {
+  project: Project;
+  projectId: string;
+}) {
+  const { scheduleUpdate, flush } = useDebouncedProjectUpdate(projectId);
+  const [savedFlash, setSavedFlash] = useState(false);
+  const mode = project.pricing_mode;
+
+  const setMode = (m: ProjectPricingMode) => {
+    if (m === mode) return;
+    scheduleUpdate({ pricing_mode: m });
+    flush();
+  };
+
+  const handleSave = () => {
+    flush();
+    setSavedFlash(true);
+    window.setTimeout(() => setSavedFlash(false), 1400);
+  };
+
+  return (
+    <div className="flex items-center gap-1.5 shrink-0">
+      <ModePill
+        active={mode === "fixed_price"}
+        onClick={() => setMode("fixed_price")}
+      >
+        מחיר קבוע
+      </ModePill>
+      <ModePill active={mode === "hourly"} onClick={() => setMode("hourly")}>
+        שעתי
+      </ModePill>
+      <button
+        type="button"
+        onClick={() => setMode("quote")}
+        className={cn(
+          "inline-flex items-center gap-1 px-2.5 py-1.5 rounded-sm text-xs font-medium transition-colors",
+          "border border-ink-300 bg-white text-ink-700 hover:bg-ink-50",
+          mode === "quote" && "border-primary-400 bg-primary-50 text-primary-700",
+        )}
+      >
+        <FileText className="w-3.5 h-3.5" />
+        הצעת מחיר
+      </button>
+      <button
+        type="button"
+        onClick={handleSave}
+        className="btn-primary !py-1.5 !px-3 !text-xs"
+        title="שמרי שינויים שעוד לא נשמרו"
+      >
+        {savedFlash ? (
+          <>
+            <Check className="w-3.5 h-3.5" />
+            נשמר
+          </>
+        ) : (
+          <>
+            <Save className="w-3.5 h-3.5" />
+            שמרי
+          </>
+        )}
+      </button>
+    </div>
+  );
+}
+
+function ModePill({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "px-2.5 py-1.5 rounded-sm text-xs font-medium transition-colors",
+        active
+          ? "bg-ink-900 text-white"
+          : "bg-ink-100 text-ink-700 hover:bg-ink-200",
+      )}
+    >
+      {children}
+    </button>
   );
 }
 

@@ -31,14 +31,17 @@ import { StatsTallWidget } from "@/components/recordings/widgets/StatsTallWidget
 import { PlayerWidget } from "@/components/recordings/widgets/PlayerWidget";
 
 /**
- * Recordings page — single DashboardGrid with five draggable widgets.
+ * Recordings page — locked DashboardGrid with five widgets.
+ *
  * Layout (lg, 12 cols):
- *   ┌──┬──┬──┬───────────────────────┬────────────┐
- *   │UP│QR│ST│        Player         │ Filters+List│
- *   └──┴──┴──┴───────────────────────┴────────────┘
- *  3 narrow tall banners on the left (each w=2), wide player in the
- *  middle (w=3), filters+list panel on the right (w=3). All widgets
- *  share state via RecordingsPageContext.
+ *   [UP][QR][ST][         Player wide          ][ Filters+List ]
+ *    1   1   1            6                            3
+ *
+ * The 3 left banners are narrow strips (w=1 each) leaving the player
+ * a wide center area (w=6). Filters+list panel sits on the right (w=3).
+ * Layout is locked — no drag/resize, no edit-mode toggle. Each widget
+ * still owns its internal collapse state where it makes sense
+ * (filters / stats).
  */
 const RECORDINGS_WIDGETS: WidgetDefinition[] = [
   {
@@ -46,7 +49,7 @@ const RECORDINGS_WIDGETS: WidgetDefinition[] = [
     title: "העלאת קובץ",
     component: UploadTallWidget,
     chromeStyle: "bare",
-    defaultDesktop: { x: 0, y: 0, w: 2, h: 10, minW: 2, minH: 4 },
+    defaultDesktop: { x: 0, y: 0, w: 1, h: 10, minW: 1, minH: 4 },
     defaultTablet: { x: 0, y: 12, w: 3, h: 4 },
     defaultMobile: { x: 0, y: 7, w: 4, h: 4 },
   },
@@ -55,7 +58,7 @@ const RECORDINGS_WIDGETS: WidgetDefinition[] = [
     title: "הקלטה מהירה",
     component: QuickRecordTallWidget,
     chromeStyle: "bare",
-    defaultDesktop: { x: 2, y: 0, w: 2, h: 10, minW: 2, minH: 4 },
+    defaultDesktop: { x: 1, y: 0, w: 1, h: 10, minW: 1, minH: 4 },
     defaultTablet: { x: 3, y: 12, w: 2, h: 4 },
     defaultMobile: { x: 0, y: 0, w: 4, h: 3 },
   },
@@ -64,7 +67,7 @@ const RECORDINGS_WIDGETS: WidgetDefinition[] = [
     title: "סטטיסטיקה",
     component: StatsTallWidget,
     chromeStyle: "bare",
-    defaultDesktop: { x: 4, y: 0, w: 2, h: 10, minW: 2, minH: 4 },
+    defaultDesktop: { x: 2, y: 0, w: 1, h: 10, minW: 1, minH: 4 },
     defaultTablet: { x: 5, y: 12, w: 3, h: 4 },
     defaultMobile: { x: 0, y: 11, w: 4, h: 4 },
   },
@@ -73,7 +76,7 @@ const RECORDINGS_WIDGETS: WidgetDefinition[] = [
     title: "נגן ההקלטה",
     component: PlayerWidget,
     chromeStyle: "bare",
-    defaultDesktop: { x: 6, y: 0, w: 3, h: 10, minW: 3, minH: 5 },
+    defaultDesktop: { x: 3, y: 0, w: 6, h: 10, minW: 4, minH: 5 },
     defaultTablet: { x: 0, y: 6, w: 8, h: 6 },
     defaultMobile: { x: 0, y: 3, w: 4, h: 4 },
   },
@@ -219,8 +222,12 @@ export function Recordings() {
           source="other"
         />
 
-        <div className="mt-10">
-          <DashboardGrid screenKey="recordings" widgets={RECORDINGS_WIDGETS} />
+        <div className="mt-5">
+          <DashboardGrid
+            screenKey="recordings"
+            widgets={RECORDINGS_WIDGETS}
+            lockedLayout
+          />
         </div>
       </ScreenScaffold>
     </RecordingsPageContext.Provider>

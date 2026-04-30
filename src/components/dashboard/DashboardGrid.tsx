@@ -68,6 +68,12 @@ interface DashboardGridProps {
   scopeId?: string | null;
   widgets: WidgetDefinition[];
   className?: string;
+  /**
+   * When true, the edit-mode toggle is hidden and dragging/resizing is
+   * permanently disabled. Use for screens where the layout should feel
+   * fixed (e.g. recordings page after the layout v2 redesign).
+   */
+  lockedLayout?: boolean;
 }
 
 // `lg` raised from 1200 to 1400 so phones in "request desktop site" mode
@@ -107,10 +113,12 @@ export function DashboardGrid({
   scopeId = null,
   widgets,
   className,
+  lockedLayout = false,
 }: DashboardGridProps) {
   const { data: savedLayout } = useDashboardLayout(screenKey, scopeId);
   const { scheduleSave } = useDebouncedLayoutSave(screenKey, scopeId);
-  const [isEditing, setIsEditing] = useEditMode(screenKey);
+  const [editingState, setIsEditing] = useEditMode(screenKey);
+  const isEditing = lockedLayout ? false : editingState;
 
   const fallback = useMemo(() => defaultLayouts(widgets), [widgets]);
 
@@ -221,13 +229,15 @@ export function DashboardGrid({
         className
       )}
     >
-      <EditModeToggle
-        editing={isEditing}
-        onToggle={() => setIsEditing((v) => !v)}
-        hasHiddenWidgets={hiddenWidgets.length > 0}
-        hiddenWidgets={hiddenWidgets}
-        onShow={showWidget}
-      />
+      {!lockedLayout && (
+        <EditModeToggle
+          editing={isEditing}
+          onToggle={() => setIsEditing((v) => !v)}
+          hasHiddenWidgets={hiddenWidgets.length > 0}
+          hiddenWidgets={hiddenWidgets}
+          onShow={showWidget}
+        />
+      )}
       <ResponsiveGridLayout
         className="layout"
         layouts={filteredLayouts}

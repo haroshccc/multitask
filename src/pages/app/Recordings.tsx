@@ -31,63 +31,72 @@ import { StatsTallWidget } from "@/components/recordings/widgets/StatsTallWidget
 import { PlayerWidget } from "@/components/recordings/widgets/PlayerWidget";
 
 /**
- * Recordings page — locked DashboardGrid with five widgets.
+ * Recordings page — locked layout per the reference screenshot.
  *
- * Layout (lg, 12 cols):
- *   [UP][QR][ST][         Player wide          ][ Filters+List ]
- *    1   1   1            6                            3
+ * Visual layout (RTL, right to left = intent x increasing):
+ *   ┌────────────┬────────┬────────┬────────┐
+ *   │ Filters +  │ Stats  │ Quick  │ Upload │  ← top row (h=4)
+ *   │  List      ├────────┴────────┴────────┤
+ *   │ (full      │                          │
+ *   │  height)   │       Player             │  ← below (h=8)
+ *   │            │                          │
+ *   └────────────┴──────────────────────────┘
  *
- * The 3 left banners are narrow strips (w=1 each) leaving the player
- * a wide center area (w=6). Filters+list panel sits on the right (w=3).
- * Layout is locked — no drag/resize, no edit-mode toggle. Each widget
- * still owns its internal collapse state where it makes sense
- * (filters / stats).
+ * Intent frame (x=0 = visual right) used by widget defaults:
+ *   filters_list:  x=0,  w=3, h=12 (full height column)
+ *   stats:         x=3,  w=3, h=4
+ *   quick_record:  x=6,  w=3, h=4
+ *   upload:        x=9,  w=3, h=4
+ *   player:        x=3,  w=9, h=8 (under the 3 top banners)
+ *
+ * lockedLayout = true, so users can't drag / resize / hide / collapse
+ * banners. Internal collapse for Filters / Stats stays available.
  */
 const RECORDINGS_WIDGETS: WidgetDefinition[] = [
   {
-    key: "upload",
-    title: "העלאת קובץ",
-    component: UploadTallWidget,
+    key: "filters_list",
+    title: "סינון ורשימה",
+    component: FiltersAndListWidget,
     chromeStyle: "bare",
-    defaultDesktop: { x: 0, y: 0, w: 1, h: 10, minW: 1, minH: 4 },
-    defaultTablet: { x: 0, y: 12, w: 3, h: 4 },
-    defaultMobile: { x: 0, y: 7, w: 4, h: 4 },
-  },
-  {
-    key: "quick_record",
-    title: "הקלטה מהירה",
-    component: QuickRecordTallWidget,
-    chromeStyle: "bare",
-    defaultDesktop: { x: 1, y: 0, w: 1, h: 10, minW: 1, minH: 4 },
-    defaultTablet: { x: 3, y: 12, w: 2, h: 4 },
-    defaultMobile: { x: 0, y: 0, w: 4, h: 3 },
+    defaultDesktop: { x: 0, y: 0, w: 3, h: 12, minW: 3, minH: 6 },
+    defaultTablet: { x: 0, y: 0, w: 8, h: 6 },
+    defaultMobile: { x: 0, y: 0, w: 4, h: 6 },
   },
   {
     key: "stats",
     title: "סטטיסטיקה",
     component: StatsTallWidget,
     chromeStyle: "bare",
-    defaultDesktop: { x: 2, y: 0, w: 1, h: 10, minW: 1, minH: 4 },
-    defaultTablet: { x: 5, y: 12, w: 3, h: 4 },
-    defaultMobile: { x: 0, y: 11, w: 4, h: 4 },
+    defaultDesktop: { x: 3, y: 0, w: 3, h: 4, minW: 3, minH: 3 },
+    defaultTablet: { x: 0, y: 6, w: 4, h: 4 },
+    defaultMobile: { x: 0, y: 14, w: 4, h: 4 },
+  },
+  {
+    key: "quick_record",
+    title: "הקלטה מהירה",
+    component: QuickRecordTallWidget,
+    chromeStyle: "bare",
+    defaultDesktop: { x: 6, y: 0, w: 3, h: 4, minW: 3, minH: 3 },
+    defaultTablet: { x: 4, y: 6, w: 4, h: 4 },
+    defaultMobile: { x: 0, y: 6, w: 4, h: 3 },
+  },
+  {
+    key: "upload",
+    title: "העלאת קובץ",
+    component: UploadTallWidget,
+    chromeStyle: "bare",
+    defaultDesktop: { x: 9, y: 0, w: 3, h: 4, minW: 3, minH: 3 },
+    defaultTablet: { x: 0, y: 10, w: 8, h: 4 },
+    defaultMobile: { x: 0, y: 9, w: 4, h: 4 },
   },
   {
     key: "player",
     title: "נגן ההקלטה",
     component: PlayerWidget,
     chromeStyle: "bare",
-    defaultDesktop: { x: 3, y: 0, w: 6, h: 10, minW: 4, minH: 5 },
-    defaultTablet: { x: 0, y: 6, w: 8, h: 6 },
-    defaultMobile: { x: 0, y: 3, w: 4, h: 4 },
-  },
-  {
-    key: "filters_list",
-    title: "סינון ורשימה",
-    component: FiltersAndListWidget,
-    chromeStyle: "bare",
-    defaultDesktop: { x: 9, y: 0, w: 3, h: 10, minW: 3, minH: 5 },
-    defaultTablet: { x: 0, y: 0, w: 8, h: 6 },
-    defaultMobile: { x: 0, y: 15, w: 4, h: 6 },
+    defaultDesktop: { x: 3, y: 4, w: 9, h: 8, minW: 6, minH: 5 },
+    defaultTablet: { x: 0, y: 14, w: 8, h: 8 },
+    defaultMobile: { x: 0, y: 18, w: 4, h: 6 },
   },
 ];
 

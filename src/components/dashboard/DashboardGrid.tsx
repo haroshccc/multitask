@@ -360,6 +360,11 @@ function WidgetChrome({
  * Minimal chrome: renders the widget body unmodified and overlays a small,
  * subtle drag handle in the top-end corner. Lets existing screens preserve
  * their original visual design while still participating in the grid.
+ *
+ * The floating chrome (drag/collapse/hide buttons) carries `widget-edit-only`
+ * so a parent `.grid-locked` can hide it via CSS — keeps locked layouts
+ * (e.g. the recordings page) free of UI affordances that would let the user
+ * accidentally rearrange / hide widgets.
  */
 function BareChrome({
   title,
@@ -378,7 +383,7 @@ function BareChrome({
     <div className="relative h-full group/widget">
       <div
         className={cn(
-          "absolute top-1.5 end-1.5 z-10 flex items-center gap-0.5",
+          "widget-edit-only absolute top-1.5 end-1.5 z-10 flex items-center gap-0.5",
           "rounded-md bg-white/80 backdrop-blur shadow-soft px-1 py-0.5",
           // On mobile/touch (no hover), keep the handle visible at 50%; on
           // desktop fade it in on hover so it doesn't compete with content.

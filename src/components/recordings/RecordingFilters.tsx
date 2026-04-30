@@ -1,4 +1,4 @@
-import { Activity, Calendar, Filter, Link2, Search, X } from "lucide-react";
+import { Activity, ArrowDown, ArrowUp, Calendar, Filter, Link2, Search, X } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { useProjects } from "@/lib/hooks/useProjects";
 import { useTaskLists } from "@/lib/hooks/useTaskLists";
@@ -176,18 +176,28 @@ export function RecordingFilters({
         )}
 
         {grouping.mode === "date" && (
-          <div className="inline-flex rounded-md bg-ink-100 p-0.5">
-            <ModeTab
-              label="חדשות → ישנות"
-              active={grouping.dateOrder === "desc"}
-              onClick={() => onGroupingChange({ ...grouping, dateOrder: "desc" })}
-            />
-            <ModeTab
-              label="ישנות → חדשות"
-              active={grouping.dateOrder === "asc"}
-              onClick={() => onGroupingChange({ ...grouping, dateOrder: "asc" })}
-            />
-          </div>
+          <button
+            type="button"
+            onClick={() =>
+              onGroupingChange({
+                ...grouping,
+                dateOrder: grouping.dateOrder === "desc" ? "asc" : "desc",
+              })
+            }
+            className="inline-flex items-center gap-1 rounded-md bg-ink-100 px-2.5 py-1 text-xs text-ink-700 hover:bg-ink-200 transition-colors"
+          >
+            {grouping.dateOrder === "desc" ? (
+              <>
+                חדש
+                <ArrowUp className="w-3 h-3" />
+              </>
+            ) : (
+              <>
+                ישן
+                <ArrowDown className="w-3 h-3" />
+              </>
+            )}
+          </button>
         )}
 
         {grouping.mode === "linkage" && (

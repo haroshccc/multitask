@@ -44,7 +44,10 @@ const SOURCE_LABEL: Record<RecordingSource, string> = {
   thought: "מחשבה",
   call: "שיחה",
   meeting: "פגישה",
-  other: "העלאה",
+  recording: "מהקלטה",
+  whatsapp: "מוואטספ",
+  upload: "מהעלאה",
+  other: "אחר",
 };
 
 interface NamedRow {

@@ -166,6 +166,14 @@
   .grid-locked .react-resizable-handle {
     display: none !important;
   }
+  /* When the screen is in locked mode, hide the entire floating chrome
+     overlay (drag handle + collapse + hide buttons) so users can't
+     accidentally rearrange the layout. Internal widget collapse states
+     (e.g. filters / stats) stay available — those use their own
+     header buttons inside the widget body, not this overlay. */
+  .grid-locked .widget-edit-only {
+    display: none !important;
+  }
   .grid-editing .react-resizable-handle {
     /* Tiny bottom-end resize affordance, only when editing. */
     background: transparent;

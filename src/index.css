@@ -208,3 +208,9 @@
     background-position: 100% 50%;
   }
 }
+
+/* Marker rule used solely to force a new asset hash so browsers stop
+   serving a stale cached stylesheet. Harmless — never matched. */
+.cache-bust-2026-04-30b {
+  display: none;
+}

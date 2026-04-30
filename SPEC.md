@@ -2669,3 +2669,67 @@ Hero: "החלל לחשוב. החלל לעשות."
 
   **מה פתוח לשלב הבא:**
   - אין כיום שום פאזה פתוחה במסך הקלטות. כל הבקשות של הסשן הזה מומשו.
+
+- **2026-04-30 — Layout / RTL / Calendar / Stats (PR #132 → #137):**
+
+  **#132 — AI toolbar underlines.**
+  - `<AiInsights>`: הוסר ה-dot indicator. Underline `h-0.5 inset-x-1 -bottom-0.5` שמשנה צבע — `bg-accent-yellow` כש-active, `bg-accent-orange` כש-`filled || count>0`, אחרת שקוף.
+
+  **#133 — סידור דף פרויקט + Gantt empty title + Recordings v2.**
+  - **PROJECT_WIDGETS** סודר מחדש (intent frame; *x=0 = visual right מאז #136*):
+    ROW1 `[calendar w=4]` `[pricing w=4]` `[stats w=4]`, ROW2 `[tasks w=12]`, ROW3 `[summary w=12 h=3 קומפקטי]`, ROW4 `[upload w=4]` `[quote w=4]` `[templates w=4]`, ROW5 `[questions w=12]`.
+  - **PricingActions בכותרת ProjectDetail** — 3 כפתורי מצב (קבוע/שעתי/הצעת מחיר) + שמרי (gradient כתום + flash "נשמר ✓"). ה-toggle הוסר מ-`<PricingBlock>`.
+  - **Recordings v2** — 5 widgets תחת `src/components/recordings/widgets/`: `FiltersAndListWidget`, `QuickRecordTallWidget`, `UploadTallWidget`, `StatsTallWidget`, `PlayerWidget`. כולם מקושרים ב-`RecordingsPageContext`.
+  - **Gantt empty-title fallback** — `gantt-utils.ts buildRows`: `t.title?.trim() || "ללא כותרת"` למשימות, `"אירוע ללא כותרת"` לאירועים. שורות עם title ריק לא יראו ריקות יותר.
+  - מיגרציות `20260430000000_reset_recordings_layout_v2` ו-`20260430000100_reset_project_detail_layout_v2` הופעלו ידנית על production דרך MCP.
+
+  **#134 — StatsBlock 4-KPI row + per-list progress bars.**
+  - KPIs ב-`grid-cols-2 lg:grid-cols-4`.
+  - `groupByList(tasks, allLists)` מקבץ לפי `task_list_id`, מתחבר ל-`useTaskLists()`.
+  - `<ListProgressRow>` — שם רשימה + סטטוס (טרם החל / בפעיל / הושלמה) + פס מילוי gradient + תווית `actualH/estimatedH`.
+  - משימות בלי `task_list_id` → "ללא רשימה". סידור לפי `total` יורד.
+
+  **#135 — Recordings locked + Stats internal collapse + Calendar week grid.**
+  - `<DashboardGrid>` קיבל prop חדש `lockedLayout` שמסתיר את toggle המצב ומחייב `isEditing=false`.
+  - **`StatsTallWidget` internally-collapsible** — header לחיץ פנימי (BarChart3 + chevron). כש-closed ה-body נעלם לגמרי.
+  - **`<CalendarBlock>` תצוגת שבוע משוכתבת** — מ-bar-chart compact ל-Google-Calendar-style: 7 עמודות ימים × 10 שורות שעות (7-16, ROW_PX=36). מקרא שעות בעמודה האחרונה. בלוקי `<WeekBar>` ב-`position:absolute` לפי דקת התחלה/משך.
+
+  **#136 — RTL x-flip ב-DashboardGrid.**
+  - הבעיה: מאז `direction:ltr` על `.react-grid-layout` (#130, RTL clipping fix), `x=0` נחת ב-visual left. בעברית RTL הקוראת מצפה לפריט הראשון בצד ימין.
+  - הפתרון: שכבת flip ב-DashboardGrid. שני frames:
+    - **intent frame** (`x=0 = visual right`) — widget defaults, layouts שמורים, callbacks.
+    - **visual frame** (`x=0 = visual left`) — מה ש-react-grid-layout מקבל.
+  - `flipX(layout, cols)`: `x' = cols - x - w`. flip של flip = identity.
+  - `filteredLayouts` עובר flip לפני RGL. `handleLayoutChange` עושה flip חוזר לפני `scheduleSave`.
+  - **משמעות עבור widget defs**: `Dashboard.tsx`, `ProjectBlocks.tsx`, `Recordings.tsx` ממשיכים להגדיר `defaultDesktop: { x, ... }` — אבל **המשמעות הויזואלית של x התהפכה**. וידג'ט שמוגדר `x=0` נחת ב-visual right. עורכי ה-defs צריכים לזכור: x גדל מימין לשמאל.
+  - מיגרציה `20260430010000_reset_layouts_for_rtl_flip` — `DELETE FROM user_dashboard_layouts;` (אגרסיבית — כל המסכים, כל המשתמשים). הופעלה על production.
+
+  **#137 — Recordings page match-screenshot + locked chrome.**
+  - **layout חדש** לפי צילום שהמשתמשת שלחה (intent frame):
+    ```
+    filters_list:  x=0,  w=3, h=12   (עמודה ימנית מלאה)
+    stats:         x=3,  w=3, h=4    (top row)
+    quick_record:  x=6,  w=3, h=4
+    upload:        x=9,  w=3, h=4
+    player:        x=3,  w=9, h=8    (מתחת ל-3 הבאנרים)
+    ```
+  - **QuickRecordTallWidget / UploadTallWidget** — חזרו לעיצוב המלא. הגרסה narrow-tall (w=1) שכתבתי ב-#135 הוסרה.
+  - **StatsTallWidget**: `useState(false)` → סגור כברירת מחדל.
+  - **ביטול עריכה אישית ב-locked layout** — class חדש `widget-edit-only` על overlay הצף של `<BareChrome>` (drag/collapse/hide), ו-CSS rule `.grid-locked .widget-edit-only { display: none !important }`. ה-collapse הפנימי של filters/stats עובד דרך ה-header של ה-widget עצמו, לא דרך ה-overlay.
+
+  **שינויי סכמה בסשן (כולן הופעלו דרך MCP):**
+  ```
+  20260430000000_reset_recordings_layout_v2.sql
+  20260430000100_reset_project_detail_layout_v2.sql
+  20260430010000_reset_layouts_for_rtl_flip.sql   (DELETE FROM user_dashboard_layouts;)
+  ```
+
+  **פתוח לסשן הבא — המשתמשת ביקשה להעביר וזה מה שצריך לסיים:**
+  - **לאמת שה-RTL flip מופיע ב-Vercel production.** המשתמשת שלחה צילום של דשבורד שבו "מחשבות לא מעובדות" עדיין ב-visual left ולא ב-visual right (היא שאלה "האם אתה מצליח להבין שזה משמאל לימין?"). או שראתה את המסך לפני שה-deploy של #136 הסתיים, או שיש bug במימוש שלא מצאתי. צעדים: `npm run dev` לוקאלית, devtools לאמת `direction:ltr` על `.react-grid-layout` ו-`direction:rtl` על `.react-grid-item`, וש-`flipLayouts` רץ פעם אחת בכל כיוון. אם בעיה — לתקן. אחרת — לבקש hard-refresh.
+  - **audit ל-LTR בתוך widgets פנימיים.** המשתמשת אמרה "הכיתוב כולו הוא משמאל לימין" — גם אחרי flip של מיקומי באנרים, ייתכן ויש text-align/flex-direction הפוכים בתוכן. מקומות לבדוק: `<UnprocessedThoughts>` rows, `<TasksBlock>` columns ו-rows, `<PricingBlock>` sliders, רשימות ב-`<FiltersAndListWidget>`.
+  - **טבלת משימות** — "תהפוך את הצדדים בטבלה שתהיה מימין לשמאל ותתקן את זה שלא רואים את השורות". `<TasksBlock>` משתמש ב-`gridTemplateColumns: gridCols`. CSS Grid יורש direction מההורה, אז בתיאוריה אחרי #136 זה אמור להיות RTL. צריך אימות + reproduction של "לא רואים שורות".
+  - **דף הקלטות אחרי #137** — המשתמשת אמרה "הרסת לי את דף ההקלטות" באמצע סשן. ב-#137 הצמדתי לצילום שלה. אם זה עדיין לא נכון אצלה — לבקש צילום עדכני אחרי deploy מלא + hard refresh, ולא לנחש.
+
+  **build infra תזכורת:**
+  - לפני push: `npx tsc -b && npx vite build`. `tsc --noEmit` לבד לא מספיק (#87).
+  - מיגרציות חדשות: לוודא שמופעלות גם על production דרך MCP `apply_migration`, לא רק לקובץ.

@@ -1,20 +1,14 @@
-import { useEffect, useMemo, useState, createContext, useContext } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Mic, ArrowLeft, Settings as SettingsIcon } from "lucide-react";
+import { Settings as SettingsIcon } from "lucide-react";
 import { ScreenScaffold } from "@/components/layout/ScreenScaffold";
 import {
   DashboardGrid,
   type WidgetDefinition,
 } from "@/components/dashboard/DashboardGrid";
-import { RecordingDropZone } from "@/components/recordings/RecordingDropZone";
-import { RecordingCard } from "@/components/recordings/RecordingCard";
-import { RecordingPlayer } from "@/components/recordings/RecordingPlayer";
 import { RecorderModal } from "@/components/recordings/RecorderModal";
-import { QuickRecordCard } from "@/components/recordings/QuickRecordCard";
-import { RecordingsMobileDropdown } from "@/components/recordings/RecordingsMobileDropdown";
 import { AiPromptsDialog } from "@/components/recordings/AiPromptsDialog";
 import {
-  RecordingFilters,
   DEFAULT_RECORDING_FILTERS,
   filterRecordings,
   type RecordingsFilterState,
@@ -26,83 +20,79 @@ import {
 } from "@/components/recordings/RecordingsListBanner";
 import { useRecordings } from "@/lib/hooks/useRecordings";
 import { useAllRecordingAssignments } from "@/lib/hooks/useRecordingLists";
+import {
+  RecordingsPageContext,
+  type RecordingsPageCtx,
+} from "@/components/recordings/widgets/context";
+import { FiltersAndListWidget } from "@/components/recordings/widgets/FiltersAndListWidget";
+import { QuickRecordTallWidget } from "@/components/recordings/widgets/QuickRecordTallWidget";
+import { UploadTallWidget } from "@/components/recordings/widgets/UploadTallWidget";
+import { StatsTallWidget } from "@/components/recordings/widgets/StatsTallWidget";
+import { PlayerWidget } from "@/components/recordings/widgets/PlayerWidget";
 
 /**
- * The 3 top widgets (filters / quick-record / drop-zone) all need access to
- * the page's shared state. Putting them in a DashboardGrid means each widget
- * gets a `scopeId` only — they pull the rest from this context.
+ * Recordings page — single DashboardGrid with five draggable widgets.
+ * Layout (lg, 12 cols):
+ *   ┌──┬──┬──┬───────────────────────┬────────────┐
+ *   │UP│QR│ST│        Player         │ Filters+List│
+ *   └──┴──┴──┴───────────────────────┴────────────┘
+ *  3 narrow tall banners on the left (each w=2), wide player in the
+ *  middle (w=3), filters+list panel on the right (w=3). All widgets
+ *  share state via RecordingsPageContext.
  */
-interface RecordingsTopBarCtx {
-  filters: RecordingsFilterState;
-  setFilters: (f: RecordingsFilterState) => void;
-  grouping: ListGroupingState;
-  setGrouping: (g: ListGroupingState) => void;
-  onStartRecording: () => void;
-  onUploaded: (id: string) => void;
-}
-const RecordingsTopBarContext = createContext<RecordingsTopBarCtx | null>(null);
-function useRecordingsTopBarCtx(): RecordingsTopBarCtx {
-  const v = useContext(RecordingsTopBarContext);
-  if (!v) throw new Error("RecordingsTopBarContext missing");
-  return v;
-}
-
-function FiltersWidget() {
-  const ctx = useRecordingsTopBarCtx();
-  return (
-    <RecordingFilters
-      filters={ctx.filters}
-      onFiltersChange={ctx.setFilters}
-      grouping={ctx.grouping}
-      onGroupingChange={ctx.setGrouping}
-    />
-  );
-}
-function QuickRecordWidget() {
-  const ctx = useRecordingsTopBarCtx();
-  return <QuickRecordCard onStart={ctx.onStartRecording} />;
-}
-function DropZoneWidget() {
-  const ctx = useRecordingsTopBarCtx();
-  return <RecordingDropZone source="other" onUploaded={ctx.onUploaded} />;
-}
-
-const RECORDINGS_TOP_WIDGETS: WidgetDefinition[] = [
+const RECORDINGS_WIDGETS: WidgetDefinition[] = [
   {
-    key: "filters",
-    title: "סינון והגדרות",
-    component: FiltersWidget,
+    key: "upload",
+    title: "העלאת קובץ",
+    component: UploadTallWidget,
     chromeStyle: "bare",
-    defaultDesktop: { x: 0, y: 0, w: 6, h: 3, minW: 4, minH: 2 },
-    defaultTablet: { x: 0, y: 0, w: 8, h: 3 },
-    defaultMobile: { x: 0, y: 4, w: 4, h: 3 },
+    defaultDesktop: { x: 0, y: 0, w: 2, h: 10, minW: 2, minH: 4 },
+    defaultTablet: { x: 0, y: 12, w: 3, h: 4 },
+    defaultMobile: { x: 0, y: 7, w: 4, h: 4 },
   },
   {
     key: "quick_record",
     title: "הקלטה מהירה",
-    component: QuickRecordWidget,
+    component: QuickRecordTallWidget,
     chromeStyle: "bare",
-    defaultDesktop: { x: 6, y: 0, w: 3, h: 3, minW: 2, minH: 2 },
-    defaultTablet: { x: 0, y: 3, w: 4, h: 3 },
+    defaultDesktop: { x: 2, y: 0, w: 2, h: 10, minW: 2, minH: 4 },
+    defaultTablet: { x: 3, y: 12, w: 2, h: 4 },
     defaultMobile: { x: 0, y: 0, w: 4, h: 3 },
   },
   {
-    key: "drop_zone",
-    title: "העלאת קובץ",
-    component: DropZoneWidget,
+    key: "stats",
+    title: "סטטיסטיקה",
+    component: StatsTallWidget,
     chromeStyle: "bare",
-    defaultDesktop: { x: 9, y: 0, w: 3, h: 3, minW: 2, minH: 2 },
-    defaultTablet: { x: 4, y: 3, w: 4, h: 3 },
-    defaultMobile: { x: 0, y: 7, w: 4, h: 3 },
+    defaultDesktop: { x: 4, y: 0, w: 2, h: 10, minW: 2, minH: 4 },
+    defaultTablet: { x: 5, y: 12, w: 3, h: 4 },
+    defaultMobile: { x: 0, y: 11, w: 4, h: 4 },
+  },
+  {
+    key: "player",
+    title: "נגן ההקלטה",
+    component: PlayerWidget,
+    chromeStyle: "bare",
+    defaultDesktop: { x: 6, y: 0, w: 3, h: 10, minW: 3, minH: 5 },
+    defaultTablet: { x: 0, y: 6, w: 8, h: 6 },
+    defaultMobile: { x: 0, y: 3, w: 4, h: 4 },
+  },
+  {
+    key: "filters_list",
+    title: "סינון ורשימה",
+    component: FiltersAndListWidget,
+    chromeStyle: "bare",
+    defaultDesktop: { x: 9, y: 0, w: 3, h: 10, minW: 3, minH: 5 },
+    defaultTablet: { x: 0, y: 0, w: 8, h: 6 },
+    defaultMobile: { x: 0, y: 15, w: 4, h: 6 },
   },
 ];
 
 export function Recordings() {
   const [filters, setFilters] = useState<RecordingsFilterState>(
-    DEFAULT_RECORDING_FILTERS
+    DEFAULT_RECORDING_FILTERS,
   );
   const [grouping, setGrouping] = useState<ListGroupingState>(DEFAULT_GROUPING);
-  // Always fetch with archived included; client-side filter then narrows.
   const { data: allRecordings = [], isLoading } = useRecordings({
     includeArchived: true,
   });
@@ -121,224 +111,119 @@ export function Recordings() {
     return m;
   }, [assignments]);
 
-  const recordings = useMemo(() => {
+  const filteredRecordings = useMemo(() => {
     const filtered = filterRecordings(allRecordings, filters);
     return applyGrouping(filtered, grouping, listsByRecording);
   }, [allRecordings, filters, listsByRecording, grouping]);
 
   // Honor `?id=...` from the URL — used by deep links from the project page's
-  // recordings list. Cleared when the user picks something else.
+  // recordings list. Cleared once consumed so reload doesn't re-force it.
   const [searchParams, setSearchParams] = useSearchParams();
   const initialIdFromUrl = searchParams.get("id");
   const [selectedId, setSelectedId] = useState<string | null>(initialIdFromUrl);
   useEffect(() => {
     if (initialIdFromUrl && initialIdFromUrl !== selectedId) {
       setSelectedId(initialIdFromUrl);
-      // Drop the param so reload doesn't re-force this selection forever.
       const next = new URLSearchParams(searchParams);
       next.delete("id");
       setSearchParams(next, { replace: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialIdFromUrl]);
+
   const [recorderOpen, setRecorderOpen] = useState(false);
   const [aiPromptsOpen, setAiPromptsOpen] = useState(false);
 
-  // Auto-select most recent on first load + keep a valid selection on the list.
+  // Auto-select most recent on first load + keep a valid selection.
   useEffect(() => {
-    if (recordings.length === 0) {
+    if (filteredRecordings.length === 0) {
       if (selectedId !== null) setSelectedId(null);
       return;
     }
-    if (selectedId == null || !recordings.some((r) => r.id === selectedId)) {
-      setSelectedId(recordings[0].id);
+    if (
+      selectedId == null ||
+      !filteredRecordings.some((r) => r.id === selectedId)
+    ) {
+      setSelectedId(filteredRecordings[0].id);
     }
-  }, [recordings, selectedId]);
-
-  const selected = useMemo(
-    () => recordings.find((r) => r.id === selectedId) ?? null,
-    [recordings, selectedId]
-  );
+  }, [filteredRecordings, selectedId]);
 
   const totalSeconds = useMemo(
     () => allRecordings.reduce((sum, r) => sum + (r.duration_seconds ?? 0), 0),
-    [allRecordings]
+    [allRecordings],
   );
 
-  const filteredOutCount = allRecordings.length - recordings.length;
-
-  const clearFiltersAndGrouping = () => {
-    setFilters(DEFAULT_RECORDING_FILTERS);
-    setGrouping(DEFAULT_GROUPING);
-  };
-
-  const topBarCtx = useMemo<RecordingsTopBarCtx>(
+  const ctx = useMemo<RecordingsPageCtx>(
     () => ({
+      allRecordings,
+      filteredRecordings,
+      isLoading,
+      listsByRecording,
       filters,
       setFilters,
       grouping,
       setGrouping,
+      clearAll: () => {
+        setFilters(DEFAULT_RECORDING_FILTERS);
+        setGrouping(DEFAULT_GROUPING);
+      },
+      selectedId,
+      setSelectedId,
       onStartRecording: () => setRecorderOpen(true),
       onUploaded: (id: string) => setSelectedId(id),
     }),
-    [filters, grouping]
+    [
+      allRecordings,
+      filteredRecordings,
+      isLoading,
+      listsByRecording,
+      filters,
+      grouping,
+      selectedId,
+    ],
   );
 
   return (
-    <RecordingsTopBarContext.Provider value={topBarCtx}>
-    <ScreenScaffold
-      title="הקלטות"
-      subtitle="הקלטה ישירה, גרירת קובץ, ניגון, הורדה ושיוך לפרויקט. תמלול עברית בפאזה הבאה."
-      actions={
-        <span className="inline-flex items-center gap-2">
-          {allRecordings.length > 0 && (
-            <span className="chip">
-              {allRecordings.length} הקלטות · {formatTotal(totalSeconds)}
-            </span>
-          )}
-          <button
-            type="button"
-            onClick={() => setAiPromptsOpen(true)}
-            className="p-1.5 rounded-md hover:bg-ink-100 text-ink-600"
-            title="הנחיות Claude לעיבוד הקלטות"
-            aria-label="הגדרות AI"
-          >
-            <SettingsIcon className="w-4 h-4" />
-          </button>
-        </span>
-      }
-    >
-      <AiPromptsDialog
-        open={aiPromptsOpen}
-        onClose={() => setAiPromptsOpen(false)}
-      />
-
-      <RecorderModal
-        open={recorderOpen}
-        onClose={() => setRecorderOpen(false)}
-        onSaved={(id) => setSelectedId(id)}
-        source="other"
-      />
-
-      {/* Top toolbar — 3 banners managed by DashboardGrid. Locked by default;
-          the user can click "ערכי באנרים" to drag/resize/swap. State (filters,
-          start-recording, upload-callback) flows through context. */}
-      <div className="mt-10">
-        <DashboardGrid
-          screenKey="recordings"
-          widgets={RECORDINGS_TOP_WIDGETS}
-        />
-      </div>
-
-      <div className="mt-5">
-        {isLoading ? (
-          <div className="card p-8 text-center text-sm text-ink-500">טוענת…</div>
-        ) : allRecordings.length === 0 ? (
-          <EmptyState />
-        ) : (
-          <>
-            {/* Mobile / tablet — dropdown + selected player. */}
-            <div className="lg:hidden space-y-3">
-              <RecordingsMobileDropdown
-                recordings={recordings}
-                selectedId={selectedId}
-                onSelect={setSelectedId}
-                totalCount={allRecordings.length}
-              />
-              {recordings.length === 0 ? (
-                <FilteredEmpty
-                  total={allRecordings.length}
-                  hidden={filteredOutCount}
-                  onClear={clearFiltersAndGrouping}
-                />
-              ) : selected ? (
-                <RecordingPlayer key={selected.id} recording={selected} />
-              ) : (
-                <div className="card p-6 text-center text-sm text-ink-500">
-                  בחרי הקלטה מהרשימה
-                </div>
-              )}
-            </div>
-
-            {/* Desktop — sidebar list + selected details. */}
-            <div className="hidden lg:grid lg:grid-cols-[minmax(0,360px)_1fr] gap-4">
-              <aside className="space-y-2">
-                {recordings.length === 0 ? (
-                  <FilteredEmpty
-                    total={allRecordings.length}
-                    hidden={filteredOutCount}
-                    onClear={clearFiltersAndGrouping}
-                  />
-                ) : (
-                  recordings.map((r) => (
-                    <RecordingCard
-                      key={r.id}
-                      recording={r}
-                      isActive={r.id === selectedId}
-                      onSelect={() => setSelectedId(r.id)}
-                    />
-                  ))
-                )}
-              </aside>
-              <section>
-                {selected ? (
-                  <RecordingPlayer key={selected.id} recording={selected} />
-                ) : (
-                  <div className="card p-6 text-center text-sm text-ink-500">
-                    בחרי הקלטה מהרשימה
-                  </div>
-                )}
-              </section>
-            </div>
-          </>
-        )}
-      </div>
-    </ScreenScaffold>
-    </RecordingsTopBarContext.Provider>
-  );
-}
-
-function EmptyState() {
-  return (
-    <div className="card p-8 sm:p-12 text-center">
-      <div className="mx-auto w-14 h-14 rounded-full bg-primary-50 text-primary-600 flex items-center justify-center mb-3">
-        <Mic className="w-7 h-7" />
-      </div>
-      <h2 className="text-lg font-semibold text-ink-900">עוד אין הקלטות</h2>
-      <p className="text-sm text-ink-600 mt-1 max-w-md mx-auto leading-relaxed">
-        גררי קובץ אודיו לאזור למעלה, או הקליטי ישירות מ"הקלטה מהירה".
-      </p>
-      <p className="mt-3 text-[11px] text-ink-400 inline-flex items-center gap-1">
-        <ArrowLeft className="w-3 h-3" />
-        אפשר גם דרך המיקרופון ב-Topbar
-      </p>
-    </div>
-  );
-}
-
-function FilteredEmpty({
-  total,
-  hidden,
-  onClear,
-}: {
-  total: number;
-  hidden: number;
-  onClear: () => void;
-}) {
-  return (
-    <div className="card p-5 text-center space-y-2">
-      <p className="text-sm font-medium text-ink-800">אין הקלטות בסינון זה</p>
-      <p className="text-xs text-ink-500">
-        {hidden} מתוך {total} הקלטות מוסתרות.
-      </p>
-      <button
-        type="button"
-        onClick={onClear}
-        className="btn-outline !py-1.5 !px-3 !text-xs"
+    <RecordingsPageContext.Provider value={ctx}>
+      <ScreenScaffold
+        title="הקלטות"
+        subtitle="הקלטה ישירה, גרירת קובץ, ניגון, הורדה ושיוך לפרויקט."
+        actions={
+          <span className="inline-flex items-center gap-2">
+            {allRecordings.length > 0 && (
+              <span className="chip">
+                {allRecordings.length} הקלטות · {formatTotal(totalSeconds)}
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={() => setAiPromptsOpen(true)}
+              className="p-1.5 rounded-md hover:bg-ink-100 text-ink-600"
+              title="הנחיות Claude לעיבוד הקלטות"
+              aria-label="הגדרות AI"
+            >
+              <SettingsIcon className="w-4 h-4" />
+            </button>
+          </span>
+        }
       >
-        נקי סינון
-      </button>
-    </div>
+        <AiPromptsDialog
+          open={aiPromptsOpen}
+          onClose={() => setAiPromptsOpen(false)}
+        />
+
+        <RecorderModal
+          open={recorderOpen}
+          onClose={() => setRecorderOpen(false)}
+          onSaved={(id) => setSelectedId(id)}
+          source="other"
+        />
+
+        <div className="mt-10">
+          <DashboardGrid screenKey="recordings" widgets={RECORDINGS_WIDGETS} />
+        </div>
+      </ScreenScaffold>
+    </RecordingsPageContext.Provider>
   );
 }
 

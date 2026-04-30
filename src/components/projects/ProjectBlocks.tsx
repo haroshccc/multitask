@@ -12,7 +12,6 @@ import {
 import { useTasksByProject } from "@/lib/hooks";
 import type { ProjectExpense } from "@/lib/types/domain";
 import { Trash2 } from "lucide-react";
-import type { ProjectPricingMode } from "@/lib/types/domain";
 import { TasksBlock } from "@/components/projects/blocks/TasksBlock";
 import { StatsBlock } from "@/components/projects/blocks/StatsBlock";
 import { CalendarBlock } from "@/components/projects/blocks/CalendarBlock";
@@ -27,13 +26,11 @@ import {
   type Currency,
 } from "@/lib/utils/pricing";
 
-const PRICING_MODES: { value: ProjectPricingMode; label: string }[] = [
-  { value: "hourly", label: "שעתי" },
-  { value: "fixed_price", label: "מחיר קבוע" },
-  { value: "quote", label: "הצעת מחיר" },
-];
-
 // ─── PricingBlock ───────────────────────────────────────────────────────────
+//
+// Pricing parameters only — the mode toggle (קבוע / שעתי / הצעת מחיר) lives
+// in the page header (PricingActions) so the block stays focused on actual
+// numeric inputs (rate, profit, spare, VAT, expenses).
 
 function PricingBlock({ scopeId }: { scopeId?: string | null }) {
   const { data: project } = useProject(scopeId);
@@ -44,12 +41,10 @@ function PricingBlock({ scopeId }: { scopeId?: string | null }) {
   const [spareMode, setSpareMode] = useState<"percent" | "hours">("percent");
   const [spareValue, setSpareValue] = useState(0);
   const [totalPrice, setTotalPrice] = useState(0);
-  const [mode, setMode] = useState<ProjectPricingMode>("hourly");
   const [vatPct, setVatPct] = useState(17);
 
   useEffect(() => {
     if (!project) return;
-    setMode(project.pricing_mode);
     setRate(Math.round((project.hourly_rate_cents ?? 0) / 100));
     setProfit(project.profit_percentage ?? 0);
     setSpareMode((project.spare_mode as "percent" | "hours" | null) ?? "percent");
@@ -60,31 +55,10 @@ function PricingBlock({ scopeId }: { scopeId?: string | null }) {
 
   if (!project) return <BlockEmpty hint="טוען…" />;
 
-  const setModeAndSave = (m: ProjectPricingMode) => {
-    setMode(m);
-    scheduleUpdate({ pricing_mode: m });
-  };
+  const mode = project.pricing_mode;
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-1.5">
-        {PRICING_MODES.map((opt) => (
-          <button
-            key={opt.value}
-            type="button"
-            onClick={() => setModeAndSave(opt.value)}
-            className={
-              "px-3 py-1 rounded-sm text-xs font-medium transition-colors " +
-              (mode === opt.value
-                ? "bg-ink-900 text-white"
-                : "bg-ink-100 text-ink-600 hover:bg-ink-200")
-            }
-          >
-            {opt.label}
-          </button>
-        ))}
-      </div>
-
       {mode === "hourly" && (
         <>
           <SliderRow
@@ -547,83 +521,89 @@ function BlockEmpty({ hint }: { hint: string }) {
 
 // ─── Widget registry ───────────────────────────────────────────────────────
 
-// Layout defaults
-//  - lg (≥1200px, 12 cols): true 2-column dashboard layout per the spec
-//  - md (768–1199px, 8 cols): single column — narrow desktops/tablets get
-//    everything stacked full-width so nothing gets cramped
-//  - sm (<768px, 4 cols): single column with mobile-friendly heights
+// Layout defaults — laid out per the reference screenshots:
+//   ROW 1 (y=0):  [calendar w=4] [pricing-params w=4] [stats w=4]
+//   ROW 2 (y=5):  [tasks w=12 — full width]
+//   ROW 3 (y=11): [summary w=12 — collapsed by default for compactness]
+//   ROW 4 (y=14): [upload w=4] [quote w=4] [templates w=4]
+//   ROW 5 (y=18): [questions w=12 — optional, can be hidden]
+//
+// The right→middle→left visual order under RTL falls out automatically
+// because react-grid-layout's container is forced to LTR (see index.css).
+// What matters is that calendar/pricing/stats are SIDE-BY-SIDE, and the
+// 3 bottom banners (upload/quote/templates) are also side-by-side.
 export const PROJECT_WIDGETS: WidgetDefinition[] = [
-  {
-    key: "stats",
-    title: "סטטיסטיקות",
-    component: StatsBlock,
-    defaultDesktop: { x: 6, y: 0, w: 6, h: 3, minW: 3, minH: 3 },
-    defaultTablet: { x: 0, y: 0, w: 8, h: 4 },
-    defaultMobile: { x: 0, y: 0, w: 4, h: 4 },
-  },
   {
     key: "calendar",
     title: "לוח זמנים",
     component: CalendarBlock,
-    defaultDesktop: { x: 0, y: 0, w: 6, h: 5, minW: 4, minH: 4 },
-    defaultTablet: { x: 0, y: 4, w: 8, h: 5 },
-    defaultMobile: { x: 0, y: 4, w: 4, h: 5 },
+    defaultDesktop: { x: 0, y: 0, w: 4, h: 5, minW: 3, minH: 4 },
+    defaultTablet: { x: 0, y: 0, w: 8, h: 5 },
+    defaultMobile: { x: 0, y: 0, w: 4, h: 5 },
   },
   {
     key: "pricing",
     title: "פרמטרי תמחור",
     component: PricingBlock,
-    defaultDesktop: { x: 6, y: 3, w: 6, h: 5, minW: 4, minH: 4 },
-    defaultTablet: { x: 0, y: 9, w: 8, h: 6 },
-    defaultMobile: { x: 0, y: 9, w: 4, h: 6 },
+    defaultDesktop: { x: 4, y: 0, w: 4, h: 5, minW: 3, minH: 4 },
+    defaultTablet: { x: 0, y: 5, w: 8, h: 6 },
+    defaultMobile: { x: 0, y: 5, w: 4, h: 6 },
   },
   {
-    key: "summary",
-    title: "סיכום בזמן אמת",
-    component: SummaryBlock,
-    defaultDesktop: { x: 0, y: 5, w: 6, h: 4, minW: 4, minH: 3 },
-    defaultTablet: { x: 0, y: 15, w: 8, h: 5 },
-    defaultMobile: { x: 0, y: 15, w: 4, h: 5 },
+    key: "stats",
+    title: "סטטיסטיקות",
+    component: StatsBlock,
+    defaultDesktop: { x: 8, y: 0, w: 4, h: 5, minW: 3, minH: 3 },
+    defaultTablet: { x: 0, y: 11, w: 8, h: 4 },
+    defaultMobile: { x: 0, y: 11, w: 4, h: 4 },
   },
   {
     key: "tasks",
     title: "טבלת משימות",
     component: TasksBlock,
-    defaultDesktop: { x: 0, y: 9, w: 12, h: 6, minW: 8, minH: 4 },
-    defaultTablet: { x: 0, y: 20, w: 8, h: 10 },
-    defaultMobile: { x: 0, y: 20, w: 4, h: 10 },
+    defaultDesktop: { x: 0, y: 5, w: 12, h: 6, minW: 8, minH: 4 },
+    defaultTablet: { x: 0, y: 15, w: 8, h: 10 },
+    defaultMobile: { x: 0, y: 15, w: 4, h: 10 },
   },
   {
-    key: "quote",
-    title: "הצעת מחיר",
-    component: QuoteBlock,
-    defaultDesktop: { x: 4, y: 15, w: 8, h: 4, minW: 6, minH: 3 },
-    defaultTablet: { x: 0, y: 30, w: 8, h: 4 },
-    defaultMobile: { x: 0, y: 30, w: 4, h: 4 },
+    key: "summary",
+    title: "סיכום בזמן אמת",
+    component: SummaryBlock,
+    defaultDesktop: { x: 0, y: 11, w: 12, h: 3, minW: 6, minH: 2 },
+    defaultTablet: { x: 0, y: 25, w: 8, h: 4 },
+    defaultMobile: { x: 0, y: 25, w: 4, h: 4 },
   },
   {
     key: "upload",
     title: "העלאת הקלטה",
     component: UploadBlock,
-    defaultDesktop: { x: 0, y: 15, w: 4, h: 4, minW: 3, minH: 3 },
-    defaultTablet: { x: 0, y: 34, w: 8, h: 4 },
-    defaultMobile: { x: 0, y: 34, w: 4, h: 4 },
+    defaultDesktop: { x: 0, y: 14, w: 4, h: 4, minW: 3, minH: 3 },
+    defaultTablet: { x: 0, y: 29, w: 8, h: 4 },
+    defaultMobile: { x: 0, y: 29, w: 4, h: 4 },
+  },
+  {
+    key: "quote",
+    title: "הצעת מחיר",
+    component: QuoteBlock,
+    defaultDesktop: { x: 4, y: 14, w: 4, h: 4, minW: 3, minH: 3 },
+    defaultTablet: { x: 0, y: 33, w: 8, h: 4 },
+    defaultMobile: { x: 0, y: 33, w: 4, h: 4 },
   },
   {
     key: "templates",
     title: "תבניות פרויקט",
     component: TemplatesBlock,
-    defaultDesktop: { x: 0, y: 19, w: 12, h: 4, minW: 6, minH: 3 },
-    defaultTablet: { x: 0, y: 38, w: 8, h: 4 },
-    defaultMobile: { x: 0, y: 38, w: 4, h: 4 },
+    defaultDesktop: { x: 8, y: 14, w: 4, h: 4, minW: 3, minH: 3 },
+    defaultTablet: { x: 0, y: 37, w: 8, h: 4 },
+    defaultMobile: { x: 0, y: 37, w: 4, h: 4 },
   },
   {
     key: "questions",
     title: "שאלות",
     component: QuestionsBlock,
-    defaultDesktop: { x: 0, y: 23, w: 6, h: 5, minW: 4, minH: 4 },
-    defaultTablet: { x: 0, y: 42, w: 8, h: 5 },
-    defaultMobile: { x: 0, y: 42, w: 4, h: 6 },
+    defaultDesktop: { x: 0, y: 18, w: 12, h: 5, minW: 6, minH: 4 },
+    defaultTablet: { x: 0, y: 41, w: 8, h: 5 },
+    defaultMobile: { x: 0, y: 41, w: 4, h: 6 },
   },
 ];
 

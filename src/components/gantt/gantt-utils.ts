@@ -195,7 +195,7 @@ export function buildRows(
             depth,
             start: timing.start,
             end: timing.end,
-            title: t.title,
+            title: t.title?.trim() || "ללא כותרת",
             completed: !!t.completed_at,
             isPhase: !!t.is_phase,
             phaseId: t.is_phase ? null : phaseId,
@@ -220,7 +220,7 @@ export function buildRows(
           depth: 0,
           start: timing.start,
           end: timing.end,
-          title: o.title,
+          title: o.title?.trim() || "ללא כותרת",
           completed: !!o.completed_at,
           isPhase: !!o.is_phase,
           phaseId: null,
@@ -240,7 +240,7 @@ export function buildRows(
         depth: 0,
         start: new Date(e.starts_at),
         end: new Date(e.ends_at),
-        title: e.title,
+        title: e.title?.trim() || "אירוע ללא כותרת",
         completed: false,
       });
     }

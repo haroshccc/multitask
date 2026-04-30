@@ -172,6 +172,21 @@
     bottom: 4px;
     inset-inline-end: 4px;
   }
+
+  /* react-grid-layout positions items via `position: absolute` + `transform:
+     translate(x, y)`. In an RTL document the absolute-positioned items end
+     up anchored on the RIGHT edge by default, and then the transform pushes
+     them further to the right — items at high x values fall off the screen
+     and items at x=0 visually land at the END of the row. Forcing the grid
+     container itself to LTR fixes the math (x=0 = visual left, x=cols = visual
+     right). The widget content inside still inherits the page's RTL via an
+     explicit override on each item. */
+  .react-grid-layout {
+    direction: ltr;
+  }
+  .react-grid-item {
+    direction: rtl;
+  }
 }
 
 /* Global keyframes (Tailwind's @keyframes block lives in the config;

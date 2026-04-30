@@ -1,11 +1,16 @@
 import { useState, useRef, useEffect } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
+  BarChart3,
+  Calendar,
+  ChevronDown,
   ChevronRight,
+  ChevronUp,
   Archive,
   ArchiveRestore,
   Loader2,
   Plus,
+  DollarSign,
   X,
   FileText,
   Save,
@@ -21,6 +26,9 @@ import {
 } from "@/lib/hooks/useProjects";
 import type { Project, ProjectPricingMode } from "@/lib/types/domain";
 import { PROJECT_WIDGETS } from "@/components/projects/ProjectBlocks";
+import { CalendarBlock } from "@/components/projects/blocks/CalendarBlock";
+import { StatsBlock } from "@/components/projects/blocks/StatsBlock";
+import { PricingBlock } from "@/components/projects/ProjectBlocks";
 import { cn } from "@/lib/utils/cn";
 
 const STATUS_LABEL: Record<string, string> = {
@@ -108,7 +116,8 @@ function ProjectDetailLoaded({
     >
       <ProjectHeader project={project} projectId={projectId} />
 
-      <div className="mt-5">
+      <div className="mt-5 space-y-3">
+        <TopInfoPanel projectId={projectId} />
         <DashboardGrid
           screenKey="project_detail"
           scopeId={projectId}
@@ -388,6 +397,65 @@ function TagsRow({
           <Plus className="w-3 h-3" />
           תג
         </button>
+      )}
+    </div>
+  );
+}
+
+// ─── Top info panel: calendar + pricing + stats ─────────────────────────────
+
+function TopInfoPanel({ projectId }: { projectId: string }) {
+  const [open, setOpen] = useState(true);
+
+  return (
+    <div className="card overflow-hidden">
+      {/* Header strip — always visible, click to expand/collapse */}
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className={cn(
+          "flex w-full items-center gap-3 px-4 py-2.5",
+          "text-sm text-ink-700 hover:bg-ink-50 transition-colors",
+          open && "border-b border-ink-200",
+        )}
+      >
+        <span className="inline-flex items-center gap-3 flex-1 min-w-0">
+          <span className="inline-flex items-center gap-1.5 font-medium shrink-0">
+            <Calendar className="w-3.5 h-3.5 text-ink-500" />
+            לוח זמנים
+          </span>
+          <span className="text-ink-300 hidden sm:block">·</span>
+          <span className="inline-flex items-center gap-1.5 font-medium shrink-0 hidden sm:inline-flex">
+            <DollarSign className="w-3.5 h-3.5 text-ink-500" />
+            תמחור
+          </span>
+          <span className="text-ink-300 hidden sm:block">·</span>
+          <span className="inline-flex items-center gap-1.5 font-medium shrink-0 hidden sm:inline-flex">
+            <BarChart3 className="w-3.5 h-3.5 text-ink-500" />
+            סטטיסטיקות
+          </span>
+        </span>
+        {open ? (
+          <ChevronUp className="w-4 h-4 shrink-0 text-ink-400" />
+        ) : (
+          <ChevronDown className="w-4 h-4 shrink-0 text-ink-400" />
+        )}
+      </button>
+
+      {/* Expanded: three panels side by side */}
+      {open && (
+        <div className="grid grid-cols-1 md:grid-cols-3 divide-x divide-x-reverse divide-ink-200 min-h-0" style={{ height: "340px" }}>
+          <div className="overflow-hidden min-h-0 p-3">
+            <CalendarBlock scopeId={projectId} />
+          </div>
+          <div className="overflow-auto min-h-0 p-3 scrollbar-thin">
+            <PricingBlock scopeId={projectId} />
+          </div>
+          <div className="overflow-auto min-h-0 p-3 scrollbar-thin">
+            <StatsBlock scopeId={projectId} />
+          </div>
+        </div>
       )}
     </div>
   );

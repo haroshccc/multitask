@@ -214,7 +214,12 @@ export function DashboardGrid({
           const collapsed = widgetState[w.key]?.collapsed ?? false;
           const Chrome = w.chromeStyle === "bare" ? BareChrome : WidgetChrome;
           return (
-            <div key={w.key}>
+            // The grid container forces direction:ltr so RGL's pixel math
+            // works in RTL pages — but that propagates to the widget content
+            // unless we explicitly pin RTL again here. Setting `dir="rtl"`
+            // on the per-item wrapper is the simplest, highest-specificity
+            // fix (HTML attribute beats any inherited / CSS direction).
+            <div key={w.key} dir="rtl">
               <Chrome
                 title={w.title}
                 collapsed={collapsed}

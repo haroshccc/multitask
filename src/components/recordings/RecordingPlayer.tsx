@@ -668,26 +668,6 @@ function RecordingListsLinkMeta({ recording }: { recording: Recording }) {
   );
 }
 
-function Meta({
-  label,
-  value,
-  valueIcon,
-}: {
-  label: string;
-  value: string | null | undefined;
-  valueIcon?: ReactNode;
-}) {
-  return (
-    <div className="rounded-md bg-ink-50 px-2.5 py-2">
-      <div className="text-[10px] uppercase tracking-wider text-ink-400">{label}</div>
-      <div className="text-xs text-ink-800 mt-0.5 inline-flex items-center gap-1 max-w-full">
-        {valueIcon}
-        <span className="truncate">{value ?? "—"}</span>
-      </div>
-    </div>
-  );
-}
-
 function SourceMeta({ recording }: { recording: Recording }) {
   const update = useUpdateRecording();
   return (
@@ -775,19 +755,6 @@ const USER_PICKABLE_STATUSES: Array<{
   { value: "processed", label: "עובדה" },
   { value: "error", label: "שגיאה" },
 ];
-
-function sourceLabel(source: Recording["source"]): string {
-  switch (source) {
-    case "thought":
-      return "מחשבה";
-    case "call":
-      return "שיחה";
-    case "meeting":
-      return "פגישה";
-    default:
-      return "אחר";
-  }
-}
 
 function buildDownloadFilename(recording: Recording): string {
   // Take the extension from storage_key tail, fallback by mime.

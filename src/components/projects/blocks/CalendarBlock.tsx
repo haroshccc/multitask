@@ -275,7 +275,11 @@ function DayPlannedBar({
   );
 }
 
-// ─── Week view: 7 day columns (compact) ─────────────────────────────────────
+// ─── Week view: 7 day columns × hour rows (Google-Calendar-like) ────────────
+
+const WEEK_HOUR_START = 7;
+const WEEK_HOUR_END = 17; // exclusive — render 7..16
+const ROW_PX = 36;
 
 function WeekGrid({
   anchor,
@@ -292,93 +296,231 @@ function WeekGrid({
     d.setDate(d.getDate() + i);
     return d;
   });
+  const hours = Array.from(
+    { length: WEEK_HOUR_END - WEEK_HOUR_START },
+    (_, i) => i + WEEK_HOUR_START,
+  );
+  const todayMidnight = startOfDay(new Date()).getTime();
 
-  const hoursByDay = useMemo(() => {
-    const m = new Map<number, number>();
+  // Bucket entries / scheduled by day index 0..6.
+  const entriesByDay = useMemo(() => {
+    const m = new Map<number, TimeEntry[]>();
     for (const e of entries) {
-      const s = new Date(e.started_at).getTime();
-      const idx = Math.floor((s - weekStart.getTime()) / 86_400_000);
+      const s = new Date(e.started_at);
+      const idx = Math.floor(
+        (startOfDay(s).getTime() - weekStart.getTime()) / 86_400_000,
+      );
       if (idx < 0 || idx > 6) continue;
-      const end = e.ended_at ? new Date(e.ended_at).getTime() : Date.now();
-      m.set(idx, (m.get(idx) ?? 0) + (end - s) / 3_600_000);
+      const arr = m.get(idx) ?? [];
+      arr.push(e);
+      m.set(idx, arr);
     }
     return m;
   }, [entries, weekStart]);
 
-  const plannedByDay = useMemo(() => {
-    const m = new Map<number, number>();
+  const scheduledByDay = useMemo(() => {
+    const m = new Map<number, Task[]>();
     for (const t of scheduled) {
       if (!t.scheduled_at) continue;
-      const s = new Date(t.scheduled_at).getTime();
-      const idx = Math.floor((s - weekStart.getTime()) / 86_400_000);
+      const s = new Date(t.scheduled_at);
+      const idx = Math.floor(
+        (startOfDay(s).getTime() - weekStart.getTime()) / 86_400_000,
+      );
       if (idx < 0 || idx > 6) continue;
-      const dur = (t.duration_minutes ?? 60) / 60;
-      m.set(idx, (m.get(idx) ?? 0) + dur);
+      const arr = m.get(idx) ?? [];
+      arr.push(t);
+      m.set(idx, arr);
     }
     return m;
   }, [scheduled, weekStart]);
 
-  const maxHours = Math.max(
-    1,
-    ...Array.from(hoursByDay.values()),
-    ...Array.from(plannedByDay.values())
-  );
-  const todayMidnight = startOfDay(new Date()).getTime();
+  const hasAnyData =
+    entries.length > 0 ||
+    scheduled.some((t) => !!t.scheduled_at);
 
   return (
-    <div className="grid grid-cols-7 gap-1.5 h-full min-h-[180px]">
-      {days.map((d, i) => {
-        const actual = hoursByDay.get(i) ?? 0;
-        const planned = plannedByDay.get(i) ?? 0;
-        const isToday = d.getTime() === todayMidnight;
-        return (
-          <div key={i} className="flex flex-col items-center gap-1 min-w-0">
+    <div className="flex flex-col h-full min-h-0">
+      {/* Header row: 7 day columns + hour-gutter spacer (right side in RTL) */}
+      <div className="grid sticky top-0 z-10 bg-white border-b border-ink-200"
+           style={{ gridTemplateColumns: `repeat(7, minmax(0, 1fr)) 28px` }}>
+        {days.map((d, i) => {
+          const isToday = d.getTime() === todayMidnight;
+          return (
             <div
+              key={i}
               className={
-                "text-[10px] " +
-                (isToday
-                  ? "text-primary-700 font-bold"
-                  : "text-ink-500")
+                "text-center py-1 " +
+                (isToday ? "bg-primary-50" : "")
               }
             >
-              {DAY_LABELS[d.getDay()]}
-              <span className="text-ink-400 ms-0.5 tabular-nums">
+              <div
+                className={
+                  "text-[10px] " +
+                  (isToday ? "text-primary-700 font-semibold" : "text-ink-500")
+                }
+              >
+                {dayLabelFull(d)}
+              </div>
+              <div
+                className={
+                  "text-[12px] tabular-nums " +
+                  (isToday
+                    ? "text-primary-700 font-bold"
+                    : "text-ink-800 font-medium")
+                }
+              >
                 {d.getDate()}
-              </span>
+              </div>
             </div>
-            <div className="flex-1 w-full flex items-end justify-center gap-0.5 min-h-[60px]">
-              {/* Planned (dashed) */}
-              {planned > 0 && (
+          );
+        })}
+        {/* Empty corner above hour gutter */}
+        <div />
+      </div>
+
+      {/* Body: 7 day columns + hour-label gutter on the right (RTL start) */}
+      <div className="flex-1 min-h-0 overflow-auto scrollbar-thin">
+        <div
+          className="grid relative"
+          style={{
+            gridTemplateColumns: `repeat(7, minmax(0, 1fr)) 28px`,
+            gridTemplateRows: `repeat(${hours.length}, ${ROW_PX}px)`,
+          }}
+        >
+          {/* Day cells — empty backgrounds with horizontal/vertical borders */}
+          {days.map((d, dayIdx) =>
+            hours.map((h, hourIdx) => {
+              const isToday = d.getTime() === todayMidnight;
+              return (
                 <div
-                  className="w-2 rounded-t-sm border border-dashed border-primary-400 bg-primary-50"
-                  style={{
-                    height: `${Math.max(8, (planned / maxHours) * 100)}%`,
-                  }}
-                  title={`מתוכנן: ${planned.toFixed(1)} ש`}
-                />
-              )}
-              {/* Actual (solid) */}
-              {actual > 0 && (
-                <div
+                  key={`${dayIdx}-${h}`}
                   className={
-                    "w-2 rounded-t-sm " +
-                    (isToday ? "bg-primary-500" : "bg-primary-400")
+                    "border-t border-ink-100 " +
+                    (dayIdx === 0 ? "" : "border-s border-ink-100 ") +
+                    (isToday ? "bg-primary-50/30" : "")
                   }
                   style={{
-                    height: `${Math.max(8, (actual / maxHours) * 100)}%`,
+                    gridColumn: dayIdx + 1,
+                    gridRow: hourIdx + 1,
                   }}
-                  title={`בפועל: ${actual.toFixed(1)} ש`}
                 />
-              )}
+              );
+            }),
+          )}
+
+          {/* Hour label gutter — last column in the grid (RTL → visually right) */}
+          {hours.map((h, hourIdx) => (
+            <div
+              key={`hour-${h}`}
+              className="border-t border-ink-100 text-[10px] text-ink-400 tabular-nums px-1 pt-0.5"
+              style={{
+                gridColumn: 8,
+                gridRow: hourIdx + 1,
+              }}
+            >
+              {pad(h)}:00
             </div>
-            <div className="text-[9px] text-ink-500 tabular-nums">
-              {actual.toFixed(1)}/{planned.toFixed(1)}
-            </div>
-          </div>
-        );
-      })}
+          ))}
+
+          {/* Time entries (solid) + scheduled (dashed) overlays */}
+          {days.map((d, dayIdx) => {
+            const dayEntries = entriesByDay.get(dayIdx) ?? [];
+            const daySched = scheduledByDay.get(dayIdx) ?? [];
+            const dayStartMs = startOfDay(d).getTime();
+            return (
+              <div
+                key={`overlay-${dayIdx}`}
+                className="relative"
+                style={{
+                  gridColumn: dayIdx + 1,
+                  gridRow: `1 / span ${hours.length}`,
+                }}
+              >
+                {dayEntries.map((e) => (
+                  <WeekBar
+                    key={`a-${e.id}`}
+                    startMs={new Date(e.started_at).getTime()}
+                    endMs={
+                      e.ended_at ? new Date(e.ended_at).getTime() : Date.now()
+                    }
+                    dayStartMs={dayStartMs}
+                    label={fmtTime(e.started_at)}
+                    solid
+                  />
+                ))}
+                {daySched.map((t) => {
+                  if (!t.scheduled_at) return null;
+                  const s = new Date(t.scheduled_at).getTime();
+                  const end = s + (t.duration_minutes ?? 60) * 60_000;
+                  return (
+                    <WeekBar
+                      key={`p-${t.id}`}
+                      startMs={s}
+                      endMs={end}
+                      dayStartMs={dayStartMs}
+                      label={t.title}
+                      solid={false}
+                    />
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
+
+        {!hasAnyData && (
+          <p className="text-center text-[11px] text-ink-400 py-3">
+            אין נתוני זמן עדיין — הפעלי סטופר על משימה
+          </p>
+        )}
+      </div>
     </div>
   );
+}
+
+/** Time-block overlay positioned by minute offset within a single day column. */
+function WeekBar({
+  startMs,
+  endMs,
+  dayStartMs,
+  label,
+  solid,
+}: {
+  startMs: number;
+  endMs: number;
+  dayStartMs: number;
+  label: string;
+  solid: boolean;
+}) {
+  const dayHourMin = WEEK_HOUR_START * 60;
+  const dayHourMax = WEEK_HOUR_END * 60;
+  const offsetMin = (startMs - dayStartMs) / 60_000;
+  const durMin = Math.max(8, (endMs - startMs) / 60_000);
+  // Clamp into the visible window 7-17.
+  const visibleStart = Math.max(dayHourMin, offsetMin);
+  const visibleEnd = Math.min(dayHourMax, offsetMin + durMin);
+  if (visibleEnd <= visibleStart) return null;
+  const top = ((visibleStart - dayHourMin) / 60) * ROW_PX;
+  const height = ((visibleEnd - visibleStart) / 60) * ROW_PX;
+  return (
+    <div
+      className={
+        "absolute inset-x-0.5 rounded text-[9px] leading-tight px-1 py-0.5 truncate " +
+        (solid
+          ? "bg-primary-500 text-white"
+          : "bg-primary-50 text-primary-700 border border-dashed border-primary-400")
+      }
+      style={{ top: `${top}px`, height: `${Math.max(12, height)}px` }}
+      title={label}
+    >
+      {label}
+    </div>
+  );
+}
+
+function dayLabelFull(d: Date): string {
+  const dow = DAY_LABELS[d.getDay()];
+  return `יום ${dow}`;
 }
 
 // ─── Month view: 6×7 day grid with intensity dots ──────────────────────────

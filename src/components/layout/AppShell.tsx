@@ -180,13 +180,22 @@ export function AppShell() {
           >
             <Plus className="w-5 h-5" />
           </button>
-          <div className="hidden md:flex items-center gap-2 ps-3 border-s border-ink-200 ms-2">
-            <button
-              className="w-8 h-8 rounded-xl bg-ink-100 hover:bg-ink-200 flex items-center justify-center text-sm font-medium text-ink-700"
-              aria-label="פרופיל"
+          <div className="hidden md:flex items-center gap-1 ps-2 border-s border-ink-200 ms-1">
+            <NavLink
+              to="/app/settings"
+              className={({ isActive }) =>
+                cn(
+                  "p-2 rounded-xl transition-colors",
+                  isActive
+                    ? "bg-ink-900 text-white"
+                    : "text-ink-600 hover:bg-ink-100 hover:text-ink-900"
+                )
+              }
+              title="הגדרות"
+              aria-label="הגדרות"
             >
-              {(profile?.full_name?.[0] ?? "?").toUpperCase()}
-            </button>
+              <SettingsIcon className="w-5 h-5" />
+            </NavLink>
             {profile?.is_super_admin && (
               <NavLink
                 to="/app/admin"
@@ -197,16 +206,24 @@ export function AppShell() {
                   )
                 }
                 title="ניהול מערכת"
+                aria-label="ניהול מערכת"
               >
-                <Shield className="w-4 h-4" />
+                <Shield className="w-5 h-5" />
               </NavLink>
             )}
+            <button
+              className="w-8 h-8 rounded-xl bg-ink-100 hover:bg-ink-200 flex items-center justify-center text-sm font-medium text-ink-700"
+              aria-label="פרופיל"
+            >
+              {(profile?.full_name?.[0] ?? "?").toUpperCase()}
+            </button>
             <button
               onClick={handleSignOut}
               className="p-2 rounded-xl text-ink-600 hover:bg-ink-100"
               aria-label="יציאה"
+              title="יציאה"
             >
-              <LogOut className="w-4 h-4" />
+              <LogOut className="w-5 h-5" />
             </button>
           </div>
         </div>
@@ -284,22 +301,6 @@ export function AppShell() {
             </aside>
           </div>
         )}
-
-        {/* Desktop sidebar rail (icons only, collapsible later) */}
-        <aside className="hidden md:flex w-14 flex-col items-center py-3 gap-1 border-s border-ink-200 bg-white">
-          <NavLink
-            to="/app/settings"
-            className={({ isActive }) =>
-              cn(
-                "p-2.5 rounded-xl transition-colors",
-                isActive ? "bg-ink-900 text-white" : "text-ink-500 hover:bg-ink-100 hover:text-ink-900"
-              )
-            }
-            title="הגדרות"
-          >
-            <SettingsIcon className="w-5 h-5" />
-          </NavLink>
-        </aside>
 
         {/* Main content */}
         <main className="flex-1 min-w-0">

@@ -132,6 +132,14 @@ function TranscriptionSection({
   const trigger = useTriggerRecordingProcessing();
   const status = recording.status;
 
+  // Once a transcript exists it must NEVER disappear from the UI — even if
+  // `status` later flips to `processing` / `processed` because the AI
+  // summarize edge function repurposes that field. Render the editor as soon
+  // as we have transcript_text so the user can't lose access to it.
+  if (recording.transcript_text && recording.transcript_text.trim().length > 0) {
+    return <TranscriptEditor recording={recording} audioElement={audioElement} />;
+  }
+
   if (status === "transcribing") {
     return (
       <section className="rounded-md border border-ink-200 bg-ink-50 px-3 py-3 space-y-1">
@@ -145,17 +153,6 @@ function TranscriptionSection({
         </p>
       </section>
     );
-  }
-
-  // 'extracting' was an old transitional status that meant "Gladia done,
-  // Claude AI running auto" — we removed the auto step, AI is manual now.
-  // Treat any old recordings still parked there as ready (they have the
-  // transcript filled, so the editor + AI button work fine).
-  if (
-    (status === "ready" || status === "extracting") &&
-    recording.transcript_text
-  ) {
-    return <TranscriptEditor recording={recording} audioElement={audioElement} />;
   }
 
   if (status === "error") {

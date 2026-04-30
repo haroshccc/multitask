@@ -1,21 +1,11 @@
 import {
-  useEffect,
   useMemo,
   useRef,
-  useState,
   type ReactNode,
   type ComponentType,
 } from "react";
 import { Responsive, WidthProvider, type Layout, type Layouts } from "react-grid-layout";
-import {
-  ChevronDown,
-  ChevronUp,
-  X,
-  Plus,
-  GripVertical,
-  Lock,
-  Pencil,
-} from "lucide-react";
+import { ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { useDashboardLayout, useDebouncedLayoutSave } from "@/lib/hooks/useDashboardLayout";
 import type {
@@ -26,25 +16,10 @@ import type {
 
 const ResponsiveGridLayout = WidthProvider(Responsive);
 
-/**
- * Globally tracks "edit mode" — a single boolean shared across all grids on
- * the page. Default = false (locked, drag/resize disabled, drag handles
- * hidden). Toggling is per-screen so the user can, say, edit the project
- * page layout without touching the dashboard's saved arrangement.
- *
- * Persisted to localStorage so the choice survives reloads.
- */
-function useEditMode(screenKey: DashboardScreen) {
-  const storageKey = `multitask:editmode:${screenKey}`;
-  const [editing, setEditing] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false;
-    return localStorage.getItem(storageKey) === "1";
-  });
-  useEffect(() => {
-    localStorage.setItem(storageKey, editing ? "1" : "0");
-  }, [editing, storageKey]);
-  return [editing, setEditing] as const;
-}
+// Layouts are always locked — drag/resize/hide of banners caused regressions
+// per user feedback. Saved positions still load from the DB so every user
+// keeps the layout the migrations seed for them, but interactive editing of
+// banner positions has been removed everywhere.
 
 export interface WidgetDefinition {
   key: string;
@@ -68,12 +43,6 @@ interface DashboardGridProps {
   scopeId?: string | null;
   widgets: WidgetDefinition[];
   className?: string;
-  /**
-   * When true, the edit-mode toggle is hidden and dragging/resizing is
-   * permanently disabled. Use for screens where the layout should feel
-   * fixed (e.g. recordings page after the layout v2 redesign).
-   */
-  lockedLayout?: boolean;
 }
 
 // `lg` raised from 1200 to 1400 so phones in "request desktop site" mode
@@ -144,12 +113,9 @@ export function DashboardGrid({
   scopeId = null,
   widgets,
   className,
-  lockedLayout = false,
 }: DashboardGridProps) {
   const { data: savedLayout } = useDashboardLayout(screenKey, scopeId);
   const { scheduleSave } = useDebouncedLayoutSave(screenKey, scopeId);
-  const [editingState, setIsEditing] = useEditMode(screenKey);
-  const isEditing = lockedLayout ? false : editingState;
 
   const fallback = useMemo(() => defaultLayouts(widgets), [widgets]);
 
@@ -228,54 +194,8 @@ export function DashboardGrid({
     });
   };
 
-  const hideWidget = (key: string) => {
-    const next: WidgetState = {
-      ...widgetState,
-      [key]: { ...widgetState[key], hidden: true },
-    };
-    scheduleSave({
-      layout_desktop: layouts.lg as unknown as WidgetLayout,
-      layout_tablet: layouts.md as unknown as WidgetLayout,
-      layout_mobile: layouts.sm as unknown as WidgetLayout,
-      widget_state: next,
-    });
-  };
-
-  const showWidget = (key: string) => {
-    const next: WidgetState = {
-      ...widgetState,
-      [key]: { ...widgetState[key], hidden: false },
-    };
-    scheduleSave({
-      layout_desktop: layouts.lg as unknown as WidgetLayout,
-      layout_tablet: layouts.md as unknown as WidgetLayout,
-      layout_mobile: layouts.sm as unknown as WidgetLayout,
-      widget_state: next,
-    });
-  };
-
-  const hiddenWidgets = widgets.filter((w) => widgetState[w.key]?.hidden);
-
   return (
-    <div
-      className={cn(
-        "relative",
-        // Class hook for the global CSS rule that hides drag handles when
-        // not editing — keeps every chrome variant consistent without
-        // threading isEditing into each chrome component.
-        isEditing ? "grid-editing" : "grid-locked",
-        className
-      )}
-    >
-      {!lockedLayout && (
-        <EditModeToggle
-          editing={isEditing}
-          onToggle={() => setIsEditing((v) => !v)}
-          hasHiddenWidgets={hiddenWidgets.length > 0}
-          hiddenWidgets={hiddenWidgets}
-          onShow={showWidget}
-        />
-      )}
+    <div className={cn("relative grid-locked", className)}>
       <ResponsiveGridLayout
         className="layout"
         layouts={filteredLayouts}
@@ -284,10 +204,9 @@ export function DashboardGrid({
         rowHeight={ROW_HEIGHT}
         margin={MARGIN}
         containerPadding={CONTAINER_PADDING}
-        draggableHandle=".widget-drag-handle"
         compactType="vertical"
-        isDraggable={isEditing}
-        isResizable={isEditing}
+        isDraggable={false}
+        isResizable={false}
         onLayoutChange={handleLayoutChange}
       >
         {visibleWidgets.map((w) => {
@@ -300,7 +219,6 @@ export function DashboardGrid({
                 title={w.title}
                 collapsed={collapsed}
                 onToggleCollapse={() => toggleCollapsed(w.key)}
-                onHide={() => hideWidget(w.key)}
               >
                 {!collapsed && <Component scopeId={scopeId} />}
               </Chrome>
@@ -316,38 +234,26 @@ function WidgetChrome({
   title,
   collapsed,
   onToggleCollapse,
-  onHide,
   children,
 }: {
   title: string;
   collapsed: boolean;
   onToggleCollapse: () => void;
-  onHide: () => void;
   children: ReactNode;
 }) {
   return (
     <div className="card h-full flex flex-col overflow-hidden">
-      <header className="widget-drag-handle flex items-center justify-between px-4 py-2.5 border-b border-ink-200 bg-ink-50/50 cursor-move select-none">
-        <div className="flex items-center gap-2 min-w-0">
-          <GripVertical className="w-4 h-4 text-ink-400 shrink-0" />
-          <h3 className="font-semibold text-sm text-ink-900 truncate">{title}</h3>
-        </div>
-        <div className="flex items-center gap-1">
-          <button
-            onClick={onToggleCollapse}
-            className="p-1 rounded hover:bg-ink-200 text-ink-600"
-            title={collapsed ? "פתח" : "כווץ"}
-          >
-            {collapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
-          </button>
-          <button
-            onClick={onHide}
-            className="p-1 rounded hover:bg-ink-200 text-ink-600"
-            title="הסתר"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
+      <header className="flex items-center justify-between px-4 py-2.5 border-b border-ink-200 bg-ink-50/50 select-none">
+        <h3 className="font-semibold text-sm text-ink-900 truncate min-w-0">{title}</h3>
+        <button
+          type="button"
+          onClick={onToggleCollapse}
+          className="p-1 rounded hover:bg-ink-200 text-ink-600 shrink-0"
+          title={collapsed ? "פתח" : "כווץ"}
+          aria-label={collapsed ? "פתח" : "כווץ"}
+        >
+          {collapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+        </button>
       </header>
       {!collapsed && (
         <div className="flex-1 overflow-auto p-4">{children}</div>
@@ -357,156 +263,17 @@ function WidgetChrome({
 }
 
 /**
- * Minimal chrome: renders the widget body unmodified and overlays a small,
- * subtle drag handle in the top-end corner. Lets existing screens preserve
- * their original visual design while still participating in the grid.
- *
- * The floating chrome (drag/collapse/hide buttons) carries `widget-edit-only`
- * so a parent `.grid-locked` can hide it via CSS — keeps locked layouts
- * (e.g. the recordings page) free of UI affordances that would let the user
- * accidentally rearrange / hide widgets.
+ * Minimal chrome: renders the widget body unmodified, no drag handle, no
+ * collapse/hide overlay. Edit-mode controls were removed app-wide per user
+ * feedback — banner positions are now fully locked.
  */
 function BareChrome({
-  title,
-  collapsed,
-  onToggleCollapse,
-  onHide,
   children,
 }: {
   title: string;
   collapsed: boolean;
   onToggleCollapse: () => void;
-  onHide: () => void;
   children: ReactNode;
 }) {
-  return (
-    <div className="relative h-full group/widget">
-      <div
-        className={cn(
-          "widget-edit-only absolute top-1.5 end-1.5 z-10 flex items-center gap-0.5",
-          "rounded-md bg-white/80 backdrop-blur shadow-soft px-1 py-0.5",
-          // On mobile/touch (no hover), keep the handle visible at 50%; on
-          // desktop fade it in on hover so it doesn't compete with content.
-          "opacity-50 md:opacity-0 md:group-hover/widget:opacity-100",
-          "transition-opacity duration-150"
-        )}
-      >
-        <span
-          className="widget-drag-handle p-1 cursor-move text-ink-500 hover:text-ink-900"
-          title={`גררי: ${title}`}
-          aria-label={`גרירת ${title}`}
-        >
-          <GripVertical className="w-3.5 h-3.5" />
-        </span>
-        <button
-          type="button"
-          onClick={onToggleCollapse}
-          className="p-1 rounded hover:bg-ink-100 text-ink-500 hover:text-ink-900"
-          title={collapsed ? "פתח" : "כווץ"}
-          aria-label={collapsed ? "פתח" : "כווץ"}
-        >
-          {collapsed ? (
-            <ChevronDown className="w-3.5 h-3.5" />
-          ) : (
-            <ChevronUp className="w-3.5 h-3.5" />
-          )}
-        </button>
-        <button
-          type="button"
-          onClick={onHide}
-          className="p-1 rounded hover:bg-ink-100 text-ink-500 hover:text-ink-900"
-          title="הסתר"
-          aria-label="הסתר"
-        >
-          <X className="w-3.5 h-3.5" />
-        </button>
-      </div>
-      {collapsed ? (
-        <div className="card h-full flex items-center justify-center text-xs text-ink-400">
-          {title} — מכווץ
-        </div>
-      ) : (
-        children
-      )}
-    </div>
-  );
-}
-
-/**
- * Single toolbar row above every grid: edit-mode toggle + (when editing) the
- * "show hidden widget" picker. Sits above the grid with negative top so it
- * doesn't push content down — there's already room above DashboardGrid in
- * every page where the ScreenScaffold header sits.
- */
-function EditModeToggle({
-  editing,
-  onToggle,
-  hasHiddenWidgets,
-  hiddenWidgets,
-  onShow,
-}: {
-  editing: boolean;
-  onToggle: () => void;
-  hasHiddenWidgets: boolean;
-  hiddenWidgets: WidgetDefinition[];
-  onShow: (key: string) => void;
-}) {
-  const [pickerOpen, setPickerOpen] = useState(false);
-  return (
-    <div className="absolute -top-11 end-0 z-10 flex items-center gap-1.5">
-      {editing && hasHiddenWidgets && (
-        <div className="relative">
-          <button
-            onClick={() => setPickerOpen((v) => !v)}
-            className="btn-outline text-xs"
-          >
-            <Plus className="w-4 h-4" />
-            הוסיפי באנר ({hiddenWidgets.length})
-          </button>
-          {pickerOpen && (
-            <div className="absolute end-0 top-full mt-1 bg-white border border-ink-200 rounded-xl shadow-lift w-56 py-1 max-h-64 overflow-auto">
-              {hiddenWidgets.map((w) => (
-                <button
-                  key={w.key}
-                  onClick={() => {
-                    onShow(w.key);
-                    setPickerOpen(false);
-                  }}
-                  className="w-full text-start px-3 py-2 text-sm hover:bg-ink-50 text-ink-900"
-                >
-                  {w.title}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-      <button
-        type="button"
-        onClick={onToggle}
-        className={cn(
-          "text-xs flex items-center gap-1",
-          editing ? "btn-accent" : "btn-outline"
-        )}
-        aria-pressed={editing}
-        title={
-          editing
-            ? "סיימי עריכת באנרים — הגרירה תינעל"
-            : "ערכי באנרים — הפעלת גרירה"
-        }
-      >
-        {editing ? (
-          <>
-            <Pencil className="w-4 h-4" />
-            במצב עריכה — סגרי
-          </>
-        ) : (
-          <>
-            <Lock className="w-4 h-4" />
-            ערכי באנרים
-          </>
-        )}
-      </button>
-    </div>
-  );
+  return <div className="h-full">{children}</div>;
 }

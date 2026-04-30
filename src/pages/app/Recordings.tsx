@@ -36,17 +36,17 @@ import { PlayerWidget } from "@/components/recordings/widgets/PlayerWidget";
  *
  * Visual layout (intent frame: x=0 = visual right in RTL):
  *   ┌────────────┬───────┬────────┬───────┐
- *   │ Filters    │ Quick │ Upload │ Stats │  ← thin top row (h=3)
+ *   │ Filters    │ Quick │ Upload │ Stats │  ← short top row (h=2)
  *   │  + List    ├───────┴────────┴───────┤
  *   │ (tall col) │                        │
- *   │            │        Player          │  ← below (h=8)
+ *   │            │        Player          │  ← below (h=9)
  *   └────────────┴────────────────────────┘
  *
  *   filters_list:  x=0, y=0, w=3, h=11
- *   quick_record:  x=3, y=0, w=3, h=3   (rightmost in the top strip)
- *   upload:        x=6, y=0, w=3, h=3   (middle)
- *   stats:         x=9, y=0, w=3, h=3   (leftmost in the top strip)
- *   player:        x=3, y=3, w=9, h=8
+ *   quick_record:  x=3, y=0, w=3, h=2   (rightmost in the top strip)
+ *   upload:        x=6, y=0, w=3, h=2   (middle)
+ *   stats:         x=9, y=0, w=3, h=2   (leftmost in the top strip)
+ *   player:        x=3, y=2, w=9, h=9
  */
 const RECORDINGS_WIDGETS: WidgetDefinition[] = [
   {
@@ -63,36 +63,36 @@ const RECORDINGS_WIDGETS: WidgetDefinition[] = [
     title: "הקלטה מהירה",
     component: QuickRecordTallWidget,
     chromeStyle: "bare",
-    defaultDesktop: { x: 3, y: 0, w: 3, h: 3, minW: 3, minH: 3 },
-    defaultTablet: { x: 0, y: 6, w: 4, h: 3 },
-    defaultMobile: { x: 0, y: 6, w: 4, h: 3 },
+    defaultDesktop: { x: 3, y: 0, w: 3, h: 2, minW: 3, minH: 2 },
+    defaultTablet: { x: 0, y: 6, w: 4, h: 2 },
+    defaultMobile: { x: 0, y: 6, w: 4, h: 2 },
   },
   {
     key: "upload",
     title: "העלאת קובץ",
     component: UploadTallWidget,
     chromeStyle: "bare",
-    defaultDesktop: { x: 6, y: 0, w: 3, h: 3, minW: 3, minH: 3 },
-    defaultTablet: { x: 4, y: 6, w: 4, h: 3 },
-    defaultMobile: { x: 0, y: 9, w: 4, h: 3 },
+    defaultDesktop: { x: 6, y: 0, w: 3, h: 2, minW: 3, minH: 2 },
+    defaultTablet: { x: 4, y: 6, w: 4, h: 2 },
+    defaultMobile: { x: 0, y: 8, w: 4, h: 2 },
   },
   {
     key: "stats",
     title: "סטטיסטיקה",
     component: StatsTallWidget,
     chromeStyle: "bare",
-    defaultDesktop: { x: 9, y: 0, w: 3, h: 3, minW: 3, minH: 3 },
-    defaultTablet: { x: 0, y: 9, w: 8, h: 3 },
-    defaultMobile: { x: 0, y: 12, w: 4, h: 3 },
+    defaultDesktop: { x: 9, y: 0, w: 3, h: 2, minW: 3, minH: 2 },
+    defaultTablet: { x: 0, y: 8, w: 8, h: 2 },
+    defaultMobile: { x: 0, y: 10, w: 4, h: 2 },
   },
   {
     key: "player",
     title: "נגן ההקלטה",
     component: PlayerWidget,
     chromeStyle: "bare",
-    defaultDesktop: { x: 3, y: 3, w: 9, h: 8, minW: 6, minH: 5 },
-    defaultTablet: { x: 0, y: 12, w: 8, h: 8 },
-    defaultMobile: { x: 0, y: 15, w: 4, h: 6 },
+    defaultDesktop: { x: 3, y: 2, w: 9, h: 9, minW: 6, minH: 5 },
+    defaultTablet: { x: 0, y: 10, w: 8, h: 9 },
+    defaultMobile: { x: 0, y: 12, w: 4, h: 6 },
   },
 ];
 

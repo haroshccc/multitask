@@ -1584,16 +1584,18 @@ function TaskRow({
   const isDone = task.status === "done" || !!task.completed_at;
   const isTimerActive = activeTimer?.task_id === task.id;
   const liveSeconds = useLiveActualSeconds(task, activeTimer);
-  const indentPx = level * 16;
+  // Per-level indent shifts the entire row's content (drag, checkbox, title,
+  // dynamic cells) inward from the start edge, so a sub-task's checkbox
+  // visibly nests under its parent — the previous title-cell-only padding
+  // left the checkbox at the same x as the parent's, which made hierarchy
+  // hard to read. Bumped to 24px per level for clearer visual separation.
+  const indentPx = level * 24;
 
   const renderFixedCell = (key: FixedColumnKey): React.ReactNode => {
     switch (key) {
       case "title":
         return (
-          <div
-            className="min-w-0"
-            style={{ paddingInlineStart: `${indentPx}px` }}
-          >
+          <div className="min-w-0">
             <EditableTitle
               value={task.title}
               done={isDone}
@@ -1695,8 +1697,11 @@ function TaskRow({
 
   return (
     <div
-      className="group/row grid items-center gap-1 py-1 hover:bg-ink-50 px-1.5 transition-colors border-b border-ink-100/80"
-      style={{ gridTemplateColumns: gridCols }}
+      className="group/row grid items-center gap-1 py-1 hover:bg-ink-50 px-1.5 transition-colors border-b border-ink-200"
+      style={{
+        gridTemplateColumns: gridCols,
+        paddingInlineStart: `calc(0.375rem + ${indentPx}px)`,
+      }}
     >
       {/* Drag handle (top-level only — sub-tasks get an empty cell) */}
       <button

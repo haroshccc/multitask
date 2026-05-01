@@ -404,12 +404,72 @@ function TagsRow({
 
 // ─── Top info panel: calendar + pricing + stats ─────────────────────────────
 
+function useIsMobile() {
+  const [mobile, setMobile] = useState(
+    () => typeof window !== "undefined" && window.innerWidth < 640,
+  );
+  useEffect(() => {
+    const update = () => setMobile(window.innerWidth < 640);
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
+  return mobile;
+}
+
 function TopInfoPanel({ projectId }: { projectId: string }) {
+  const isMobile = useIsMobile();
+
+  // Desktop: single toggle for the whole panel (open by default)
   const [open, setOpen] = useState(true);
 
+  // Mobile: each section independently collapsible (all closed by default)
+  const [calOpen, setCalOpen] = useState(false);
+  const [pricingOpen, setPricingOpen] = useState(false);
+  const [statsOpen, setStatsOpen] = useState(false);
+
+  // ── Mobile: three independent accordions ───────────────────────────────
+  if (isMobile) {
+    return (
+      <div className="space-y-2">
+        <MobileAccordion
+          icon={<Calendar className="w-3.5 h-3.5 text-ink-500" />}
+          title="לוח זמנים"
+          open={calOpen}
+          onToggle={() => setCalOpen((v) => !v)}
+        >
+          <div className="p-3" style={{ height: "300px" }}>
+            <CalendarBlock scopeId={projectId} />
+          </div>
+        </MobileAccordion>
+
+        <MobileAccordion
+          icon={<DollarSign className="w-3.5 h-3.5 text-ink-500" />}
+          title="תמחור"
+          open={pricingOpen}
+          onToggle={() => setPricingOpen((v) => !v)}
+        >
+          <div className="p-3 overflow-auto max-h-80 scrollbar-thin">
+            <PricingBlock scopeId={projectId} />
+          </div>
+        </MobileAccordion>
+
+        <MobileAccordion
+          icon={<BarChart3 className="w-3.5 h-3.5 text-ink-500" />}
+          title="סטטיסטיקות"
+          open={statsOpen}
+          onToggle={() => setStatsOpen((v) => !v)}
+        >
+          <div className="p-3 overflow-auto max-h-80 scrollbar-thin">
+            <StatsBlock scopeId={projectId} />
+          </div>
+        </MobileAccordion>
+      </div>
+    );
+  }
+
+  // ── Desktop: single collapsible with 3-column side-by-side layout ──────
   return (
     <div className="card overflow-hidden">
-      {/* Header strip — always visible, click to expand/collapse */}
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -425,13 +485,13 @@ function TopInfoPanel({ projectId }: { projectId: string }) {
             <Calendar className="w-3.5 h-3.5 text-ink-500" />
             לוח זמנים
           </span>
-          <span className="text-ink-300 hidden sm:block">·</span>
-          <span className="inline-flex items-center gap-1.5 font-medium shrink-0 hidden sm:inline-flex">
+          <span className="text-ink-300">·</span>
+          <span className="inline-flex items-center gap-1.5 font-medium shrink-0">
             <DollarSign className="w-3.5 h-3.5 text-ink-500" />
             תמחור
           </span>
-          <span className="text-ink-300 hidden sm:block">·</span>
-          <span className="inline-flex items-center gap-1.5 font-medium shrink-0 hidden sm:inline-flex">
+          <span className="text-ink-300">·</span>
+          <span className="inline-flex items-center gap-1.5 font-medium shrink-0">
             <BarChart3 className="w-3.5 h-3.5 text-ink-500" />
             סטטיסטיקות
           </span>
@@ -443,9 +503,11 @@ function TopInfoPanel({ projectId }: { projectId: string }) {
         )}
       </button>
 
-      {/* Expanded: three panels side by side */}
       {open && (
-        <div className="grid grid-cols-1 md:grid-cols-3 divide-x divide-x-reverse divide-ink-200 min-h-0" style={{ height: "340px" }}>
+        <div
+          className="grid grid-cols-3 divide-x divide-x-reverse divide-ink-200"
+          style={{ height: "340px" }}
+        >
           <div className="overflow-hidden min-h-0 p-3">
             <CalendarBlock scopeId={projectId} />
           </div>
@@ -457,6 +519,44 @@ function TopInfoPanel({ projectId }: { projectId: string }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function MobileAccordion({
+  icon,
+  title,
+  open,
+  onToggle,
+  children,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  open: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="card overflow-hidden">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        className={cn(
+          "flex w-full items-center gap-2 px-4 py-2.5",
+          "text-sm text-ink-700 hover:bg-ink-50 transition-colors",
+          open && "border-b border-ink-200",
+        )}
+      >
+        {icon}
+        <span className="flex-1 text-start font-medium">{title}</span>
+        {open ? (
+          <ChevronUp className="w-4 h-4 text-ink-400" />
+        ) : (
+          <ChevronDown className="w-4 h-4 text-ink-400" />
+        )}
+      </button>
+      {open && children}
     </div>
   );
 }

@@ -54,7 +54,7 @@ const RECORDINGS_WIDGETS: WidgetDefinition[] = [
     chromeStyle: "bare",
     defaultDesktop: { x: 0, y: 0, w: 3, h: 11, minW: 3, minH: 6 },
     defaultTablet: { x: 0, y: 0, w: 8, h: 6 },
-    defaultMobile: { x: 0, y: 8, w: 4, h: 2 },
+    defaultMobile: { x: 0, y: 0, w: 4, h: 2 },
   },
   {
     key: "quick_record",
@@ -63,7 +63,7 @@ const RECORDINGS_WIDGETS: WidgetDefinition[] = [
     chromeStyle: "bare",
     defaultDesktop: { x: 3, y: 0, w: 4, h: 1, minW: 3, minH: 1 },
     defaultTablet: { x: 0, y: 6, w: 4, h: 1 },
-    defaultMobile: { x: 0, y: 10, w: 4, h: 1 },
+    defaultMobile: { x: 0, y: 2, w: 2, h: 1 },
   },
   {
     key: "upload",
@@ -72,7 +72,7 @@ const RECORDINGS_WIDGETS: WidgetDefinition[] = [
     chromeStyle: "bare",
     defaultDesktop: { x: 7, y: 0, w: 5, h: 1, minW: 3, minH: 1 },
     defaultTablet: { x: 4, y: 6, w: 4, h: 1 },
-    defaultMobile: { x: 0, y: 11, w: 4, h: 1 },
+    defaultMobile: { x: 2, y: 2, w: 2, h: 1 },
   },
   {
     key: "player",
@@ -81,7 +81,7 @@ const RECORDINGS_WIDGETS: WidgetDefinition[] = [
     chromeStyle: "bare",
     defaultDesktop: { x: 3, y: 1, w: 9, h: 10, minW: 6, minH: 5 },
     defaultTablet: { x: 0, y: 7, w: 8, h: 10 },
-    defaultMobile: { x: 0, y: 0, w: 4, h: 8 },
+    defaultMobile: { x: 0, y: 3, w: 4, h: 8 },
   },
 ];
 

@@ -1,5 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import { Upload, AlertCircle, Loader2, X } from "lucide-react";
+
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(
+    () => typeof window !== "undefined" && window.innerWidth < 640,
+  );
+  useEffect(() => {
+    const update = () => setIsMobile(window.innerWidth < 640);
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
+  return isMobile;
+}
 import { cn } from "@/lib/utils/cn";
 import { useFileUpload } from "@/lib/hooks/useFileUpload";
 import { useCreateRecording } from "@/lib/hooks/useRecordings";
@@ -113,6 +125,59 @@ export function UploadTallWidget() {
     handleFiles(e.dataTransfer.files);
   };
   const openPicker = () => inputRef.current?.click();
+  const isMobile = useIsMobile();
+
+  if (isMobile) {
+    return (
+      <div className="h-full flex flex-col">
+        <button
+          type="button"
+          onClick={openPicker}
+          onDragOver={onDragOver}
+          onDragLeave={onDragLeave}
+          onDrop={onDrop}
+          className={cn(
+            "card h-full w-full flex items-center justify-center gap-2",
+            isDragging && "border-primary-500 bg-primary-50",
+            isUploading && "opacity-90",
+          )}
+        >
+          <input
+            ref={inputRef}
+            type="file"
+            accept={ACCEPTED}
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              handleFiles(e.target.files);
+              e.target.value = "";
+            }}
+          />
+          <span
+            className={cn(
+              "w-7 h-7 shrink-0 rounded-full flex items-center justify-center",
+              isDragging ? "bg-primary-500 text-white" : "bg-ink-100 text-ink-600",
+            )}
+          >
+            {isUploading ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Upload className="w-3.5 h-3.5" />
+            )}
+          </span>
+          <span className="text-sm font-semibold text-ink-900">
+            {isUploading ? `${Math.round(upload.state.progress)}%` : "העלאה"}
+          </span>
+        </button>
+        {localError && (
+          <div className="mt-1 inline-flex items-start gap-1 text-[10px] text-danger-600">
+            <AlertCircle className="w-3 h-3 mt-0.5 shrink-0" />
+            <span className="break-words truncate">{localError}</span>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="h-full flex flex-col">

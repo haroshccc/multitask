@@ -29,6 +29,18 @@ import { QuickRecordTallWidget } from "@/components/recordings/widgets/QuickReco
 import { UploadTallWidget } from "@/components/recordings/widgets/UploadTallWidget";
 import { PlayerWidget } from "@/components/recordings/widgets/PlayerWidget";
 
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(
+    () => typeof window !== "undefined" && window.innerWidth < 640,
+  );
+  useEffect(() => {
+    const update = () => setIsMobile(window.innerWidth < 640);
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
+  return isMobile;
+}
+
 /**
  * Recordings page — fixed layout (banner positions are not user-editable
  * anywhere in the app; see DashboardGrid).
@@ -86,6 +98,7 @@ const RECORDINGS_WIDGETS: WidgetDefinition[] = [
 ];
 
 export function Recordings() {
+  const isMobile = useIsMobile();
   const [filters, setFilters] = useState<RecordingsFilterState>(
     DEFAULT_RECORDING_FILTERS,
   );
@@ -216,12 +229,25 @@ export function Recordings() {
           source="other"
         />
 
-        <div className="mt-5">
-          <DashboardGrid
-            screenKey="recordings"
-            widgets={RECORDINGS_WIDGETS}
-          />
-        </div>
+        {isMobile ? (
+          <div className="mt-5 flex flex-col gap-2">
+            <FiltersAndListWidget />
+            <div className="grid grid-cols-2 gap-2 h-14">
+              <QuickRecordTallWidget />
+              <UploadTallWidget />
+            </div>
+            <div className="min-h-[600px]">
+              <PlayerWidget />
+            </div>
+          </div>
+        ) : (
+          <div className="mt-5">
+            <DashboardGrid
+              screenKey="recordings"
+              widgets={RECORDINGS_WIDGETS}
+            />
+          </div>
+        )}
       </ScreenScaffold>
     </RecordingsPageContext.Provider>
   );

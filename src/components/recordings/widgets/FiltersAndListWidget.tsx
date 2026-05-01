@@ -186,26 +186,119 @@ export function FiltersAndListWidget() {
   const total = ctx.allRecordings.length;
   const hidden = total - recordings.length;
 
-  // ── Mobile compact picker ──────────────────────────────────────────────────
+  // ── Mobile layout: stats + filters + list picker ─────────────────────────
   if (isMobile) {
     const selected = recordings.find((r) => r.id === ctx.selectedId);
     return (
-      <div className="card flex flex-col overflow-hidden">
-        {/* Trigger row */}
+      <div className="card flex flex-col overflow-auto">
+        {/* Stats section */}
+        <button
+          type="button"
+          onClick={() => setStatsOpen((v) => !v)}
+          aria-expanded={statsOpen}
+          className={cn(
+            "flex w-full items-center justify-between gap-2 px-3 py-2.5 border-b border-ink-200",
+            "text-sm text-ink-700 hover:bg-ink-50 transition-colors",
+          )}
+        >
+          <span className="inline-flex items-center gap-1.5 font-medium">
+            <BarChart3 className="w-3.5 h-3.5" />
+            סטטיסטיקה
+          </span>
+          {statsOpen ? (
+            <ChevronUp className="w-4 h-4 text-ink-500" />
+          ) : (
+            <ChevronDown className="w-4 h-4 text-ink-500" />
+          )}
+        </button>
+        {statsOpen && (
+          <div className="border-b border-ink-200">
+            <div className="px-2 pt-2">
+              <select
+                value={dim}
+                onChange={(e) => setDim(e.target.value as Dimension)}
+                className="field !py-1 !px-2 !text-[11px] w-full"
+                aria-label="ממד פילוח"
+              >
+                {DIMENSIONS.map((d) => (
+                  <option key={d.value} value={d.value}>{d.label}</option>
+                ))}
+              </select>
+            </div>
+            <div className="px-2 py-2 max-h-40 overflow-auto scrollbar-thin">
+              {buckets.length === 0 ? (
+                <p className="text-[11px] text-ink-500 text-center py-3">אין נתונים</p>
+              ) : (
+                <ul className="space-y-1.5">
+                  {buckets.map((b) => (
+                    <li key={b.key}>
+                      <div className="flex items-center justify-between text-[11px] text-ink-700 mb-0.5">
+                        <span className="truncate" title={b.label}>{b.label}</span>
+                        <span className="text-ink-500 tabular-nums shrink-0 ms-1">{b.count}</span>
+                      </div>
+                      <div className="h-1 rounded-full bg-ink-100 overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-gradient-to-r from-primary-400 to-primary-600"
+                          style={{ width: `${(b.count / max) * 100}%` }}
+                        />
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Filters section */}
+        <button
+          type="button"
+          onClick={() => setFiltersOpen((v) => !v)}
+          aria-expanded={filtersOpen}
+          className={cn(
+            "flex w-full items-center justify-between gap-2 px-3 py-2.5 border-b border-ink-200",
+            "text-sm text-ink-700 hover:bg-ink-50 transition-colors",
+          )}
+        >
+          <span className="inline-flex items-center gap-1.5 font-medium">
+            <Filter className="w-3.5 h-3.5" />
+            סינון
+            {countActive(ctx) > 0 && (
+              <span className="chip-accent !py-0 !px-1.5 !text-[10px]">
+                {countActive(ctx)}
+              </span>
+            )}
+          </span>
+          {filtersOpen ? (
+            <ChevronUp className="w-4 h-4 text-ink-500" />
+          ) : (
+            <ChevronDown className="w-4 h-4 text-ink-500" />
+          )}
+        </button>
+        {filtersOpen && (
+          <div className="border-b border-ink-200">
+            <RecordingFilters
+              filters={ctx.filters}
+              onFiltersChange={ctx.setFilters}
+              grouping={ctx.grouping}
+              onGroupingChange={ctx.setGrouping}
+              className="!shadow-none !border-0 !rounded-none"
+            />
+          </div>
+        )}
+
+        {/* Recording list picker */}
         <button
           type="button"
           onClick={() => setMobileOpen((v) => !v)}
           className={cn(
-            "flex w-full items-center gap-2 px-3 py-2.5",
+            "flex w-full items-center gap-2 px-3 py-2.5 border-b border-ink-200",
             "text-sm text-ink-700 hover:bg-ink-50 transition-colors",
-            mobileOpen && "border-b border-ink-200",
           )}
         >
           <List className="w-4 h-4 shrink-0 text-ink-500" />
           <span className="flex-1 min-w-0 text-start truncate font-medium">
-            {selected
-              ? (selected.title || "ללא כותרת")
-              : `${total} הקלטות`}
+            {selected ? (selected.title || "ללא כותרת") : `${total} הקלטות`}
           </span>
           <span className="text-[11px] text-ink-400 tabular-nums shrink-0">
             {total > 0 && `${recordings.length}/${total}`}
@@ -216,10 +309,8 @@ export function FiltersAndListWidget() {
             <ChevronDown className="w-4 h-4 shrink-0 text-ink-400" />
           )}
         </button>
-
-        {/* Collapsed list */}
         {mobileOpen && (
-          <div className="overflow-auto max-h-64 p-2 space-y-1 scrollbar-thin">
+          <div className="overflow-auto max-h-56 p-2 space-y-1 scrollbar-thin">
             {ctx.isLoading ? (
               <p className="text-center text-xs text-ink-500 py-3">טוענת…</p>
             ) : recordings.length === 0 ? (

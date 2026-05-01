@@ -2733,3 +2733,59 @@ Hero: "החלל לחשוב. החלל לעשות."
   **build infra תזכורת:**
   - לפני push: `npx tsc -b && npx vite build`. `tsc --noEmit` לבד לא מספיק (#87).
   - מיגרציות חדשות: לוודא שמופעלות גם על production דרך MCP `apply_migration`, לא רק לקובץ.
+
+- **2026-04-30 → 2026-05-01 — Cleanup pass: recordings + project + mobile.**
+  סשן ארוך של תיקוני UI/UX על-בסיס משוב המשתמשת על המסכים שהיו פתוחים מ-#137. הוקם branch `claude/review-app-screens-FCYxZ`. כל קומיט מוזג ל-main בנפרד כדי ש-Vercel יפרוס בהדרגה.
+
+  **מסך הקלטות — desktop:**
+  - **הסטטיסטיקה הוטמעה ב-`<FiltersAndListWidget>`** במקום widget נפרד ב-top strip. עכשיו `FiltersAndListWidget` הוא card עם 3 שכבות accordion: סטטיסטיקה (סגור) → סינון (סגור) → רשימת הקלטות. כל אחת לוחצת לפתיחה ודוחפת את הבאות למטה — אותו pattern של הסינון על הרשימה. ה-widget `stats` הוסר מ-`RECORDINGS_WIDGETS`. `quick_record` ו-`upload` תפסו את העמודות שהתפנו (w=4 ו-w=5).
+  - **שדה מקור editable** ב-`<RecordingPlayer>`: `<Meta label="מקור">` הקריא-בלבד הוחלף ב-`<SourceMeta>` עם `<select>` של 7 ערכים — `thought / call / meeting / recording / whatsapp / upload / other`. בחירת `other` חושפת `<input>` שנשמר ל-`source_custom` ב-blur.
+  - **chevrons על כל ה-meta cells** — הוסף `<ChevronDown>` ל-`LinkMeta` ו-`RecordingListsLinkMeta` כדי שיראו interactive כמו `StatusMeta`/`SourceMeta`.
+  - **toggle date-order חד-שורה** — שני tabs "חדש→ישן / ישן→חדש" שלא נכנסו לפאנל הצר הוחלפו בכפתור יחיד שמראה "חדש ↑" / "ישן ↓" ומתחלף בלחיצה.
+
+  **מסך הקלטות — מובייל (<640px):**
+  - הניסיון הראשון השאיר את ה-DashboardGrid ועשה את ה-`FiltersAndListWidget` compact picker ב-y=8 + player ב-y=0. המשתמשת ביקשה ההפך: סטטיסטיקה→סינון→רשימה למעלה, שורת כפתורים קומפקטית, ואז נגן.
+  - **Recordings.tsx** עוקף את ה-DashboardGrid במובייל לחלוטין ועובר ל-flex column טבעי. הסיבה: react-grid-layout מקצה גובה קבוע לכל פריט (`h * rowHeight`), ואקורדיון שמשתנה בגובה גורם או לרווח כשסגור או לחפיפה כשפתוח. flex column מאפשר לכל widget לקבוע גובה לפי תוכן.
+  - **`<FiltersAndListWidget>` mobile branch** מציג את 3 הסקציות (סטטיסטיקה / סינון / רשימה) באותה card; כולן `useState(false)` כברירת מחדל. בחירה ברשימה סוגרת אותה מיידית.
+  - **`<QuickRecordTallWidget>` ו-`<UploadTallWidget>`** קיבלו mobile branch קומפקטי שמרנדר רק `[icon] + [label]`. הם נכנסים ל-`grid grid-cols-2 gap-2 h-14` באותה שורה ב-Recordings.tsx, במקום שני באנרים מלאים.
+  - **`<PlayerWidget>`** עטוף ב-`min-h-[600px]` כדי שייראה מספק את הגובה שהוא רגיל אליו ב-grid.
+
+  **מסך פרויקט (ProjectDetail.tsx):**
+  - **`<TopInfoPanel>`** מאחד את 3 הבאנרים העליונים (יומן + תמחור + סטטיסטיקה) שהיו widgets נפרדים ב-PROJECT_WIDGETS לתוך card אחד מעל ה-DashboardGrid. סגירתו פעם אחת מצמצמת לרצועה דקה ומשחררת את כל המסך לטבלת המשימות (פתרון לבקשת המשתמשת "לראות יותר משימות").
+  - **PROJECT_WIDGETS עודכן** — `calendar` / `pricing` / `stats` הוסרו. y-positions של widgets מתחת זזו למעלה: tasks y=0, summary y=6, upload/quote/templates y=9, questions y=13.
+  - **ייצוא `PricingBlock` שונה ל-`export function`** כך ש-TopInfoPanel יכול לייבאו.
+  - **TopInfoPanel mobile branch** — שלושת הבאנרים מתפצלים ל-3 `<MobileAccordion>` עצמאיים (calendar / pricing / stats), כולם סגורים כברירת מחדל. בלי זה הם הצטופפו ב-grid 3 עמודות ועלו זה על זה במסך צר.
+
+  **מסד נתונים — extend recording source:**
+  - מיגרציה `20260430030000_add_recording_source_values_and_custom.sql`:
+    ```sql
+    ALTER TYPE recording_source ADD VALUE IF NOT EXISTS 'recording';
+    ALTER TYPE recording_source ADD VALUE IF NOT EXISTS 'whatsapp';
+    ALTER TYPE recording_source ADD VALUE IF NOT EXISTS 'upload';
+    ALTER TABLE recordings ADD COLUMN IF NOT EXISTS source_custom TEXT;
+    ```
+  - `src/lib/types/database.ts` עודכן ידנית — `recording_source` enum הורחב ושדה `source_custom: string | null` נוסף ל-Row/Insert/Update של `recordings`.
+  - SOURCE_LABEL ב-`<StatsTallWidget>` ו-`<FiltersAndListWidget>` מיפו את 3 הערכים החדשים.
+
+  **תקלות שעלו ושיטת העבודה:**
+  - **Vercel webhook נתקע פעמיים** — אחרי merges ל-main לא הופעל deploy חדש לproduction (התקיעה הייתה ב-main, ה-preview של feature branch עבד). הפתרון: empty commit `chore: trigger Vercel redeploy`/`chore: trigger Vercel production redeploy` שמדחף webhook חדש. קומיטים: `d18d85d`, `aa16567`.
+  - **שגיאת build ב-Vercel `tsc -b`** — `Meta` ו-`sourceLabel` נשארו לא-בשימוש ב-`RecordingPlayer.tsx` אחרי החלפתם ב-`SourceMeta`. `tsc --noEmit` הלוקאלי לא תפס (תקלה ידועה מ-#87) אבל Vercel עם `noUnusedLocals` נפל. fix ב-`c262da6` — מחיקת שניהם.
+  - **MCP `pull_request_read` לא היה זמין** בסשן הזה (lockdown) — לכן merges נעשו דרך CLI git ו-deployments בוצעו ע"י Vercel auto-deploy על main.
+
+  **קומיטים בסשן (כולם מוזגו ל-main):**
+  ```
+  d09e6e4 stats moved into FiltersAndListWidget
+  4ba3759 editable source + chevrons on meta cells
+  c262da6 fix unused Meta/sourceLabel after refactor
+  aab590b single-toggle date-order
+  0d24aa9 extend source enum + free-text other
+  0918781 TopInfoPanel — combine 3 project banners
+  c5766b7 mobile compact picker + player-first (superseded)
+  eacf4e6 mobile restore stats+filters + compact action row
+  00ec717 mobile flex layout instead of grid (final)
+  ```
+
+  **פתוח לסשן הבא:**
+  - **המשתמשת ביקשה roadmap מ-פאזה 8 והלאה** — ראי תשובה בסשן עצמו (לא נשמרה כאן כי המבנה הקיים של ה-SPEC לא ממוספר בפאזות מעבר ל-7).
+  - **calendar week view RTL** — נשאר תלוי בקומיט #136, לא נבדק מאז שה-build התייצב. אם המשתמשת תאמת — לעדכן/לבטל את ה-followup הישן.
+  - **דף הקלטות מובייל** — אחרי `00ec717` המשתמשת אישרה "מושלם". סוגר את ה-followup מ-#137 על "הרסת לי את דף ההקלטות".

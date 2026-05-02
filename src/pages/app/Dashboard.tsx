@@ -46,36 +46,40 @@ const HOME_WIDGETS: WidgetDefinition[] = [
     title: "KPI בטווח",
     component: RangeKpis,
     chromeStyle: "bare",
-    defaultDesktop: { x: 8, y: 0, w: 4, h: 5, minW: 3, minH: 3 },
-    defaultTablet: { x: 0, y: 5, w: 8, h: 4 },
-    defaultMobile: { x: 0, y: 10, w: 4, h: 4 },
+    // 6 hero cards in a 2×3 grid + per-card expansion. Taller than the old
+    // 4-KPI version so all six fit without inner scroll on desktop.
+    defaultDesktop: { x: 8, y: 0, w: 4, h: 7, minW: 3, minH: 5 },
+    defaultTablet: { x: 0, y: 5, w: 8, h: 6 },
+    defaultMobile: { x: 0, y: 10, w: 4, h: 7 },
   },
   {
     key: "active_projects",
     title: "פרויקטים פעילים",
     component: RangeProjects,
     chromeStyle: "bare",
-    defaultDesktop: { x: 0, y: 5, w: 6, h: 4, minW: 4, minH: 3 },
-    defaultTablet: { x: 0, y: 9, w: 8, h: 4 },
-    defaultMobile: { x: 0, y: 14, w: 4, h: 4 },
+    // Sits next to the taller KPI column on desktop (rows 5-8, cols 0-7).
+    defaultDesktop: { x: 0, y: 5, w: 8, h: 4, minW: 4, minH: 3 },
+    defaultTablet: { x: 0, y: 11, w: 8, h: 4 },
+    defaultMobile: { x: 0, y: 17, w: 4, h: 4 },
   },
   {
     key: "unprocessed_thoughts",
     title: "מחשבות לא מעובדות",
     component: UnprocessedThoughts,
     chromeStyle: "bare",
-    defaultDesktop: { x: 6, y: 5, w: 6, h: 4, minW: 3, minH: 3 },
-    defaultTablet: { x: 0, y: 13, w: 8, h: 4 },
-    defaultMobile: { x: 0, y: 18, w: 4, h: 4 },
+    // Full width under both KPI (ends y=7) and projects (ends y=9).
+    defaultDesktop: { x: 0, y: 9, w: 12, h: 4, minW: 3, minH: 3 },
+    defaultTablet: { x: 0, y: 15, w: 8, h: 4 },
+    defaultMobile: { x: 0, y: 21, w: 4, h: 4 },
   },
   {
     key: "notifications",
     title: "התראות",
     component: NotificationsStub,
     chromeStyle: "bare",
-    defaultDesktop: { x: 0, y: 9, w: 12, h: 3, minW: 4, minH: 3 },
-    defaultTablet: { x: 0, y: 17, w: 8, h: 3 },
-    defaultMobile: { x: 0, y: 22, w: 4, h: 3 },
+    defaultDesktop: { x: 0, y: 13, w: 12, h: 3, minW: 4, minH: 3 },
+    defaultTablet: { x: 0, y: 19, w: 8, h: 3 },
+    defaultMobile: { x: 0, y: 25, w: 4, h: 3 },
   },
 ];
 

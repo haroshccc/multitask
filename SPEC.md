@@ -2819,3 +2819,108 @@ Hero: "החלל לחשוב. החלל לעשות."
     - sparkline מוצג רק ב-`week`/`month` (ב-`day` יש רק נקודה אחת — חסר ערך).
     - מצב הפתיחה של כל כרטיסיה הוא **לוקאלי לקומפוננטה** (לא ב-`widget_state`) — preference
       רגעי, לא איזון לאחסון DB. אותו עיקרון כמו ה-collapse של `DashboardGrid`.
+
+
+- **2026-05-02 — פאזה 8.2 + 8.3 (סשן ארוך): סיכום AI יומי/שבועי/חודשי + agent עם אישור פעולות.**
+
+  ## פאזה 8.2 — Brief AI read-only
+
+  **מטרה:** באנר עליון בדשבורד שמציג סיכום AI לטווח הנבחר (יום/שבוע/חודש) — מה
+  היה, עם מי דיברתי, מתי הייתי הכי יעילה, והמלצות. בלי לבצע פעולות, רק טקסט.
+
+  **רכיבים שנבנו:**
+  - **migration `20260502000001_daily_briefs.sql`** — טבלת קאש לסיכומים. PK
+    על `(user_id, organization_id, view, anchor)` כדי שכל טווח יישמר עם תוצאה
+    אחת. עמודות 8.3 (`proposals`, `proposal_decisions`) שותלו מראש כדי
+    שהמיגרציה תהיה forward-compatible. RLS פר-משתמש, service-role של ה-edge
+    function עוקפת.
+  - **edge function `supabase/functions/daily-brief/`** — בדומה ל-`summarize`:
+    1. פולת מכל הטבלאות (tasks/events/recordings/thoughts/time_entries) את
+       מה ששייך לטווח, ארוז כטקסט עברי קומפקטי עם entity ids מפורשות
+       (`task:<uuid>`, `event:<uuid>`, `rec:<uuid>`, `thought:<uuid>`).
+    2. שולחת ל-Claude Sonnet 4.6 עם tool-use (`report_brief`) ו-system prompt
+       מטומון (`cache_control: ephemeral`).
+    3. ולידציה של ה-proposals — רק ids שמופיעות בקלט עוברות.
+    4. UPSERT לטבלת `daily_briefs` עם `onConflict: user_id,organization_id,view,anchor`.
+    5. **קבלה של `from`/`to` כפרמטרים** — תיקון ל-TZ shift: ה-frontend ב-RTL Israel
+       מחשב טווחים ב-local-tz, ה-edge function רץ UTC. בלי הפרמטרים האלה,
+       `parseIsoDate('2026-05-02')` היה מחזיר UTC midnight ולא Israeli midnight.
+       fallback ל-UTC interpretation אם `from`/`to` חסרים (לא אמור לקרות מ-UI).
+  - **service `src/lib/services/daily-brief.ts`** — שלוש פונקציות: `loadCachedBrief`
+    (קריאה מהטבלה ב-RLS פר-user), `generateBrief` (קריאה לפונקציה), ו-
+    `recordProposalDecision` (read-modify-write על `proposal_decisions` jsonb).
+  - **hook `src/lib/hooks/useDailyBrief.ts`** — `useDailyBrief({view, anchor})`
+    לקריאה (cache-first), `useGenerateDailyBrief({view, anchor, from, to})`
+    למוטציה (force=true ל-refresh ידני), ו-`useRecordProposalDecision()` עם
+    optimistic update.
+  - **widget `BriefBanner`** — חי בראש הדשבורד (`x:0,y:0,w:12,h:7`). מציג:
+    - Headline + summary
+    - "עם מי דיברת" — כרטיסיות פר-אדם (שם + הקשר)
+    - "הקלטות" — דייג'סט של הקלטות התקופה
+    - "שעות יעילות" — תובנה אחת
+    - "המלצות" — 2-5 כרטיסיות מקובצות (time/tasks/meetings/general)
+    - "הצעות פעולה" — כרטיסיות 8.3 (ראה למטה)
+    - 4 מצבי UX: empty / loading / ready / error
+    - כפתור "🔄 רענן" שולח `force:true` (קריאת AI חדשה ≈ ¢2-5)
+
+  **עיצוב טוקנים:** השתמשתי ב-`from-violet-100 to-primary-100` ל-AI accent,
+  טון `bg-emerald-50/100` להמלצות `tasks`, `bg-violet-50/100` לפגישות,
+  `bg-primary-50/100` לזמן, `bg-amber-50/100` ל-general.
+
+  **עלות:** Sonnet 4.6 — system prompt ~1500 tokens (cached, חוסך עד 90%),
+  user context ~2.5K tokens (פר טווח), output ~600 tokens. ≈ ¢2-5 פר קריאה.
+  ברירת מחדל **שמרני** — מאוחסן בקאש, רק `🔄 רענן` יוצר קריאה חדשה.
+
+  ## פאזה 8.3 — Agent עם אישור פעולות
+
+  **עקרון בסיס:** AI לא מבצע שום פעולה לבד. הוא מציע — המשתמשת מאשרת.
+
+  **6 סוגי הצעות:** `move_task`, `schedule_task`, `create_event`, `reorder_day`,
+  `complete_task`, `split_task`. כל הצעה: `{id, kind, payload, reason}` עם
+  payload typed פר kind.
+
+  **רכיבים שנבנו:**
+  - **טיפוסים ב-`src/lib/types/domain.ts`** — `Proposal` discriminated union,
+    `ProposalDecision` (state: 'approved'|'dismissed'|'edited' + applied_at +
+    applied_target_id + edited_payload).
+  - **edge function** — `report_brief` tool-schema כולל `proposals[]`. ולידציה
+    אגרסיבית בצד שרת: כל `task_id`/`event_id`/`recording_id` חייב להופיע
+    ב-`knownTaskIds`/`knownEventIds`/`knownRecordingIds` (Sets שנבנו מהקלט).
+    הצעות לא תקינות מסוננות לפני ה-UPSERT. אם Claude ממציא id — נופל בשקט.
+  - **`BriefProposalCard`** — כרטיסיה לכל הצעה עם 3 פעולות:
+    - **✓ אישור** → קורא ל-mutation המתאימה (`useUpdateTask`/`useCompleteTask`/
+      `useCreateEvent`/`useCreateTask` בהתאם ל-kind), ואז `recordDecision`
+      עם `state:'approved'` + `applied_at` + `applied_target_id`.
+    - **✕ דחייה** → רק `recordDecision` עם `state:'dismissed'`.
+    - **✏ ערוך לפני** → פותח inline editor, המשתמשת מתקנת payload (תאריך,
+      כותרת, מיקום, משך), אישור עם `state:'edited'` + `edited_payload`.
+  - **inline editors** — תומכים ב-`move_task`, `schedule_task`, `create_event`.
+    `reorder_day` ו-`split_task` רק approve/dismiss (post-MVP — מורכבים).
+  - **history view** — אחרי החלטה הכרטיסיה הופכת ל-`DecisionRow` קומפקטי
+    (ירוק/אפור) שמראה את הזמן והפעולה. כפתור "הראה טופלו" חושף דחיות.
+  - **optimistic update** ב-`useRecordProposalDecision` — UI מתעדכן מיד,
+    rollback אוטומטי אם DB נופל.
+
+  **בעיות מוכרות שלא תוקנו (acceptable for MVP):**
+  - **Race ב-approve מקביל** — `recordProposalDecision` עושה read-modify-write
+    על `proposal_decisions` jsonb. אם לוחצים על 2 הצעות במקביל, הכתיבה
+    האחרונה מוחקת את הראשונה. סבירות נמוכה (משתמש לוחץ אחד-אחד), השפעה
+    קטנה (אפשר ללחוץ שוב). תיקון מתאים: RPC עם `jsonb_set`.
+  - **`reorder_day`/`split_task` — אין עריכה** — רק approve/dismiss.
+  - **TZ של ה-edge function** — אם ה-frontend לא שולח `from`/`to` (לא אמור
+    לקרות מ-UI), נופל ל-UTC interpretation של anchor. נכון פר-API.
+
+  ## דברים שלא הצלחתי לבדוק בלי דפדפן
+  - **גלילה אופקית של הצעות** ב-mobile (חצים ימינה/שמאלה לכרטיסיות).
+  - **התנהגות באמת של המודל** — האם Claude עוקב אחרי ה-prompt? יש סיכוי
+    שיפיק הצעות עם ids שלא ראה. הוולידציה תסנן אותם, אבל המשתמשת תראה
+    "0 הצעות" מסיבה לא ברורה. לוג ב-console יעזור לדבג.
+  - **קומפילציה של ה-edge function ב-Supabase** — לא הרצתי `supabase
+    functions deploy`. צריך לוודא שה-deno deps נפתרים (`std@0.224.0`,
+    `@supabase/supabase-js@2.48.1`).
+
+  **קומיטים:**
+  - `feat(dashboard/8.2): AI brief banner with cache + manual refresh`
+  - `feat(dashboard/8.3): proposal cards with approve/dismiss/edit`
+
+  (שני הפיצ'רים מוזגו ל-main כדי שיתוופצו ב-Vercel.)

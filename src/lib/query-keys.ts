@@ -94,6 +94,10 @@ export const queryKeys = {
   // Global search
   search: (orgId: string, query: string) =>
     ["search", orgId, query] as const,
+
+  // Daily brief (Phase 8.2 / 8.3)
+  dailyBrief: (userId: string, view: string, anchor: string) =>
+    ["daily-brief", userId, view, anchor] as const,
 } as const;
 
 /**

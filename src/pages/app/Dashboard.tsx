@@ -12,6 +12,7 @@ import { RangeKpis } from "@/components/dashboard/widgets/RangeKpis";
 import { RangeTasks } from "@/components/dashboard/widgets/RangeTasks";
 import { RangeEvents } from "@/components/dashboard/widgets/RangeEvents";
 import { RangeProjects } from "@/components/dashboard/widgets/RangeProjects";
+import { BriefBanner } from "@/components/dashboard/widgets/BriefBanner";
 import { NotificationsStub } from "@/components/dashboard/widgets/DashboardStubs";
 
 /**
@@ -23,63 +24,72 @@ import { NotificationsStub } from "@/components/dashboard/widgets/DashboardStubs
  * encodes the state so refresh keeps the view.
  */
 const HOME_WIDGETS: WidgetDefinition[] = [
+  // Phase 8.2 — AI brief banner. First item, full-width, tall enough to fit
+  // the headline + summary + people + recommendations + a few proposals
+  // before the user has to scroll inside the widget.
+  {
+    key: "ai_brief",
+    title: "סיכום AI",
+    component: BriefBanner,
+    chromeStyle: "bare",
+    defaultDesktop: { x: 0, y: 0, w: 12, h: 7, minW: 6, minH: 5 },
+    defaultTablet: { x: 0, y: 0, w: 8, h: 7 },
+    defaultMobile: { x: 0, y: 0, w: 4, h: 8 },
+  },
   {
     key: "todays_tasks",
     title: "משימות בטווח",
     component: RangeTasks,
     chromeStyle: "bare",
-    defaultDesktop: { x: 0, y: 0, w: 4, h: 5, minW: 3, minH: 3 },
-    defaultTablet: { x: 0, y: 0, w: 4, h: 5 },
-    defaultMobile: { x: 0, y: 0, w: 4, h: 5 },
+    defaultDesktop: { x: 0, y: 7, w: 4, h: 5, minW: 3, minH: 3 },
+    defaultTablet: { x: 0, y: 7, w: 4, h: 5 },
+    defaultMobile: { x: 0, y: 8, w: 4, h: 5 },
   },
   {
     key: "upcoming_events",
     title: "אירועים בטווח",
     component: RangeEvents,
     chromeStyle: "bare",
-    defaultDesktop: { x: 4, y: 0, w: 4, h: 5, minW: 3, minH: 3 },
-    defaultTablet: { x: 4, y: 0, w: 4, h: 5 },
-    defaultMobile: { x: 0, y: 5, w: 4, h: 5 },
+    defaultDesktop: { x: 4, y: 7, w: 4, h: 5, minW: 3, minH: 3 },
+    defaultTablet: { x: 4, y: 7, w: 4, h: 5 },
+    defaultMobile: { x: 0, y: 13, w: 4, h: 5 },
   },
   {
     key: "weekly_kpis",
     title: "KPI בטווח",
     component: RangeKpis,
     chromeStyle: "bare",
-    // 6 hero cards in a 2×3 grid + per-card expansion. Taller than the old
-    // 4-KPI version so all six fit without inner scroll on desktop.
-    defaultDesktop: { x: 8, y: 0, w: 4, h: 7, minW: 3, minH: 5 },
-    defaultTablet: { x: 0, y: 5, w: 8, h: 6 },
-    defaultMobile: { x: 0, y: 10, w: 4, h: 7 },
+    // 6 hero cards in a 2×3 grid + per-card expansion.
+    defaultDesktop: { x: 8, y: 7, w: 4, h: 7, minW: 3, minH: 5 },
+    defaultTablet: { x: 0, y: 12, w: 8, h: 6 },
+    defaultMobile: { x: 0, y: 18, w: 4, h: 7 },
   },
   {
     key: "active_projects",
     title: "פרויקטים פעילים",
     component: RangeProjects,
     chromeStyle: "bare",
-    // Sits next to the taller KPI column on desktop (rows 5-8, cols 0-7).
-    defaultDesktop: { x: 0, y: 5, w: 8, h: 4, minW: 4, minH: 3 },
-    defaultTablet: { x: 0, y: 11, w: 8, h: 4 },
-    defaultMobile: { x: 0, y: 17, w: 4, h: 4 },
+    defaultDesktop: { x: 0, y: 12, w: 8, h: 4, minW: 4, minH: 3 },
+    defaultTablet: { x: 0, y: 18, w: 8, h: 4 },
+    defaultMobile: { x: 0, y: 25, w: 4, h: 4 },
   },
   {
     key: "unprocessed_thoughts",
     title: "מחשבות לא מעובדות",
     component: UnprocessedThoughts,
     chromeStyle: "bare",
-    // Full width under both KPI (ends y=7) and projects (ends y=9).
-    defaultDesktop: { x: 0, y: 9, w: 12, h: 4, minW: 3, minH: 3 },
-    defaultTablet: { x: 0, y: 15, w: 8, h: 4 },
-    defaultMobile: { x: 0, y: 21, w: 4, h: 4 },
+    defaultDesktop: { x: 0, y: 16, w: 12, h: 4, minW: 3, minH: 3 },
+    defaultTablet: { x: 0, y: 22, w: 8, h: 4 },
+    defaultMobile: { x: 0, y: 29, w: 4, h: 4 },
   },
   {
     key: "notifications",
     title: "התראות",
     component: NotificationsStub,
     chromeStyle: "bare",
-    defaultDesktop: { x: 0, y: 13, w: 12, h: 3, minW: 4, minH: 3 },
-    defaultTablet: { x: 0, y: 19, w: 8, h: 3 },
-    defaultMobile: { x: 0, y: 25, w: 4, h: 3 },
+    defaultDesktop: { x: 0, y: 20, w: 12, h: 3, minW: 4, minH: 3 },
+    defaultTablet: { x: 0, y: 26, w: 8, h: 3 },
+    defaultMobile: { x: 0, y: 33, w: 4, h: 3 },
   },
 ];
 

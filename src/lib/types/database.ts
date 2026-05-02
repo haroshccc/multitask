@@ -41,6 +41,51 @@ export type Database = {
         }
         Relationships: []
       }
+      daily_briefs: {
+        Row: {
+          anchor: string
+          generated_at: string
+          id: string
+          input_token_count: number | null
+          model: string | null
+          organization_id: string
+          output: Json
+          output_token_count: number | null
+          proposal_decisions: Json
+          proposals: Json
+          user_id: string
+          view: string
+        }
+        Insert: {
+          anchor: string
+          generated_at?: string
+          id?: string
+          input_token_count?: number | null
+          model?: string | null
+          organization_id: string
+          output: Json
+          output_token_count?: number | null
+          proposal_decisions?: Json
+          proposals?: Json
+          user_id: string
+          view: string
+        }
+        Update: {
+          anchor?: string
+          generated_at?: string
+          id?: string
+          input_token_count?: number | null
+          model?: string | null
+          organization_id?: string
+          output?: Json
+          output_token_count?: number | null
+          proposal_decisions?: Json
+          proposals?: Json
+          user_id?: string
+          view?: string
+        }
+        Relationships: []
+      }
       event_participants: {
         Row: {
           added_at: string

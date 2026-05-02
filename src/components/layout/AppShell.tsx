@@ -28,6 +28,7 @@ import { QuickCapture } from "@/components/capture/QuickCapture";
 import { AnimatedFab } from "@/components/capture/AnimatedFab";
 import { GlobalSearchPalette } from "@/components/search/GlobalSearchPalette";
 import { Logo } from "@/components/brand/Logo";
+import { FloatingTimerBanner } from "@/components/timer/FloatingTimerBanner";
 
 interface NavItem {
   to: string;
@@ -348,6 +349,8 @@ export function AppShell() {
       />
 
       <GlobalSearchPalette open={searchOpen} onClose={() => setSearchOpen(false)} />
+
+      <FloatingTimerBanner />
     </div>
   );
 }

@@ -2789,3 +2789,33 @@ Hero: "החלל לחשוב. החלל לעשות."
   - **המשתמשת ביקשה roadmap מ-פאזה 8 והלאה** — ראי תשובה בסשן עצמו (לא נשמרה כאן כי המבנה הקיים של ה-SPEC לא ממוספר בפאזות מעבר ל-7).
   - **calendar week view RTL** — נשאר תלוי בקומיט #136, לא נבדק מאז שה-build התייצב. אם המשתמשת תאמת — לעדכן/לבטל את ה-followup הישן.
   - **דף הקלטות מובייל** — אחרי `00ec717` המשתמשת אישרה "מושלם". סוגר את ה-followup מ-#137 על "הרסת לי את דף ההקלטות".
+
+- **2026-05-02 — פאזה 8.1.1: הרחבת KPI עם progressive disclosure (לפני 8.2).**
+  - **למה:** המשתמשת אמרה ש-4 ה-KPI של 8.1 לא מספיק מפורטים. במקום toggle compact/expanded
+    גלובלי שהיא הציעה, בחרנו progressive disclosure פר-כרטיסיה — 6 hero cards שכל אחת
+    נפתחת בקליק לסאב-מטריקס + השוואה לטווח הקודם. הסיבה: toggles גלובליים קובעים מצב
+    "כל המידע / חלק מהמידע" שאף אחד לא משנה אחרי יום, ובינתיים יש מצב חצי-עמוס שגור
+    שכמעט תמיד לא אופטימלי.
+  - **6 הכרטיסיות (`src/components/dashboard/widgets/RangeKpis.tsx`):**
+    1. **זמן עבודה** — total tracked. Expand: streak, שעת שיא, ימים פעילים, sparkline (week/month).
+    2. **משימות שהושלמו** — count. Expand: חדשות שנוצרו, באיחור, ממוצע זמן לסיום, prev.
+    3. **ביצוע %** — completed/scheduled. Expand: counts גולמיים + זמן פוקוס נטו (tracked − meetings).
+    4. **פגישות** — count + שעות. Expand: ממוצע משך, % עם וידאו, prev.
+    5. **הקלטות** — count + דקות. Expand: שעות סה"כ, breakdown לפי `source` enum (call/meeting/thought/other).
+    6. **מחשבות** — count + שיעור עיבוד. Expand: מעובדות/סה"כ, breakdown לפי source (app_*/whatsapp_*).
+  - כל hero card: trend chip (`↑/↓/—`) מול הטווח הקודם — `prev = shiftRange(range, view)`
+    (יום אחורה / שבוע אחורה / חודש אחורה). פאנל נפתח עם `aria-expanded` וגריד 2-עמודות
+    של sub-metrics.
+  - **פטרן fetch:** טווח-איחוד (`min(prev.from, range.from)` → `max(prev.to, range.to)`)
+    נשלח ל-`useEvents` ול-`useTimeEntriesByRange` כדי לחשב את שתי התקופות מאותו payload.
+    Tasks/recordings/thoughts ממילא נטענים full-org-scope, אז סינון לטווח קורה ב-JS.
+  - **layout:** `weekly_kpis` גדל ל-`h:7` בדסקטופ (היה 5) כדי לתת מקום ל-6 כרטיסיות
+    ב-2×3 grid. `active_projects` הוגדל ל-`w:8` (היה 6) כדי למלא את החלל לצד KPI הגבוה,
+    ו-`unprocessed_thoughts`/`notifications` ירדו בהתאם.
+  - החלטות שעלו במהלך הבניה:
+    - אין שדה `due_at` בפועל בטבלת `tasks` — ה-SPEC §15 הזכיר אותו אבל ה-DB יישם רק
+      `scheduled_at`. **באיחור** מוגדר כאן `scheduled_at < now() AND !completed_at`
+      בתוך הטווח. אם נוסיף `due_at` בעתיד — להחליף את התנאי ב-`computeStats`.
+    - sparkline מוצג רק ב-`week`/`month` (ב-`day` יש רק נקודה אחת — חסר ערך).
+    - מצב הפתיחה של כל כרטיסיה הוא **לוקאלי לקומפוננטה** (לא ב-`widget_state`) — preference
+      רגעי, לא איזון לאחסון DB. אותו עיקרון כמו ה-collapse של `DashboardGrid`.

@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Play, Pause, X, Timer as TimerIcon } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Play, Pause, X, Clock, GripVertical } from "lucide-react";
 import {
   useActiveTimer,
   useStartTimer,
@@ -8,6 +8,30 @@ import {
 import { useTask } from "@/lib/hooks/useTasks";
 import { useTaskList } from "@/lib/hooks/useTaskLists";
 import { cn } from "@/lib/utils/cn";
+
+const POS_KEY = "multitask.timer-banner.pos";
+const MARGIN = 8;
+
+interface Pos {
+  x: number;
+  y: number;
+}
+
+function loadPos(): Pos | null {
+  try {
+    const raw = localStorage.getItem(POS_KEY);
+    if (!raw) return null;
+    const p = JSON.parse(raw) as Pos;
+    if (typeof p.x === "number" && typeof p.y === "number") return p;
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+function clamp(v: number, lo: number, hi: number) {
+  return Math.max(lo, Math.min(hi, v));
+}
 
 function formatElapsed(seconds: number): string {
   const s = Math.max(0, Math.floor(seconds));
@@ -31,18 +55,27 @@ function formatElapsed(seconds: number): string {
  * - X dismisses the banner without affecting the timer state. A new
  *   `start_timer` call (from anywhere) un-dismisses it.
  *
- * All start/stop operations write directly to `time_entries` via the existing
- * RPCs; Realtime invalidates `useActiveTimer()` so the UI is always in sync
- * without manual save.
+ * Drag: pointer-down anywhere on the card (except a button) starts a drag.
+ * Position persists in localStorage; viewport-clamped on each move and on
+ * window resize.
  */
 export function FloatingTimerBanner() {
   const { data: activeEntry } = useActiveTimer();
   const [stickyTaskId, setStickyTaskId] = useState<string | null>(null);
   const [dismissed, setDismissed] = useState(false);
   const [now, setNow] = useState(() => Date.now());
+  const [pos, setPos] = useState<Pos | null>(() => loadPos());
+  const [isDragging, setIsDragging] = useState(false);
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  const dragRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    baseX: number;
+    baseY: number;
+  } | null>(null);
 
   // Sticky tracking: remember the task even after the timer stops, until X.
-  // A new active timer (potentially different task) un-dismisses the banner.
   useEffect(() => {
     if (activeEntry) {
       setStickyTaskId(activeEntry.task_id);
@@ -57,6 +90,36 @@ export function FloatingTimerBanner() {
     const id = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(id);
   }, [activeEntry?.id]);
+
+  // Re-clamp on resize so the banner doesn't end up off-screen.
+  useEffect(() => {
+    const onResize = () => {
+      const el = cardRef.current;
+      if (!el || !pos) return;
+      const w = el.offsetWidth;
+      const h = el.offsetHeight;
+      setPos((prev) =>
+        prev
+          ? {
+              x: clamp(prev.x, MARGIN, window.innerWidth - w - MARGIN),
+              y: clamp(prev.y, MARGIN, window.innerHeight - h - MARGIN),
+            }
+          : prev,
+      );
+    };
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [pos]);
+
+  // Persist position
+  useEffect(() => {
+    if (!pos) return;
+    try {
+      localStorage.setItem(POS_KEY, JSON.stringify(pos));
+    } catch {
+      /* ignore */
+    }
+  }, [pos]);
 
   const { data: task } = useTask(stickyTaskId);
   const { data: list } = useTaskList(task?.task_list_id);
@@ -88,20 +151,84 @@ export function FloatingTimerBanner() {
     else start.mutate({ taskId: stickyTaskId });
   };
 
+  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    // Don't start a drag from any interactive child (buttons).
+    if ((e.target as HTMLElement).closest("button")) return;
+    const el = cardRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    dragRef.current = {
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      baseX: rect.left,
+      baseY: rect.top,
+    };
+    el.setPointerCapture(e.pointerId);
+    setIsDragging(true);
+    e.preventDefault();
+  };
+
+  const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const d = dragRef.current;
+    if (!d || d.pointerId !== e.pointerId) return;
+    const el = cardRef.current;
+    if (!el) return;
+    const w = el.offsetWidth;
+    const h = el.offsetHeight;
+    const dx = e.clientX - d.startX;
+    const dy = e.clientY - d.startY;
+    setPos({
+      x: clamp(d.baseX + dx, MARGIN, window.innerWidth - w - MARGIN),
+      y: clamp(d.baseY + dy, MARGIN, window.innerHeight - h - MARGIN),
+    });
+  };
+
+  const onPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    const d = dragRef.current;
+    if (!d || d.pointerId !== e.pointerId) return;
+    cardRef.current?.releasePointerCapture(e.pointerId);
+    dragRef.current = null;
+    setIsDragging(false);
+  };
+
+  // When pos is null, fall back to the original CSS-class anchored placement.
+  // When pos is set, switch to absolute pixel positioning.
+  const style: React.CSSProperties | undefined = pos
+    ? { left: pos.x, top: pos.y, right: "auto", bottom: "auto" }
+    : undefined;
+
   return (
     <div
+      ref={cardRef}
       role="status"
       aria-live="polite"
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerUp}
+      style={style}
       className={cn(
         "fixed z-40 pointer-events-auto",
-        "bottom-20 md:bottom-4 end-4",
-        "card !p-2 !pe-2.5 shadow-lift",
-        "flex items-center gap-2.5",
+        !pos && "bottom-20 md:bottom-4 end-4",
+        "card !p-2 !pe-2.5 shadow-lift select-none",
+        "flex items-center gap-2",
         "max-w-[calc(100vw-2rem)] sm:max-w-md",
+        isDragging
+          ? "cursor-grabbing transition-none"
+          : "cursor-grab transition-shadow",
         isRunning &&
           "border-primary-300 bg-gradient-to-l from-primary-50 to-white",
       )}
     >
+      <span
+        className="shrink-0 text-ink-400 -ms-0.5 self-stretch flex items-center"
+        aria-hidden
+        title="גררי כדי להזיז"
+      >
+        <GripVertical className="w-3.5 h-3.5" />
+      </span>
+
       <span
         className={cn(
           "shrink-0 w-9 h-9 rounded-full flex items-center justify-center",
@@ -111,7 +238,7 @@ export function FloatingTimerBanner() {
         )}
         aria-hidden
       >
-        <TimerIcon className="w-4 h-4" />
+        <Clock className="w-4 h-4" />
       </span>
 
       <div className="flex-1 min-w-0">

@@ -7,6 +7,7 @@ import {
 } from "@/lib/hooks/useTimer";
 import { useTask } from "@/lib/hooks/useTasks";
 import { useTaskList } from "@/lib/hooks/useTaskLists";
+import { ListIcon } from "@/components/tasks/list-icons";
 import { cn } from "@/lib/utils/cn";
 
 const POS_KEY = "multitask.timer-banner.pos";
@@ -136,15 +137,7 @@ export function FloatingTimerBanner() {
     : 0;
 
   const taskTitle = task?.title?.trim() || "ללא כותרת";
-  const listLabel = list
-    ? `${list.emoji ? `${list.emoji} ` : ""}${list.name}`
-    : null;
   const parentLabel = parentTask?.title?.trim() || null;
-
-  const subtitleParts: string[] = [];
-  if (listLabel) subtitleParts.push(listLabel);
-  if (parentLabel) subtitleParts.push(`↳ ${parentLabel}`);
-  const subtitle = subtitleParts.join(" · ") || "ללא רשימה";
 
   const toggle = () => {
     if (isRunning) stop.mutate();
@@ -255,7 +248,22 @@ export function FloatingTimerBanner() {
             {formatElapsed(elapsed)}
           </span>
         </div>
-        <div className="text-[11px] text-ink-500 truncate">{subtitle}</div>
+        <div className="text-[11px] text-ink-500 truncate flex items-center gap-1 min-w-0">
+          {list ? (
+            <span className="inline-flex items-center gap-0.5 shrink-0">
+              <ListIcon emoji={list.emoji} className="w-3 h-3" />
+              <span className="truncate">{list.name}</span>
+            </span>
+          ) : (
+            <span className="shrink-0">ללא רשימה</span>
+          )}
+          {parentLabel && (
+            <>
+              <span className="shrink-0">·</span>
+              <span className="truncate">↳ {parentLabel}</span>
+            </>
+          )}
+        </div>
       </div>
 
       <button

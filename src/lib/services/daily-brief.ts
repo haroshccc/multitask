@@ -136,6 +136,35 @@ export async function recordProposalDecision(args: {
   return rowToBrief(updated);
 }
 
+/**
+ * Same as `recordProposalDecision`, but applies multiple decisions in one
+ * read-modify-write — used by the "אשר הכל / דחה הכל" bulk actions to avoid
+ * N round-trips and the lost-update race that would entail.
+ */
+export async function recordProposalDecisionsBatch(args: {
+  briefId: string;
+  decisions: Record<string, ProposalDecision>;
+}): Promise<DailyBrief> {
+  const { data: existing, error: readErr } = await supabase
+    .from("daily_briefs")
+    .select("*")
+    .eq("id", args.briefId)
+    .maybeSingle();
+  if (readErr) throw readErr;
+  if (!existing) throw new Error("brief_not_found");
+  const decisions =
+    (existing.proposal_decisions as unknown as ProposalDecisions) ?? {};
+  const next = { ...decisions, ...args.decisions };
+  const { data: updated, error: upErr } = await supabase
+    .from("daily_briefs")
+    .update({ proposal_decisions: next as unknown as Json })
+    .eq("id", args.briefId)
+    .select()
+    .single();
+  if (upErr) throw upErr;
+  return rowToBrief(updated);
+}
+
 /** Apply a proposal client-side and record the decision. The actual mutation
  *  (move / schedule / create event / ...) is handled by the caller; this
  *  function just records the outcome on the brief row.

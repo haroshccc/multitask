@@ -14,12 +14,26 @@ import {
   TrendingUp,
   Compass,
   CalendarDays,
+  XCircle,
 } from "lucide-react";
 import { useDashboardRange } from "../dashboard-context";
-import { useDailyBrief, useGenerateDailyBrief } from "@/lib/hooks/useDailyBrief";
+import {
+  useDailyBrief,
+  useGenerateDailyBrief,
+  useRecordProposalDecisionsBatch,
+} from "@/lib/hooks/useDailyBrief";
+import { useUpdateTask, useCompleteTask } from "@/lib/hooks";
 import { ApplyProposalCard } from "./BriefProposalCard";
 import { cn } from "@/lib/utils/cn";
-import type { BriefRecommendation, DailyBrief } from "@/lib/types/domain";
+import type {
+  BriefRecommendation,
+  DailyBrief,
+  Proposal,
+  ProposalDecisions,
+  MoveTaskPayload,
+  ScheduleTaskPayload,
+  CompleteTaskPayload,
+} from "@/lib/types/domain";
 
 const VIEW_LABEL: Record<string, string> = {
   day: "היום",
@@ -316,12 +330,15 @@ function BriefContent({
       {/* Proposals (Phase 8.3) */}
       {proposals.length > 0 && (
         <section>
-          <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2 mb-2 flex-wrap">
             <SectionHeader icon={Pencil} label="הצעות פעולה" inline />
-            <span className="text-[10px] text-ink-500">
+            <span className="text-[10px] text-ink-500 ms-auto">
               {visibleProposalsCount} ממתינות · {dismissedCount} טופלו
             </span>
           </div>
+          {visibleProposalsCount > 1 && (
+            <ProposalsToolbar brief={brief} />
+          )}
           <div className="space-y-2">
             {proposals
               .filter(
@@ -356,6 +373,141 @@ function BriefContent({
         <ExternalLink className="w-3 h-3" />
         AI לא מבצע פעולות לבד — כל שינוי דורש אישור שלך.
       </div>
+    </div>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// Bulk-actions toolbar — appears when ≥2 pending proposals.
+
+const SIMPLE_KINDS = new Set(["move_task", "schedule_task", "complete_task"]);
+
+/**
+ * "אשר הכל" / "דחה הכל" toolbar.
+ *
+ * Approve-all is intentionally limited to single-step proposals (move,
+ * schedule, complete) — anything multi-step (reorder_day, split_task,
+ * create_event) needs the user to look at the dedicated card first. Dismiss-all
+ * has no such restriction; dismissing is always safe.
+ */
+function ProposalsToolbar({ brief }: { brief: DailyBrief }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const updateTask = useUpdateTask();
+  const completeTask = useCompleteTask();
+  const recordBatch = useRecordProposalDecisionsBatch();
+
+  const pending = brief.proposals.filter(
+    (p) => !brief.proposal_decisions[p.id]
+  );
+  const simplePending = pending.filter((p) => SIMPLE_KINDS.has(p.kind));
+
+  async function applyOne(p: Proposal): Promise<string | undefined> {
+    switch (p.kind) {
+      case "move_task":
+      case "schedule_task": {
+        const pl = p.payload as MoveTaskPayload | ScheduleTaskPayload;
+        await updateTask.mutateAsync({
+          taskId: pl.task_id,
+          patch: {
+            scheduled_at: pl.new_scheduled_at,
+            ...(("duration_minutes" in pl && pl.duration_minutes != null)
+              ? { duration_minutes: pl.duration_minutes }
+              : {}),
+          },
+        });
+        return pl.task_id;
+      }
+      case "complete_task": {
+        const pl = p.payload as CompleteTaskPayload;
+        await completeTask.mutateAsync({ taskId: pl.task_id, completed: true });
+        return pl.task_id;
+      }
+    }
+    return undefined;
+  }
+
+  async function handleApproveAll() {
+    if (simplePending.length === 0) return;
+    setBusy(true);
+    setError(null);
+    const decisions: ProposalDecisions = {};
+    let firstError: string | null = null;
+    for (const p of simplePending) {
+      try {
+        const targetId = await applyOne(p);
+        decisions[p.id] = {
+          state: "approved",
+          applied_at: new Date().toISOString(),
+          ...(targetId ? { applied_target_id: targetId } : {}),
+        };
+      } catch (err) {
+        if (!firstError) {
+          firstError = err instanceof Error ? err.message : String(err);
+        }
+      }
+    }
+    try {
+      if (Object.keys(decisions).length > 0) {
+        await recordBatch.mutateAsync({ brief, decisions });
+      }
+    } catch (err) {
+      firstError = err instanceof Error ? err.message : String(err);
+    }
+    if (firstError) setError(firstError);
+    setBusy(false);
+  }
+
+  async function handleDismissAll() {
+    if (pending.length === 0) return;
+    setBusy(true);
+    setError(null);
+    const decisions: ProposalDecisions = {};
+    for (const p of pending) {
+      decisions[p.id] = { state: "dismissed" };
+    }
+    try {
+      await recordBatch.mutateAsync({ brief, decisions });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+    setBusy(false);
+  }
+
+  return (
+    <div className="flex items-center gap-1.5 flex-wrap mb-2 p-2 rounded-md bg-ink-50/60 border border-ink-100">
+      {simplePending.length > 0 && (
+        <button
+          type="button"
+          onClick={handleApproveAll}
+          disabled={busy}
+          className={cn(
+            "inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium border transition-colors",
+            "bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-600",
+            busy && "opacity-60 cursor-wait"
+          )}
+          title="מאשר רק הצעות פשוטות (העברה / תזמון / סימון). מורכבות נשארות לאישור פרטני."
+        >
+          {busy ? (
+            <Loader2 className="w-3 h-3 animate-spin" />
+          ) : (
+            <CheckCircle2 className="w-3 h-3" />
+          )}
+          אשר הכל ({simplePending.length})
+        </button>
+      )}
+      <button
+        type="button"
+        onClick={handleDismissAll}
+        disabled={busy}
+        className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium border bg-white hover:bg-rose-50 text-rose-700 border-rose-300"
+      >
+        <XCircle className="w-3 h-3" />
+        דחה הכל ({pending.length})
+      </button>
+      {error && (
+        <span className="text-[10px] text-rose-700 ms-2 truncate">{error}</span>
+      )}
     </div>
   );
 }

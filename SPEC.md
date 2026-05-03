@@ -2968,3 +2968,57 @@ Hero: "החלל לחשוב. החלל לעשות."
   בדיוק מה שצריך). עוד שדה היה כפילות.
 
   **קומיט:** `feat(dashboard/8.2.1): AI forward planning + lookahead window`
+
+- **2026-05-03 — פאזה 8.3.1: ReorderDay כאג'נדה ויזואלית + Bulk Actions.**
+
+  **טריגר:** ה-AI מציע פעולות, אבל ב-`reorder_day` הקלף הקיים פשוט הציג
+  "לסדר מחדש N משימות" עם אישור גלובלי בלבד. המשתמשת ביקשה אג'נדה
+  ויזואלית של היום המוצע + checkbox פר-משימה כדי לאשר/לדחות שינוי בודד.
+
+  **שינויים — Frontend:**
+  - **קומפוננטה חדשה `ReorderDayCard`** (`src/components/dashboard/widgets/
+    BriefReorderDayCard.tsx`):
+    - מקבץ את ה-moves לפי יום (יום שני / יום שלישי / ...) ומסדר לפי שעה.
+    - לכל move: checkbox (default checked) + שם המשימה + diff "היה→יהיה"
+      (ישן strikethrough, חדש בולט) + DateTimePicker inline לשינוי השעה.
+    - כפתור "אשר את כל הסידור" / "אשר X מסומנות" (משתנה לפי בחירה),
+      "סמן הכל / בטל הכל", "דחה הכל".
+    - אם המשתמשת ביטלה checkbox או שינתה שעה — נרשם כ-`edited` עם
+      `edited_payload` שמכיל רק את ה-moves הנבחרים.
+  - `ApplyProposalCard` מנתב הצעות `reorder_day` ל-`ReorderDayCard` במקום
+    הקלף הגנרי.
+
+  **`ProposalsToolbar` (B-bulk actions ב-`BriefBanner.tsx`):**
+  - מופיעה כשיש ≥2 הצעות פתוחות.
+  - "אשר הכל (N)" — מאשר רק הצעות *פשוטות* (move_task / schedule_task /
+    complete_task). הצעות מורכבות (reorder_day / split_task / create_event)
+    דורשות אישור פרטני — מגן על המשתמשת מטעויות גדולות.
+  - "דחה הכל (N)" — דוחה את כל הפתוחות.
+  - שגיאה בודדת לא חוסמת את השאר; מציגה את השגיאה הראשונה.
+
+  **תשתית bulk decisions:**
+  - `recordProposalDecisionsBatch(briefId, decisions)` ב-service: עדכון
+    אחד של `proposal_decisions` JSONB עם N החלטות בו-זמנית. מונע race
+    בין read-modify-write.
+  - `useRecordProposalDecisionsBatch` hook עם optimistic update.
+
+  **שיפור visual diff ב-`move_task` / `schedule_task`:**
+  - `move_task` summary: שם המשימה בשורה אחת, ומתחתיה "זמן ישן
+    (strikethrough) ←חץ← זמן חדש (badge ירוק)".
+  - `schedule_task`: זמן חדש כ-badge primary + משך זמן.
+
+  **`ReorderDayPayload.moves` הורחב:**
+  - נוספו `current_scheduled_at?: string | null` ו-`duration_minutes?:
+    number | null` לכל move.
+  - כולם optional — אם ה-AI לא מספק (גרסת v2 של ה-edge function), ה-UI
+    מציג "ללא תזמון → X" וזה עובד.
+
+  **שינויים — Edge Function (לפריסה ידנית):**
+  - SYSTEM_PROMPT הורחב עם סקציה "מבני payload" שמפרטת בדיוק אילו שדות
+    ה-AI חייב למלא לכל סוג הצעה. דגש מפורש: ב-`reorder_day` חובה
+    current_scheduled_at + task_title + duration_minutes לכל move.
+  - **לא נפרס דרך MCP** — wrapper דחה את הקריאה (ZodError על type
+    coercion). נפרס ידנית בעדכון הבא; v2 ממשיך לשרת והקליינט מסתדר עם
+    שדות חסרים.
+
+  **קומיט:** `feat(brief/8.3.1): visual reorder-day agenda + bulk actions`

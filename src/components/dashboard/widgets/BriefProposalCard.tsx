@@ -9,6 +9,7 @@ import {
   GitBranch,
   CheckSquare,
   Loader2,
+  ArrowLeft,
 } from "lucide-react";
 import {
   useUpdateTask,
@@ -18,6 +19,7 @@ import {
   useRecordProposalDecision,
 } from "@/lib/hooks";
 import { cn } from "@/lib/utils/cn";
+import { ReorderDayCard } from "./BriefReorderDayCard";
 import type {
   DailyBrief,
   Proposal,
@@ -85,6 +87,17 @@ interface Props {
  * the thing".
  */
 export function ApplyProposalCard({ proposal, brief, decision }: Props) {
+  // reorder_day has its own visual layout (day-agenda with per-row checkboxes
+  // and inline time editors), so it bypasses the generic card.
+  if (proposal.kind === "reorder_day") {
+    return (
+      <ReorderDayCard
+        proposal={proposal as Proposal & { kind: "reorder_day"; payload: ReorderDayPayload }}
+        brief={brief}
+        decision={decision}
+      />
+    );
+  }
   const meta = KIND_META[proposal.kind];
   const [isEditing, setIsEditing] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -422,23 +435,47 @@ function ProposalSummary({
   switch (proposal.kind) {
     case "move_task": {
       const p = payload as MoveTaskPayload;
+      const taskName = p.task_title ?? `task:${p.task_id.slice(0, 6)}`;
+      if (!p.current_scheduled_at) {
+        return (
+          <span>
+            להעביר את <b>{taskName}</b> ל־<b>{fmtDateTime(p.new_scheduled_at)}</b>
+          </span>
+        );
+      }
       return (
-        <span>
-          להעביר את <b>{p.task_title ?? `task:${p.task_id.slice(0, 6)}`}</b> ל־
-          <b>{fmtDateTime(p.new_scheduled_at)}</b>
-          {p.current_scheduled_at && (
-            <> (היה {fmtDateTime(p.current_scheduled_at)})</>
-          )}
+        <span className="block">
+          <span className="block">
+            להעביר את <b>{taskName}</b>
+          </span>
+          <span className="inline-flex items-center gap-1.5 mt-1 text-[11px]">
+            <span className="line-through text-ink-400">
+              {fmtDateTime(p.current_scheduled_at)}
+            </span>
+            <ArrowLeft className="w-3 h-3 text-ink-400" />
+            <span className="font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
+              {fmtDateTime(p.new_scheduled_at)}
+            </span>
+          </span>
         </span>
       );
     }
     case "schedule_task": {
       const p = payload as ScheduleTaskPayload;
+      const taskName = p.task_title ?? `task:${p.task_id.slice(0, 6)}`;
       return (
-        <span>
-          לתזמן את <b>{p.task_title ?? `task:${p.task_id.slice(0, 6)}`}</b> ל־
-          <b>{fmtDateTime(p.new_scheduled_at)}</b>
-          {p.duration_minutes ? ` למשך ${p.duration_minutes} דק'` : ""}
+        <span className="block">
+          <span className="block">
+            לתזמן את <b>{taskName}</b>
+          </span>
+          <span className="inline-flex items-center gap-1.5 mt-1 text-[11px]">
+            <span className="font-semibold text-primary-700 bg-primary-50 px-1.5 py-0.5 rounded">
+              {fmtDateTime(p.new_scheduled_at)}
+            </span>
+            {p.duration_minutes ? (
+              <span className="text-ink-500">למשך {p.duration_minutes} דק׳</span>
+            ) : null}
+          </span>
         </span>
       );
     }

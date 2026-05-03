@@ -40,7 +40,11 @@ import {
   useIsTaskSelected,
   useTaskSelectionStore,
 } from "@/lib/selection/store";
-import { Link as LinkIcon, Calendar as CalendarIcon } from "lucide-react";
+import {
+  Link as LinkIcon,
+  Calendar as CalendarIcon,
+  AlertTriangle,
+} from "lucide-react";
 import { PlanVsActualBar } from "@/components/tasks/PlanVsActualBar";
 import type { Task } from "@/lib/types/domain";
 
@@ -591,12 +595,44 @@ export function TaskRow({
         {display.dueDate && task.scheduled_at && (
           <span
             className="shrink-0 inline-flex items-center gap-0.5 text-[10px] text-ink-600 px-1.5 py-0.5 rounded-md bg-ink-100"
-            title="תאריך יעד"
+            title="זמן עבודה מתוכנן"
           >
             <CalendarIcon className="w-3 h-3" />
             {formatShortDate(task.scheduled_at)}
           </span>
         )}
+
+        {/* Deadline — separate from scheduled_at. Shown always when set and
+            not completed; severity coded by colour:
+              red    = past deadline
+              orange = within 24h
+              ink    = further out */}
+        {task.deadline_at && !isDone && (() => {
+          const dl = new Date(task.deadline_at);
+          const ms = dl.getTime() - Date.now();
+          const tone =
+            ms < 0
+              ? "bg-danger-50 text-danger-700"
+              : ms < 24 * 3600 * 1000
+              ? "bg-warning-50 text-warning-700"
+              : "bg-ink-100 text-ink-600";
+          const titleText =
+            ms < 0
+              ? `דד-ליין עבר: ${formatShortDate(task.deadline_at)}`
+              : `דד-ליין: ${formatShortDate(task.deadline_at)}`;
+          return (
+            <span
+              className={cn(
+                "shrink-0 inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-md font-semibold",
+                tone
+              )}
+              title={titleText}
+            >
+              <AlertTriangle className="w-3 h-3" />
+              {formatShortDate(task.deadline_at)}
+            </span>
+          );
+        })()}
 
         {display.estimated && task.estimated_hours != null && (
           <span
@@ -792,8 +828,15 @@ export function TaskRow({
 
                   {display.dueDate && task.scheduled_at && (
                     <div className="flex items-center gap-2 px-3 py-1.5 text-ink-700">
-                      <span className="text-xs text-ink-500 w-20">תאריך יעד</span>
+                      <span className="text-xs text-ink-500 w-20">זמן עבודה</span>
                       <span>{formatShortDate(task.scheduled_at)}</span>
+                    </div>
+                  )}
+
+                  {task.deadline_at && (
+                    <div className="flex items-center gap-2 px-3 py-1.5 text-ink-700">
+                      <span className="text-xs text-ink-500 w-20">דד-ליין</span>
+                      <span>{formatShortDate(task.deadline_at)}</span>
                     </div>
                   )}
 

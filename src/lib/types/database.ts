@@ -1476,6 +1476,7 @@ export type Database = {
           completion_submitted_at: string | null
           created_at: string
           custom_fields: Json
+          deadline_at: string | null
           description: string | null
           duration_minutes: number | null
           estimated_hours: number | null
@@ -1517,6 +1518,7 @@ export type Database = {
           completion_submitted_at?: string | null
           created_at?: string
           custom_fields?: Json
+          deadline_at?: string | null
           description?: string | null
           duration_minutes?: number | null
           estimated_hours?: number | null
@@ -1558,6 +1560,7 @@ export type Database = {
           completion_submitted_at?: string | null
           created_at?: string
           custom_fields?: Json
+          deadline_at?: string | null
           description?: string | null
           duration_minutes?: number | null
           estimated_hours?: number | null

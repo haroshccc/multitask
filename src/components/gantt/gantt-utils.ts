@@ -39,6 +39,11 @@ export interface GanttRow {
   /** Resolved color for this row — used to paint phase bands in a shade
    *  of the list's color (hash-stable per phase id). */
   accentColor?: string;
+  /** True when the underlying task has no scheduled_at + no
+   *  estimated_hours + no duration_minutes. The table still surfaces it
+   *  (so the user can assign a schedule from there); the Gantt bar is
+   *  suppressed. start/end are set to a placeholder = today. */
+  unscheduled?: boolean;
 }
 
 // Time helpers ---------------------------------------------------------------
@@ -182,27 +187,31 @@ export function buildRows(
       return maxEnd;
     };
 
+    // The Gantt's `editable table` mode wants to expose every task in the
+    // selected scope, including ones with no schedule yet — the user fills
+    // those in from the table. Tasks without a timing get a placeholder
+    // start/end (today's `fallback`) and an `unscheduled` flag so the
+    // GanttBar renderer can skip drawing a bar.
     const walk = (pid: string | null, depth: number, phaseId: string | null) => {
       const kids = childrenOf.get(pid) ?? [];
       for (const t of kids) {
         const timing = calcTaskTiming(t, fallback);
         const childPhaseId = t.is_phase ? t.id : phaseId;
-        if (timing) {
-          rows.push({
-            id: `task:${t.id}`,
-            kind: "task",
-            task: t,
-            depth,
-            start: timing.start,
-            end: timing.end,
-            title: t.title?.trim() || "ללא כותרת",
-            completed: !!t.completed_at,
-            isPhase: !!t.is_phase,
-            phaseId: t.is_phase ? null : phaseId,
-            childrenEnd: t.is_phase ? findSubtreeEnd(t.id) : null,
-            accentColor: t.is_phase ? accentForPhase(t) : undefined,
-          });
-        }
+        rows.push({
+          id: `task:${t.id}`,
+          kind: "task",
+          task: t,
+          depth,
+          start: timing?.start ?? fallback,
+          end: timing?.end ?? fallback,
+          title: t.title?.trim() || "ללא כותרת",
+          completed: !!t.completed_at,
+          isPhase: !!t.is_phase,
+          phaseId: t.is_phase ? null : phaseId,
+          childrenEnd: t.is_phase ? findSubtreeEnd(t.id) : null,
+          accentColor: t.is_phase ? accentForPhase(t) : undefined,
+          unscheduled: !timing,
+        });
         walk(t.id, depth + 1, childPhaseId);
       }
     };
@@ -212,22 +221,21 @@ export function buildRows(
     walk(null, 0, null);
     for (const o of orphans) {
       const timing = calcTaskTiming(o, fallback);
-      if (timing) {
-        rows.push({
-          id: `task:${o.id}`,
-          kind: "task",
-          task: o,
-          depth: 0,
-          start: timing.start,
-          end: timing.end,
-          title: o.title?.trim() || "ללא כותרת",
-          completed: !!o.completed_at,
-          isPhase: !!o.is_phase,
-          phaseId: null,
-          childrenEnd: o.is_phase ? findSubtreeEnd(o.id) : null,
-          accentColor: o.is_phase ? accentForPhase(o) : undefined,
-        });
-      }
+      rows.push({
+        id: `task:${o.id}`,
+        kind: "task",
+        task: o,
+        depth: 0,
+        start: timing?.start ?? fallback,
+        end: timing?.end ?? fallback,
+        title: o.title?.trim() || "ללא כותרת",
+        completed: !!o.completed_at,
+        isPhase: !!o.is_phase,
+        phaseId: null,
+        childrenEnd: o.is_phase ? findSubtreeEnd(o.id) : null,
+        accentColor: o.is_phase ? accentForPhase(o) : undefined,
+        unscheduled: !timing,
+      });
     }
   }
 

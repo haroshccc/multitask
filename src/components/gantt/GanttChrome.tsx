@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   ChevronRight,
   ChevronLeft,
@@ -149,6 +150,13 @@ export function GanttChrome({
 
   const visibleListCount = lists.length - hiddenListIds.size;
 
+  const sourceLabel =
+    source.kind === "all"
+      ? "כל המשימות"
+      : source.kind === "list"
+      ? lists.find((l) => l.id === source.id)?.name ?? "רשימה"
+      : projects.find((p) => p.id === source.id)?.name ?? "פרויקט";
+
   return (
     <div
       className={cn(
@@ -156,6 +164,19 @@ export function GanttChrome({
         className
       )}
     >
+      {/* Source picker — pinned to the leading edge of the chrome so it's
+          the first thing the user picks. Single selection: "all" / one list
+          / one project. Outline-style button with the FolderKanban icon and
+          the active label inline so it reads as a "scope" indicator and
+          doesn't get lost among the toggles. */}
+      <SourcePicker
+        source={source}
+        sourceLabel={sourceLabel}
+        lists={lists}
+        projects={projects}
+        onSourceChange={onSourceChange}
+      />
+
       {/* Date nav */}
       <div className="inline-flex items-center gap-0.5">
         <button
@@ -203,115 +224,6 @@ export function GanttChrome({
       </div>
 
       <div className="ms-auto inline-flex items-center gap-1 flex-wrap">
-        {/* Source picker — single selection: "all" / a specific list / a
-            specific project. Lets the user scope the Gantt to one
-            workstream so they don't accidentally edit unrelated work
-            when the surface looks like a single project plan. */}
-        <PopoverButton
-          icon={<FolderKanban className="w-3.5 h-3.5" />}
-          label={
-            source.kind === "all"
-              ? "כל המשימות"
-              : source.kind === "list"
-              ? lists.find((l) => l.id === source.id)?.name ?? "רשימה"
-              : projects.find((p) => p.id === source.id)?.name ?? "פרויקט"
-          }
-          title="היקף הגאנט"
-          wide
-        >
-          {(close) => (
-            <div className="py-1 max-h-80 overflow-y-auto">
-              <button
-                onClick={() => {
-                  onSourceChange({ kind: "all" });
-                  close();
-                }}
-                className={cn(
-                  "w-full flex items-center gap-2 px-3 py-1.5 text-sm text-start hover:bg-ink-50",
-                  source.kind === "all" && "bg-primary-50 text-primary-700 font-medium"
-                )}
-                type="button"
-              >
-                <Layers className="w-3.5 h-3.5" />
-                <span className="flex-1">כל המשימות</span>
-                {source.kind === "all" && <Check className="w-3.5 h-3.5" />}
-              </button>
-
-              {lists.length > 0 && (
-                <>
-                  <div className="text-[10px] font-semibold text-ink-400 uppercase tracking-wider px-3 py-1 mt-1 border-t border-ink-100">
-                    רשימות
-                  </div>
-                  {lists.map((l) => {
-                    const selected =
-                      source.kind === "list" && source.id === l.id;
-                    return (
-                      <button
-                        key={l.id}
-                        onClick={() => {
-                          onSourceChange({ kind: "list", id: l.id });
-                          close();
-                        }}
-                        className={cn(
-                          "w-full flex items-center gap-2 px-3 py-1.5 text-sm text-start hover:bg-ink-50",
-                          selected && "bg-primary-50 text-primary-700 font-medium"
-                        )}
-                        type="button"
-                      >
-                        <span
-                          className="w-3 h-3 rounded-sm shrink-0"
-                          style={{ backgroundColor: l.color ?? "#6b6b80" }}
-                        />
-                        {l.emoji && (
-                          <ListIcon emoji={l.emoji} className="w-3.5 h-3.5" />
-                        )}
-                        <span className="truncate flex-1">{l.name}</span>
-                        {selected && <Check className="w-3.5 h-3.5" />}
-                      </button>
-                    );
-                  })}
-                </>
-              )}
-
-              {projects.length > 0 && (
-                <>
-                  <div className="text-[10px] font-semibold text-ink-400 uppercase tracking-wider px-3 py-1 mt-1 border-t border-ink-100">
-                    פרויקטים
-                  </div>
-                  {projects.map((p) => {
-                    const selected =
-                      source.kind === "project" && source.id === p.id;
-                    return (
-                      <button
-                        key={p.id}
-                        onClick={() => {
-                          onSourceChange({ kind: "project", id: p.id });
-                          close();
-                        }}
-                        className={cn(
-                          "w-full flex items-center gap-2 px-3 py-1.5 text-sm text-start hover:bg-ink-50",
-                          selected && "bg-primary-50 text-primary-700 font-medium"
-                        )}
-                        type="button"
-                      >
-                        <span
-                          className="w-3 h-3 rounded-sm shrink-0"
-                          style={{ backgroundColor: p.color ?? "#6b6b80" }}
-                        />
-                        {p.emoji && (
-                          <span className="text-sm">{p.emoji}</span>
-                        )}
-                        <span className="truncate flex-1">{p.name}</span>
-                        {selected && <Check className="w-3.5 h-3.5" />}
-                      </button>
-                    );
-                  })}
-                </>
-              )}
-            </div>
-          )}
-        </PopoverButton>
-
         {/* Layer popover (tasks / events / both) */}
         <PopoverButton
           icon={<Layers className="w-3.5 h-3.5" />}
@@ -476,6 +388,142 @@ export function GanttChrome({
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+
+/**
+ * SourcePicker — single-selection chooser for Gantt scope.
+ * Renders as a prominent outlined pill at the leading edge of the chrome
+ * with the active source name visible at all times. Opens a dropdown with
+ * three groups: "all", lists (radio), projects (radio).
+ */
+function SourcePicker({
+  source,
+  sourceLabel,
+  lists,
+  projects,
+  onSourceChange,
+}: {
+  source: GanttSource;
+  sourceLabel: string;
+  lists: UnifiedList[];
+  projects: UnifiedProject[];
+  onSourceChange: (s: GanttSource) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={cn(
+          "inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium transition-colors",
+          source.kind === "all"
+            ? "border-ink-300 bg-white text-ink-700 hover:bg-ink-50"
+            : "border-primary-300 bg-primary-50 text-primary-700 hover:bg-primary-100"
+        )}
+        title="היקף הגאנט"
+      >
+        <FolderKanban className="w-3.5 h-3.5" />
+        <span className="max-w-[160px] truncate">{sourceLabel}</span>
+        <ChevronLeft className={cn("w-3 h-3 transition-transform", open && "-rotate-90")} />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
+          <div className="absolute top-full start-0 mt-1 z-40 w-64 bg-white border border-ink-200 rounded-xl shadow-lift py-1 max-h-80 overflow-y-auto">
+            <button
+              onClick={() => {
+                onSourceChange({ kind: "all" });
+                setOpen(false);
+              }}
+              className={cn(
+                "w-full flex items-center gap-2 px-3 py-1.5 text-sm text-start hover:bg-ink-50",
+                source.kind === "all" && "bg-primary-50 text-primary-700 font-medium"
+              )}
+              type="button"
+            >
+              <Layers className="w-3.5 h-3.5" />
+              <span className="flex-1">כל המשימות</span>
+              {source.kind === "all" && <Check className="w-3.5 h-3.5" />}
+            </button>
+
+            {lists.length > 0 && (
+              <>
+                <div className="text-[10px] font-semibold text-ink-400 uppercase tracking-wider px-3 py-1 mt-1 border-t border-ink-100">
+                  רשימות
+                </div>
+                {lists.map((l) => {
+                  const selected = source.kind === "list" && source.id === l.id;
+                  return (
+                    <button
+                      key={l.id}
+                      onClick={() => {
+                        onSourceChange({ kind: "list", id: l.id });
+                        setOpen(false);
+                      }}
+                      className={cn(
+                        "w-full flex items-center gap-2 px-3 py-1.5 text-sm text-start hover:bg-ink-50",
+                        selected && "bg-primary-50 text-primary-700 font-medium"
+                      )}
+                      type="button"
+                    >
+                      <span
+                        className="w-3 h-3 rounded-sm shrink-0"
+                        style={{ backgroundColor: l.color ?? "#6b6b80" }}
+                      />
+                      {l.emoji && <ListIcon emoji={l.emoji} className="w-3.5 h-3.5" />}
+                      <span className="truncate flex-1">{l.name}</span>
+                      {selected && <Check className="w-3.5 h-3.5" />}
+                    </button>
+                  );
+                })}
+              </>
+            )}
+
+            {projects.length > 0 && (
+              <>
+                <div className="text-[10px] font-semibold text-ink-400 uppercase tracking-wider px-3 py-1 mt-1 border-t border-ink-100">
+                  פרויקטים
+                </div>
+                {projects.map((p) => {
+                  const selected = source.kind === "project" && source.id === p.id;
+                  return (
+                    <button
+                      key={p.id}
+                      onClick={() => {
+                        onSourceChange({ kind: "project", id: p.id });
+                        setOpen(false);
+                      }}
+                      className={cn(
+                        "w-full flex items-center gap-2 px-3 py-1.5 text-sm text-start hover:bg-ink-50",
+                        selected && "bg-primary-50 text-primary-700 font-medium"
+                      )}
+                      type="button"
+                    >
+                      <span
+                        className="w-3 h-3 rounded-sm shrink-0"
+                        style={{ backgroundColor: p.color ?? "#6b6b80" }}
+                      />
+                      {p.emoji && <span className="text-sm">{p.emoji}</span>}
+                      <span className="truncate flex-1">{p.name}</span>
+                      {selected && <Check className="w-3.5 h-3.5" />}
+                    </button>
+                  );
+                })}
+              </>
+            )}
+
+            {lists.length === 0 && projects.length === 0 && (
+              <div className="px-3 py-3 text-xs text-ink-500 text-center">
+                עדיין אין רשימות או פרויקטים.
+              </div>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }

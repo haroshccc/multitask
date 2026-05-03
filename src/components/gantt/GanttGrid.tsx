@@ -83,10 +83,9 @@ export function GanttGrid({
   if (rows.length === 0) {
     return (
       <div className="card p-12 text-center text-ink-500">
-        <p className="text-base">אין משימות מתוזמנות להצגה.</p>
+        <p className="text-base">אין משימות בהיקף הנבחר.</p>
         <p className="text-xs mt-2">
-          הוסף לתאריך עם <code className="text-primary-700">scheduled_at</code> או{" "}
-          <code className="text-primary-700">estimated_hours</code> ממסך המשימות.
+          שני את "מקור" בראש הדף או הוסיפי משימה חדשה.
         </p>
       </div>
     );
@@ -288,10 +287,13 @@ export function GanttGrid({
                 </div>
               )}
 
-              {/* Bars */}
+              {/* Bars — unscheduled rows occupy their slot but render no
+                  bar (nothing to position). The editable table is where
+                  the user assigns a schedule for those. */}
               {rows.map((r, i) => {
                 const isCritical =
                   r.kind === "task" && !!r.task && criticalSet.has(r.task.id);
+                if (r.unscheduled) return null;
                 return (
                   <div
                     key={r.id + "-bar"}

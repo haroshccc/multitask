@@ -3439,3 +3439,48 @@ Hero: "החלל לחשוב. החלל לעשות."
   הוא הגנה נוספת.
 
   **קומיט:** `feat(gantt): wave 9 stage 2 — source picker (single) + dependencies cell`
+
+- **2026-05-03 — מסך גאנט, גל 9 שלב 2.1: הצג כל המשימות + צבעי שורות + Source picker בולט.**
+
+  **טריגר:** המשתמשת דיווחה אחרי stage 2:
+  > "אין יכולת לבחור פרויקט אחד או רשימה אחת בלבד. בנוסף זה מראה
+  >  לי רק את המשימות שייש להם כבר תזמון, והרעיון הוא שמהטבלה
+  >  הזו אני אוכל לערוך ולהוסיף תזמונים להכל. בטבלה צריכים להופיע
+  >  כל המשימות של הרשימה / הפרויקט. וכל מה שמתוזמן צריך לקבל צבע
+  >  שורה בהיר יותר וכל מה שלא תוזמן עדיין צריך לקבל צבע שורה כהה
+  >  יותר."
+
+  **9.5.1 — הצג כל המשימות (כולל לא מתוזמנות):**
+  - `GanttRow` קיבל שדה `unscheduled?: boolean`.
+  - `buildRows` עכשיו מוסיף **כל** משימה ב-scope, גם בלי
+    `scheduled_at`/`estimated_hours`/`duration_minutes`. למשימה
+    בלי timing, `start`/`end` נקבעים ל-fallback (היום) ו-`unscheduled=true`.
+  - `GanttGrid` מדלג על רנדור ה-bar עבור unscheduled (`return null`),
+    אבל ה-row עצמה עדיין תופסת מקום ב-grid כדי שה-table וה-bars
+    יישארו מסונכרנים אנכית.
+  - `GanttBar` נקי מהבדיקה — היא נעשית ב-grid לפני הפעלת ה-component
+    (rules of hooks).
+  - empty state עודכן: "אין משימות בהיקף הנבחר. שני 'מקור' או הוסיפי
+    משימה חדשה" (במקום "אין משימות מתוזמנות").
+
+  **9.5.2 — צבעי שורות לפי מצב תזמון:**
+  - מתוזמנת: `bg-white` (בהיר).
+  - לא מתוזמנת: `bg-ink-100` (כהה יותר — בולט לעין).
+  - hover: `bg-ink-100` (במקום `bg-ink-50`) כדי לא להיבלע ב-bg של
+    unscheduled.
+  - phase קיים: שילוב — phase לא-מתוזמן שומר על font חזק אבל לא על
+    `bg-ink-50/60` (כי כבר יש `bg-ink-100`).
+  - critical-path עדיין מקבל `bg-danger-500/5`.
+
+  **9.5.3 — Source picker בולט:**
+  - חולץ ל-component ייעודי `SourcePicker` (לא PopoverButton) כדי
+    שיהיה שונה מהאחרים.
+  - הועבר ל-**leading edge** של ה-chrome (לפני Date nav) במקום
+    ה-`ms-auto` block של ה-toggles.
+  - העיצוב: outlined pill עם `FolderKanban` icon + label תמיד
+    (גם ב-mobile, ב-`max-w-[160px] truncate`). כש source ≠ "all",
+    ה-pill מקבל `bg-primary-50 text-primary-700` כהיגד ויזואלי
+    "הgantt עכשיו מצומצם".
+  - הdropdown זהה לקודם (כל המשימות / רשימות / פרויקטים).
+
+  **קומיט:** `feat(gantt): wave 9 stage 2.1 — show unscheduled tasks + row tints + prominent source picker`

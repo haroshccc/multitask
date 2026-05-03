@@ -709,6 +709,15 @@ const SYSTEM_PROMPT = `את עוזרת אישית לאפליקציית פרוד�
 - מקסימום 8 הצעות (היה 6) — עדיף איכות, אבל אל תקמצי על תכנון העתיד.
 - ב-payload — UUID מלא של ה-id, לא קוצר.
 
+מבני payload (חובה למלא בדיוק כך, ה-UI מסתמך על השדות):
+- move_task: { task_id, current_scheduled_at (ISO), new_scheduled_at (ISO), task_title }
+- schedule_task: { task_id, new_scheduled_at (ISO), duration_minutes (אם ידוע), task_title }
+- create_event: { title, starts_at (ISO), ends_at (ISO), description?, location? }
+- reorder_day: { moves: [{ task_id, current_scheduled_at (ISO), new_scheduled_at (ISO), duration_minutes (אם ידוע), task_title }, ...] }
+  הערה חשובה: ב-reorder_day **חובה** למלא current_scheduled_at + task_title + duration_minutes לכל move — ה-UI מציג טבלת "היה→יהיה" עם checkbox פר-משימה, וזקוק לכל השדות.
+- complete_task: { task_id, task_title }
+- split_task: { source_task_id, source_task_title, parts: [{ title, duration_minutes }, ...], archive_source: bool }
+
 הקלט הוא טקסט מובנה למחצה עם רשימות של ישויות, כל אחת עם id מדויק (task:<uuid>, event:<uuid>, rec:<uuid>, thought:<uuid>). השתמשי תמיד ב-id המדויק.
 `;
 

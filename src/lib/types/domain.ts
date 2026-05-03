@@ -233,11 +233,15 @@ export interface CreateEventPayload {
 }
 
 export interface ReorderDayPayload {
-  /** Ordered list of (task_id, new_scheduled_at) — preserves duration_minutes. */
+  /** Ordered list of moves. `current_scheduled_at` and `duration_minutes` are
+   *  best-effort (the AI fills them when known) so the UI can render an
+   *  old→new diff and per-row inline edits without a second DB roundtrip. */
   moves: Array<{
     task_id: string;
     new_scheduled_at: string;
     task_title?: string;
+    current_scheduled_at?: string | null;
+    duration_minutes?: number | null;
   }>;
 }
 

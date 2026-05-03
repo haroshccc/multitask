@@ -362,7 +362,15 @@ export function TaskRow({
     if (e.shiftKey) {
       store.shiftSelect(task.id);
     } else {
-      store.toggle(task.id);
+      // Selecting a parent automatically selects the whole subtree —
+      // the user expects "I clicked one row, the things hanging off it
+      // come with me". Clicking again on the parent deselects it all.
+      const descendantIds = collectDescendantIds(children);
+      if (descendantIds.length > 0) {
+        store.toggleSubtree(task.id, descendantIds);
+      } else {
+        store.toggle(task.id);
+      }
     }
   };
 
@@ -1196,6 +1204,17 @@ function countCompletedDescendants(children: TaskTreeNode[]): number {
     n += countCompletedDescendants(c.children);
   }
   return n;
+}
+
+/** Flat list of every descendant id under `nodes`, depth-first. Used by the
+ *  selection checkbox so toggling a parent cascades to its whole subtree. */
+function collectDescendantIds(nodes: TaskTreeNode[]): string[] {
+  const out: string[] = [];
+  for (const n of nodes) {
+    out.push(n.task.id);
+    if (n.children.length > 0) out.push(...collectDescendantIds(n.children));
+  }
+  return out;
 }
 
 function MenuBtn({

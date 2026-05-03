@@ -3216,3 +3216,46 @@ Hero: "החלל לחשוב. החלל לעשות."
   חובה להציע schedule_task לפני הדד-ליין.
 
   **קומיט:** `feat(tasks): wave 4 — deadline_at column + UI + AI awareness`
+
+- **2026-05-03 — מסך משימות, גל 5+6: drag/select cascade + סדר רשימות.**
+
+  **טריגר:** המשתמשת דיווחה על שני באגים בגל 2/3 ובקשה אחרונה:
+  > "1. כשאני מעבירה משימה עם תתי משימות, תתי המשימות שלה לא
+  >  עוברים איתה - הם צריכים אוטומטית לעבור איתה.
+  >  2. כשאני מסמנת משימה תתי המשימות שלה צריכות להיות מסומנות
+  >  אוטומטית ואפשר לבטל את הסימון."
+  > "צריך להיות יכולת עריכה של איזה רשימה אני רואה קודם כאילו את
+  >  סדר הרשימות, ממליצה שזה יהיה בסינון הרשימות"
+
+  **5.A — drag cascade.** ב-`Tasks.tsx` נוספה helper `collectDescendants`
+  (BFS על `tasks` המקומי). בכל אחד משלושת ה-handlers של drag (drop on
+  list, task-nest, task-before/after), כשה-list משתנה אנחנו מחשבים את
+  ה-descendant ids לפני ה-mutation, ואז קוראים ל-`moveToList` גם על
+  המשימה הראשית וגם על כל descendant. ב-undo/redo — אותו loop, רק
+  עם prev/next listId. ה-parent links עצמם **לא** משתנים — רק
+  ה-`task_list_id` cascading. תתי-משימה נשארות ילדות של אבא שלהן,
+  פשוט באותה רשימה כמוהו.
+
+  **5.B — select cascade.** ב-`useTaskSelectionStore` נוסף
+  `toggleSubtree(rootId, descendantIds)` — מחליט direction לפי root:
+  אם השורש כרגע נבחר → מבטל את כל ה-subtree, אחרת מסמן את כולו.
+  ב-`TaskRow.handleSelectClick` אם לשורה יש children, קוראים ל-
+  `toggleSubtree(task.id, collectDescendantIds(children))`. ל-leaf
+  ממשיכים עם ה-`toggle` הרגיל. ה-helper `collectDescendantIds` הוא
+  flat depth-first של כל ה-descendants ב-`TaskTreeNode`. Shift+click
+  עדיין עובד כרגיל (range select לפי orderedIds).
+
+  **6 — סדר רשימות.** ב-popover "רשימות בתצוגה" של `TasksChrome`
+  נוספו חצי ↑/↓ בצד כל שורה (מופיעים ב-hover על השורה). לחיצה
+  קוראת ל-`onMoveListInOrder(listId, direction)` שעובר ל-`Tasks.tsx`.
+  הלוגיקה ב-`handleMoveListInOrder`:
+  - מצמיד את ה-list ל-peer group שלו (pinned-first / unpinned),
+    כי ה-visual order משלב אותם.
+  - מוצא את השכן הסמוך ואת השכן-של-השכן באותו כיוון.
+  - מחשב `sort_order` חדש כ-midpoint בין השכנים (או ±1 אם
+    בקצה). העמודה `sort_order` היא double-precision כך שיש מקום
+    אינסופי בין כל שני ערכים.
+  - קורא ל-`useReorderTaskLists.mutate([{id, sort_order}])` הקיים.
+  - עוטף ב-`pushUndo` כך ש-Ctrl+Z מחזיר את הסדר.
+
+  **קומיט:** `feat(tasks): wave 5+6 — drag/select cascade to subtasks + list reorder`

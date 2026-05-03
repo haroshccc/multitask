@@ -132,14 +132,21 @@ export function GanttTable({
                 r.kind === "task" && !!r.task && criticalSet.has(r.task.id);
               const isPhase = !!r.isPhase;
               const isEvent = r.kind === "event";
+              const isUnscheduled = !!r.unscheduled;
               return (
                 <tr
                   key={r.id}
                   className={cn(
-                    "border-b border-ink-150 hover:bg-ink-50",
+                    "border-b border-ink-150 hover:bg-ink-100",
+                    // Scheduled = light background (white). Unscheduled =
+                    // distinctly darker tint so the eye picks them out as
+                    // "needs attention". Phases keep their own subtle tint;
+                    // critical-path rows tinted warm red.
+                    isUnscheduled ? "bg-ink-100" : "bg-white",
                     r.completed && "opacity-60",
                     isCritical && "bg-danger-500/5",
-                    isPhase && "bg-ink-50/60 font-semibold"
+                    isPhase && !isUnscheduled && "bg-ink-50/60 font-semibold",
+                    isPhase && isUnscheduled && "font-semibold"
                   )}
                   style={{
                     height: ROW_HEIGHT,

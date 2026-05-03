@@ -1,8 +1,13 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Link2, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
-import { useUpdateTask } from "@/lib/hooks/useTasks";
+import {
+  useCreateTaskDependency,
+  useDeleteTaskDependency,
+  useUpdateTask,
+} from "@/lib/hooks/useTasks";
 import { pushUndo } from "@/lib/undo/store";
-import type { Task } from "@/lib/types/domain";
+import type { Task, TaskDependency } from "@/lib/types/domain";
 import type { GanttRow } from "./gantt-utils";
 
 const ROW_HEIGHT = 40;
@@ -10,6 +15,9 @@ const HEADER_HEIGHT = 64; // matches GanttGrid timeline header
 
 interface GanttTableProps {
   rows: GanttRow[];
+  /** Every dependency in the org — used by the dependencies cell to look
+   *  up which tasks each row depends on. */
+  deps: TaskDependency[];
   /** Critical-path rows get a warm tint, mirroring the grid. */
   criticalSet: Set<string>;
   /** Click on a row → open the full edit modal (same handler as the bar). */
@@ -35,11 +43,37 @@ interface GanttTableProps {
  */
 export function GanttTable({
   rows,
+  deps,
   criticalSet,
   onRowClick,
   layout,
 }: GanttTableProps) {
   const updateTask = useUpdateTask();
+  const createDep = useCreateTaskDependency();
+  const deleteDep = useDeleteTaskDependency();
+
+  // Index dependencies by task — for each task id, the list of tasks it
+  // depends on (i.e. predecessors that must finish first).
+  const depsByTask = useMemo(() => {
+    const m = new Map<string, TaskDependency[]>();
+    for (const d of deps) {
+      const arr = m.get(d.task_id) ?? [];
+      arr.push(d);
+      m.set(d.task_id, arr);
+    }
+    return m;
+  }, [deps]);
+
+  // All visible task rows — used by the dependency picker to limit choices
+  // to what's currently on the Gantt (cross-list deps require a wider scope
+  // and are rare; deferred).
+  const visibleTaskMap = useMemo(() => {
+    const m = new Map<string, GanttRow>();
+    for (const r of rows) {
+      if (r.kind === "task" && r.task) m.set(r.task.id, r);
+    }
+    return m;
+  }, [rows]);
 
   const update = (
     taskId: string,
@@ -86,6 +120,9 @@ export function GanttTable({
               </th>
               <th className="text-center font-semibold text-ink-700 px-1 py-2 w-16">
                 משך (ד׳)
+              </th>
+              <th className="text-center font-semibold text-ink-700 px-1 py-2 w-20">
+                תלויות
               </th>
             </tr>
           </thead>
@@ -237,6 +274,28 @@ export function GanttTable({
                       />
                     )}
                   </td>
+
+                  {/* Dependencies — predecessor picker. The chip shows the
+                      count of "must finish before this" tasks; clicking opens
+                      a popover with the list of visible tasks to toggle. */}
+                  <td className="px-1 py-1 text-center">
+                    {r.kind === "task" && r.task && (
+                      <DependenciesCell
+                        task={r.task}
+                        deps={depsByTask.get(r.task.id) ?? []}
+                        visibleTaskMap={visibleTaskMap}
+                        onAdd={(predecessorId) => {
+                          createDep.mutate({
+                            taskId: r.task!.id,
+                            dependsOnTaskId: predecessorId,
+                          });
+                        }}
+                        onRemove={(depId) => {
+                          deleteDep.mutate(depId);
+                        }}
+                      />
+                    )}
+                  </td>
                 </tr>
               );
             })}
@@ -344,6 +403,145 @@ function NumberCell({
       }}
       className="w-12 text-center text-[11px] bg-transparent border border-transparent hover:border-ink-200 focus:border-primary-400 outline-none rounded-sm px-1 py-0.5"
     />
+  );
+}
+
+function DependenciesCell({
+  task,
+  deps,
+  visibleTaskMap,
+  onAdd,
+  onRemove,
+}: {
+  task: Task;
+  deps: TaskDependency[];
+  visibleTaskMap: Map<string, GanttRow>;
+  onAdd: (predecessorId: string) => void;
+  onRemove: (depId: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [filter, setFilter] = useState("");
+
+  // Tasks already linked as predecessors — by id.
+  const linkedIds = useMemo(
+    () => new Set(deps.map((d) => d.depends_on_task_id)),
+    [deps]
+  );
+
+  // Choices: every visible task except this one and any that would create a
+  // direct cycle (the current task is already a predecessor of). Self-link
+  // and back-link prevention; deeper cycles aren't checked here — the DB
+  // enforces the schema, and the user gets immediate feedback.
+  const choices = useMemo(() => {
+    const out: Array<{ id: string; title: string; isLinked: boolean; depId?: string }> = [];
+    for (const [id, row] of visibleTaskMap) {
+      if (id === task.id) continue;
+      const dep = deps.find((d) => d.depends_on_task_id === id);
+      out.push({ id, title: row.title, isLinked: !!dep, depId: dep?.id });
+    }
+    out.sort((a, b) => {
+      if (a.isLinked !== b.isLinked) return a.isLinked ? -1 : 1;
+      return a.title.localeCompare(b.title, "he");
+    });
+    return out;
+  }, [visibleTaskMap, task.id, deps]);
+
+  const filtered = useMemo(() => {
+    const q = filter.trim().toLowerCase();
+    if (!q) return choices;
+    return choices.filter((c) => c.title.toLowerCase().includes(q));
+  }, [choices, filter]);
+
+  return (
+    <div className="relative inline-block">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={cn(
+          "inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md hover:bg-ink-100 text-[11px]",
+          deps.length > 0 ? "text-ink-900 bg-ink-100" : "text-ink-400"
+        )}
+        title={
+          deps.length === 0
+            ? "אין תלויות"
+            : `${deps.length} תלויות (לחצי לעריכה)`
+        }
+      >
+        <Link2 className="w-3 h-3" />
+        {deps.length > 0 && <span className="font-mono">{deps.length}</span>}
+      </button>
+      {open && (
+        <>
+          <div
+            className="fixed inset-0 z-30"
+            onClick={() => {
+              setOpen(false);
+              setFilter("");
+            }}
+          />
+          <div className="absolute end-0 mt-1 z-40 w-72 bg-white border border-ink-200 rounded-xl shadow-lift overflow-hidden">
+            <div className="px-3 py-2 border-b border-ink-100 bg-ink-50/60">
+              <div className="text-[11px] font-semibold text-ink-700 mb-1">
+                תלוי ב…
+              </div>
+              <input
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+                placeholder="חיפוש משימה"
+                autoFocus
+                className="w-full text-xs bg-white border border-ink-200 rounded-md px-2 py-1 outline-none focus:border-primary-400"
+              />
+            </div>
+            <div className="max-h-64 overflow-y-auto py-1">
+              {filtered.length === 0 ? (
+                <div className="px-3 py-3 text-xs text-ink-500 text-center">
+                  אין משימות תואמות
+                </div>
+              ) : (
+                filtered.map((c) => (
+                  <div
+                    key={c.id}
+                    className="flex items-center gap-2 px-3 py-1.5 hover:bg-ink-50 group"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (c.isLinked && c.depId) {
+                          onRemove(c.depId);
+                        } else {
+                          onAdd(c.id);
+                        }
+                      }}
+                      className="flex-1 text-start text-xs text-ink-900 truncate"
+                    >
+                      <span
+                        className={cn(
+                          "inline-block w-3 h-3 rounded-sm border me-2 align-middle",
+                          c.isLinked
+                            ? "bg-primary-500 border-primary-500"
+                            : "border-ink-300 bg-white"
+                        )}
+                      />
+                      {c.title}
+                    </button>
+                    {c.isLinked && c.depId && (
+                      <button
+                        type="button"
+                        onClick={() => onRemove(c.depId!)}
+                        className="opacity-0 group-hover:opacity-100 p-1 rounded text-ink-400 hover:text-danger-500"
+                        title="הסר תלות"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 

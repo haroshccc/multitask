@@ -15,6 +15,7 @@ import {
   PanelRightOpen,
   Columns2,
   Rows2,
+  FolderKanban,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { ListIcon } from "@/components/tasks/list-icons";
@@ -26,7 +27,25 @@ interface UnifiedList {
   name: string;
   emoji: string | null;
   color: string | null;
+  /** Project this list belongs to (if any). Used by the Source picker
+   *  to group lists under their parent project. */
+  project_id?: string | null;
 }
+
+interface UnifiedProject {
+  id: string;
+  name: string;
+  emoji: string | null;
+  color: string | null;
+}
+
+/** What the Gantt is "scoped to". Single selection — not multi-toggle —
+ *  because working on multiple lists/projects at once on a Gantt is rarely
+ *  what the user actually wants and tends to produce confusing schedules. */
+export type GanttSource =
+  | { kind: "all" }
+  | { kind: "list"; id: string }
+  | { kind: "project"; id: string };
 
 interface GanttChromeProps {
   zoom: GanttZoom;
@@ -43,6 +62,11 @@ interface GanttChromeProps {
   hiddenListIds: Set<string>;
   onToggleListVisibility: (listId: string) => void;
   onCreateList: () => void;
+
+  // Projects (for the Source picker — Gantt scope)
+  projects: UnifiedProject[];
+  source: GanttSource;
+  onSourceChange: (s: GanttSource) => void;
 
   // Filter panel toggle
   filtersActiveCount: number;
@@ -104,6 +128,9 @@ export function GanttChrome({
   hiddenListIds,
   onToggleListVisibility,
   onCreateList,
+  projects,
+  source,
+  onSourceChange,
   filtersActiveCount,
   filtersOpen,
   onToggleFilters,
@@ -176,6 +203,115 @@ export function GanttChrome({
       </div>
 
       <div className="ms-auto inline-flex items-center gap-1 flex-wrap">
+        {/* Source picker — single selection: "all" / a specific list / a
+            specific project. Lets the user scope the Gantt to one
+            workstream so they don't accidentally edit unrelated work
+            when the surface looks like a single project plan. */}
+        <PopoverButton
+          icon={<FolderKanban className="w-3.5 h-3.5" />}
+          label={
+            source.kind === "all"
+              ? "כל המשימות"
+              : source.kind === "list"
+              ? lists.find((l) => l.id === source.id)?.name ?? "רשימה"
+              : projects.find((p) => p.id === source.id)?.name ?? "פרויקט"
+          }
+          title="היקף הגאנט"
+          wide
+        >
+          {(close) => (
+            <div className="py-1 max-h-80 overflow-y-auto">
+              <button
+                onClick={() => {
+                  onSourceChange({ kind: "all" });
+                  close();
+                }}
+                className={cn(
+                  "w-full flex items-center gap-2 px-3 py-1.5 text-sm text-start hover:bg-ink-50",
+                  source.kind === "all" && "bg-primary-50 text-primary-700 font-medium"
+                )}
+                type="button"
+              >
+                <Layers className="w-3.5 h-3.5" />
+                <span className="flex-1">כל המשימות</span>
+                {source.kind === "all" && <Check className="w-3.5 h-3.5" />}
+              </button>
+
+              {lists.length > 0 && (
+                <>
+                  <div className="text-[10px] font-semibold text-ink-400 uppercase tracking-wider px-3 py-1 mt-1 border-t border-ink-100">
+                    רשימות
+                  </div>
+                  {lists.map((l) => {
+                    const selected =
+                      source.kind === "list" && source.id === l.id;
+                    return (
+                      <button
+                        key={l.id}
+                        onClick={() => {
+                          onSourceChange({ kind: "list", id: l.id });
+                          close();
+                        }}
+                        className={cn(
+                          "w-full flex items-center gap-2 px-3 py-1.5 text-sm text-start hover:bg-ink-50",
+                          selected && "bg-primary-50 text-primary-700 font-medium"
+                        )}
+                        type="button"
+                      >
+                        <span
+                          className="w-3 h-3 rounded-sm shrink-0"
+                          style={{ backgroundColor: l.color ?? "#6b6b80" }}
+                        />
+                        {l.emoji && (
+                          <ListIcon emoji={l.emoji} className="w-3.5 h-3.5" />
+                        )}
+                        <span className="truncate flex-1">{l.name}</span>
+                        {selected && <Check className="w-3.5 h-3.5" />}
+                      </button>
+                    );
+                  })}
+                </>
+              )}
+
+              {projects.length > 0 && (
+                <>
+                  <div className="text-[10px] font-semibold text-ink-400 uppercase tracking-wider px-3 py-1 mt-1 border-t border-ink-100">
+                    פרויקטים
+                  </div>
+                  {projects.map((p) => {
+                    const selected =
+                      source.kind === "project" && source.id === p.id;
+                    return (
+                      <button
+                        key={p.id}
+                        onClick={() => {
+                          onSourceChange({ kind: "project", id: p.id });
+                          close();
+                        }}
+                        className={cn(
+                          "w-full flex items-center gap-2 px-3 py-1.5 text-sm text-start hover:bg-ink-50",
+                          selected && "bg-primary-50 text-primary-700 font-medium"
+                        )}
+                        type="button"
+                      >
+                        <span
+                          className="w-3 h-3 rounded-sm shrink-0"
+                          style={{ backgroundColor: p.color ?? "#6b6b80" }}
+                        />
+                        {p.emoji && (
+                          <span className="text-sm">{p.emoji}</span>
+                        )}
+                        <span className="truncate flex-1">{p.name}</span>
+                        {selected && <Check className="w-3.5 h-3.5" />}
+                      </button>
+                    );
+                  })}
+                </>
+              )}
+            </div>
+          )}
+        </PopoverButton>
+
         {/* Layer popover (tasks / events / both) */}
         <PopoverButton
           icon={<Layers className="w-3.5 h-3.5" />}

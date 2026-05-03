@@ -3394,3 +3394,48 @@ Hero: "החלל לחשוב. החלל לעשות."
   המרה list↔project, column manager עם custom fields.
 
   **קומיט:** `feat(gantt): wave 9 stage 1 — editable table + side/stacked layout toggle`
+
+- **2026-05-03 — מסך גאנט, גל 9 שלב 2: source picker + dependencies cell.**
+
+  **טריגר:** המשתמשת דיווחה שני חסרים אחרי שלב 1:
+  > "1. אין יכולת לראות או לבחור פרויקטים, בנוסף תוסיף יכולת של
+  >  בחירה רשימה אחת בלבד או פרויקט אחד בלבד שלא יצא מצב שיעבוד
+  >  בטעות על כמה רשימות במקביל.
+  >  2. אין הגדרת תלויות בין משימות- חשוב מאוד."
+
+  **9.4 — Single-select source picker.** ב-`GanttChrome` נוסף
+  popover חדש "מקור" עם 3 קבוצות:
+  - "כל המשימות" (default).
+  - "רשימות" (single-select radio של כל ה-task_lists).
+  - "פרויקטים" (single-select radio של כל ה-projects).
+
+  ב-`Gantt.tsx`:
+  - state `source: GanttSource` (מ-`GanttChrome`) שנשמר ב-
+    `multitask.gantt.source` ב-localStorage כ-JSON.
+  - `useProjects()` נוסף ל-imports.
+  - `filteredTasks` עכשיו מחיל את ה-source בנוסף ל-hidden lists:
+    - `kind=list` → `t.task_list_id === source.id`.
+    - `kind=project` → `t.task_list_id ∈ {l.id | l.project_id === source.id}`.
+    - `kind=all` → fallback ל-hidden-lists toggle הקיים.
+
+  כש-source ספציפי, ה-Lists popover עדיין נראה אבל ה-toggles שלו
+  לא עוברים את ה-filter (single source גובר). ה-multi-toggle נשאר
+  שימושי ל-`kind=all`.
+
+  **9.5 — Dependencies cell.** עמודה חדשה ב-`GanttTable`. cell:
+  - chip עם אייקון `Link2` + count של ה-predecessors.
+  - click → popover עם:
+    - input חיפוש (filter ב-title).
+    - רשימה של כל המשימות הנראות (filteredTasks → visibleTaskMap),
+      sorted: linked-first אז alphabetical.
+    - לכל שורה: checkbox-like cell + שם המשימה. click → toggle:
+      - אם linked → `useDeleteTaskDependency.mutate(depId)`.
+      - אם לא → `useCreateTaskDependency.mutate({taskId, dependsOnTaskId})`.
+    - hover על linked → אייקון אשפה אדום קטן להסרה מהירה.
+
+  זה משתמש ב-mutations הקיימים — ה-`GanttDependencyArrows` הקיים
+  יראה את החצים אוטומטית אחרי invalidation. self-link מנוע (skip
+  של `id === task.id`); מניעת cycles עמוקים נדחית — ה-DB schema
+  הוא הגנה נוספת.
+
+  **קומיט:** `feat(gantt): wave 9 stage 2 — source picker (single) + dependencies cell`

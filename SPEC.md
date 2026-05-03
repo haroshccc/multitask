@@ -3023,3 +3023,54 @@ Hero: "החלל לחשוב. החלל לעשות."
     ל-version 4. מעכשיו ה-AI ימלא את כל השדות החסרים בעצמו.
 
   **קומיט:** `feat(brief/8.3.1): visual reorder-day agenda + bulk actions`
+
+- **2026-05-03 — מסך משימות, גל 1: שיפורי UX קטנים בכל המסך.**
+
+  **טריגר:** המשתמשת ביקשה 5 שינויים תחומים שמרגישים "קטנים" כל אחד
+  בנפרד אבל בצירוף משנים את ההרגשה של עבודה במסך.
+
+  **A. ברירת מחדל לדחיפות 3 → 0.** משימה חדשה כברירת מחדל לא מקבלת
+  דירוג בכלל; המשתמשת בוחרת אם בכלל לדרג. תוקן בכל מקומות היצירה:
+  `TaskRow` (Enter יוצר sibling, Tab/Add subtask), `TaskColumn`
+  (handleCreate / handleEmptyCreate), `UnassignedBanner` (handleCreate),
+  `TaskEditModal` (createDraft fallback), `QuickCapture` (משימה חדשה).
+  הצעות AI ב-`thought-suggestions` נשארו עם 3 כי שם זה הצעה
+  קונקרטית-משמעית של ה-AI, לא ברירת מחדל.
+
+  **B. תפריט הקשרי על שורת משימה — z-index בעיה.** התפריט (עפרון/חץ/
+  שכפל/מחק) היה `position: absolute` ביחס ל-row, ולכן נחתך מתחת
+  לכרטיס הרשימה כשנשמרה גלילה פנימית. תוקן ב-`TaskRow.tsx`:
+  - `createPortal` ל-`document.body` עם `z-[61]` ו-backdrop ב-`z-[60]`.
+  - מחושב מיקום הכפתור עם `getBoundingClientRect()` ב-`openMenu()` —
+    `top = bottom + 4`, `right = window.innerWidth - rect.right`
+    (RTL-friendly, נצמד ל-end של הכפתור).
+  - listener ל-`scroll` capture-phase + `resize` סוגרים את התפריט
+    (כי המיקום קפוא ולא יכול לעקוב אחרי גלילה).
+  - `closeMenu()` מאחד ניקוי של `menuOpen` + `duplicateToListOpen`
+    כדי שתת-תפריט "שכפל לרשימה אחרת" לא יישאר תקוע.
+
+  **C. "לא משויכות" סגור — אופקי במקום אנכי במצב ערימה.** ב-Stack
+  layout הברנר היה ניסה להפוך לרצועה אנכית צרה (vertical strip עם
+  text writing-mode). זה התאים ל-Columns אבל נראה רע ב-Stack. תוקן
+  ב-`UnassignedBanner.tsx`: כש-`fullWidth=true` מציגים תמיד את ה-bar
+  האופקי הצר (Inbox + שם + ספירה + ChevronDown), בלי קשר ל-mobile/
+  desktop. בColumns עדיין vertical strip בדסקטופ.
+
+  **D. Sticky banners בStack layout.** בStack המשתמשת ביקשה ש"באנר
+  עליון, סרגל ולא-משויכות יישארו בעין כל הזמן, רק רשימות יגללו".
+  ארגנתי מחדש את `Tasks.tsx`: ה-`DndContext` עכשיו עוטף את כל החלקים
+  (כך drop targets ב-toolbar+banner נשמרים), וב-Stack-mode בלבד —
+  עוטפים את `TasksChrome` + `FilterBar` + `StatsPanel` + `Unassigned`
+  ב-`<div className="sticky top-0 z-30 bg-ink-50 ...">`. רשימות
+  ה-`TaskColumn` יורדות אחרי. בColumns mode המבנה נשאר זהה.
+
+  **E. Hover highlight על שורת משימה.** המשתמשת התלוננה ש"כשהשורות
+  ארוכות אני מתבלבלת ועורכת משימה אחרת". הוספתי `hover:bg-ink-50`
+  ל-className של `TaskRow` — צבע בהיר אך מובחן שמדגיש על איזו שורה
+  המצביע נמצא.
+
+  **בא בהמשך:** גל 2 (drag/swap subtasks + multi-select bulk),
+  גל 3 (undo/redo audit מלא — יצירה/מחיקה/כותרת/תיאור/תזמון),
+  גל 4 (`deadline_at` column + UI — דד-ליין נפרד מ-scheduled_at).
+
+  **קומיט:** `feat(tasks): wave 1 — urgency default, portal menu, sticky stack, hover, unattached fix`

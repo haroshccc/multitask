@@ -414,112 +414,151 @@ export function Tasks() {
       }
     >
       <div className="space-y-2">
-        <TasksChrome
-          lists={lists.map((l) => ({
-            id: l.id,
-            name: l.name,
-            emoji: l.emoji,
-            color: l.color,
-          }))}
-          hiddenListIds={hiddenSet}
-          onToggleListVisibility={toggleListVisibility}
-          onCreateList={handleCreateList}
-          filtersActiveCount={filtersActiveCount}
-          filtersOpen={filtersOpen}
-          onToggleFilters={() => setFiltersOpen((v) => !v)}
-          statsOpen={statsOpen}
-          onToggleStats={() => setStatsOpen((v) => !v)}
-          layout={layout}
-          onLayoutChange={setLayout}
-        />
-
-        {filtersOpen && (
-          <FilterBar
-            screenKey="tasks"
-            filters={filters}
-            onChange={setFilters}
-            fields={fields}
-            alwaysExpanded
-          />
-        )}
-
-        {statsOpen && (
-          <StatsPanel
-            lists={visibleLists}
-            tasks={tasks}
-            open
-            onToggle={() => setStatsOpen(false)}
-          />
-        )}
-
         <DndContext
           sensors={sensors}
           collisionDetection={pointerWithin}
           onDragEnd={handleDragEnd}
         >
           {layout === "stack" ? (
-            // Stack layout: each list is a full-width section, top to bottom.
-            // Visible-lists filter still applies. Drag-and-drop still works
-            // across sections — the dnd context wraps both layouts.
-            <div className="flex flex-col gap-3">
-              <UnassignedBanner
-                open={unassignedOpen}
-                onToggle={() => setUnassignedOpen((v) => !v)}
-                roots={listTrees.get("__unassigned__") ?? []}
-                totalCount={counts.get("__unassigned__") ?? 0}
-                display={rowDisplayPrefs}
-                onOpenEdit={setEditingTaskId}
-                fullWidth
-              />
-              {visibleLists.map((list) => (
-                <TaskColumn
-                  key={list.id}
-                  list={list}
-                  roots={listTrees.get(list.id) ?? []}
-                  totalCount={counts.get(list.id) ?? 0}
-                  divisor={1}
+            // Stack layout: toolbar + filters + stats + Unassigned are all
+            // glued to the top of the viewport so the user can scroll just
+            // the lists below them. Drag-and-drop still works because the
+            // DndContext wraps both the sticky header and the scrolling body.
+            <>
+              <div className="sticky top-0 z-30 bg-ink-50 -mx-1 px-1 pt-1 pb-2 space-y-2">
+                <TasksChrome
+                  lists={lists.map((l) => ({
+                    id: l.id,
+                    name: l.name,
+                    emoji: l.emoji,
+                    color: l.color,
+                  }))}
+                  hiddenListIds={hiddenSet}
+                  onToggleListVisibility={toggleListVisibility}
+                  onCreateList={handleCreateList}
+                  filtersActiveCount={filtersActiveCount}
+                  filtersOpen={filtersOpen}
+                  onToggleFilters={() => setFiltersOpen((v) => !v)}
+                  statsOpen={statsOpen}
+                  onToggleStats={() => setStatsOpen((v) => !v)}
+                  layout={layout}
+                  onLayoutChange={setLayout}
+                />
+                {filtersOpen && (
+                  <FilterBar
+                    screenKey="tasks"
+                    filters={filters}
+                    onChange={setFilters}
+                    fields={fields}
+                    alwaysExpanded
+                  />
+                )}
+                {statsOpen && (
+                  <StatsPanel
+                    lists={visibleLists}
+                    tasks={tasks}
+                    open
+                    onToggle={() => setStatsOpen(false)}
+                  />
+                )}
+                <UnassignedBanner
+                  open={unassignedOpen}
+                  onToggle={() => setUnassignedOpen((v) => !v)}
+                  roots={listTrees.get("__unassigned__") ?? []}
+                  totalCount={counts.get("__unassigned__") ?? 0}
                   display={rowDisplayPrefs}
                   onOpenEdit={setEditingTaskId}
+                  fullWidth
                 />
-              ))}
-              {visibleLists.length === 0 && <EmptyListsHint lists={lists} />}
-            </div>
+              </div>
+              <div className="flex flex-col gap-3">
+                {visibleLists.map((list) => (
+                  <TaskColumn
+                    key={list.id}
+                    list={list}
+                    roots={listTrees.get(list.id) ?? []}
+                    totalCount={counts.get(list.id) ?? 0}
+                    divisor={1}
+                    display={rowDisplayPrefs}
+                    onOpenEdit={setEditingTaskId}
+                  />
+                ))}
+                {visibleLists.length === 0 && <EmptyListsHint lists={lists} />}
+              </div>
+            </>
           ) : (
             // Columns (kanban) layout — the original Phase 3 layout.
             // On mobile: stack vertically. On md+: side-by-side with
             // Unassigned on the leading (right in RTL) edge.
-            <div className="flex flex-col md:flex-row items-stretch gap-3 min-h-[calc(100vh-340px)]">
-              <UnassignedBanner
-                open={unassignedOpen}
-                onToggle={() => setUnassignedOpen((v) => !v)}
-                roots={listTrees.get("__unassigned__") ?? []}
-                totalCount={counts.get("__unassigned__") ?? 0}
-                display={rowDisplayPrefs}
-                onOpenEdit={setEditingTaskId}
+            <>
+              <TasksChrome
+                lists={lists.map((l) => ({
+                  id: l.id,
+                  name: l.name,
+                  emoji: l.emoji,
+                  color: l.color,
+                }))}
+                hiddenListIds={hiddenSet}
+                onToggleListVisibility={toggleListVisibility}
+                onCreateList={handleCreateList}
+                filtersActiveCount={filtersActiveCount}
+                filtersOpen={filtersOpen}
+                onToggleFilters={() => setFiltersOpen((v) => !v)}
+                statsOpen={statsOpen}
+                onToggleStats={() => setStatsOpen((v) => !v)}
+                layout={layout}
+                onLayoutChange={setLayout}
               />
+              {filtersOpen && (
+                <FilterBar
+                  screenKey="tasks"
+                  filters={filters}
+                  onChange={setFilters}
+                  fields={fields}
+                  alwaysExpanded
+                />
+              )}
+              {statsOpen && (
+                <StatsPanel
+                  lists={visibleLists}
+                  tasks={tasks}
+                  open
+                  onToggle={() => setStatsOpen(false)}
+                />
+              )}
+              <div className="flex flex-col md:flex-row items-stretch gap-3 min-h-[calc(100vh-340px)]">
+                <UnassignedBanner
+                  open={unassignedOpen}
+                  onToggle={() => setUnassignedOpen((v) => !v)}
+                  roots={listTrees.get("__unassigned__") ?? []}
+                  totalCount={counts.get("__unassigned__") ?? 0}
+                  display={rowDisplayPrefs}
+                  onOpenEdit={setEditingTaskId}
+                />
 
-              <div className="flex-1 min-w-0 overflow-x-auto scrollbar-thin">
-                <div className="flex items-stretch gap-3 pb-2">
-                  {visibleLists.map((list) => (
-                    <TaskColumn
-                      key={list.id}
-                      list={list}
-                      roots={listTrees.get(list.id) ?? []}
-                      totalCount={counts.get(list.id) ?? 0}
-                      divisor={Math.min(
-                        Math.max(visibleLists.length, 1),
-                        maxVisibleColumns
-                      )}
-                      display={rowDisplayPrefs}
-                      onOpenEdit={setEditingTaskId}
-                    />
-                  ))}
-                  {visibleLists.length === 0 && (
-                    <EmptyListsHint lists={lists} />
-                  )}
+                <div className="flex-1 min-w-0 overflow-x-auto scrollbar-thin">
+                  <div className="flex items-stretch gap-3 pb-2">
+                    {visibleLists.map((list) => (
+                      <TaskColumn
+                        key={list.id}
+                        list={list}
+                        roots={listTrees.get(list.id) ?? []}
+                        totalCount={counts.get(list.id) ?? 0}
+                        divisor={Math.min(
+                          Math.max(visibleLists.length, 1),
+                          maxVisibleColumns
+                        )}
+                        display={rowDisplayPrefs}
+                        onOpenEdit={setEditingTaskId}
+                      />
+                    ))}
+                    {visibleLists.length === 0 && (
+                      <EmptyListsHint lists={lists} />
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
+            </>
           )}
         </DndContext>
       </div>

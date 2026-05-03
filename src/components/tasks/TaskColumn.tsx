@@ -109,7 +109,7 @@ export function TaskColumn({
       task_list_id: listId,
       parent_task_id: null,
       status: "todo",
-      urgency: 3,
+      urgency: 0,
     });
     setNewTitle("");
     setFocusTaskId(t.id);
@@ -121,7 +121,7 @@ export function TaskColumn({
       task_list_id: listId,
       parent_task_id: null,
       status: "todo",
-      urgency: 3,
+      urgency: 0,
     });
     setFocusTaskId(t.id);
   };

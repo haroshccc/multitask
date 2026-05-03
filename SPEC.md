@@ -3123,3 +3123,54 @@ Hero: "החלל לחשוב. החלל לעשות."
   אותן משימות לא הגיוני). שאר הפעולות שומרות את הבחירה.
 
   **קומיט:** `feat(tasks): wave 2 — three-zone drag + multi-select with bulk toolbar`
+
+- **2026-05-03 — מסך משימות, גל 3: undo/redo coverage מלא.**
+
+  **טריגר:** המשתמשת דיווחה ש-undo "לא עובד בכל הפעולות, למשל בכתיבה
+  או במחיקה או בעריכה". עד עכשיו ה-`pushUndo` עטף רק urgency,
+  indent/outdent, complete, drag/reorder, ושינויי רשימה. כל הפעולות
+  המוכרות שלא נכללו: יצירת משימה (Enter sibling, Tab subtask, +N),
+  שינוי כותרת inline (commitTitle), שמירה ב-TaskEditModal (כל
+  השדות), מחיקה (כולל subtree).
+
+  **3.A — Create + title + delete:**
+  - **Create** עטוף ב-3 מקומות: `TaskRow.handleKeyDown` (Enter יוצר
+    sibling), `TaskRow.handleAddSubtask`, `TaskColumn.handleCreate`/
+    `handleEmptyCreate`, ו-`UnassignedBanner.handleCreate`.
+    ה-`pushUndo`: `undo: deleteTask(newId)`, `redo: createTask(payload)`.
+    Note: ב-redo נוצר id חדש אם המשתמשת undo+redo, אבל ה-payload
+    זהה — pragmatic trade-off לעומת preserving id.
+  - **Title** ב-`commitTitle`: snapshot של `task.title` לפני updateTask,
+    `pushUndo` עם undo/redo של ה-title הקודם/חדש.
+  - **Delete** ב-`TaskRow.handleDelete`: לפני ה-deleteTask, קוראים
+    ל-`tasksService.fetchTaskSubtree(rootId)` שמחזיר את כל ה-subtree
+    (root + descendants ב-BFS, parent-first). אחרי ה-delete, ה-undo
+    קורא ל-`useRestoreTasks` שmutates `tasksService.restoreTasks` —
+    insert חזרה של כל ה-rows עם ה-ids המקוריים בסדר parent-first.
+    ה-DB מאפשר insert עם id מפורש, וה-FK של parent_task_id מוצמדת
+    ב-deferrable mode כך שגם אם ילדים נוצרים לפני parents הכל עובד.
+    ה-description של ה-undo משלב את ספירת ה-subtree אם > 1 ("מחיקת
+    משימה (5 פריטים)").
+
+  **3.B — TaskEditModal save:**
+  - ב-create mode: אותה תבנית כמו 3.A — `pushUndo` עם delete/recreate.
+  - ב-update mode: snapshot של **כל** השדות הניתנים לעריכה (title,
+    description, notes, urgency, status, task_list_id, assignee_user_id,
+    tags, location, external_url, scheduled_at, duration_minutes,
+    estimated_hours, is_phase) לפני ה-mutateAsync, אז `pushUndo` עם
+    undo=updateTask(prevPatch), redo=updateTask(newPatch). פעולה
+    אחת של Ctrl+Z מחזירה את כל הטופס למצב הקודם.
+
+  **תשתית חדשה:**
+  - `tasksService.fetchTaskSubtree(rootId): Promise<Task[]>` — BFS
+    על parent_task_id, מחזיר flat array.
+  - `tasksService.restoreTasks(tasks: Task[]): Promise<void>` —
+    insert ברצף (אחד-אחד כדי לשמור על סדר), כולל id מפורש.
+  - `useRestoreTasks()` hook — mutation שמ-invalidates את ה-tasks
+    query אחרי ה-restore כדי שה-React Query cache יתעדכן.
+
+  **לא נכלל בכוונה:** undo על duplicate, indent רב-שלבי, ו-changes ב-list metadata
+  (rename/color/emoji/pin) שכבר היה להם undo. גם undo על
+  bulk-actions toolbar כבר קיים (מגל 2).
+
+  **קומיט:** `feat(tasks): wave 3 — undo coverage for create/title/edit/delete`

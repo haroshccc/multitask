@@ -229,6 +229,48 @@ export async function deleteTask(taskId: string): Promise<void> {
   if (error) throw error;
 }
 
+/**
+ * Returns the task + all of its descendants in a flat array, ordered such
+ * that parents appear before children (BFS from root). Used to snapshot a
+ * subtree before a delete so we can restore it on undo.
+ */
+export async function fetchTaskSubtree(rootId: string): Promise<Task[]> {
+  const { data: root } = await supabase
+    .from("tasks")
+    .select("*")
+    .eq("id", rootId)
+    .maybeSingle();
+  if (!root) return [];
+
+  const all: Task[] = [root];
+  let frontierIds: string[] = [rootId];
+  while (frontierIds.length > 0) {
+    const { data: children } = await supabase
+      .from("tasks")
+      .select("*")
+      .in("parent_task_id", frontierIds);
+    if (!children || children.length === 0) break;
+    all.push(...children);
+    frontierIds = children.map((c) => c.id);
+  }
+  return all;
+}
+
+/**
+ * Re-inserts a previously-deleted subtree, preserving original ids and
+ * parent links. Inserted in BFS order (parents first) so FKs stay valid
+ * if any are deferred.
+ */
+export async function restoreTasks(tasks: Task[]): Promise<void> {
+  if (tasks.length === 0) return;
+  // Insert one row at a time to keep the order; bulk insert wouldn't
+  // guarantee parent-before-child execution if the array is ever reordered.
+  for (const t of tasks) {
+    const { error } = await supabase.from("tasks").insert(t);
+    if (error) throw error;
+  }
+}
+
 // Dependencies ---------------------------------------------------------------
 
 export async function listTaskDependencies(taskId: string): Promise<TaskDependency[]> {

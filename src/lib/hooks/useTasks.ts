@@ -223,6 +223,26 @@ export function useDeleteTask() {
   });
 }
 
+/**
+ * Re-inserts previously-deleted tasks, preserving ids. Used by the undo
+ * handler on delete actions so Ctrl+Z restores the whole subtree exactly
+ * as it was. Pair with `tasksService.fetchTaskSubtree` to capture state
+ * before the delete fires.
+ */
+export function useRestoreTasks() {
+  const qc = useQueryClient();
+  const scope = useOrgScope();
+  return useMutation({
+    mutationFn: (tasks: import("@/lib/types/domain").Task[]) =>
+      tasksService.restoreTasks(tasks),
+    onSuccess: () => {
+      if (scope.organizationId) {
+        qc.invalidateQueries({ queryKey: queryFamilies.allTasks(scope.organizationId) });
+      }
+    },
+  });
+}
+
 // Dependencies ---------------------------------------------------------------
 
 export function useTaskDependencies(taskId: string | null | undefined) {

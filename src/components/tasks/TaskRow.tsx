@@ -23,7 +23,9 @@ import {
   useDuplicateTaskTree,
   useDuplicateTask,
   useDeleteTask,
+  useRestoreTasks,
 } from "@/lib/hooks/useTasks";
+import * as tasksService from "@/lib/services/tasks";
 import { useTaskLists } from "@/lib/hooks/useTaskLists";
 import {
   useActiveTimer,
@@ -87,6 +89,7 @@ export function TaskRow({
   const duplicateTree = useDuplicateTaskTree();
   const duplicateOne = useDuplicateTask();
   const deleteTaskM = useDeleteTask();
+  const restoreTasks = useRestoreTasks();
   const { data: taskLists = [] } = useTaskLists();
   const startTimer = useStartTimer();
   const stopTimer = useStopTimer();
@@ -160,7 +163,15 @@ export function TaskRow({
       setDraft(task.title);
       return;
     }
+    const prevTitle = task.title;
     updateTask.mutate({ taskId: task.id, patch: { title: trimmed } });
+    pushUndo({
+      description: "שינוי כותרת",
+      undo: () =>
+        updateTask.mutate({ taskId: task.id, patch: { title: prevTitle } }),
+      redo: () =>
+        updateTask.mutate({ taskId: task.id, patch: { title: trimmed } }),
+    });
   };
 
   const handleKeyDown = async (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -168,12 +179,18 @@ export function TaskRow({
       e.preventDefault();
       commitTitle();
       // Create new sibling right after this one.
-      const newTask = await createTask.mutateAsync({
+      const payload = {
         title: "",
         task_list_id: listId ?? null,
         parent_task_id: parentTaskId,
         status: "todo",
         urgency: 0,
+      };
+      const newTask = await createTask.mutateAsync(payload);
+      pushUndo({
+        description: "יצירת משימה",
+        undo: () => deleteTaskM.mutate(newTask.id),
+        redo: () => createTask.mutate(payload),
       });
       onRequestFocus(newTask.id);
       return;
@@ -246,21 +263,44 @@ export function TaskRow({
     closeMenu();
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     const taskId = task.id;
+    // Snapshot the subtree (root + descendants) before deleting so undo can
+    // restore the whole branch with the original ids and parent links.
+    let subtree: Awaited<ReturnType<typeof tasksService.fetchTaskSubtree>> = [];
+    try {
+      subtree = await tasksService.fetchTaskSubtree(taskId);
+    } catch (err) {
+      console.error("delete: failed to snapshot subtree", err);
+    }
     deleteTaskM.mutate(taskId);
     setConfirmDelete(false);
     closeMenu();
-    // No undo for delete — the DB cascades children. We gate via confirmation.
+    if (subtree.length > 0) {
+      pushUndo({
+        description:
+          subtree.length > 1
+            ? `מחיקת משימה (${subtree.length} פריטים)`
+            : "מחיקת משימה",
+        undo: () => restoreTasks.mutate(subtree),
+        redo: () => deleteTaskM.mutate(taskId),
+      });
+    }
   };
 
   const handleAddSubtask = async () => {
-    const newTask = await createTask.mutateAsync({
+    const payload = {
       title: "",
       task_list_id: listId ?? null,
       parent_task_id: task.id,
       status: "todo",
       urgency: 0,
+    };
+    const newTask = await createTask.mutateAsync(payload);
+    pushUndo({
+      description: "הוספת תת-משימה",
+      undo: () => deleteTaskM.mutate(newTask.id),
+      redo: () => createTask.mutate(payload),
     });
     setCollapsed(false);
     onRequestFocus(newTask.id);

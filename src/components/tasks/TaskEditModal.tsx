@@ -26,7 +26,9 @@ import {
   useUpdateTask,
   useCompleteTask,
   useCreateTask,
+  useDeleteTask,
 } from "@/lib/hooks/useTasks";
+import { pushUndo } from "@/lib/undo/store";
 import { useThought } from "@/lib/hooks/useThoughts";
 import { ThoughtEditModal } from "@/components/thoughts/ThoughtEditModal";
 import {
@@ -114,6 +116,7 @@ export function TaskEditModal({
   const updateTask = useUpdateTask();
   const completeTask = useCompleteTask();
   const createTask = useCreateTask();
+  const deleteTaskM = useDeleteTask();
 
   const [tab, setTab] = useState<Tab>(defaultTab);
 
@@ -240,7 +243,7 @@ export function TaskEditModal({
     if (isCreate) {
       if (!title.trim()) return false;
       try {
-        const created = await createTask.mutateAsync({
+        const payload = {
           title: title.trim(),
           description: description || null,
           notes: notes || null,
@@ -258,6 +261,12 @@ export function TaskEditModal({
             estimatedMinutes != null ? minutesToHours(estimatedMinutes) : null,
           is_phase: isPhase,
           source_thought_id: createDraft?.source_thought_id ?? null,
+        };
+        const created = await createTask.mutateAsync(payload);
+        pushUndo({
+          description: "יצירת משימה",
+          undo: () => deleteTaskM.mutate(created.id),
+          redo: () => createTask.mutate(payload),
         });
         onCreated?.(created.id);
         return true;
@@ -267,26 +276,48 @@ export function TaskEditModal({
     }
 
     if (!task) return true;
+    // Snapshot the previous state of every editable field so the undo entry
+    // can put the task back exactly where it was — title, schedule, list,
+    // tags, the lot. One Ctrl+Z reverses the whole save.
+    const prevPatch = {
+      title: task.title,
+      description: task.description,
+      notes: task.notes,
+      urgency: task.urgency,
+      status: task.status,
+      task_list_id: task.task_list_id,
+      assignee_user_id: task.assignee_user_id,
+      tags: task.tags,
+      location: task.location,
+      external_url: task.external_url,
+      scheduled_at: task.scheduled_at,
+      duration_minutes: task.duration_minutes,
+      estimated_hours: task.estimated_hours,
+      is_phase: task.is_phase,
+    };
+    const newPatch = {
+      title: title.trim() || task.title,
+      description: description || null,
+      notes: notes || null,
+      urgency,
+      status,
+      task_list_id: listId,
+      assignee_user_id: assigneeId,
+      tags,
+      location: location || null,
+      external_url: externalUrl || null,
+      scheduled_at: scheduledAt,
+      duration_minutes: durationMinutes,
+      estimated_hours:
+        estimatedMinutes != null ? minutesToHours(estimatedMinutes) : null,
+      is_phase: isPhase,
+    };
     try {
-      await updateTask.mutateAsync({
-        taskId: task.id,
-        patch: {
-          title: title.trim() || task.title,
-          description: description || null,
-          notes: notes || null,
-          urgency,
-          status,
-          task_list_id: listId,
-          assignee_user_id: assigneeId,
-          tags,
-          location: location || null,
-          external_url: externalUrl || null,
-          scheduled_at: scheduledAt,
-          duration_minutes: durationMinutes,
-          estimated_hours:
-            estimatedMinutes != null ? minutesToHours(estimatedMinutes) : null,
-          is_phase: isPhase,
-        },
+      await updateTask.mutateAsync({ taskId: task.id, patch: newPatch });
+      pushUndo({
+        description: "עריכת משימה",
+        undo: () => updateTask.mutate({ taskId: task.id, patch: prevPatch }),
+        redo: () => updateTask.mutate({ taskId: task.id, patch: newPatch }),
       });
       return true;
     } catch {

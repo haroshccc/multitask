@@ -9,7 +9,8 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils/cn";
-import { useCreateTask } from "@/lib/hooks/useTasks";
+import { useCreateTask, useDeleteTask } from "@/lib/hooks/useTasks";
+import { pushUndo } from "@/lib/undo/store";
 import type { RowDisplayPrefs } from "@/lib/hooks/useRowDisplayPrefs";
 import { TaskRow, type TaskTreeNode } from "./TaskRow";
 
@@ -41,6 +42,7 @@ export function UnassignedBanner({
   fullWidth,
 }: UnassignedBannerProps) {
   const createTask = useCreateTask();
+  const deleteTaskM = useDeleteTask();
   const [newTitle, setNewTitle] = useState("");
   const [focusTaskId, setFocusTaskId] = useState<string | null>(null);
 
@@ -55,12 +57,18 @@ export function UnassignedBanner({
   const handleCreate = async () => {
     const trimmed = newTitle.trim();
     if (!trimmed) return;
-    const t = await createTask.mutateAsync({
+    const payload = {
       title: trimmed,
       task_list_id: null,
       parent_task_id: null,
       status: "todo",
       urgency: 0,
+    };
+    const t = await createTask.mutateAsync(payload);
+    pushUndo({
+      description: "יצירת משימה",
+      undo: () => deleteTaskM.mutate(t.id),
+      redo: () => createTask.mutate(payload),
     });
     setNewTitle("");
     setFocusTaskId(t.id);

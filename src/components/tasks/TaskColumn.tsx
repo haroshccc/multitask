@@ -13,7 +13,7 @@ import {
   Link as LinkIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
-import { useCreateTask } from "@/lib/hooks/useTasks";
+import { useCreateTask, useDeleteTask } from "@/lib/hooks/useTasks";
 import {
   useArchiveTaskList,
   useUpdateTaskList,
@@ -73,6 +73,7 @@ export function TaskColumn({
   onOpenEdit,
 }: TaskColumnProps) {
   const createTask = useCreateTask();
+  const deleteTaskM = useDeleteTask();
   const archiveList = useArchiveTaskList();
   const updateList = useUpdateTaskList();
   const [newTitle, setNewTitle] = useState("");
@@ -104,24 +105,36 @@ export function TaskColumn({
   const handleCreate = async () => {
     const trimmed = newTitle.trim();
     if (!trimmed) return;
-    const t = await createTask.mutateAsync({
+    const payload = {
       title: trimmed,
       task_list_id: listId,
       parent_task_id: null,
       status: "todo",
       urgency: 0,
+    };
+    const t = await createTask.mutateAsync(payload);
+    pushUndo({
+      description: "יצירת משימה",
+      undo: () => deleteTaskM.mutate(t.id),
+      redo: () => createTask.mutate(payload),
     });
     setNewTitle("");
     setFocusTaskId(t.id);
   };
 
   const handleEmptyCreate = async () => {
-    const t = await createTask.mutateAsync({
+    const payload = {
       title: "",
       task_list_id: listId,
       parent_task_id: null,
       status: "todo",
       urgency: 0,
+    };
+    const t = await createTask.mutateAsync(payload);
+    pushUndo({
+      description: "יצירת משימה",
+      undo: () => deleteTaskM.mutate(t.id),
+      redo: () => createTask.mutate(payload),
     });
     setFocusTaskId(t.id);
   };

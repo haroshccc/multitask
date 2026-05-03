@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   ChevronRight,
   ChevronLeft,
@@ -177,7 +177,9 @@ export function GanttChrome({
         onSourceChange={onSourceChange}
       />
 
-      {/* Date nav */}
+      {/* Date nav. The "היום" button snaps to today; the dated label
+          opens a native date input so the user can jump to any anchor
+          (e.g. "show me Q3" without paginating week-by-week). */}
       <div className="inline-flex items-center gap-0.5">
         <button
           onClick={() => step(-1)}
@@ -191,9 +193,11 @@ export function GanttChrome({
           onClick={() => onAnchorChange(new Date())}
           className="text-xs px-2 py-1 rounded-md hover:bg-ink-100 text-ink-700 font-medium"
           type="button"
+          title="חזרה להיום"
         >
           היום
         </button>
+        <AnchorDatePicker anchor={anchor} onChange={onAnchorChange} />
         <button
           onClick={() => step(1)}
           className="p-1.5 rounded-md hover:bg-ink-100 text-ink-700"
@@ -524,6 +528,75 @@ function SourcePicker({
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+/**
+ * Anchor date picker — a button that shows the current anchor date in
+ * Hebrew locale and opens a native date input on click. Handles the ISO
+ * <-> Date conversion locally so the chrome's `onAnchorChange` keeps its
+ * `Date` API. The native input avoids pulling in another date-picker lib
+ * for what's essentially a "jump to any day" affordance.
+ */
+function AnchorDatePicker({
+  anchor,
+  onChange,
+}: {
+  anchor: Date;
+  onChange: (d: Date) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const toIsoDate = (d: Date): string => {
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  };
+
+  const label = anchor.toLocaleDateString("he-IL", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+
+  return (
+    <div className="relative inline-flex">
+      <button
+        type="button"
+        onClick={() => {
+          // Native pickers — try showPicker() (Chrome/Safari recent), fall
+          // back to focus + click to coax the popup open.
+          const el = inputRef.current;
+          if (!el) return;
+          const anyEl = el as HTMLInputElement & { showPicker?: () => void };
+          if (typeof anyEl.showPicker === "function") {
+            anyEl.showPicker();
+          } else {
+            el.focus();
+            el.click();
+          }
+        }}
+        className="text-xs px-2 py-1 rounded-md border border-ink-200 hover:bg-ink-50 text-ink-700 font-medium tabular-nums"
+        title="קפצי לתאריך"
+      >
+        {label}
+      </button>
+      <input
+        ref={inputRef}
+        type="date"
+        value={toIsoDate(anchor)}
+        onChange={(e) => {
+          const v = e.target.value;
+          if (!v) return;
+          const [y, m, d] = v.split("-").map(Number);
+          if (!y || !m || !d) return;
+          onChange(new Date(y, m - 1, d));
+        }}
+        // Hide the input itself; we drive it from the visible button so we
+        // get our own styling but the browser still owns the calendar UI.
+        className="absolute inset-0 opacity-0 pointer-events-none w-0 h-0"
+        tabIndex={-1}
+      />
     </div>
   );
 }

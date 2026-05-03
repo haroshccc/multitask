@@ -16,6 +16,10 @@ interface SelectionState {
   orderedIds: string[];
 
   toggle: (id: string) => void;
+  /** Toggle a parent + all of its descendants together. If the parent is
+   *  currently selected, the whole subtree gets deselected; otherwise it
+   *  all becomes selected. The parent's id is recorded as the anchor. */
+  toggleSubtree: (rootId: string, descendantIds: string[]) => void;
   selectOnly: (id: string) => void;
   /** Range-select between the anchor and `id`, inclusive. If no anchor, falls
    *  back to selectOnly. Adds to the existing selection (does not clear). */
@@ -35,6 +39,24 @@ export const useTaskSelectionStore = create<SelectionState>((set, get) => ({
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return { selected: next, anchorId: id };
+    });
+  },
+
+  toggleSubtree(rootId, descendantIds) {
+    set((s) => {
+      const next = new Set(s.selected);
+      // Decide direction based on the root: if root is currently selected,
+      // we deselect the whole subtree; otherwise we select it all. This
+      // matches the "click checkbox = the whole branch follows" model the
+      // user described and lets a second click undo the cascade.
+      const turnOff = next.has(rootId);
+      const allIds = [rootId, ...descendantIds];
+      if (turnOff) {
+        for (const id of allIds) next.delete(id);
+      } else {
+        for (const id of allIds) next.add(id);
+      }
+      return { selected: next, anchorId: rootId };
     });
   },
 

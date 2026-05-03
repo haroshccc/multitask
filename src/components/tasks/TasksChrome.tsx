@@ -8,6 +8,8 @@ import {
   List as ListIcon2,
   Columns3,
   Rows3,
+  ChevronUp,
+  ChevronDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { ListIcon } from "@/components/tasks/list-icons";
@@ -23,6 +25,9 @@ interface UnifiedList {
 }
 
 interface TasksChromeProps {
+  /** Reorder a list one slot up or down. -1 = move up, +1 = move down.
+   *  No-op when the list is already at the boundary. */
+  onMoveListInOrder?: (listId: string, direction: -1 | 1) => void;
   // Lists
   lists: UnifiedList[];
   hiddenListIds: Set<string>;
@@ -58,6 +63,7 @@ export function TasksChrome({
   hiddenListIds,
   onToggleListVisibility,
   onCreateList,
+  onMoveListInOrder,
   layout,
   onLayoutChange,
   filtersActiveCount,
@@ -98,39 +104,75 @@ export function TasksChrome({
                 עוד אין רשימות.
               </p>
             ) : (
-              lists.map((l) => {
+              lists.map((l, idx) => {
                 const hidden = hiddenListIds.has(l.id);
+                const isFirst = idx === 0;
+                const isLast = idx === lists.length - 1;
                 return (
-                  <button
+                  <div
                     key={l.id}
-                    onClick={() => onToggleListVisibility(l.id)}
-                    className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-start hover:bg-ink-50"
-                    type="button"
+                    className="flex items-center gap-1 px-2 py-0.5 hover:bg-ink-50 group"
                   >
-                    <span
-                      className={cn(
-                        "w-3 h-3 rounded-sm border flex items-center justify-center shrink-0",
-                        hidden ? "border-ink-300 bg-white" : "border-transparent"
-                      )}
-                      style={hidden ? undefined : { backgroundColor: l.color ?? "#6b6b80" }}
+                    <button
+                      onClick={() => onToggleListVisibility(l.id)}
+                      className="flex items-center gap-2 flex-1 min-w-0 py-1 text-sm text-start"
+                      type="button"
                     >
-                      {!hidden && <Check className="w-2.5 h-2.5 text-white" />}
-                    </span>
-                    {l.emoji && <ListIcon emoji={l.emoji} className="w-3.5 h-3.5" />}
-                    <span
-                      className={cn(
-                        "truncate flex-1",
-                        hidden ? "text-ink-500" : "text-ink-900"
+                      <span
+                        className={cn(
+                          "w-3 h-3 rounded-sm border flex items-center justify-center shrink-0",
+                          hidden ? "border-ink-300 bg-white" : "border-transparent"
+                        )}
+                        style={hidden ? undefined : { backgroundColor: l.color ?? "#6b6b80" }}
+                      >
+                        {!hidden && <Check className="w-2.5 h-2.5 text-white" />}
+                      </span>
+                      {l.emoji && <ListIcon emoji={l.emoji} className="w-3.5 h-3.5" />}
+                      <span
+                        className={cn(
+                          "truncate flex-1",
+                          hidden ? "text-ink-500" : "text-ink-900"
+                        )}
+                      >
+                        {l.name}
+                      </span>
+                      {hidden ? (
+                        <EyeOff className="w-3 h-3 text-ink-400" />
+                      ) : (
+                        <Eye className="w-3 h-3 text-ink-400" />
                       )}
-                    >
-                      {l.name}
-                    </span>
-                    {hidden ? (
-                      <EyeOff className="w-3 h-3 text-ink-400" />
-                    ) : (
-                      <Eye className="w-3 h-3 text-ink-400" />
+                    </button>
+                    {onMoveListInOrder && (
+                      <div className="flex items-center shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onMoveListInOrder(l.id, -1);
+                          }}
+                          disabled={isFirst}
+                          className="p-1 rounded text-ink-400 hover:text-ink-900 hover:bg-ink-100 disabled:opacity-30 disabled:cursor-not-allowed"
+                          title="העבר למעלה"
+                          aria-label="העבר למעלה"
+                        >
+                          <ChevronUp className="w-3 h-3" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onMoveListInOrder(l.id, 1);
+                          }}
+                          disabled={isLast}
+                          className="p-1 rounded text-ink-400 hover:text-ink-900 hover:bg-ink-100 disabled:opacity-30 disabled:cursor-not-allowed"
+                          title="העבר למטה"
+                          aria-label="העבר למטה"
+                        >
+                          <ChevronDown className="w-3 h-3" />
+                        </button>
+                      </div>
                     )}
-                  </button>
+                  </div>
                 );
               })
             )}

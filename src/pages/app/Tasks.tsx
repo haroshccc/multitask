@@ -40,6 +40,7 @@ import {
   useMoveTaskToList,
   useSetTaskParent,
   useReorderTasks,
+  useReorderTaskLists,
   useListVisibility,
   useSetListVisibility,
   useCreateTaskList,
@@ -61,6 +62,7 @@ export function Tasks() {
   const moveToList = useMoveTaskToList();
   const setParent = useSetTaskParent();
   const reorderTasks = useReorderTasks();
+  const reorderLists = useReorderTaskLists();
 
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [pageMenuOpen, setPageMenuOpen] = useState(false);
@@ -97,6 +99,42 @@ export function Tasks() {
     const name = window.prompt("שם הרשימה החדשה:");
     if (!name?.trim()) return;
     await createTaskList.mutateAsync({ name: name.trim(), kind: "custom" });
+  };
+
+  /** Move a list one slot in the visible order. The on-screen order is
+   *  pinned-first, then sort_order asc — so we operate inside one of
+   *  those two groups (a pinned list stays among pinned, an unpinned
+   *  one stays among unpinned) and rewrite its sort_order to land
+   *  between the new neighbours. */
+  const handleMoveListInOrder = (listId: string, direction: -1 | 1) => {
+    const target = lists.find((l) => l.id === listId);
+    if (!target) return;
+    const peers = lists
+      .filter((l) => !!l.is_pinned === !!target.is_pinned)
+      .sort((a, b) => a.sort_order - b.sort_order);
+    const idx = peers.findIndex((l) => l.id === listId);
+    if (idx === -1) return;
+    const swapIdx = idx + direction;
+    if (swapIdx < 0 || swapIdx >= peers.length) return;
+    const neighbour = peers[swapIdx]!;
+    const farther = peers[swapIdx + direction];
+    // Compute a sort_order that lands between neighbour and farther.
+    // If farther is missing we're at the boundary — bump past neighbour
+    // by ±1 (the sort_order column is double-precision).
+    const newSortOrder = farther
+      ? (neighbour.sort_order + farther.sort_order) / 2
+      : direction === -1
+      ? neighbour.sort_order - 1
+      : neighbour.sort_order + 1;
+    const prevSortOrder = target.sort_order;
+    reorderLists.mutate([{ id: listId, sort_order: newSortOrder }]);
+    pushUndo({
+      description: "סידור רשימות",
+      undo: () =>
+        reorderLists.mutate([{ id: listId, sort_order: prevSortOrder }]),
+      redo: () =>
+        reorderLists.mutate([{ id: listId, sort_order: newSortOrder }]),
+    });
   };
 
   // Allow ?edit=<taskId> in the URL to pre-open the TaskEditModal — used by
@@ -258,6 +296,25 @@ export function Tasks() {
     },
   ];
 
+  /** All descendants (children + grandchildren + …) of `rootId`, computed
+   *  from the current `tasks` slice. Used so that when a parent task is
+   *  dragged into a different list, its whole subtree follows. The parent
+   *  link itself is preserved — only `task_list_id` cascades. */
+  const collectDescendants = (rootId: string): string[] => {
+    const out: string[] = [];
+    const queue: string[] = [rootId];
+    while (queue.length > 0) {
+      const pid = queue.shift()!;
+      for (const t of tasks) {
+        if (t.parent_task_id === pid) {
+          out.push(t.id);
+          queue.push(t.id);
+        }
+      }
+    }
+    return out;
+  };
+
   const handleDragEnd = (e: DragEndEvent) => {
     const { active, over } = e;
     if (!over) return;
@@ -285,32 +342,36 @@ export function Tasks() {
       const prevListId = activeData.listId;
       const prevParentId = activeData.parentTaskId;
       const nextListId = overData.listId;
+      // When the list changes, the whole subtree must follow — otherwise
+      // children stay orphaned in the old list and disappear from view.
+      const descendantIds =
+        prevListId !== nextListId ? collectDescendants(activeData.taskId) : [];
       // Apply
       setParent.mutate({ taskId: activeData.taskId, parentId: null });
       if (prevListId !== nextListId) {
-        moveToList.mutate({
-          taskId: activeData.taskId,
-          listId: nextListId,
-        });
+        moveToList.mutate({ taskId: activeData.taskId, listId: nextListId });
+        for (const did of descendantIds) {
+          moveToList.mutate({ taskId: did, listId: nextListId });
+        }
       }
       pushUndo({
         description: "העברת משימה בין רשימות",
         undo: () => {
           setParent.mutate({ taskId: activeData.taskId, parentId: prevParentId });
           if (prevListId !== nextListId) {
-            moveToList.mutate({
-              taskId: activeData.taskId,
-              listId: prevListId,
-            });
+            moveToList.mutate({ taskId: activeData.taskId, listId: prevListId });
+            for (const did of descendantIds) {
+              moveToList.mutate({ taskId: did, listId: prevListId });
+            }
           }
         },
         redo: () => {
           setParent.mutate({ taskId: activeData.taskId, parentId: null });
           if (prevListId !== nextListId) {
-            moveToList.mutate({
-              taskId: activeData.taskId,
-              listId: nextListId,
-            });
+            moveToList.mutate({ taskId: activeData.taskId, listId: nextListId });
+            for (const did of descendantIds) {
+              moveToList.mutate({ taskId: did, listId: nextListId });
+            }
           }
         },
       });
@@ -328,31 +389,33 @@ export function Tasks() {
       const nextParentId = overData.taskId;
       // No-op: already a child of this parent in this list.
       if (prevParentId === nextParentId && prevListId === nextListId) return;
+      const descendantIds =
+        prevListId !== nextListId ? collectDescendants(activeData.taskId) : [];
       setParent.mutate({ taskId: activeData.taskId, parentId: nextParentId });
       if (prevListId !== nextListId) {
-        moveToList.mutate({
-          taskId: activeData.taskId,
-          listId: nextListId,
-        });
+        moveToList.mutate({ taskId: activeData.taskId, listId: nextListId });
+        for (const did of descendantIds) {
+          moveToList.mutate({ taskId: did, listId: nextListId });
+        }
       }
       pushUndo({
         description: "הפיכת משימה לתת-משימה",
         undo: () => {
           setParent.mutate({ taskId: activeData.taskId, parentId: prevParentId });
           if (prevListId !== nextListId) {
-            moveToList.mutate({
-              taskId: activeData.taskId,
-              listId: prevListId,
-            });
+            moveToList.mutate({ taskId: activeData.taskId, listId: prevListId });
+            for (const did of descendantIds) {
+              moveToList.mutate({ taskId: did, listId: prevListId });
+            }
           }
         },
         redo: () => {
           setParent.mutate({ taskId: activeData.taskId, parentId: nextParentId });
           if (prevListId !== nextListId) {
-            moveToList.mutate({
-              taskId: activeData.taskId,
-              listId: nextListId,
-            });
+            moveToList.mutate({ taskId: activeData.taskId, listId: nextListId });
+            for (const did of descendantIds) {
+              moveToList.mutate({ taskId: did, listId: nextListId });
+            }
           }
         },
       });
@@ -401,18 +464,17 @@ export function Tasks() {
       // task being filtered out of `siblings` above, but we still re-rank.
       const activeTask = tasks.find((t) => t.id === activeData.taskId);
       const prevSortOrder = activeTask?.sort_order ?? 0;
+      const descendantIds =
+        prevListId !== nextListId ? collectDescendants(activeData.taskId) : [];
 
       if (prevParentId !== nextParentId) {
-        setParent.mutate({
-          taskId: activeData.taskId,
-          parentId: nextParentId,
-        });
+        setParent.mutate({ taskId: activeData.taskId, parentId: nextParentId });
       }
       if (prevListId !== nextListId) {
-        moveToList.mutate({
-          taskId: activeData.taskId,
-          listId: nextListId,
-        });
+        moveToList.mutate({ taskId: activeData.taskId, listId: nextListId });
+        for (const did of descendantIds) {
+          moveToList.mutate({ taskId: did, listId: nextListId });
+        }
       }
       reorderTasks.mutate([
         { id: activeData.taskId, sort_order: newSortOrder },
@@ -422,16 +484,13 @@ export function Tasks() {
         description: "סידור מחדש",
         undo: () => {
           if (prevParentId !== nextParentId) {
-            setParent.mutate({
-              taskId: activeData.taskId,
-              parentId: prevParentId,
-            });
+            setParent.mutate({ taskId: activeData.taskId, parentId: prevParentId });
           }
           if (prevListId !== nextListId) {
-            moveToList.mutate({
-              taskId: activeData.taskId,
-              listId: prevListId,
-            });
+            moveToList.mutate({ taskId: activeData.taskId, listId: prevListId });
+            for (const did of descendantIds) {
+              moveToList.mutate({ taskId: did, listId: prevListId });
+            }
           }
           reorderTasks.mutate([
             { id: activeData.taskId, sort_order: prevSortOrder },
@@ -439,16 +498,13 @@ export function Tasks() {
         },
         redo: () => {
           if (prevParentId !== nextParentId) {
-            setParent.mutate({
-              taskId: activeData.taskId,
-              parentId: nextParentId,
-            });
+            setParent.mutate({ taskId: activeData.taskId, parentId: nextParentId });
           }
           if (prevListId !== nextListId) {
-            moveToList.mutate({
-              taskId: activeData.taskId,
-              listId: nextListId,
-            });
+            moveToList.mutate({ taskId: activeData.taskId, listId: nextListId });
+            for (const did of descendantIds) {
+              moveToList.mutate({ taskId: did, listId: nextListId });
+            }
           }
           reorderTasks.mutate([
             { id: activeData.taskId, sort_order: newSortOrder },
@@ -578,6 +634,7 @@ export function Tasks() {
                   hiddenListIds={hiddenSet}
                   onToggleListVisibility={toggleListVisibility}
                   onCreateList={handleCreateList}
+                  onMoveListInOrder={handleMoveListInOrder}
                   filtersActiveCount={filtersActiveCount}
                   filtersOpen={filtersOpen}
                   onToggleFilters={() => setFiltersOpen((v) => !v)}

@@ -3291,3 +3291,50 @@ Hero: "החלל לחשוב. החלל לעשות."
   החצים שונה.
 
   **קומיט:** `feat(tasks): wave 7 — quick controls on list banner (hide/color/reorder)`
+
+- **2026-05-03 — מסך יומן, גל 8: דד-ליין כמסמן 15-דק נפרד.**
+
+  **טריגר:** המשתמשת שאלה איך להציג deadline ביומן בלי לבלבל אותו
+  עם אירוע/משימה רגילים. הצעתי כמה וריאנטים, היא ענתה:
+
+  > "אתה תשים דד ליין כרבע שעה - בלי להגדיר באמת רבע שעה, אבל
+  > שיתפוס מקום ביומן של 15 דקות, אתה תכתוב את שם המשימה, מימינה
+  > תשים שעון חלון אייקון בשחור לבן ומתחת לשם המשימה תעשה קו
+  > בצבע הרשימה שלה. - לא לעשות מסגרת לכל ה15 דק אלא רק קו
+  > תחתון מתחת לשם המשימה והאייקון."
+
+  > "אם לא הגדרתי משך למשימה אבל כן שמתי לה תאריך, תשים אותה
+  > באופן אוטומטי 15 דק בלבד."
+
+  **8.A — `taskDeadlineToItem` (חדש ב-`calendar-utils.ts`).** מחזיר
+  `CalendarItem` עם `kind: "deadline"`, `start = task.deadline_at`,
+  `end = start + 15min`. מחזיר null אם המשימה הושלמה (deadline מתקיים
+  כבר לא מעניין). ה-`source` נשאר ה-Task כדי שלחיצה תפתח את
+  TaskEditModal. `CalendarItemKind` הורחב ל-`"task" | "event" |
+  "deadline"`.
+
+  **8.B — `Calendar.tsx` משתמש בו.** בלולאה שבונה `items[]`, לכל
+  task אנחנו מוסיפים *גם* את ה-scheduled block (אם יש scheduled_at)
+  *וגם* את ה-deadline marker (אם יש deadline_at). הם לוויים זה לזה —
+  ה-AI יוכל להמליץ שניהם באותה משימה.
+
+  **8.C — `taskToItem` default 15.** ה-fallback ל-`duration_minutes`
+  ירד מ-60 (או estimated_hours*60) ל-**15**. משימה ש"זרוקה ביומן"
+  בלי משך מפורש תופסת רבע שעה — לא להעמיד פנים שהמשתמשת
+  התחייבה לבלוק שעתי שלם.
+
+  **8.D — `CalendarBlock` רנדור deadline.** בתחילת הקומפוננטה,
+  אם `kind === "deadline"`, חוזר אובייקט שונה לחלוטין:
+  - אין border, אין background.
+  - שם המשימה משמאל (start ב-RTL = ימין ויזואלית).
+  - אייקון `Hourglass` (lucide) בצד ה-end, צבע ink-900.
+  - מתחת — `<div className="h-[2px]">` עם `backgroundColor: listColor`.
+  - hover מקבל רקע ink-50/60 וקפיצה ב-z (אותה התנהגות כמו block רגיל).
+  - לחיצה פותחת את ה-Task המקורי דרך `onClick` הקיים.
+
+  Week view יורש את הטיפול אוטומטית (משתמש ב-`CalendarBlock`
+  המיובא מ-DayView). Month/Agenda עדיין יציגו deadline כ-pill רגיל
+  בצבע ה-list — לא אופטימלי אבל לא שובר; שיפור נוסף ב-views האלה
+  יבוא בגל המשך אם המשתמשת תבקש.
+
+  **קומיט:** `feat(calendar): wave 8 — deadline marker as 15-min ghost row`

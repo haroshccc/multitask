@@ -2924,3 +2924,47 @@ Hero: "החלל לחשוב. החלל לעשות."
   - `feat(dashboard/8.3): proposal cards with approve/dismiss/edit`
 
   (שני הפיצ'רים מוזגו ל-main כדי שיתוופצו ב-Vercel.)
+
+- **2026-05-02 (סוף יום) — פאזה 8.2.1: AI עם מבט קדימה (forward planning).**
+
+  **טריגר:** המשתמשת ביקשה שהסיכום לא רק יסכם את העבר — שיציע **גם הצעות
+  עתידיות**: סידור ימים קדימה, העברת משימות ביום עמוס, תזמון משימות פתוחות,
+  המלצות יעילות לטווח הבא.
+
+  **שינויים ב-edge function `daily-brief`:**
+  - **חלון lookahead** — הפונקציה שולפת משימות/אירועים מעבר לסוף הטווח:
+    day → 7 ימים קדימה, week → 28 ימים, month → 90 ימים. ה-ids נכנסים ל-
+    `knownTaskIds`/`knownEventIds` כך שהצעות עליהם עוברות ולידציה.
+  - **שלוש סקציות חדשות בקלט:**
+    - `== הצפוי בקרוב ==` — משימות מתוזמנות קדימה, מקובצות לפי יום (כדי
+      שה-AI יראה ימים עמוסים).
+    - אירועים צפויים בלוח.
+    - `== משימות פתוחות ללא תזמון ==` — משימות בלי `scheduled_at`,
+      ממוינות לפי דחיפות (חומר ל-`schedule_task`).
+  - **SYSTEM_PROMPT שודרג** — מסביר שהקלט מכיל שתי שכבות זמן (עבר + עתיד),
+    דורש לפחות חצי מההמלצות יהיו עתידיות, מבקש להציע באקטיביות
+    `move_task`/`schedule_task`/`reorder_day` עבור הצפוי בקרוב.
+  - **שדה חדש `forward_outlook`** — פסקה מנדטורית של 2-3 משפטים על מה
+    צפוי בתקופה הבאה ועל מה לשים דגש. נוסף ל-tool schema של Claude
+    (`required`).
+  - **קטגוריות recommendations הורחבו** — `efficiency` ו-`planning` נוספו
+    ל-time/tasks/meetings/general (6 במקום 4). שני החדשים forward-looking.
+  - **תקרת הצעות עלתה ל-8** (היה 6) — כדי שיהיה מקום גם לסיכום עבר וגם
+    לתכנון עתיד.
+
+  **שינויים ב-frontend:**
+  - `BriefOutput.forward_outlook?: string` ב-`src/lib/types/domain.ts`.
+    קטגוריות recommendations הורחבו ב-2.
+  - `BriefBanner` מציג סקציה חדשה "מה צפוי קדימה" עם רקע gradient
+    (indigo/cyan) כדי לבדל ויזואלית מסיכום העבר. CATEGORY_ICON +
+    CATEGORY_TONE קיבלו `efficiency` (TrendingUp + cyan) ו-`planning`
+    (CalendarDays + indigo).
+
+  **deploy:** ה-edge function נפרס דרך MCP (version 2 על
+  `rzlvuaqbvfzkunbyyvbc`). הקוד הזה תאם את ה-DB הקיים — אין מיגרציה חדשה.
+
+  **הצעה נדחתה במכוון:** לא הוספתי שדה נפרד `schedule_suggestions` — הכל
+  זורם דרך `proposals[]` הקיים (move_task/schedule_task/reorder_day הם
+  בדיוק מה שצריך). עוד שדה היה כפילות.
+
+  **קומיט:** `feat(dashboard/8.2.1): AI forward planning + lookahead window`

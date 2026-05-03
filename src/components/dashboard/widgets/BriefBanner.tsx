@@ -11,6 +11,9 @@ import {
   ExternalLink,
   Loader2,
   AlertTriangle,
+  TrendingUp,
+  Compass,
+  CalendarDays,
 } from "lucide-react";
 import { useDashboardRange } from "../dashboard-context";
 import { useDailyBrief, useGenerateDailyBrief } from "@/lib/hooks/useDailyBrief";
@@ -29,6 +32,8 @@ const CATEGORY_ICON: Record<BriefRecommendation["category"], typeof Lightbulb> =
   tasks: CheckCircle2,
   meetings: Users,
   general: Lightbulb,
+  efficiency: TrendingUp,
+  planning: CalendarDays,
 };
 
 const CATEGORY_TONE: Record<BriefRecommendation["category"], string> = {
@@ -36,6 +41,8 @@ const CATEGORY_TONE: Record<BriefRecommendation["category"], string> = {
   tasks: "bg-emerald-50 text-emerald-700 border-emerald-200",
   meetings: "bg-violet-50 text-violet-700 border-violet-200",
   general: "bg-amber-50 text-amber-700 border-amber-200",
+  efficiency: "bg-cyan-50 text-cyan-700 border-cyan-200",
+  planning: "bg-indigo-50 text-indigo-700 border-indigo-200",
 };
 
 /**
@@ -261,6 +268,16 @@ function BriefContent({
           <SectionHeader icon={Clock} label="שעות יעילות" />
           <p className="text-xs text-ink-700 leading-relaxed">
             {output.productive_hours_insight}
+          </p>
+        </section>
+      )}
+
+      {/* Forward outlook (Phase 8.2.1) — what's coming + how to prepare */}
+      {output.forward_outlook && (
+        <section>
+          <SectionHeader icon={Compass} label="מה צפוי קדימה" />
+          <p className="text-xs text-ink-800 leading-relaxed bg-gradient-to-l from-indigo-50/60 to-cyan-50/60 rounded-lg p-2.5 border border-indigo-100">
+            {output.forward_outlook}
           </p>
         </section>
       )}

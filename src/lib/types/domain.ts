@@ -170,8 +170,15 @@ export interface BriefRecommendation {
   title: string;
   /** Explanation / reasoning. */
   description: string;
-  /** Loose category for icon/colour binding in the UI. */
-  category: "time" | "tasks" | "meetings" | "general";
+  /** Loose category for icon/colour binding in the UI.
+   *  `efficiency` and `planning` (added 8.2.1) are forward-looking. */
+  category:
+    | "time"
+    | "tasks"
+    | "meetings"
+    | "general"
+    | "efficiency"
+    | "planning";
 }
 
 export interface BriefOutput {
@@ -185,6 +192,9 @@ export interface BriefOutput {
   recordings_digest: string;
   /** Pattern / insight about productive hours. */
   productive_hours_insight: string;
+  /** Forward-looking paragraph (8.2.1) — what's coming up + how to prepare.
+   *  Distinct from `recommendations[]` which are bullets; this is narrative. */
+  forward_outlook?: string;
   /** Free-form recommendations. UI shows as chips/cards. */
   recommendations: BriefRecommendation[];
 }

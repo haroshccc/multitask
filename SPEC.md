@@ -3517,3 +3517,49 @@ Hero: "החלל לחשוב. החלל לעשות."
   null). זה מונע race conditions ולoops.
 
   **קומיט:** `feat(gantt): wave 9.7 — parent task auto-rollup from children`
+
+- **2026-05-03 — מסך גאנט, גל 9.4: יצירת רשימה/פרויקט + המרה + + משימה inline.**
+
+  **טריגר:** המשתמשת ביקשה (אחרי ש-Source picker עבד):
+  > "לפתוח רשימה חדשה / פרויקט חדש, לכתוב משימות בטבלה, ואז להפוך
+  >  אותה לרשימה או לפרויקט"
+
+  הגישה הפרגמטית: יצירה מיידית ב-DB (לא draft state מורכב) +
+  אופציה להמיר list→project אחרי. המשתמשת מקבלת flow מובן ב-2
+  קליקים: "+ חדש" → שם → טבלה ריקה → "+ הוספת משימה".
+
+  **9.4.a — Source picker, 3 פעולות חדשות:**
+  - **+ רשימה חדשה (ריקה)**: prompt לשם → `createTaskList` →
+    `setSource({kind:"list", id:newList.id})`. הגאנט קופץ לטבלה
+    הריקה.
+  - **+ פרויקט חדש (ריק)**: prompt לשם → `createProject` →
+    seed list עם אותו שם + `project_id=newProject.id` →
+    `setSource({kind:"project", id:newProject.id})`.
+    ה-list הראשוני קיים כי tasks יושבות על list, לא על project.
+  - **הפוך את "X" לפרויקט**: רק כש-`source.kind="list"`. דורש
+    confirmation. יוצר project חדש (שם/צבע/אימוג'י מועתקים מה-list)
+    + מעדכן `list.project_id=newProject.id`. כל המשימות נשארות
+    במקומן — שום data loss. ה-source עובר ל-`kind:"project"`.
+  - **3 הכפתורים** מסודרים בbottom של ה-dropdown של Source picker
+    מתחת ל-divider, כדי שהפעולה הראשונית "החלף scope" תישאר למעלה.
+
+  **9.4.b — GanttTable, + new task row:**
+  - כש-`onCreateTask` prop מסופק (קרי source ספציפי), הtable מוסיפה
+    שורה תחתונה עם רקע primary-50 ו-input "הוספת משימה חדשה...".
+  - Enter / blur עם טקסט → קורא ל-`onCreateTask(title)` → input
+    מתנקה.
+  - Escape מבטל.
+  - שורה זו מוסתרת כש-source="all" (אין יעד יחיד למשימה חדשה).
+
+  **9.4.c — Gantt.tsx, `handleCreateTaskInScope`:**
+  - אם `source="list"`: `createTask` עם `task_list_id=source.id`.
+  - אם `source="project"`: מחפש את ה-list הראשון של הפרויקט; אם
+    אין (מצב נדיר אם המשתמשת מחקה את ה-seed) — יוצר רשימה חדשה
+    בשם הפרויקט עם `project_id`. אז יוצר משימה תחתיה.
+  - כל ה-tasks נוצרות עם default `urgency=0, status="todo"`.
+
+  **גישה מודגשת — המרה הפוכה project→list נדחתה:**
+  פעולה הרסנית (אחיד הרבה רשימות לאחת + ארכוב project), שצריכה UI
+  של בחירה ("איזו list לשמר?"). זה גל נפרד אם המשתמשת תבקש.
+
+  **קומיט:** `feat(gantt): wave 9.4 — create new list/project + convert list→project + inline + task row`

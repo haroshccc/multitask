@@ -68,6 +68,16 @@ interface GanttChromeProps {
   projects: UnifiedProject[];
   source: GanttSource;
   onSourceChange: (s: GanttSource) => void;
+  /** Create a new (empty) list and select it as the source. The Gantt
+   *  refreshes to show the empty table; the user adds tasks from there. */
+  onCreateNewList?: () => void;
+  /** Same for a new project. The project will get its own initial task
+   *  list created behind the scenes; new tasks land in that list. */
+  onCreateNewProject?: () => void;
+  /** Convert the currently-selected list into a project (creates a new
+   *  project + sets list.project_id). Only meaningful when
+   *  source.kind === "list". */
+  onConvertListToProject?: () => void;
 
   // Filter panel toggle
   filtersActiveCount: number;
@@ -132,6 +142,9 @@ export function GanttChrome({
   projects,
   source,
   onSourceChange,
+  onCreateNewList,
+  onCreateNewProject,
+  onConvertListToProject,
   filtersActiveCount,
   filtersOpen,
   onToggleFilters,
@@ -175,6 +188,9 @@ export function GanttChrome({
         lists={lists}
         projects={projects}
         onSourceChange={onSourceChange}
+        onCreateNewList={onCreateNewList}
+        onCreateNewProject={onCreateNewProject}
+        onConvertListToProject={onConvertListToProject}
       />
 
       {/* Date nav. The "היום" button snaps to today; the dated label
@@ -409,12 +425,18 @@ function SourcePicker({
   lists,
   projects,
   onSourceChange,
+  onCreateNewList,
+  onCreateNewProject,
+  onConvertListToProject,
 }: {
   source: GanttSource;
   sourceLabel: string;
   lists: UnifiedList[];
   projects: UnifiedProject[];
   onSourceChange: (s: GanttSource) => void;
+  onCreateNewList?: () => void;
+  onCreateNewProject?: () => void;
+  onConvertListToProject?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -523,6 +545,55 @@ function SourcePicker({
             {lists.length === 0 && projects.length === 0 && (
               <div className="px-3 py-3 text-xs text-ink-500 text-center">
                 עדיין אין רשימות או פרויקטים.
+              </div>
+            )}
+
+            {/* Create-new actions — sit at the bottom of the dropdown so the
+                primary "switch context" affordance is on top, and the rarer
+                "scaffold a new container" lives below. */}
+            {(onCreateNewList || onCreateNewProject || onConvertListToProject) && (
+              <div className="border-t border-ink-100 mt-1 pt-1">
+                {onCreateNewList && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onCreateNewList();
+                      setOpen(false);
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-start text-primary-600 hover:bg-ink-50"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    רשימה חדשה (ריקה)
+                  </button>
+                )}
+                {onCreateNewProject && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onCreateNewProject();
+                      setOpen(false);
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-start text-primary-600 hover:bg-ink-50"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    פרויקט חדש (ריק)
+                  </button>
+                )}
+                {/* Promote the selected list to a project. Only meaningful
+                    when a single list is selected; hidden otherwise. */}
+                {source.kind === "list" && onConvertListToProject && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onConvertListToProject();
+                      setOpen(false);
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-start text-ink-700 hover:bg-ink-50 border-t border-ink-100 mt-1 pt-2"
+                  >
+                    <FolderKanban className="w-3.5 h-3.5" />
+                    הפוך את "{sourceLabel}" לפרויקט
+                  </button>
+                )}
               </div>
             )}
           </div>

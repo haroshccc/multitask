@@ -3259,3 +3259,35 @@ Hero: "החלל לחשוב. החלל לעשות."
   - עוטף ב-`pushUndo` כך ש-Ctrl+Z מחזיר את הסדר.
 
   **קומיט:** `feat(tasks): wave 5+6 — drag/select cascade to subtasks + list reorder`
+
+- **2026-05-03 — מסך משימות, גל 7: בקרת רשימה ישירה על הבאנר.**
+
+  **טריגר:** המשתמשת ביקשה שלוש בקרות "מהירות" על הבאנר של כל
+  רשימה — דברים שהיו דורשים תפריט-משנה או popover אחר:
+
+  > 1. עינית כיסוי בצד שמאל של הבאנר (להסתיר את הרשימה).
+  > 2. עיגול צבע ליד העינית (לערוך כמו עם האייקון).
+  > 3. חצים למעלה/למטה (או ימינה/שמאלה ב-columns) להזיז סדר.
+
+  **שינוי ב-`TaskColumn`:**
+  - הוספת props: `onHide`, `onMoveInOrder(direction: -1 | 1)`,
+    `isFirst`, `isLast`, `layout: "stack" | "columns"`.
+  - בהדר, ב-end (אחרי שם + ספירה + Pin) נוספו ארבעה כפתורים:
+    1. **חץ ↑ / →** — `onMoveInOrder(-1)` (move earlier). Disabled
+       ב-`isFirst`. ב-RTL columns, ChevronRight = "מוקדם יותר" (סוף
+       הflex = ימין הויזואלי = ה-leading edge).
+    2. **חץ ↓ / ←** — `onMoveInOrder(1)`. Disabled ב-`isLast`.
+    3. **עיגול צבע** — `w-4 h-4 rounded-full` עם `backgroundColor:
+       listColor`. onClick → פותח את אותו color picker שכבר היה
+       מתחת ל-menu item "שנה צבע כותרת" (מנפנף את ה-`colorOpen`
+       state הקיים).
+    4. **EyeOff** — `onHide()`. עוטף את `toggleListVisibility(id)`
+       ב-Tasks.tsx.
+
+  **חיבור ב-`Tasks.tsx`:** ב-stack mode + columns mode, כל
+  `TaskColumn` מקבל את ה-handlers + flags. ה-pseudo-list "לא משויכות"
+  לא מקבלת `onHide` (כי אין list_id) — הכפתור פשוט לא נרנדר. יוצא
+  שגם ב-stack וגם ב-columns אותם 4 הכפתורים על הבאנר, רק כיוון
+  החצים שונה.
+
+  **קומיט:** `feat(tasks): wave 7 — quick controls on list banner (hide/color/reorder)`

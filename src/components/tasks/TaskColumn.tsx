@@ -11,6 +11,11 @@ import {
   Smile,
   Type,
   Link as LinkIcon,
+  EyeOff,
+  ChevronUp,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { useCreateTask, useDeleteTask } from "@/lib/hooks/useTasks";
@@ -45,6 +50,21 @@ interface TaskColumnProps {
   /** Per-user pref of which inline badges to render on each task row */
   display: RowDisplayPrefs;
   onOpenEdit: (taskId: string) => void;
+  /** Hide this list from the current view. Wired to the eye icon on the
+   *  banner. The "unassigned" pseudo-list doesn't get this control because
+   *  there's no list_id to toggle visibility on. */
+  onHide?: () => void;
+  /** Move this list one slot earlier or later in the visible order. -1 =
+   *  earlier (up in stack / right-of-current in RTL columns), +1 = later.
+   *  Disabled buttons render at the boundaries. */
+  onMoveInOrder?: (direction: -1 | 1) => void;
+  /** True if the list is the first or last *visible* list — used to disable
+   *  the corresponding arrow. */
+  isFirst?: boolean;
+  isLast?: boolean;
+  /** Layout the column lives in. Drives arrow direction: vertical chevrons
+   *  in stack, horizontal in columns. */
+  layout?: "stack" | "columns";
 }
 
 const COLOR_PRESETS = [
@@ -71,6 +91,11 @@ export function TaskColumn({
   divisor = 1,
   display,
   onOpenEdit,
+  onHide,
+  onMoveInOrder,
+  isFirst,
+  isLast,
+  layout = "columns",
 }: TaskColumnProps) {
   const createTask = useCreateTask();
   const deleteTaskM = useDeleteTask();
@@ -328,6 +353,70 @@ export function TaskColumn({
           <span className="text-ink-400" title="רשימה מקובעת">
             <Pin className="w-3.5 h-3.5" />
           </span>
+        )}
+
+        {/* Reorder arrows — vertical in stack, horizontal in columns. In RTL
+            columns, ChevronRight = "earlier in order" (i.e. towards the
+            leading edge), ChevronLeft = "later". */}
+        {canEdit && onMoveInOrder && (
+          <>
+            <button
+              type="button"
+              onClick={() => onMoveInOrder(-1)}
+              disabled={isFirst}
+              className="p-1 rounded-md text-ink-500 hover:text-ink-900 hover:bg-ink-100 disabled:opacity-30 disabled:cursor-not-allowed"
+              title={layout === "stack" ? "העבר למעלה" : "העבר ימינה"}
+              aria-label={layout === "stack" ? "העבר למעלה" : "העבר ימינה"}
+            >
+              {layout === "stack" ? (
+                <ChevronUp className="w-3.5 h-3.5" />
+              ) : (
+                <ChevronRight className="w-3.5 h-3.5" />
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => onMoveInOrder(1)}
+              disabled={isLast}
+              className="p-1 rounded-md text-ink-500 hover:text-ink-900 hover:bg-ink-100 disabled:opacity-30 disabled:cursor-not-allowed"
+              title={layout === "stack" ? "העבר למטה" : "העבר שמאלה"}
+              aria-label={layout === "stack" ? "העבר למטה" : "העבר שמאלה"}
+            >
+              {layout === "stack" ? (
+                <ChevronDown className="w-3.5 h-3.5" />
+              ) : (
+                <ChevronLeft className="w-3.5 h-3.5" />
+              )}
+            </button>
+          </>
+        )}
+
+        {/* Color circle — opens the same color-picker popover as the menu's
+            "שנה צבע כותרת" entry. Quick affordance for the most-used edit. */}
+        {canEdit && (
+          <button
+            type="button"
+            onClick={() => setColorOpen((v) => !v)}
+            className="shrink-0 w-4 h-4 rounded-full border border-ink-200 hover:scale-110 transition-transform"
+            style={{ backgroundColor: listColor }}
+            title="שנה צבע"
+            aria-label="שנה צבע רשימה"
+          />
+        )}
+
+        {/* Hide-from-view eye — instant access to "I don't want this list
+            cluttering my view today". The popover in TasksChrome can put it
+            back. The unassigned pseudo-list opts out (no list_id to hide). */}
+        {canEdit && onHide && (
+          <button
+            type="button"
+            onClick={onHide}
+            className="p-1 rounded-md text-ink-500 hover:text-ink-900 hover:bg-ink-100"
+            title="הסתר רשימה מהתצוגה"
+            aria-label="הסתר רשימה"
+          >
+            <EyeOff className="w-3.5 h-3.5" />
+          </button>
         )}
 
         {canEdit && (

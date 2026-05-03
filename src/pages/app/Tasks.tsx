@@ -671,7 +671,7 @@ export function Tasks() {
                 />
               </div>
               <div className="flex flex-col gap-3">
-                {visibleLists.map((list) => (
+                {visibleLists.map((list, idx) => (
                   <TaskColumn
                     key={list.id}
                     list={list}
@@ -680,6 +680,11 @@ export function Tasks() {
                     divisor={1}
                     display={rowDisplayPrefs}
                     onOpenEdit={setEditingTaskId}
+                    onHide={() => toggleListVisibility(list.id)}
+                    onMoveInOrder={(dir) => handleMoveListInOrder(list.id, dir)}
+                    isFirst={idx === 0}
+                    isLast={idx === visibleLists.length - 1}
+                    layout="stack"
                   />
                 ))}
                 {visibleLists.length === 0 && <EmptyListsHint lists={lists} />}
@@ -737,7 +742,7 @@ export function Tasks() {
 
                 <div className="flex-1 min-w-0 overflow-x-auto scrollbar-thin">
                   <div className="flex items-stretch gap-3 pb-2">
-                    {visibleLists.map((list) => (
+                    {visibleLists.map((list, idx) => (
                       <TaskColumn
                         key={list.id}
                         list={list}
@@ -749,6 +754,13 @@ export function Tasks() {
                         )}
                         display={rowDisplayPrefs}
                         onOpenEdit={setEditingTaskId}
+                        onHide={() => toggleListVisibility(list.id)}
+                        onMoveInOrder={(dir) =>
+                          handleMoveListInOrder(list.id, dir)
+                        }
+                        isFirst={idx === 0}
+                        isLast={idx === visibleLists.length - 1}
+                        layout="columns"
                       />
                     ))}
                     {visibleLists.length === 0 && (

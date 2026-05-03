@@ -817,7 +817,10 @@ async function callClaude(contextText: string): Promise<ClaudeReturn> {
   }
   const body = {
     model: ANTHROPIC_MODEL,
-    max_tokens: 3072,
+    // Generous budget — month view + 8 proposals can easily exceed 3K. We saw
+    // 8.3.1 briefs cap at 3072 with proposals[] empty because the AI ran out
+    // of room mid-response.
+    max_tokens: 8192,
     system: [
       // Cache the static system prompt so repeated calls are cheap.
       { type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } },

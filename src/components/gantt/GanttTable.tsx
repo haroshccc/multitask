@@ -422,16 +422,8 @@ function DependenciesCell({
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState("");
 
-  // Tasks already linked as predecessors — by id.
-  const linkedIds = useMemo(
-    () => new Set(deps.map((d) => d.depends_on_task_id)),
-    [deps]
-  );
-
-  // Choices: every visible task except this one and any that would create a
-  // direct cycle (the current task is already a predecessor of). Self-link
-  // and back-link prevention; deeper cycles aren't checked here — the DB
-  // enforces the schema, and the user gets immediate feedback.
+  // Choices: every visible task except this one. Linked predecessors are
+  // surfaced first so the most-relevant rows are at the top.
   const choices = useMemo(() => {
     const out: Array<{ id: string; title: string; isLinked: boolean; depId?: string }> = [];
     for (const [id, row] of visibleTaskMap) {

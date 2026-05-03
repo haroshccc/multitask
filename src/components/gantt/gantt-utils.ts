@@ -254,7 +254,54 @@ export function buildRows(
     }
   }
 
+  // Parent rollup — every task with at least one child has its bar
+  // *expanded* to wrap the children's span:
+  //   start = min(parent.start, children.start)
+  //   end   = max(parent.end,   children.end)
+  // If the parent itself was unscheduled, the rollup adopts the children's
+  // span and the parent stops being unscheduled. Bottom-up traversal so
+  // the rollup composes correctly through arbitrarily-deep nesting.
+  if (layer !== "events") {
+    const taskRowById = new Map<string, GanttRow>();
+    for (const r of rows) {
+      if (r.kind === "task" && r.task) taskRowById.set(r.task.id, r);
+    }
+    // Sort by depth descending so leaves are processed before their parents.
+    const byDepthDesc = [...rows].sort((a, b) => b.depth - a.depth);
+    for (const row of byDepthDesc) {
+      if (row.kind !== "task" || !row.task) continue;
+      const taskId = row.task.id;
+      const kids = (childrenOfFromTasks(tasks, taskId)) ?? [];
+      if (kids.length === 0) continue;
+      let minStart: Date | null = null;
+      let maxEnd: Date | null = null;
+      for (const c of kids) {
+        const cRow = taskRowById.get(c.id);
+        if (!cRow) continue;
+        if (cRow.unscheduled) continue;
+        if (!minStart || cRow.start < minStart) minStart = cRow.start;
+        if (!maxEnd || cRow.end > maxEnd) maxEnd = cRow.end;
+      }
+      if (!minStart || !maxEnd) continue;
+      if (row.unscheduled) {
+        // Parent had no schedule — adopt the children's span.
+        row.start = minStart;
+        row.end = maxEnd;
+        row.unscheduled = false;
+      } else {
+        // Parent has its own bar — expand it to encompass the children.
+        if (minStart < row.start) row.start = minStart;
+        if (maxEnd > row.end) row.end = maxEnd;
+      }
+    }
+  }
+
   return rows;
+}
+
+/** Direct children of a task in a tasks slice — used by the rollup pass. */
+function childrenOfFromTasks(tasks: Task[], parentId: string): Task[] {
+  return tasks.filter((t) => t.parent_task_id === parentId);
 }
 
 // Critical path --------------------------------------------------------------

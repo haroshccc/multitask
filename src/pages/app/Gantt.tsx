@@ -25,12 +25,14 @@ import {
   useCreateTaskList,
   useEvents,
   useListVisibility,
+  useProjects,
   useSetListVisibility,
   useTaskLists,
   useTasks,
   useUpdateEvent,
   useUpdateTask,
 } from "@/lib/hooks";
+import type { GanttSource } from "@/components/gantt/GanttChrome";
 
 export function Gantt() {
   const [zoom, setZoom] = useState<GanttZoom>("week");
@@ -76,6 +78,7 @@ export function Gantt() {
   const { data: tasks = [] } = useTasks(filters);
   const { data: deps = [] } = useAllTaskDependencies();
   const { data: lists = [] } = useTaskLists();
+  const { data: projects = [] } = useProjects();
   const { data: visibility } = useListVisibility("gantt");
   const setListVisibility = useSetListVisibility();
   const createTaskList = useCreateTaskList();
@@ -83,6 +86,32 @@ export function Gantt() {
     () => new Set(visibility?.hidden_list_ids ?? []),
     [visibility]
   );
+
+  /** Single-selection scope for the Gantt — "all", or one specific list,
+   *  or one specific project. When narrowed, the multi-list visibility
+   *  toggles below are bypassed; we just show that one workstream. */
+  const [source, setSource] = useState<GanttSource>(() => {
+    if (typeof window === "undefined") return { kind: "all" };
+    try {
+      const raw = localStorage.getItem("multitask.gantt.source");
+      if (!raw) return { kind: "all" };
+      const parsed = JSON.parse(raw) as GanttSource;
+      if (
+        parsed.kind === "all" ||
+        ((parsed.kind === "list" || parsed.kind === "project") &&
+          typeof parsed.id === "string")
+      ) {
+        return parsed;
+      }
+      return { kind: "all" };
+    } catch {
+      return { kind: "all" };
+    }
+  });
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem("multitask.gantt.source", JSON.stringify(source));
+  }, [source]);
 
   const updateTask = useUpdateTask();
   const updateEvent = useUpdateEvent();
@@ -102,12 +131,30 @@ export function Gantt() {
     to: windowEnd.toISOString(),
   });
 
+  /** When a specific source is picked we bypass the visibility toggles —
+   *  the user explicitly asked for one scope, so we don't need a second
+   *  layer of filtering on top. The multi-toggle popover stays available
+   *  and applies again when source.kind === "all". */
+  const projectListIds = useMemo(() => {
+    if (source.kind !== "project") return null;
+    return new Set(
+      lists.filter((l) => l.project_id === source.id).map((l) => l.id)
+    );
+  }, [lists, source]);
+
   const filteredTasks = useMemo(() => {
     return tasks.filter((t) => {
+      if (source.kind === "list") {
+        return t.task_list_id === source.id;
+      }
+      if (source.kind === "project") {
+        return !!t.task_list_id && !!projectListIds?.has(t.task_list_id);
+      }
+      // source.kind === "all" — fall back to the per-list hide toggles.
       if (t.task_list_id && hiddenLists.has(t.task_list_id)) return false;
       return true;
     });
-  }, [tasks, hiddenLists]);
+  }, [tasks, hiddenLists, source, projectListIds]);
 
   const rows = useMemo(
     () => buildRows(filteredTasks, events, layer, lists),
@@ -225,8 +272,20 @@ export function Gantt() {
         name: l.name,
         emoji: l.emoji,
         color: l.color,
+        project_id: l.project_id,
       })),
     [lists]
+  );
+
+  const unifiedProjects = useMemo(
+    () =>
+      projects.map((p) => ({
+        id: p.id,
+        name: p.name,
+        emoji: p.emoji ?? null,
+        color: p.color ?? null,
+      })),
+    [projects]
   );
 
   return (
@@ -243,6 +302,9 @@ export function Gantt() {
           hiddenListIds={hiddenLists}
           onToggleListVisibility={toggleListVisibility}
           onCreateList={handleCreateList}
+          projects={unifiedProjects}
+          source={source}
+          onSourceChange={setSource}
           filtersActiveCount={filtersActiveCount}
           filtersOpen={filtersOpen}
           onToggleFilters={() => setFiltersOpen((v) => !v)}
@@ -291,6 +353,7 @@ export function Gantt() {
             <div className="basis-1/3 min-w-0 shrink-0">
               <GanttTable
                 rows={visibleRows}
+                deps={deps}
                 criticalSet={criticalSet}
                 onRowClick={handleRowClick}
                 layout="side"
@@ -315,6 +378,7 @@ export function Gantt() {
           <div className="flex flex-col gap-2">
             <GanttTable
               rows={visibleRows}
+              deps={deps}
               criticalSet={criticalSet}
               onRowClick={handleRowClick}
               layout="stacked"

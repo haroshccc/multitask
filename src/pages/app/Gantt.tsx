@@ -22,6 +22,8 @@ import {
 } from "@/components/gantt/gantt-utils";
 import {
   useAllTaskDependencies,
+  useCreateProject,
+  useCreateTask,
   useCreateTaskList,
   useEvents,
   useListVisibility,
@@ -31,6 +33,7 @@ import {
   useTasks,
   useUpdateEvent,
   useUpdateTask,
+  useUpdateTaskList,
 } from "@/lib/hooks";
 import type { GanttSource } from "@/components/gantt/GanttChrome";
 
@@ -115,6 +118,9 @@ export function Gantt() {
 
   const updateTask = useUpdateTask();
   const updateEvent = useUpdateEvent();
+  const createProject = useCreateProject();
+  const updateTaskList = useUpdateTaskList();
+  const createTask = useCreateTask();
 
   const windowStart = useMemo(() => {
     const span = defaultSpanDays(zoom);
@@ -274,6 +280,98 @@ export function Gantt() {
     await createTaskList.mutateAsync({ name: name.trim(), kind: "custom" });
   };
 
+  /** Create a brand-new empty list and immediately scope the Gantt to it
+   *  (so the user lands in the empty table ready to add tasks). */
+  const handleCreateNewList = async () => {
+    const name = window.prompt("שם הרשימה החדשה:");
+    if (!name?.trim()) return;
+    const list = await createTaskList.mutateAsync({
+      name: name.trim(),
+      kind: "custom",
+    });
+    setSource({ kind: "list", id: list.id });
+  };
+
+  /** Create a new project plus its initial task list (since tasks live on
+   *  lists, not directly on projects). The Gantt scopes to the new project
+   *  so the user sees the empty container ready for tasks. */
+  const handleCreateNewProject = async () => {
+    const name = window.prompt("שם הפרויקט החדש:");
+    if (!name?.trim()) return;
+    const project = await createProject.mutateAsync({ name: name.trim() });
+    // Seed with a default task list so newly-created tasks have a home.
+    await createTaskList.mutateAsync({
+      name: name.trim(),
+      kind: "custom",
+      project_id: project.id,
+    });
+    setSource({ kind: "project", id: project.id });
+  };
+
+  /** Inline-create a task within the current scope. For a list scope the
+   *  task lands in that list. For a project scope it lands in the
+   *  project's first list (creating one if the project somehow has none).
+   *  No-op for "all" — the source picker doesn't expose this affordance
+   *  in that mode anyway. */
+  const handleCreateTaskInScope = async (title: string) => {
+    if (source.kind === "list") {
+      await createTask.mutateAsync({
+        title,
+        task_list_id: source.id,
+        parent_task_id: null,
+        status: "todo",
+        urgency: 0,
+      });
+      return;
+    }
+    if (source.kind === "project") {
+      // Find the first list of this project; create one if missing.
+      let targetList = lists.find((l) => l.project_id === source.id);
+      if (!targetList) {
+        const proj = projects.find((p) => p.id === source.id);
+        targetList = await createTaskList.mutateAsync({
+          name: proj?.name ?? "רשימה חדשה",
+          kind: "custom",
+          project_id: source.id,
+        });
+      }
+      await createTask.mutateAsync({
+        title,
+        task_list_id: targetList.id,
+        parent_task_id: null,
+        status: "todo",
+        urgency: 0,
+      });
+    }
+  };
+
+  /** Promote the currently-selected list into a project: create a new
+   *  project, attach the list to it via project_id, then re-scope the
+   *  Gantt to the project so the user sees the same tasks but now under
+   *  a project header. The list is preserved (no data loss). */
+  const handleConvertListToProject = async () => {
+    if (source.kind !== "list") return;
+    const list = lists.find((l) => l.id === source.id);
+    if (!list) return;
+    if (
+      !window.confirm(
+        `להפוך את הרשימה "${list.name}" לפרויקט?\nכל המשימות יישארו במקומן.`
+      )
+    ) {
+      return;
+    }
+    const project = await createProject.mutateAsync({
+      name: list.name,
+      color: list.color,
+      emoji: list.emoji,
+    });
+    await updateTaskList.mutateAsync({
+      listId: list.id,
+      patch: { project_id: project.id },
+    });
+    setSource({ kind: "project", id: project.id });
+  };
+
   const unifiedLists = useMemo(
     () =>
       lists.map((l) => ({
@@ -314,6 +412,9 @@ export function Gantt() {
           projects={unifiedProjects}
           source={source}
           onSourceChange={setSource}
+          onCreateNewList={handleCreateNewList}
+          onCreateNewProject={handleCreateNewProject}
+          onConvertListToProject={handleConvertListToProject}
           filtersActiveCount={filtersActiveCount}
           filtersOpen={filtersOpen}
           onToggleFilters={() => setFiltersOpen((v) => !v)}
@@ -366,6 +467,9 @@ export function Gantt() {
                 criticalSet={criticalSet}
                 onRowClick={handleRowClick}
                 layout="side"
+                onCreateTask={
+                  source.kind === "all" ? undefined : handleCreateTaskInScope
+                }
               />
             </div>
             <div className="basis-2/3 min-w-0 grow">
@@ -391,6 +495,9 @@ export function Gantt() {
               criticalSet={criticalSet}
               onRowClick={handleRowClick}
               layout="stacked"
+              onCreateTask={
+                source.kind === "all" ? undefined : handleCreateTaskInScope
+              }
             />
             <GanttGrid
               rows={visibleRows}

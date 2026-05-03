@@ -26,6 +26,10 @@ interface GanttTableProps {
    *  vertical scroll so the Gantt below stays in view. When `side`, the
    *  table grows to fit the rows (the surrounding flex handles overflow). */
   layout: "side" | "stacked";
+  /** Add a task with the given title to the current scope. When provided
+   *  the table renders an inline + new row at the bottom; omitted when
+   *  the scope is "all" because there's no obvious destination list. */
+  onCreateTask?: (title: string) => Promise<void> | void;
 }
 
 /**
@@ -47,10 +51,12 @@ export function GanttTable({
   criticalSet,
   onRowClick,
   layout,
+  onCreateTask,
 }: GanttTableProps) {
   const updateTask = useUpdateTask();
   const createDep = useCreateTaskDependency();
   const deleteDep = useDeleteTaskDependency();
+  const [newTitle, setNewTitle] = useState("");
 
   // Index dependencies by task — for each task id, the list of tasks it
   // depends on (i.e. predecessors that must finish first).
@@ -306,6 +312,44 @@ export function GanttTable({
                 </tr>
               );
             })}
+            {/* Inline + new task row — only shown when the scope picks a
+                concrete destination (a list or a project). With "all"
+                selected we don't know which list a new task should land
+                in, so the affordance is suppressed. Enter or blur commits;
+                the input clears so the user can keep typing rows. */}
+            {onCreateTask && (
+              <tr
+                className="border-b border-ink-150 bg-primary-50/40 hover:bg-primary-50"
+                style={{ height: ROW_HEIGHT }}
+              >
+                <td className="px-2 py-1" colSpan={7}>
+                  <div className="flex items-center gap-2">
+                    <span className="text-primary-600 text-sm">+</span>
+                    <input
+                      value={newTitle}
+                      onChange={(e) => setNewTitle(e.target.value)}
+                      onKeyDown={async (e) => {
+                        if (e.key === "Enter") {
+                          const trimmed = newTitle.trim();
+                          if (!trimmed) return;
+                          await onCreateTask(trimmed);
+                          setNewTitle("");
+                        }
+                        if (e.key === "Escape") setNewTitle("");
+                      }}
+                      onBlur={async () => {
+                        const trimmed = newTitle.trim();
+                        if (!trimmed) return;
+                        await onCreateTask(trimmed);
+                        setNewTitle("");
+                      }}
+                      placeholder="הוספת משימה חדשה..."
+                      className="flex-1 min-w-0 bg-transparent border-0 outline-none text-sm placeholder:text-ink-400 py-0.5"
+                    />
+                  </div>
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>

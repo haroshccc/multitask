@@ -3338,3 +3338,59 @@ Hero: "החלל לחשוב. החלל לעשות."
   יבוא בגל המשך אם המשתמשת תבקש.
 
   **קומיט:** `feat(calendar): wave 8 — deadline marker as 15-min ghost row`
+
+- **2026-05-03 — מסך גאנט, גל 9 שלב 1: טבלה ערוכה לצד הגאנט.**
+
+  **טריגר:** המשתמשת ביקשה להפוך את ה-Gantt לטבלת עריכה דמוית
+  MS Project / Monday — להוסיף עמודות ערוכות בצד או מעל ה-bars,
+  לשמור את כל יכולות הגאנט הקיימות (drag, resize, modal, dependency
+  arrows). היא רוצה שני סידורי תצוגה: 1/3 טבלה לצד 2/3 גאנט, או
+  טבלה במלא הרוחב מעל גאנט במלא הרוחב.
+
+  **מה נפרס בשלב הראשון (9.1+9.2):**
+
+  **9.1 — Layout toggle.** ב-`GanttChrome` שני כפתורים חדשים
+  (Columns2 / Rows2 מ-lucide) לבחירה בין `"side"` ו-`"stacked"`.
+  ה-state נשמר ב-`localStorage` כ-`multitask.gantt.tableLayout`.
+  Default = `"side"`.
+
+  ב-`Gantt.tsx`:
+  - `sidebarCollapsed=true` → רנדור הישן (טבלה מוסתרת לחלוטין,
+    timeline במלא הרוחב). זה היה ועדיין נשאר — toggle נפרד.
+  - `tableLayout="side"` → flex-row של [GanttTable basis-1/3,
+    GanttGrid basis-2/3 grow]. ב-RTL זה אומר שהטבלה ב-end (ימין)
+    וה-Gantt ב-start (שמאל).
+  - `tableLayout="stacked"` → flex-col של [GanttTable, GanttGrid]
+    כאשר ה-table עם `max-h-[40vh]` ו-overflow-auto פנימי כדי לא
+    להבריח את ה-Gantt מתחת לקיפול.
+
+  ב-`GanttGrid` נוסף prop `hideInternalSidebar` — כשtrue, ה-sidebar
+  הפנימי לא נרנדר (כי GanttTable חיצוני תופס את מקומו).
+
+  **9.2 — GanttTable component (חדש).** טבלה של 6 עמודות עם inline
+  edit, מסונכרנת אנכית עם ה-bars (אותו `ROW_HEIGHT=40`, אותו
+  `HEADER_HEIGHT=64`):
+  1. **משימה** — input של כותרת, blur-commit, Enter/Escape.
+     נקודה צבעונית ב-leading edge פותחת את ה-modal המלא.
+  2. **דחיפות** — `UrgencyMiniChip` (3-bar) עם popup בחירה 0/1/2/3.
+  3. **סטטוס** — כרגע label בלבד (popover dropdown יבוא בwave
+     הבא, צריך useMyTaskStatuses).
+  4. **תזמון** — `DateTimeCell` (`<input type="datetime-local">`)
+     עם המרה ל-local-time format ובחזרה ל-ISO. blur-commit.
+  5. **דד-ליין** — אותו DateTimeCell, מקושר ל-deadline_at.
+  6. **משך (ד׳)** — `NumberCell`, `<input type="number">`.
+
+  כל edit עטוף ב-`pushUndo` עם prev/next snapshot של השדה הספציפי.
+  Phase rows מקבלות font חזק + רקע ink-50 + border-start בצבע ה-list
+  (אותו עיצוב כמו sidebar הקיים). Critical-path rows: tint אדמדם.
+  Event rows: ללא inline edit (נפתחות ב-EventEditModal).
+
+  **שלב 1 שומר:** TaskEditModal, EventEditModal, drag/resize של
+  bars, dependency arrows, critical path tint, list visibility,
+  filters, כל ה-chrome הקיים.
+
+  **שלב 2 (גל 9.3-9.6) ממתין לבדיקה ופידבק:** phase rollup ויזואלי
+  עם start/end auto-computed, list/project selector + יצירת טיוטה,
+  המרה list↔project, column manager עם custom fields.
+
+  **קומיט:** `feat(gantt): wave 9 stage 1 — editable table + side/stacked layout toggle`

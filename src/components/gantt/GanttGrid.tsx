@@ -34,6 +34,10 @@ interface GanttGridProps {
    *  gives the timeline full width). */
   sidebarCollapsed?: boolean;
   onToggleSidebar?: () => void;
+  /** When true, the internal sidebar is suppressed entirely — the parent
+   *  is rendering an external `GanttTable` instead and only wants the
+   *  timeline. */
+  hideInternalSidebar?: boolean;
 }
 
 export function GanttGrid({
@@ -48,6 +52,7 @@ export function GanttGrid({
   onCreateAt,
   sidebarCollapsed,
   onToggleSidebar,
+  hideInternalSidebar,
 }: GanttGridProps) {
   const pxPerDay = pxPerDayFn(zoom);
   const totalDays = Math.max(
@@ -90,8 +95,10 @@ export function GanttGrid({
   return (
     <div className="card overflow-hidden">
       <div className="flex" style={{ minHeight: timelineHeight + 64 }}>
-        {/* Left column: task rows — can be collapsed to a thin strip */}
-        {sidebarCollapsed ? (
+        {/* Left column: task rows — can be collapsed to a thin strip.
+            Suppressed entirely when the parent renders an external
+            GanttTable (hideInternalSidebar=true). */}
+        {hideInternalSidebar ? null : sidebarCollapsed ? (
           <button
             onClick={onToggleSidebar}
             className="shrink-0 border-e border-ink-200 bg-ink-50/60 hover:bg-ink-100 w-6 flex items-center justify-center text-ink-500"

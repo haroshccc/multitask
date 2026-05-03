@@ -3484,3 +3484,36 @@ Hero: "החלל לחשוב. החלל לעשות."
   - הdropdown זהה לקודם (כל המשימות / רשימות / פרויקטים).
 
   **קומיט:** `feat(gantt): wave 9 stage 2.1 — show unscheduled tasks + row tints + prominent source picker`
+
+- **2026-05-03 — מסך גאנט, גל 9.7: Parent rollup אוטומטי.**
+
+  **טריגר:** המשתמשת:
+  > "משימת אם תלויה בתת משימות שלה אוטומטית. אם תת משימה ב מתוזמנת
+  >  להתחיל לפני משימה א, משימה א צריכה להסתנכרן ולהתחיל בזמן ב.
+  >  וכך גם בסיום."
+
+  **מימוש (`gantt-utils.ts/buildRows` — pass שני):**
+
+  אחרי שכל ה-rows נבנו, עוברים עליהם **מעלים לכיוון השורש** (sort
+  לפי `depth` יורד). לכל row של task עם children:
+  - חישוב `minStart = min(children[*].start)` ו-`maxEnd = max(children[*].end)`.
+  - children שהם `unscheduled` נדלגים (אין להם timing אמיתי).
+  - אם **parent עצמו unscheduled** → מאמץ את ה-rollup, מסיר את הflag.
+  - אם **parent יש לו timing משלו** → מרחיב כך שיכלול גם את ה-children
+    (start = min(parent, rollup), end = max(parent, rollup)).
+
+  הbottom-up traversal מבטיח שcomposite מורכב נכון: nested phase של
+  3 שכבות מתעדכנת מהעלים ועולה. ה-`isPhase` flag נשאר רלוונטי
+  לעיצוב (font חזק, color band) — הrollup חל על **כל** parent עם
+  children, לא רק phases.
+
+  **השפעה ויזואלית:**
+  - Gantt bar של parent **עוטף** את ה-bars של ה-children (אופקית).
+  - כששוחת תת-משימה אחורה (drag), ה-bar של parent נמתח אחורה אוטומטית.
+  - כששוחת תת-משימה קדימה, ה-bar של parent נמתח קדימה.
+
+  **לא נכתב ל-DB:** ה-rollup הוא ויזואלי-בלבד. ה-`scheduled_at` /
+  `duration_minutes` של parent ב-DB נשארים כמו שהמשתמשת קבעה (או
+  null). זה מונע race conditions ולoops.
+
+  **קומיט:** `feat(gantt): wave 9.7 — parent task auto-rollup from children`

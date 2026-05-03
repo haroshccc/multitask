@@ -27,6 +27,7 @@ import {
 } from "@/components/filters/FilterBar";
 import { TaskEditModal } from "@/components/tasks/TaskEditModal";
 import { TaskColumn } from "@/components/tasks/TaskColumn";
+import { BulkActionsToolbar } from "@/components/tasks/BulkActionsToolbar";
 import { ArchiveModal } from "@/components/tasks/ArchiveModal";
 import { RowDisplaySettingsModal } from "@/components/tasks/RowDisplaySettingsModal";
 import { StatsPanel } from "@/components/tasks/StatsPanel";
@@ -38,6 +39,7 @@ import {
   useTaskLists,
   useMoveTaskToList,
   useSetTaskParent,
+  useReorderTasks,
   useListVisibility,
   useSetListVisibility,
   useCreateTaskList,
@@ -46,6 +48,7 @@ import {
   useRowDisplayPrefs,
 } from "@/lib/hooks";
 import { pushUndo } from "@/lib/undo/store";
+import { useTaskSelectionStore } from "@/lib/selection/store";
 import type { Task, TaskList } from "@/lib/types/domain";
 
 export function Tasks() {
@@ -57,6 +60,7 @@ export function Tasks() {
   const createTaskList = useCreateTaskList();
   const moveToList = useMoveTaskToList();
   const setParent = useSetTaskParent();
+  const reorderTasks = useReorderTasks();
 
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [pageMenuOpen, setPageMenuOpen] = useState(false);
@@ -167,6 +171,38 @@ export function Tasks() {
     });
   }, [lists, hiddenSet]);
 
+  // Flatten visible trees into an ordered list of task ids — used by the
+  // multi-select store to resolve Shift+click range selection across rows.
+  // Unassigned first, then visible lists in their visual order; each list is
+  // depth-first (children right after their parent).
+  const orderedTaskIds = useMemo(() => {
+    const out: string[] = [];
+    const flatten = (nodes: TaskTreeNode[]) => {
+      for (const n of nodes) {
+        out.push(n.task.id);
+        if (n.children.length > 0) flatten(n.children);
+      }
+    };
+    flatten(listTrees.get("__unassigned__") ?? []);
+    for (const list of visibleLists) {
+      flatten(listTrees.get(list.id) ?? []);
+    }
+    return out;
+  }, [listTrees, visibleLists]);
+
+  useEffect(() => {
+    useTaskSelectionStore.getState().setOrderedIds(orderedTaskIds);
+  }, [orderedTaskIds]);
+
+  // Esc clears selection — common keyboard convention. Anywhere in the screen.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") useTaskSelectionStore.getState().clear();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } })
   );
@@ -230,10 +266,15 @@ export function Tasks() {
       | undefined;
     const overData = over.data.current as
       | { type: "list"; listId: string | null }
-      | { type: "task-drop"; taskId: string; listId: string | null }
+      | { type: "task-nest"; taskId: string; listId: string | null }
+      | {
+          type: "task-before" | "task-after";
+          taskId: string;
+          listId: string | null;
+          parentTaskId: string | null;
+        }
       | undefined;
     if (!activeData || !overData) return;
-
     if (activeData.type !== "task") return;
 
     if (overData.type === "list") {
@@ -276,7 +317,7 @@ export function Tasks() {
       return;
     }
 
-    if (overData.type === "task-drop") {
+    if (overData.type === "task-nest") {
       // Don't allow dropping a task on itself.
       if (overData.taskId === activeData.taskId) return;
       // Don't allow dropping a task on one of its own descendants.
@@ -285,6 +326,8 @@ export function Tasks() {
       const prevParentId = activeData.parentTaskId;
       const nextListId = overData.listId;
       const nextParentId = overData.taskId;
+      // No-op: already a child of this parent in this list.
+      if (prevParentId === nextParentId && prevListId === nextListId) return;
       setParent.mutate({ taskId: activeData.taskId, parentId: nextParentId });
       if (prevListId !== nextListId) {
         moveToList.mutate({
@@ -311,6 +354,105 @@ export function Tasks() {
               listId: nextListId,
             });
           }
+        },
+      });
+      return;
+    }
+
+    if (overData.type === "task-before" || overData.type === "task-after") {
+      // Reorder as sibling — same list + same parent as the target row.
+      if (overData.taskId === activeData.taskId) return;
+      if (isDescendant(tasks, overData.taskId, activeData.taskId)) return;
+
+      const targetTask = tasks.find((t) => t.id === overData.taskId);
+      if (!targetTask) return;
+
+      // Siblings in the destination scope, ordered by sort_order.
+      const siblings = tasks
+        .filter(
+          (t) =>
+            t.task_list_id === overData.listId &&
+            (t.parent_task_id ?? null) === (overData.parentTaskId ?? null) &&
+            t.id !== activeData.taskId
+        )
+        .sort((a, b) => a.sort_order - b.sort_order);
+      const targetIdx = siblings.findIndex((s) => s.id === overData.taskId);
+      if (targetIdx === -1) return;
+
+      let newSortOrder: number;
+      if (overData.type === "task-before") {
+        const prevSibling = siblings[targetIdx - 1];
+        newSortOrder = prevSibling
+          ? (prevSibling.sort_order + targetTask.sort_order) / 2
+          : targetTask.sort_order - 1;
+      } else {
+        const nextSibling = siblings[targetIdx + 1];
+        newSortOrder = nextSibling
+          ? (targetTask.sort_order + nextSibling.sort_order) / 2
+          : targetTask.sort_order + 1;
+      }
+
+      const prevListId = activeData.listId;
+      const prevParentId = activeData.parentTaskId;
+      const nextListId = overData.listId;
+      const nextParentId = overData.parentTaskId;
+
+      // Cross-scope move + reorder. Same-scope no-op handled by the active
+      // task being filtered out of `siblings` above, but we still re-rank.
+      const activeTask = tasks.find((t) => t.id === activeData.taskId);
+      const prevSortOrder = activeTask?.sort_order ?? 0;
+
+      if (prevParentId !== nextParentId) {
+        setParent.mutate({
+          taskId: activeData.taskId,
+          parentId: nextParentId,
+        });
+      }
+      if (prevListId !== nextListId) {
+        moveToList.mutate({
+          taskId: activeData.taskId,
+          listId: nextListId,
+        });
+      }
+      reorderTasks.mutate([
+        { id: activeData.taskId, sort_order: newSortOrder },
+      ]);
+
+      pushUndo({
+        description: "סידור מחדש",
+        undo: () => {
+          if (prevParentId !== nextParentId) {
+            setParent.mutate({
+              taskId: activeData.taskId,
+              parentId: prevParentId,
+            });
+          }
+          if (prevListId !== nextListId) {
+            moveToList.mutate({
+              taskId: activeData.taskId,
+              listId: prevListId,
+            });
+          }
+          reorderTasks.mutate([
+            { id: activeData.taskId, sort_order: prevSortOrder },
+          ]);
+        },
+        redo: () => {
+          if (prevParentId !== nextParentId) {
+            setParent.mutate({
+              taskId: activeData.taskId,
+              parentId: nextParentId,
+            });
+          }
+          if (prevListId !== nextListId) {
+            moveToList.mutate({
+              taskId: activeData.taskId,
+              listId: nextListId,
+            });
+          }
+          reorderTasks.mutate([
+            { id: activeData.taskId, sort_order: newSortOrder },
+          ]);
         },
       });
       return;
@@ -580,6 +722,8 @@ export function Tasks() {
       )}
 
       {statusesOpen && <StatusesModal onClose={() => setStatusesOpen(false)} />}
+
+      <BulkActionsToolbar allTasks={tasks} />
     </ScreenScaffold>
   );
 }

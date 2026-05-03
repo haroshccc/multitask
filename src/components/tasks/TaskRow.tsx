@@ -34,6 +34,10 @@ import { useTimeUnit, formatSeconds } from "@/lib/hooks/useTimeUnit";
 import { useMyTaskStatuses } from "@/lib/hooks/useUserTaskStatuses";
 import type { RowDisplayPrefs } from "@/lib/hooks/useRowDisplayPrefs";
 import { pushUndo } from "@/lib/undo/store";
+import {
+  useIsTaskSelected,
+  useTaskSelectionStore,
+} from "@/lib/selection/store";
 import { Link as LinkIcon, Calendar as CalendarIcon } from "lucide-react";
 import { PlanVsActualBar } from "@/components/tasks/PlanVsActualBar";
 import type { Task } from "@/lib/types/domain";
@@ -262,8 +266,13 @@ export function TaskRow({
     onRequestFocus(newTask.id);
   };
 
-  // DnD — the row is both a drag source AND a drop target
-  // (dropping a task onto a row makes it a child of that row).
+  // DnD — the row is both a drag source AND three drop targets:
+  //   - top 25% strip → drop *before* this row (sibling above)
+  //   - middle 50% → nest as a child of this row
+  //   - bottom 25% → drop *after* this row (sibling below)
+  // Three zones lets the user reorder siblings AND nest with the same drag,
+  // disambiguated only by where they release. A visual indicator (top/bottom
+  // line, or full-row tint for nest) shows what will happen before they let go.
   const {
     attributes,
     listeners,
@@ -274,27 +283,54 @@ export function TaskRow({
     data: { type: "task", taskId: task.id, listId, parentTaskId },
   });
 
-  const { setNodeRef: setDropRef, isOver } = useDroppable({
-    id: `task-drop:${task.id}`,
-    data: { type: "task-drop", taskId: task.id, listId },
+  const { setNodeRef: setBeforeRef, isOver: isOverBefore } = useDroppable({
+    id: `task-before:${task.id}`,
+    data: {
+      type: "task-before",
+      taskId: task.id,
+      listId,
+      parentTaskId,
+    },
   });
 
-  // Combine refs
-  const setRef = (el: HTMLDivElement | null) => {
-    setDragRef(el);
-    setDropRef(el);
-  };
+  const { setNodeRef: setNestRef, isOver: isOverNest } = useDroppable({
+    id: `task-nest:${task.id}`,
+    data: { type: "task-nest", taskId: task.id, listId },
+  });
+
+  const { setNodeRef: setAfterRef, isOver: isOverAfter } = useDroppable({
+    id: `task-after:${task.id}`,
+    data: {
+      type: "task-after",
+      taskId: task.id,
+      listId,
+      parentTaskId,
+    },
+  });
 
   const isPhase = task.is_phase === true;
+
+  const isSelected = useIsTaskSelected(task.id);
+
+  const handleSelectClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const store = useTaskSelectionStore.getState();
+    if (e.shiftKey) {
+      store.shiftSelect(task.id);
+    } else {
+      store.toggle(task.id);
+    }
+  };
 
   return (
     <>
       <div
-        ref={setRef}
+        ref={setDragRef}
         className={cn(
-          "group flex items-start gap-1.5 rounded-md transition-colors px-1.5 py-1 hover:bg-ink-50",
+          "group relative flex items-start gap-1.5 rounded-md transition-colors px-1.5 py-1 hover:bg-ink-50",
           isDragging && "opacity-40",
-          isOver && "bg-primary-50 ring-1 ring-primary-300",
+          isOverNest && "bg-primary-50 ring-1 ring-primary-300",
+          isSelected && "bg-primary-50/60 ring-1 ring-primary-300",
           // Phase rows get a colored stripe on the leading edge, slightly
           // larger font, and a subtle background tint to read as a
           // group-header visually.
@@ -308,6 +344,65 @@ export function TaskRow({
             : {}),
         }}
       >
+        {/* Drop zones — three invisible strips. pointer-events:none so they
+            don't intercept clicks on the row itself; dnd-kit detects collisions
+            by element rect, not pointer events. */}
+        <div
+          ref={setBeforeRef}
+          className="absolute top-0 inset-x-0 h-1/4 pointer-events-none"
+          aria-hidden
+        />
+        <div
+          ref={setNestRef}
+          className="absolute top-1/4 inset-x-0 h-1/2 pointer-events-none"
+          aria-hidden
+        />
+        <div
+          ref={setAfterRef}
+          className="absolute bottom-0 inset-x-0 h-1/4 pointer-events-none"
+          aria-hidden
+        />
+        {/* Visual cue: 2px colored line at the top/bottom edge while a drag
+            hovers in the corresponding zone. */}
+        {isOverBefore && (
+          <div
+            className="absolute top-0 inset-x-1 h-0.5 bg-primary-500 rounded-full pointer-events-none"
+            aria-hidden
+          />
+        )}
+        {isOverAfter && (
+          <div
+            className="absolute bottom-0 inset-x-1 h-0.5 bg-primary-500 rounded-full pointer-events-none"
+            aria-hidden
+          />
+        )}
+        {/* Selection checkbox — appears on hover, or always when selected.
+            Cmd/Ctrl+click also works on the row directly via the title input
+            (handled in handleKeyDown), but the visible checkbox is the
+            primary affordance. Shift+click extends a range from the anchor. */}
+        <button
+          type="button"
+          onClick={handleSelectClick}
+          aria-label={isSelected ? "בטל סימון" : "סמן משימה"}
+          aria-pressed={isSelected}
+          className={cn(
+            "shrink-0 mt-0.5 w-4 h-4 rounded-sm border-2 flex items-center justify-center transition-all",
+            isSelected
+              ? "bg-primary-500 border-primary-500 text-white opacity-100"
+              : "border-ink-300 hover:border-primary-500 opacity-0 group-hover:opacity-100"
+          )}
+        >
+          {isSelected && (
+            <svg viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3">
+              <path
+                fillRule="evenodd"
+                d="M16.704 5.29a1 1 0 010 1.415l-8 8a1 1 0 01-1.415 0l-4-4a1 1 0 011.415-1.414L8 12.586l7.29-7.293a1 1 0 011.415 0z"
+                clipRule="evenodd"
+              />
+            </svg>
+          )}
+        </button>
+
         {/* Drag handle */}
         <button
           {...attributes}

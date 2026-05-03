@@ -3074,3 +3074,52 @@ Hero: "החלל לחשוב. החלל לעשות."
   גל 4 (`deadline_at` column + UI — דד-ליין נפרד מ-scheduled_at).
 
   **קומיט:** `feat(tasks): wave 1 — urgency default, portal menu, sticky stack, hover, unattached fix`
+
+- **2026-05-03 — מסך משימות, גל 2: drag חכם + multi-select bulk.**
+
+  **טריגר:** המשתמשת ביקשה (1) drag שמבדיל בין reorder לבין nest בלי
+  shift או כפתורים מיוחדים, ו-(2) יכולת לסמן כמה משימות בבת אחת
+  ולהפעיל פעולות עליהן ביחד.
+
+  **2.1 — Three-zone drag.** במקום droppable יחיד שתמיד עושה nest,
+  כל TaskRow עכשיו חולק לשלושה אזורי-הצבה:
+  - 25% עליון → drop **לפני** השורה (sibling above) — קו 2px primary
+    בקצה העליון של השורה כאינדיקטור
+  - 50% אמצעי → **תת-משימה** של השורה (nest) — bg-primary-50 + ring
+    סביב כל השורה
+  - 25% תחתון → drop **אחרי** השורה (sibling below) — קו תחתון
+
+  שלושה droppables נפרדים (`task-before:` / `task-nest:` / `task-after:`)
+  עם 3 absolute strips (pointer-events:none כדי לא לחסום קליקים).
+  `handleDragEnd` ב-Tasks.tsx מטפל בכל סוג: nest כמו קודם
+  (`setParent`/`moveToList`), ו-before/after מחשבים sort_order חדש
+  כ-midpoint בין השכן לפני/אחרי הtarget. ה-double-precision של ה-DB
+  לעמודה מאפשר אלפי midpoints בלי overflow. כולם עטופים ב-`pushUndo`
+  כך ש-Ctrl+Z מחזיר גם list, גם parent, וגם sort_order.
+
+  **2.2 — Selection store.** Zustand store חדש ב-`src/lib/selection/
+  store.ts` עם `selected: Set<string>`, `anchorId`, ו-`orderedIds`.
+  פעולות: `toggle`, `selectOnly`, `shiftSelect` (אם יש anchor — בוחר
+  את כל ה-IDs ברנגה לפי orderedIds), ו-`clear`. ה-`orderedIds` מנופצף
+  ב-Tasks.tsx מתוך `listTrees` בסדר התצוגתי (Unassigned → לפי
+  visibleLists → depth-first בכל list) ומועבר ל-store ב-useEffect.
+  Esc מנקה בחירה (window listener).
+
+  ב-TaskRow נוסף checkbox קטן ב-leading edge של השורה — שקוף עד
+  hover, רואים אותו מלא כשהשורה נבחרת. Click=toggle, Shift+click=
+  range. שורה נבחרת מקבלת `bg-primary-50/60 ring-1 ring-primary-300`.
+
+  **2.3 — BulkActionsToolbar (חדש).** סרגל קבוע בתחתית המסך שמופיע
+  כשיש ≥1 בחירה. מציג ספירה + פעולות: דחיפות (אותו popup של 0/1/2/3
+  כמו row UrgencyChip), תזמון (datetime-local + "הסר תזמון"),
+  העברה לרשימה (rendezvous עם רשימת כל הרשימות + "לא משויכת"),
+  סימון הושלם, ומחיקה (עם confirmation modal). כפתור X מנקה בחירה.
+  כל פעולה batch-mutate עם `Promise.all` לוגי (parallel `mutate()`
+  calls), ועטופה ב-`pushUndo` יחיד עם `description` שכולל את הספירה
+  (למשל "שינוי דחיפות (5)"). ה-undo משמור snapshot map id→prev value
+  לכל משימה כדי להחזיר כל אחת ל-state המקורי שלה.
+
+  Complete ו-Delete מנקים את הבחירה אחרי ביצוע (ההמשך של עבודה על
+  אותן משימות לא הגיוני). שאר הפעולות שומרות את הבחירה.
+
+  **קומיט:** `feat(tasks): wave 2 — three-zone drag + multi-select with bulk toolbar`

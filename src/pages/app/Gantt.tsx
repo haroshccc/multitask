@@ -9,6 +9,7 @@ import { TaskEditModal } from "@/components/tasks/TaskEditModal";
 import { EventEditModal } from "@/components/calendar/EventEditModal";
 import { GanttChrome } from "@/components/gantt/GanttChrome";
 import { GanttGrid } from "@/components/gantt/GanttGrid";
+import { GanttTable } from "@/components/gantt/GanttTable";
 import {
   type GanttLayer,
   type GanttRow,
@@ -56,6 +57,20 @@ export function Gantt() {
       String(sidebarCollapsed)
     );
   }, [sidebarCollapsed]);
+
+  /** Editable-table layout: "side" = table 1/3 + Gantt 2/3 next to each
+   *  other (RTL flow puts table on the right, Gantt on the left).
+   *  "stacked" = table full width on top, Gantt full width below. The
+   *  user picks per their workflow; persisted in localStorage. */
+  const [tableLayout, setTableLayout] = useState<"side" | "stacked">(() => {
+    if (typeof window === "undefined") return "side";
+    const raw = localStorage.getItem("multitask.gantt.tableLayout");
+    return raw === "stacked" ? "stacked" : "side";
+  });
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem("multitask.gantt.tableLayout", tableLayout);
+  }, [tableLayout]);
 
   const [filters, setFilters] = useFiltersFromUrl();
   const { data: tasks = [] } = useTasks(filters);
@@ -235,6 +250,8 @@ export function Gantt() {
           onToggleCriticalOnly={() => setShowCriticalOnly((v) => !v)}
           sidebarCollapsed={sidebarCollapsed}
           onToggleSidebar={() => setSidebarCollapsed((v) => !v)}
+          tableLayout={tableLayout}
+          onTableLayoutChange={setTableLayout}
         />
 
         {filtersOpen && (
@@ -247,19 +264,75 @@ export function Gantt() {
           />
         )}
 
-        <GanttGrid
-          rows={visibleRows}
-          deps={deps}
-          zoom={zoom}
-          windowStart={windowStart}
-          windowEnd={windowEnd}
-          criticalSet={criticalSet}
-          onRowClick={handleRowClick}
-          onBarChange={handleBarChange}
-          onCreateAt={handleGanttCreateAt}
-          sidebarCollapsed={sidebarCollapsed}
-          onToggleSidebar={() => setSidebarCollapsed((v) => !v)}
-        />
+        {/* Table + Gantt layout. The user picks side-by-side (default) or
+            stacked. In side mode RTL puts the table on the right and Gantt
+            on the left at a 1:2 width ratio. In stacked mode each takes
+            full width with the table above. The internal sidebar of
+            GanttGrid is suppressed in both cases — the external
+            GanttTable replaces it. The legacy "collapse sidebar" toggle
+            still hides the table entirely (useful when the user wants the
+            timeline at full width). */}
+        {sidebarCollapsed ? (
+          <GanttGrid
+            rows={visibleRows}
+            deps={deps}
+            zoom={zoom}
+            windowStart={windowStart}
+            windowEnd={windowEnd}
+            criticalSet={criticalSet}
+            onRowClick={handleRowClick}
+            onBarChange={handleBarChange}
+            onCreateAt={handleGanttCreateAt}
+            sidebarCollapsed={sidebarCollapsed}
+            onToggleSidebar={() => setSidebarCollapsed((v) => !v)}
+          />
+        ) : tableLayout === "side" ? (
+          <div className="flex gap-2 items-stretch">
+            <div className="basis-1/3 min-w-0 shrink-0">
+              <GanttTable
+                rows={visibleRows}
+                criticalSet={criticalSet}
+                onRowClick={handleRowClick}
+                layout="side"
+              />
+            </div>
+            <div className="basis-2/3 min-w-0 grow">
+              <GanttGrid
+                rows={visibleRows}
+                deps={deps}
+                zoom={zoom}
+                windowStart={windowStart}
+                windowEnd={windowEnd}
+                criticalSet={criticalSet}
+                onRowClick={handleRowClick}
+                onBarChange={handleBarChange}
+                onCreateAt={handleGanttCreateAt}
+                hideInternalSidebar
+              />
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            <GanttTable
+              rows={visibleRows}
+              criticalSet={criticalSet}
+              onRowClick={handleRowClick}
+              layout="stacked"
+            />
+            <GanttGrid
+              rows={visibleRows}
+              deps={deps}
+              zoom={zoom}
+              windowStart={windowStart}
+              windowEnd={windowEnd}
+              criticalSet={criticalSet}
+              onRowClick={handleRowClick}
+              onBarChange={handleBarChange}
+              onCreateAt={handleGanttCreateAt}
+              hideInternalSidebar
+            />
+          </div>
+        )}
       </div>
 
       <TaskEditModal

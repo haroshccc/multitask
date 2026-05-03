@@ -13,6 +13,8 @@ import {
   Calendar as CalendarIcon,
   PanelRightClose,
   PanelRightOpen,
+  Columns2,
+  Rows2,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { ListIcon } from "@/components/tasks/list-icons";
@@ -54,6 +56,11 @@ interface GanttChromeProps {
   // Sidebar (task-name column) collapse
   sidebarCollapsed: boolean;
   onToggleSidebar: () => void;
+
+  // Table-vs-Gantt layout. "side" = table 1/3 right + Gantt 2/3 left.
+  // "stacked" = table full width on top, Gantt full width below.
+  tableLayout: "side" | "stacked";
+  onTableLayoutChange: (l: "side" | "stacked") => void;
 
   className?: string;
 }
@@ -104,6 +111,8 @@ export function GanttChrome({
   onToggleCriticalOnly,
   sidebarCollapsed,
   onToggleSidebar,
+  tableLayout,
+  onTableLayoutChange,
   className,
 }: GanttChromeProps) {
   const step = (n: 1 | -1) => {
@@ -295,6 +304,41 @@ export function GanttChrome({
           }
           label={sidebarCollapsed ? "הצג שמות" : "מזער שמות"}
         />
+
+        {/* Table-vs-Gantt layout toggle. Two icons: side (Columns2) puts the
+            table next to the Gantt at 1/3 width; stacked (Rows2) gives both
+            full width with the table on top. Persisted in localStorage by
+            Gantt.tsx so the user's choice sticks across sessions. */}
+        <div className="inline-flex rounded-md border border-ink-200 p-0.5 bg-ink-50">
+          <button
+            onClick={() => onTableLayoutChange("side")}
+            className={cn(
+              "p-1 rounded-sm transition-colors",
+              tableLayout === "side"
+                ? "bg-white text-ink-900 shadow-soft"
+                : "text-ink-600 hover:text-ink-900"
+            )}
+            title="טבלה לצד הגאנט"
+            aria-label="טבלה לצד הגאנט"
+            type="button"
+          >
+            <Columns2 className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={() => onTableLayoutChange("stacked")}
+            className={cn(
+              "p-1 rounded-sm transition-colors",
+              tableLayout === "stacked"
+                ? "bg-white text-ink-900 shadow-soft"
+                : "text-ink-600 hover:text-ink-900"
+            )}
+            title="טבלה מעל הגאנט"
+            aria-label="טבלה מעל הגאנט"
+            type="button"
+          >
+            <Rows2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -6,7 +6,7 @@
  */
 import type { EventRow, Task, TimeEntry } from "@/lib/types/domain";
 
-export type CalendarItemKind = "task" | "event";
+export type CalendarItemKind = "task" | "event" | "deadline";
 export type LayerMode = "both" | "tasks" | "events";
 
 export interface CalendarItem {
@@ -196,9 +196,10 @@ export function formatWeekRange(d: Date, timeZone?: string): string {
 export function taskToItem(t: Task, listColor: string | null): CalendarItem | null {
   if (!t.scheduled_at) return null;
   const start = new Date(t.scheduled_at);
-  const durationMin =
-    t.duration_minutes ??
-    (t.estimated_hours != null ? Math.round(t.estimated_hours * 60) : 60);
+  // Default: a scheduled task with no explicit duration takes 15 minutes
+  // on the calendar. This matches the user's "if I just dropped a date,
+  // don't pretend I committed to a one-hour block" expectation.
+  const durationMin = t.duration_minutes ?? 15;
   const end = new Date(start.getTime() + durationMin * MIN);
   return {
     id: `task:${t.id}`,
@@ -213,6 +214,39 @@ export function taskToItem(t: Task, listColor: string | null): CalendarItem | nu
     completed: !!t.completed_at,
     source: t,
     isPhase: !!t.is_phase,
+  };
+}
+
+/**
+ * Render a task's `deadline_at` as a separate, visually-distinct calendar
+ * item. Always 15 minutes wide so it claims a quarter-hour slot regardless
+ * of how the task is otherwise scheduled. The renderer uses `kind:
+ * "deadline"` to draw it as a flat label + hourglass with only an underline
+ * in the list color — no border, no background block.
+ *
+ * Returns null when the task has no deadline or is already completed
+ * (a met deadline is no longer noise to look at).
+ */
+export function taskDeadlineToItem(
+  t: Task,
+  listColor: string | null
+): CalendarItem | null {
+  if (!t.deadline_at) return null;
+  if (t.completed_at) return null;
+  const start = new Date(t.deadline_at);
+  const end = new Date(start.getTime() + 15 * MIN);
+  return {
+    id: `deadline:${t.id}`,
+    kind: "deadline",
+    title: t.title,
+    description: t.description ?? null,
+    start,
+    end,
+    allDay: false,
+    color: listColor,
+    listId: t.task_list_id,
+    completed: false,
+    source: t,
   };
 }
 

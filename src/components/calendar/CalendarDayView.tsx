@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { Hourglass } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import {
   HOUR,
@@ -356,12 +357,57 @@ export function CalendarBlock({
   const { prefs } = useCalendarPrefs();
   const tz = prefs.timezone;
   const isTask = item.kind === "task";
+  const isDeadline = item.kind === "deadline";
   const past = isPast(item, now);
   const overdue = isOverdueTask(item, now);
   const completed = item.completed;
 
   // Color: list color for both (tasks borrow from list, events either list or primary).
-  const accent = item.color ?? (isTask ? "#6b6b80" : "#f59e0b");
+  const accent = item.color ?? (isTask || isDeadline ? "#6b6b80" : "#f59e0b");
+
+  // Deadline marker — rendered inline rather than as a bordered block. Title
+  // + hourglass icon, with a coloured underline in the list's color. Sits in
+  // the time grid at the deadline timestamp, claiming a 15-minute slot. No
+  // border, no background, no time-range header — visually distinct from a
+  // regular task block at first glance.
+  if (isDeadline) {
+    return (
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={(e) => {
+          e.stopPropagation();
+          onClick();
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onClick();
+          }
+        }}
+        className="absolute px-1 text-start cursor-pointer hover:z-20 hover:bg-ink-50/60 rounded-sm transition-colors"
+        style={{
+          top: `${top}%`,
+          height: `${Math.max(height, 1.5)}%`,
+          insetInlineStart: `calc(${leftPct}% + 2px)`,
+          width: `calc(${widthPct}% - 4px)`,
+        }}
+        title={`דד-ליין: ${item.title}`}
+      >
+        <div className="flex items-center justify-between gap-1 text-[11px]">
+          <span className="truncate font-medium text-ink-900 flex-1 min-w-0">
+            {item.title}
+          </span>
+          <Hourglass className="w-3 h-3 text-ink-900 shrink-0" />
+        </div>
+        {/* Underline in the list color — the only chrome we draw. */}
+        <div
+          className="h-[2px] mt-0.5 rounded-full"
+          style={{ backgroundColor: accent }}
+        />
+      </div>
+    );
+  }
 
   // Override visualization (events only): when an event has its own color
   // overriding its parent calendar's color, use the calendar color for the

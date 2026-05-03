@@ -33,6 +33,7 @@ import {
   endOfMonth,
   startOfWeek,
   taskToItem,
+  taskDeadlineToItem,
   timeEntryToStripe,
 } from "@/components/calendar/calendar-utils";
 import {
@@ -148,13 +149,19 @@ export function Calendar() {
     const out: CalendarItem[] = [];
     if (layer !== "events") {
       for (const t of tasks) {
-        if (!t.scheduled_at) continue;
         if (t.task_list_id && hiddenLists.has(t.task_list_id)) continue;
-        const item = taskToItem(
-          t,
-          listColorById.get(t.task_list_id ?? "") ?? null
-        );
-        if (item) out.push(item);
+        const listColor = listColorById.get(t.task_list_id ?? "") ?? null;
+        // Scheduled work block (only if there's a scheduled_at).
+        if (t.scheduled_at) {
+          const item = taskToItem(t, listColor);
+          if (item) out.push(item);
+        }
+        // Deadline marker — independent of scheduling. Both can coexist for
+        // the same task: a work block at 10:00 plus a deadline marker at
+        // 17:00 means "I plan to work on it in the morning, it must be done
+        // by evening".
+        const dl = taskDeadlineToItem(t, listColor);
+        if (dl) out.push(dl);
       }
     }
     if (layer !== "tasks") {

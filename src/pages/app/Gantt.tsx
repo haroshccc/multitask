@@ -156,9 +156,18 @@ export function Gantt() {
     });
   }, [tasks, hiddenLists, source, projectListIds]);
 
+  /** When the user scopes the Gantt to a specific list/project, drop events
+   *  too — the user is looking at one workstream's tasks; orphan events
+   *  from other calendars just create noise. Events come back when the
+   *  scope is "all". */
+  const filteredEvents = useMemo(() => {
+    if (source.kind === "all") return events;
+    return [];
+  }, [events, source.kind]);
+
   const rows = useMemo(
-    () => buildRows(filteredTasks, events, layer, lists),
-    [filteredTasks, events, layer, lists]
+    () => buildRows(filteredTasks, filteredEvents, layer, lists),
+    [filteredTasks, filteredEvents, layer, lists]
   );
 
   const criticalSet = useMemo(

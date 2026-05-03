@@ -60,33 +60,37 @@ export function UnassignedBanner({
       task_list_id: null,
       parent_task_id: null,
       status: "todo",
-      urgency: 3,
+      urgency: 0,
     });
     setNewTitle("");
     setFocusTaskId(t.id);
   };
 
   // Collapsed — two variants:
-  //   Mobile: thin horizontal strip (like the FilterBar collapsed state).
-  //   Desktop: narrow vertical strip on the leading edge.
+  //   Stack mode (fullWidth) OR mobile: thin horizontal bar that collapses
+  //     upward into a single row, ChevronDown to re-open.
+  //   Desktop columns mode: narrow vertical strip on the leading edge.
   if (!open) {
     return (
       <div
         ref={setNodeRef}
         className={cn(
           "bg-white border border-ink-200 rounded-xl shadow-soft transition-colors",
-          // Mobile: full width thin bar
-          "w-full md:w-10",
-          // Desktop: narrow vertical strip
-          "md:flex-shrink-0",
+          // In stack mode (fullWidth) we always render the thin horizontal
+          // bar, even on desktop — that's what the user asked for.
+          fullWidth ? "w-full" : "w-full md:w-10 md:flex-shrink-0",
           isOver && "ring-2 ring-primary-400 border-primary-300"
         )}
       >
-        {/* Mobile-only thin horizontal bar */}
+        {/* Thin horizontal bar — visible on mobile always, and on desktop
+            when in stack/fullWidth mode. */}
         <button
           onClick={onToggle}
           type="button"
-          className="md:hidden w-full flex items-center gap-2 px-3 py-1.5 hover:bg-ink-50 rounded-xl"
+          className={cn(
+            "w-full flex items-center gap-2 px-3 py-1.5 hover:bg-ink-50 rounded-xl",
+            !fullWidth && "md:hidden"
+          )}
           title="פתח לא משויכות"
         >
           <Inbox className="w-4 h-4 text-ink-600 shrink-0" />
@@ -95,26 +99,28 @@ export function UnassignedBanner({
           <ChevronDown className="w-3.5 h-3.5 text-ink-500 ms-auto" />
         </button>
 
-        {/* Desktop-only narrow vertical strip */}
-        <div className="hidden md:flex flex-col items-center py-3 px-1">
-          <button
-            onClick={onToggle}
-            type="button"
-            className="p-1 rounded-md hover:bg-ink-100 text-ink-600"
-            title="פתח לא משויכות"
-          >
-            <ChevronRight className="w-4 h-4" />
-          </button>
-          <div className="flex-1 flex flex-col items-center justify-center gap-2">
-            <Inbox className="w-5 h-5 text-ink-500" />
-            <div
-              className="text-xs font-semibold text-ink-700 tabular-nums px-1 py-0.5 rounded bg-ink-100"
-              style={{ writingMode: "vertical-rl" }}
+        {/* Desktop-only narrow vertical strip — only in columns mode. */}
+        {!fullWidth && (
+          <div className="hidden md:flex flex-col items-center py-3 px-1">
+            <button
+              onClick={onToggle}
+              type="button"
+              className="p-1 rounded-md hover:bg-ink-100 text-ink-600"
+              title="פתח לא משויכות"
             >
-              {totalCount} לא משויכות
+              <ChevronRight className="w-4 h-4" />
+            </button>
+            <div className="flex-1 flex flex-col items-center justify-center gap-2">
+              <Inbox className="w-5 h-5 text-ink-500" />
+              <div
+                className="text-xs font-semibold text-ink-700 tabular-nums px-1 py-0.5 rounded bg-ink-100"
+                style={{ writingMode: "vertical-rl" }}
+              >
+                {totalCount} לא משויכות
+              </div>
             </div>
           </div>
-        </div>
+        )}
       </div>
     );
   }

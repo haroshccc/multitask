@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import {
   Play,
@@ -90,9 +91,41 @@ export function TaskRow({
   const [draft, setDraft] = useState(task.title);
   const [collapsed, setCollapsed] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(
+    null
+  );
   const [duplicateToListOpen, setDuplicateToListOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const menuTriggerRef = useRef<HTMLButtonElement>(null);
+
+  const openMenu = () => {
+    const el = menuTriggerRef.current;
+    if (el) {
+      const r = el.getBoundingClientRect();
+      setMenuPos({
+        top: r.bottom + 4,
+        right: Math.max(8, window.innerWidth - r.right),
+      });
+    }
+    setMenuOpen(true);
+  };
+
+  const closeMenu = () => {
+    setMenuOpen(false);
+    setDuplicateToListOpen(false);
+  };
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onScroll = () => closeMenu();
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onScroll);
+    return () => {
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onScroll);
+    };
+  }, [menuOpen]);
 
   const [timeUnit] = useTimeUnit();
   const { data: myStatuses = [] } = useMyTaskStatuses();
@@ -136,7 +169,7 @@ export function TaskRow({
         task_list_id: listId ?? null,
         parent_task_id: parentTaskId,
         status: "todo",
-        urgency: 3,
+        urgency: 0,
       });
       onRequestFocus(newTask.id);
       return;
@@ -193,12 +226,12 @@ export function TaskRow({
 
   const handleDuplicateSingle = () => {
     duplicateOne.mutate({ sourceTaskId: task.id });
-    setMenuOpen(false);
+    closeMenu();
   };
 
   const handleDuplicateTree = () => {
     duplicateTree.mutate({ sourceTaskId: task.id });
-    setMenuOpen(false);
+    closeMenu();
   };
 
   const handleDuplicateToList = (targetListId: string | null) => {
@@ -206,15 +239,14 @@ export function TaskRow({
       sourceTaskId: task.id,
       targetListId: targetListId ?? undefined,
     });
-    setDuplicateToListOpen(false);
-    setMenuOpen(false);
+    closeMenu();
   };
 
   const handleDelete = () => {
     const taskId = task.id;
     deleteTaskM.mutate(taskId);
     setConfirmDelete(false);
-    setMenuOpen(false);
+    closeMenu();
     // No undo for delete — the DB cascades children. We gate via confirmation.
   };
 
@@ -224,7 +256,7 @@ export function TaskRow({
       task_list_id: listId ?? null,
       parent_task_id: task.id,
       status: "todo",
-      urgency: 3,
+      urgency: 0,
     });
     setCollapsed(false);
     onRequestFocus(newTask.id);
@@ -260,7 +292,7 @@ export function TaskRow({
       <div
         ref={setRef}
         className={cn(
-          "group flex items-start gap-1.5 rounded-md transition-colors px-1.5 py-1",
+          "group flex items-start gap-1.5 rounded-md transition-colors px-1.5 py-1 hover:bg-ink-50",
           isDragging && "opacity-40",
           isOver && "bg-primary-50 ring-1 ring-primary-300",
           // Phase rows get a colored stripe on the leading edge, slightly
@@ -524,17 +556,21 @@ export function TaskRow({
 
         <div className="relative shrink-0">
           <button
-            onClick={() => setMenuOpen((v) => !v)}
+            ref={menuTriggerRef}
+            onClick={() => (menuOpen ? closeMenu() : openMenu())}
             className="p-1 rounded-md text-ink-400 hover:text-ink-900 hover:bg-ink-100 md:opacity-0 md:group-hover:opacity-100"
             aria-label="תפריט"
             type="button"
           >
             <MoreHorizontal className="w-4 h-4 md:w-3.5 md:h-3.5" />
           </button>
-          {menuOpen && (
+          {menuOpen && menuPos && createPortal(
             <>
-              <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-              <div className="absolute end-0 mt-1 w-64 md:w-56 bg-white border border-ink-200 rounded-xl shadow-lift z-20 py-1 text-sm">
+              <div className="fixed inset-0 z-[60]" onClick={closeMenu} />
+              <div
+                className="fixed w-64 md:w-56 bg-white border border-ink-200 rounded-xl shadow-lift z-[61] py-1 text-sm max-h-[80vh] overflow-y-auto"
+                style={{ top: menuPos.top, right: menuPos.right }}
+              >
                 {/* Mobile-only: the inline badges collapsed into the menu as
                     interactive rows so the task row itself stays minimal. */}
                 <div className="md:hidden">
@@ -542,7 +578,7 @@ export function TaskRow({
                     icon={<CornerDownLeft className="w-3.5 h-3.5" />}
                     onClick={() => {
                       handleAddSubtask();
-                      setMenuOpen(false);
+                      closeMenu();
                     }}
                   >
                     הוסף תת-משימה
@@ -551,7 +587,7 @@ export function TaskRow({
                     icon={<Pencil className="w-3.5 h-3.5" />}
                     onClick={() => {
                       onOpenEdit(task.id);
-                      setMenuOpen(false);
+                      closeMenu();
                     }}
                   >
                     ערוך פרטים
@@ -596,7 +632,7 @@ export function TaskRow({
                         type="button"
                         onClick={() => {
                           onOpenEdit(task.id);
-                          setMenuOpen(false);
+                          closeMenu();
                         }}
                         className="w-full flex items-center gap-2 px-3 py-1.5 text-ink-700 hover:bg-ink-100 text-start"
                       >
@@ -654,7 +690,7 @@ export function TaskRow({
                       type="button"
                       onClick={() => {
                         toggleTimer();
-                        setMenuOpen(false);
+                        closeMenu();
                       }}
                       className="w-full flex items-center gap-2 px-3 py-1.5 text-ink-700 hover:bg-ink-100 text-start"
                     >
@@ -723,7 +759,7 @@ export function TaskRow({
                 <button
                   type="button"
                   onClick={() => {
-                    setMenuOpen(false);
+                    closeMenu();
                     setConfirmDelete(true);
                   }}
                   className="w-full flex items-center gap-2 px-3 py-1.5 text-danger-600 hover:bg-danger/10 text-start"
@@ -732,7 +768,8 @@ export function TaskRow({
                   מחק משימה
                 </button>
               </div>
-            </>
+            </>,
+            document.body
           )}
         </div>
       </div>

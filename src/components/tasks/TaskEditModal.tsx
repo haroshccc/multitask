@@ -130,7 +130,7 @@ export function TaskEditModal({
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [notes, setNotes] = useState("");
-  const [urgency, setUrgency] = useState<number>(3);
+  const [urgency, setUrgency] = useState<number>(0);
   const [status, setStatus] = useState<string>("todo");
   const [listId, setListId] = useState<string | null>(null);
   const [tags, setTags] = useState<string[]>([]);
@@ -167,7 +167,7 @@ export function TaskEditModal({
       setTitle(createDraft.title ?? "");
       setDescription(createDraft.description ?? "");
       setNotes("");
-      setUrgency(createDraft.urgency ?? 3);
+      setUrgency(createDraft.urgency ?? 0);
       setStatus(createDraft.status ?? "todo");
       setListId(createDraft.task_list_id ?? null);
       setTags(createDraft.tags ?? []);

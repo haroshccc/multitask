@@ -233,7 +233,7 @@ export function QuickCapture({ open, onClose }: QuickCaptureProps) {
                           task_list_id: null,
                           parent_task_id: null,
                           status: "todo",
-                          urgency: 3,
+                          urgency: 0,
                         });
                         onClose();
                         navigate(`/app/tasks?edit=${t.id}`);

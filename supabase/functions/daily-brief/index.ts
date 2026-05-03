@@ -212,7 +212,7 @@ async function gatherContext(
   const { data: tasksRaw } = await sb
     .from("tasks")
     .select(
-      "id, title, status, scheduled_at, completed_at, created_at, duration_minutes, urgency, parent_task_id, task_list_id, assignee_user_id, owner_id"
+      "id, title, status, scheduled_at, deadline_at, completed_at, created_at, duration_minutes, urgency, parent_task_id, task_list_id, assignee_user_id, owner_id"
     )
     .eq("organization_id", ctx.organizationId)
     .or(
@@ -273,7 +273,7 @@ async function gatherContext(
   const { data: upcomingTasksRaw } = await sb
     .from("tasks")
     .select(
-      "id, title, scheduled_at, duration_minutes, urgency, task_list_id, completed_at"
+      "id, title, scheduled_at, deadline_at, duration_minutes, urgency, task_list_id, completed_at"
     )
     .eq("organization_id", ctx.organizationId)
     .gte("scheduled_at", range.to)
@@ -316,7 +316,9 @@ async function gatherContext(
   // to suggest "you have X unscheduled tasks; schedule Y for tomorrow morning".
   const { data: unscheduledRaw } = await sb
     .from("tasks")
-    .select("id, title, urgency, task_list_id, duration_minutes, created_at")
+    .select(
+      "id, title, urgency, task_list_id, duration_minutes, deadline_at, created_at"
+    )
     .eq("organization_id", ctx.organizationId)
     .is("scheduled_at", null)
     .is("completed_at", null)
@@ -444,8 +446,9 @@ async function gatherContext(
       const listLabel = list ? `[${list.emoji ?? ""}${list.name}]` : "";
       const done = t.completed_at ? "✓" : t.scheduled_at! < new Date().toISOString() ? "⏰" : "○";
       const dur = t.duration_minutes ? `${t.duration_minutes}ד` : "";
+      const dl = t.deadline_at ? ` ⏳דד-ליין:${fmtTimestamp(t.deadline_at)}` : "";
       lines.push(
-        `  ${done} task:${t.id} | ${fmtTimestamp(t.scheduled_at)} ${dur} | ${truncate(t.title, 80)} ${listLabel}`
+        `  ${done} task:${t.id} | ${fmtTimestamp(t.scheduled_at)} ${dur}${dl} | ${truncate(t.title, 80)} ${listLabel}`
       );
     }
   }
@@ -601,8 +604,9 @@ async function gatherContext(
         const list = t.task_list_id ? listMap.get(t.task_list_id) : null;
         const listLabel = list ? `[${list.emoji ?? ""}${list.name}]` : "";
         const dur = t.duration_minutes ? `${t.duration_minutes}ד` : "";
+        const dl = t.deadline_at ? ` ⏳דד-ליין:${fmtTimestamp(t.deadline_at)}` : "";
         lines.push(
-          `    task:${t.id} | ${fmtTimestamp(t.scheduled_at)} ${dur} | ${truncate(
+          `    task:${t.id} | ${fmtTimestamp(t.scheduled_at)} ${dur}${dl} | ${truncate(
             t.title,
             70
           )} ${listLabel}`
@@ -646,8 +650,9 @@ async function gatherContext(
       const listLabel = list ? `[${list.emoji ?? ""}${list.name}]` : "";
       const urg = t.urgency > 0 ? ` ★${t.urgency}` : "";
       const dur = t.duration_minutes ? ` (${t.duration_minutes}ד)` : "";
+      const dl = t.deadline_at ? ` ⏳דד-ליין:${fmtTimestamp(t.deadline_at)}` : "";
       lines.push(
-        `  task:${t.id}${urg}${dur} | ${truncate(t.title, 80)} ${listLabel}`
+        `  task:${t.id}${urg}${dur}${dl} | ${truncate(t.title, 80)} ${listLabel}`
       );
     }
     if (unscheduled.length > 25) {
@@ -680,6 +685,11 @@ const SYSTEM_PROMPT = `את עוזרת אישית לאפליקציית פרוד�
 1. ניתוח התקופה שעברה — מה קרה.
 2. סקציית "הצפוי בקרוב" — משימות + אירועים שכבר מתוזמנים לימים/שבועות הבאים, ועוד סקציה של משימות פתוחות בלי תזמון.
 המשימה שלך: גם לסכם את העבר וגם **להציע באופן פעיל לארגן את העתיד** — לזהות עומסים, לפצל ימים שצפופים, להעביר משימות שלא דוחקות, לתזמן משימות פתוחות לבלוקים יעילים.
+
+**שני שדות זמן שונים על משימה:**
+- scheduled_at (זמן עבודה) = מתי המשתמשת מתכננת לעבוד עליה. ניתן להזיז.
+- deadline_at (⏳דד-ליין) = הזמן האחרון לביצוע. **קדוש** — אסור לדחוף scheduled_at אחרי deadline_at. אם משימה עם דד-ליין לא מתוזמנת — חובה לתזמן אותה לפני הדד-ליין.
+- כשאת מציעה move_task / schedule_task / reorder_day — אם יש לטאסק deadline_at, ודאי שה-new_scheduled_at לפניו, ובסיבה הציני "כדי לעמוד בדד-ליין X".
 
 עקרונות כלליים:
 - כל הטקסט החופשי בעברית בלבד.

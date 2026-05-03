@@ -3174,3 +3174,45 @@ Hero: "החלל לחשוב. החלל לעשות."
   bulk-actions toolbar כבר קיים (מגל 2).
 
   **קומיט:** `feat(tasks): wave 3 — undo coverage for create/title/edit/delete`
+
+- **2026-05-03 — מסך משימות, גל 4: דד-ליין נפרד מ-scheduled_at.**
+
+  **טריגר:** המשתמשת ביקשה שדה דד-ליין על משימה — נפרד מ-scheduled_at:
+  > "למשימה יש כרגע תזמון, זה מראה לי מתי אני רוצה לעבוד עליה,
+  >  בנוסף צריך שכל משימה יהיה אפשר לערוך לה גם דד-ליין. שזה לא
+  >  הזמן שאני בהכרח עובדת עליה אבל זה הזמן האחרון לביצוע."
+
+  **4.A — DB migration:** `ALTER TABLE tasks ADD COLUMN deadline_at
+  TIMESTAMP WITH TIME ZONE` + `tasks_deadline_at_idx` (partial index
+  על deadline_at IS NOT NULL AND completed_at IS NULL — מאיץ
+  את ה-"מה חורג" של הדשבורד).
+
+  **4.B — Types:** הוספת `deadline_at: string | null` ב-Row/Insert/
+  Update של `database.ts`. ה-`Task = Tables["tasks"]["Row"]` ב-
+  domain.ts מקבל את זה אוטומטית.
+
+  **4.C — TaskEditModal:** שדה חדש "דד-ליין" עם DateTimePicker בטאב
+  "תזמון". תוויות תוקנו: "תאריך ושעה" → "זמן עבודה מתוכנן" עם hint
+  "מתי את מתכננת לעבוד עליה". דד-ליין עם hint "הזמן האחרון
+  לביצוע — שונה מהזמן המתוכנן". ה-`Field` רכיב הורחב לתמוך ב-
+  `hint?: string` (שורת טקסט קטנה ind ink-400 מתחת לשדה).
+  ה-`saveAll` מטפל בfield החדש ב-create + update + ב-snapshot של
+  ה-undo (גל 3 מחזיר את כל ה-deadline בנוסף לכל שאר השדות).
+
+  **4.D — Badge ב-TaskRow:** badge נפרד שמוצג תמיד כשיש deadline +
+  לא הושלם. צבע לפי דחיפות הזמן:
+  - **אדום** (`bg-danger-50 text-danger-700`) — דד-ליין עבר.
+  - **כתום** (`bg-warning-50 text-warning-700`) — דד-ליין תוך 24
+    שעות.
+  - **ניטרלי** — מעבר לכך.
+  אייקון `AlertTriangle`. ב-mobile menu (פרטי השורה ב-⋯) — שורה
+  נפרדת "דד-ליין" עם הזמן. ה-`scheduled_at` badge עכשיו עם title
+  "זמן עבודה מתוכנן" במקום "תאריך יעד" (שלא היה מדויק).
+
+  **4.E — Edge function v7:** ה-context של ה-AI עכשיו מציג
+  `⏳דד-ליין:DD/M HH:MM` ליד כל משימה שיש לה. SYSTEM_PROMPT מסביר
+  את ההפרדה: scheduled_at ניתן להזיז, deadline_at קדוש — אסור
+  לדחוף scheduled_at אחרי deadline. משימה עם דד-ליין לא מתוזמנת —
+  חובה להציע schedule_task לפני הדד-ליין.
+
+  **קומיט:** `feat(tasks): wave 4 — deadline_at column + UI + AI awareness`

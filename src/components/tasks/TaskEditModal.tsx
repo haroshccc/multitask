@@ -140,6 +140,7 @@ export function TaskEditModal({
   const [location, setLocation] = useState("");
   const [externalUrl, setExternalUrl] = useState("");
   const [scheduledAt, setScheduledAt] = useState<string | null>(null); // ISO
+  const [deadlineAt, setDeadlineAt] = useState<string | null>(null); // ISO — hard deadline, distinct from scheduledAt
   const [durationMinutes, setDurationMinutes] = useState<number | null>(null);
   const [estimatedMinutes, setEstimatedMinutes] = useState<number | null>(null);
   const [assigneeId, setAssigneeId] = useState<string | null>(null);
@@ -158,6 +159,7 @@ export function TaskEditModal({
       setLocation(task.location ?? "");
       setExternalUrl(task.external_url ?? "");
       setScheduledAt(task.scheduled_at ?? null);
+      setDeadlineAt(task.deadline_at ?? null);
       setAssigneeId(task.assignee_user_id ?? null);
       setDurationMinutes(task.duration_minutes ?? null);
       setEstimatedMinutes(hoursToMinutes(task.estimated_hours ?? null));
@@ -177,6 +179,7 @@ export function TaskEditModal({
       setLocation("");
       setExternalUrl("");
       setScheduledAt(createDraft.scheduled_at ?? null);
+      setDeadlineAt(null);
       setAssigneeId(null);
       setDurationMinutes(createDraft.duration_minutes ?? null);
       setEstimatedMinutes(
@@ -210,6 +213,7 @@ export function TaskEditModal({
       location !== (task.location ?? "") ||
       externalUrl !== (task.external_url ?? "") ||
       scheduledAt !== (task.scheduled_at ?? null) ||
+      deadlineAt !== (task.deadline_at ?? null) ||
       durationMinutes !== (task.duration_minutes ?? null) ||
       estimatedMinutes !== hoursToMinutes(task.estimated_hours ?? null) ||
       isPhase !== !!task.is_phase ||
@@ -228,6 +232,7 @@ export function TaskEditModal({
     location,
     externalUrl,
     scheduledAt,
+    deadlineAt,
     durationMinutes,
     estimatedMinutes,
     isPhase,
@@ -256,6 +261,7 @@ export function TaskEditModal({
           location: location || null,
           external_url: externalUrl || null,
           scheduled_at: scheduledAt,
+          deadline_at: deadlineAt,
           duration_minutes: durationMinutes,
           estimated_hours:
             estimatedMinutes != null ? minutesToHours(estimatedMinutes) : null,
@@ -291,6 +297,7 @@ export function TaskEditModal({
       location: task.location,
       external_url: task.external_url,
       scheduled_at: task.scheduled_at,
+      deadline_at: task.deadline_at,
       duration_minutes: task.duration_minutes,
       estimated_hours: task.estimated_hours,
       is_phase: task.is_phase,
@@ -544,7 +551,10 @@ export function TaskEditModal({
               {tab === "schedule" && (
                 <div className="space-y-4">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <Field label="תאריך ושעה">
+                    <Field
+                      label="זמן עבודה מתוכנן"
+                      hint="מתי את מתכננת לעבוד עליה"
+                    >
                       <DateTimePicker
                         value={scheduledAt}
                         onChange={setScheduledAt}
@@ -556,6 +566,18 @@ export function TaskEditModal({
                         onChange={setDurationMinutes}
                         placeholder="00:00"
                         ariaLabel="משך משימה"
+                      />
+                    </Field>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <Field
+                      label="דד-ליין"
+                      hint="הזמן האחרון לביצוע — שונה מהזמן המתוכנן"
+                    >
+                      <DateTimePicker
+                        value={deadlineAt}
+                        onChange={setDeadlineAt}
                       />
                     </Field>
                   </div>
@@ -709,15 +731,18 @@ function TabBtn({
 
 function Field({
   label,
+  hint,
   children,
 }: {
   label: string;
+  hint?: string;
   children: React.ReactNode;
 }) {
   return (
     <div>
       <label className="eyebrow mb-1 block">{label}</label>
       {children}
+      {hint && <p className="text-[11px] text-ink-400 mt-1">{hint}</p>}
     </div>
   );
 }

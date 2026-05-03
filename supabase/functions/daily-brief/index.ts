@@ -68,6 +68,14 @@ function rangeFor(view: View, anchorIso: string): { from: string; to: string } {
   return { from: from.toISOString(), to: to.toISOString() };
 }
 
+/** Forward-looking horizon — how far past `range.to` the AI should peek to
+ *  suggest schedule changes. Day → next 7d, Week → next 28d, Month → next 90d. */
+function lookaheadDays(view: View): number {
+  if (view === "day") return 7;
+  if (view === "week") return 28;
+  return 90;
+}
+
 // -----------------------------------------------------------------------------
 // Anthropic types we care about
 
@@ -82,10 +90,21 @@ interface BriefOutput {
   }>;
   recordings_digest: string;
   productive_hours_insight: string;
+  /** Forward-looking paragraph: what's coming up + how to prepare. Distinct
+   *  from `recommendations` which are bullet points; this is a 2-3 sentence
+   *  narrative that frames the next period. */
+  forward_outlook: string;
   recommendations: Array<{
     title: string;
     description: string;
-    category: "time" | "tasks" | "meetings" | "general";
+    /** `efficiency` and `planning` added in 8.2.1 — both forward-looking. */
+    category:
+      | "time"
+      | "tasks"
+      | "meetings"
+      | "general"
+      | "efficiency"
+      | "planning";
   }>;
 }
 
@@ -114,6 +133,8 @@ interface ContextPayload {
   anchorIso: string;
   fromIso: string;
   toIso: string;
+  /** End of lookahead window — used so the AI can plan upcoming days/weeks. */
+  lookaheadToIso: string;
   contextText: string;
   membersById: Record<string, string>;
   /** Entity ids referenced in the prompt — used to validate AI proposals. */
@@ -174,6 +195,13 @@ async function gatherContext(
     from: rangeOverride?.from ?? computed.from,
     to: rangeOverride?.to ?? computed.to,
   };
+  // Lookahead horizon — extends past `range.to` so the AI can recommend
+  // changes to upcoming days/weeks (e.g. "your tomorrow is overloaded —
+  // move task X to Wednesday"). The lookahead entities are added to
+  // knownTaskIds/knownEventIds so proposals targeting them pass validation.
+  const lookaheadEnd = new Date(range.to);
+  lookaheadEnd.setUTCDate(lookaheadEnd.getUTCDate() + lookaheadDays(view));
+  const lookaheadToIso = lookaheadEnd.toISOString();
   const sb = ctx.serviceClient;
 
   // Tasks: scheduled OR completed OR created in range; or scheduled-and-overdue.
@@ -239,6 +267,63 @@ async function gatherContext(
       participantsByEvent.get(p.event_id)!.push(p.user_id);
     }
   }
+
+  // Upcoming tasks (lookahead) — anything scheduled past range.to but within
+  // the lookahead window. Excludes already-completed tasks.
+  const { data: upcomingTasksRaw } = await sb
+    .from("tasks")
+    .select(
+      "id, title, scheduled_at, duration_minutes, urgency, task_list_id, completed_at"
+    )
+    .eq("organization_id", ctx.organizationId)
+    .gte("scheduled_at", range.to)
+    .lt("scheduled_at", lookaheadToIso)
+    .is("completed_at", null)
+    .order("scheduled_at", { ascending: true })
+    .limit(80);
+  const upcomingTasks = upcomingTasksRaw ?? [];
+
+  // Backfill listMap with any list ids referenced by upcoming tasks but not
+  // yet cached (i.e. lists that don't have any task in the current period).
+  const missingListIds = Array.from(
+    new Set(
+      upcomingTasks
+        .map((t) => t.task_list_id)
+        .filter((id): id is string => !!id && !listMap.has(id))
+    )
+  );
+  if (missingListIds.length > 0) {
+    const { data: extraLists } = await sb
+      .from("task_lists")
+      .select("id, name, emoji")
+      .in("id", missingListIds);
+    for (const l of extraLists ?? []) {
+      listMap.set(l.id, { name: l.name, emoji: l.emoji });
+    }
+  }
+
+  // Upcoming events (lookahead).
+  const { data: upcomingEvents } = await sb
+    .from("events")
+    .select("id, title, location, starts_at, ends_at, video_call_url")
+    .eq("organization_id", ctx.organizationId)
+    .gte("starts_at", range.to)
+    .lt("starts_at", lookaheadToIso)
+    .order("starts_at", { ascending: true })
+    .limit(40);
+
+  // Unscheduled open tasks — for `schedule_task` proposals. The AI may want
+  // to suggest "you have X unscheduled tasks; schedule Y for tomorrow morning".
+  const { data: unscheduledRaw } = await sb
+    .from("tasks")
+    .select("id, title, urgency, task_list_id, duration_minutes, created_at")
+    .eq("organization_id", ctx.organizationId)
+    .is("scheduled_at", null)
+    .is("completed_at", null)
+    .order("urgency", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(40);
+  const unscheduled = unscheduledRaw ?? [];
 
   // Recordings
   const { data: recordingsRaw } = await sb
@@ -340,7 +425,11 @@ async function gatherContext(
       !t.completed_at &&
       t.scheduled_at! < new Date().toISOString()
   );
-  const knownTaskIds = new Set<string>(tasksAll.map((t) => t.id));
+  const knownTaskIds = new Set<string>([
+    ...tasksAll.map((t) => t.id),
+    ...upcomingTasks.map((t) => t.id),
+    ...unscheduled.map((t) => t.id),
+  ]);
 
   lines.push(`== משימות ==`);
   lines.push(`- הושלמו: ${tasksCompleted.length}`);
@@ -373,7 +462,10 @@ async function gatherContext(
   lines.push("");
 
   // Events
-  const knownEventIds = new Set<string>((events ?? []).map((e) => e.id));
+  const knownEventIds = new Set<string>([
+    ...((events ?? []).map((e) => e.id)),
+    ...((upcomingEvents ?? []).map((e) => e.id)),
+  ]);
   lines.push(`== אירועים ==`);
   if (!events || events.length === 0) {
     lines.push("אין אירועים בטווח.");
@@ -475,6 +567,93 @@ async function gatherContext(
       lines.push(`    ${day}: ${fmtDuration(s)}`);
     }
   }
+  lines.push("");
+
+  // -- Upcoming (lookahead) — what's scheduled past the current period -------
+  // Gives the AI material to suggest schedule changes / batching / rest.
+  lines.push(
+    `== הצפוי בקרוב (${lookaheadDays(view)} ימים אחרי סוף הטווח) ==`
+  );
+  if (upcomingTasks.length === 0) {
+    lines.push("אין משימות מתוזמנות קדימה.");
+  } else {
+    // Group by day so the AI sees overload patterns (e.g. 8 tasks on Monday).
+    const byDay = new Map<string, typeof upcomingTasks>();
+    for (const t of upcomingTasks) {
+      if (!t.scheduled_at) continue;
+      const k = t.scheduled_at.slice(0, 10);
+      if (!byDay.has(k)) byDay.set(k, []);
+      byDay.get(k)!.push(t);
+    }
+    const sortedDays = Array.from(byDay.keys()).sort();
+    for (const day of sortedDays) {
+      const tasksOfDay = byDay.get(day)!;
+      const totalMin = tasksOfDay.reduce(
+        (s, t) => s + (t.duration_minutes ?? 0),
+        0
+      );
+      lines.push(
+        `  ${day} (${tasksOfDay.length} משימות${
+          totalMin > 0 ? `, ~${totalMin} דק׳` : ""
+        }):`
+      );
+      for (const t of tasksOfDay.slice(0, 12)) {
+        const list = t.task_list_id ? listMap.get(t.task_list_id) : null;
+        const listLabel = list ? `[${list.emoji ?? ""}${list.name}]` : "";
+        const dur = t.duration_minutes ? `${t.duration_minutes}ד` : "";
+        lines.push(
+          `    task:${t.id} | ${fmtTimestamp(t.scheduled_at)} ${dur} | ${truncate(
+            t.title,
+            70
+          )} ${listLabel}`
+        );
+      }
+      if (tasksOfDay.length > 12) {
+        lines.push(`    ... ועוד ${tasksOfDay.length - 12}`);
+      }
+    }
+  }
+
+  if (upcomingEvents && upcomingEvents.length > 0) {
+    lines.push("");
+    lines.push("אירועים צפויים:");
+    for (const e of upcomingEvents.slice(0, 30)) {
+      const dur = e.starts_at && e.ends_at
+        ? fmtDuration(
+            (new Date(e.ends_at).getTime() - new Date(e.starts_at).getTime()) /
+              1000
+          )
+        : "—";
+      const meet = e.video_call_url ? " 🎥" : "";
+      lines.push(
+        `  - event:${e.id} | ${fmtTimestamp(e.starts_at)} (${dur})${meet} | ${truncate(
+          e.title,
+          70
+        )}${e.location ? ` | מיקום: ${truncate(e.location, 40)}` : ""}`
+      );
+    }
+  }
+  lines.push("");
+
+  // -- Unscheduled open tasks — for `schedule_task` proposals -----------------
+  lines.push(`== משימות פתוחות ללא תזמון ==`);
+  if (unscheduled.length === 0) {
+    lines.push("אין משימות לא מתוזמנות פתוחות.");
+  } else {
+    lines.push(`סה״כ ${unscheduled.length} (מסודרות לפי דחיפות).`);
+    for (const t of unscheduled.slice(0, 25)) {
+      const list = t.task_list_id ? listMap.get(t.task_list_id) : null;
+      const listLabel = list ? `[${list.emoji ?? ""}${list.name}]` : "";
+      const urg = t.urgency > 0 ? ` ★${t.urgency}` : "";
+      const dur = t.duration_minutes ? ` (${t.duration_minutes}ד)` : "";
+      lines.push(
+        `  task:${t.id}${urg}${dur} | ${truncate(t.title, 80)} ${listLabel}`
+      );
+    }
+    if (unscheduled.length > 25) {
+      lines.push(`  ... ועוד ${unscheduled.length - 25}`);
+    }
+  }
 
   return {
     rangeLabel,
@@ -482,6 +661,7 @@ async function gatherContext(
     anchorIso,
     fromIso: range.from,
     toIso: range.to,
+    lookaheadToIso,
     contextText: lines.join("\n"),
     membersById,
     knownTaskIds,
@@ -494,34 +674,42 @@ async function gatherContext(
 // Anthropic call
 
 const SYSTEM_PROMPT = `את עוזרת אישית לאפליקציית פרודוקטיביות בעברית בשם Multitask.
-המשתמשת היא בעלת המוצר ואת מסכמת לה את התקופה הנוכחית מהדאטה שלה: משימות, אירועים, הקלטות, מחשבות וזמן עבודה.
+המשתמשת היא בעלת המוצר ואת מסכמת לה את התקופה הנוכחית **וגם נותנת תכנון אקטיבי קדימה** מהדאטה שלה: משימות, אירועים, הקלטות, מחשבות, זמן עבודה, ומה שצפוי בקרוב.
 
-עקרונות:
+הקלט מכיל **שתי שכבות זמן**:
+1. ניתוח התקופה שעברה — מה קרה.
+2. סקציית "הצפוי בקרוב" — משימות + אירועים שכבר מתוזמנים לימים/שבועות הבאים, ועוד סקציה של משימות פתוחות בלי תזמון.
+המשימה שלך: גם לסכם את העבר וגם **להציע באופן פעיל לארגן את העתיד** — לזהות עומסים, לפצל ימים שצפופים, להעביר משימות שלא דוחקות, לתזמן משימות פתוחות לבלוקים יעילים.
+
+עקרונות כלליים:
 - כל הטקסט החופשי בעברית בלבד.
-- אל תמציאי נתונים שלא מופיעים בקלט. אם משהו ריק — תכתבי מחרוזת ריקה / מערך ריק.
-- ה"summary" הוא משפט אחד עד שניים שמתאר מה היה בתקופה.
-- "headline" הוא משפט אחד עוצמתי — הדבר הכי חשוב מהתקופה (אופציונלי, רק אם יש משהו שבולט).
-- "people_summary" — לכל אדם שדובר/שותף לאירוע/הוזכר בהקלטה: שם + 1-2 משפטי הקשר על מה דובר. השם נלקח מתיוג הדוברים, מהמשתתפים באירועים, או מהקטעים שב-membersById.
-- "recordings_digest" — סיכום-על של ההקלטות בתקופה (פסקה אחת, לא רשימה). אם אין הקלטות — מחרוזת ריקה.
-- "productive_hours_insight" — תובנה אחת על השעות היעילות, המבוססת על שעת השיא + פירוט יומי.
-- "recommendations" — 2-5 המלצות פרקטיות לתקופה הבאה. כל המלצה: title קצר + description (1-2 משפטים) + category.
+- אל תמציאי נתונים שלא מופיעים בקלט. אם משהו ריק — מחרוזת ריקה / מערך ריק.
+- אל תהססי לתת המלצות אסרטיביות — המשתמשת תאשר/תדחה כל הצעה.
 
-הצעות פעולה (proposals) — חשוב מאוד:
-- מותר להציע פעולות **רק** עם entity ids שמופיעות במפורש בקלט: task:<id>, event:<id>, rec:<id>.
-- כל הצעה היא **טיוטה**, לא ביצוע — המשתמשת תאשר לפני שמשהו קורה. תני תזמון מוצע רגיל, ואל תפחדי להציע.
-- סוגי הצעות:
-  - move_task: משימה כבר מתוזמנת אבל הזמן שלה לא מתאים (חרגה / יום עמוס) → להעביר ל-new_scheduled_at.
-  - schedule_task: משימה ללא scheduled_at שכדאי לתזמן.
-  - create_event: יצירת אירוע חדש שעלה במחשבה / הקלטה (כותרת, starts_at, ends_at, ואופציונלי description/location).
-  - reorder_day: סידור מחדש של כמה משימות באותו יום (למשל בוקר/אחה"צ/ערב).
-  - complete_task: משימה שכנראה הושלמה אבל לא סומנה (זוהתה בהקלטה/מחשבה).
-  - split_task: משימה גדולה שכדאי לפצל ל-2-4 חלקים.
-- לכל הצעה, "reason" זה משפט אחד מסביר.
-- אל תציעי יותר מ-6 הצעות בסך הכל. עדיף איכות על כמות.
-- ב-payload שמחזירה — השתמשי ב-id המדויק שראית (UUID מלא, לא קוצר).
-- אם אין הצעות שמתאימות, החזירי מערך ריק.
+תכולת הסיכום:
+- "summary" — משפט אחד עד שניים, מה היה בתקופה.
+- "headline" — משפט אחד עוצמתי על הדבר הבולט בתקופה (אם יש).
+- "people_summary" — לכל אדם שדובר/השתתף/הוזכר: שם + 1-2 משפטי הקשר. שמות מתיוג דוברים, ממשתתפים, או מ-membersById.
+- "recordings_digest" — סיכום-על של ההקלטות בתקופה (פסקה אחת).
+- "productive_hours_insight" — תובנה אחת על שעות יעילות לפי שעת השיא + פירוט יומי.
+- "forward_outlook" — **חובה**, פסקה של 2-3 משפטים על מה צפוי בתקופה הבאה (לפי "הצפוי בקרוב"): על מה לשים דגש, היכן יש עומס, מה לטפל בו לפני שיהפוך לבעיה. אם אין נתונים קדימה — תכתבי "אין משימות מתוזמנות קדימה — שווה לתזמן את המשימות הפתוחות".
+- "recommendations" — 3-7 המלצות פרקטיות. **לפחות חצי מהן צריכות להיות עתידיות** (קטגוריה efficiency / planning / time / tasks שמכוונות לתקופה הבאה). title קצר + description (1-2 משפטים) + category.
 
-הקלט הוא טקסט מובנה למחצה עם רשימות של ישויות, כל אחת עם id מדויק (task:<uuid>, event:<uuid>, rec:<uuid>, thought:<uuid>).
+הצעות פעולה (proposals) — חשוב מאוד, **התרכזי בעתיד**:
+- מותר להציע פעולות עם entity ids מהקלט בלבד: task:<id>, event:<id>, rec:<id>. הכוונה כולל גם משימות מהסקציה "הצפוי בקרוב" וגם משימות מ"פתוחות ללא תזמון" — כולן ידועות לנו.
+- כל הצעה היא **טיוטה** — המשתמשת מאשרת לפני שמשהו קורה. אל תהססי להציע.
+- סוגי הצעות והמתי להשתמש בהן:
+  - move_task: משימה כבר מתוזמנת ביום עמוס → להעביר ליום עם פחות עומס. במיוחד שימי לב לימים בקרוב עם 5+ משימות.
+  - schedule_task: משימה פתוחה ללא scheduled_at שכדאי לתזמן ל-X (תאריך מוצע + שעה מוצעת). השתמשי כמה שיותר.
+  - create_event: יצירת אירוע חדש שעלה בהקלטה/מחשבה (כותרת, starts_at, ends_at).
+  - reorder_day: יום בקרוב עם הרבה משימות — סדרי אותן לפי בוקר/אחה"צ/ערב.
+  - complete_task: משימה שכנראה הושלמה אבל לא סומנה (זוהתה בהקלטה/מחשבה כ"עשיתי").
+  - split_task: משימה גדולה (2+ שעות) שכדאי לפצל ל-2-4 חלקים.
+- "reason" — משפט אחד מסביר למה זה הגיוני.
+- מקסימום 8 הצעות (היה 6) — עדיף איכות, אבל אל תקמצי על תכנון העתיד.
+- ב-payload — UUID מלא של ה-id, לא קוצר.
+
+הקלט הוא טקסט מובנה למחצה עם רשימות של ישויות, כל אחת עם id מדויק (task:<uuid>, event:<uuid>, rec:<uuid>, thought:<uuid>). השתמשי תמיד ב-id המדויק.
 `;
 
 const TOOL_SCHEMA = {
@@ -547,6 +735,7 @@ const TOOL_SCHEMA = {
       },
       recordings_digest: { type: "string" },
       productive_hours_insight: { type: "string" },
+      forward_outlook: { type: "string" },
       recommendations: {
         type: "array",
         items: {
@@ -556,7 +745,14 @@ const TOOL_SCHEMA = {
             description: { type: "string" },
             category: {
               type: "string",
-              enum: ["time", "tasks", "meetings", "general"],
+              enum: [
+                "time",
+                "tasks",
+                "meetings",
+                "general",
+                "efficiency",
+                "planning",
+              ],
             },
           },
           required: ["title", "description", "category"],
@@ -590,6 +786,7 @@ const TOOL_SCHEMA = {
       "people_summary",
       "recordings_digest",
       "productive_hours_insight",
+      "forward_outlook",
       "recommendations",
       "proposals",
     ],
@@ -658,6 +855,7 @@ async function callClaude(contextText: string): Promise<ClaudeReturn> {
       people_summary: out.people_summary ?? [],
       recordings_digest: out.recordings_digest ?? "",
       productive_hours_insight: out.productive_hours_insight ?? "",
+      forward_outlook: out.forward_outlook ?? "",
       recommendations: out.recommendations ?? [],
     },
     proposals: out.proposals ?? [],

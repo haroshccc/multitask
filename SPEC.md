@@ -3013,12 +3013,13 @@ Hero: "החלל לחשוב. החלל לעשות."
   - כולם optional — אם ה-AI לא מספק (גרסת v2 של ה-edge function), ה-UI
     מציג "ללא תזמון → X" וזה עובד.
 
-  **שינויים — Edge Function (לפריסה ידנית):**
+  **שינויים — Edge Function (נפרס v4):**
   - SYSTEM_PROMPT הורחב עם סקציה "מבני payload" שמפרטת בדיוק אילו שדות
     ה-AI חייב למלא לכל סוג הצעה. דגש מפורש: ב-`reorder_day` חובה
     current_scheduled_at + task_title + duration_minutes לכל move.
-  - **לא נפרס דרך MCP** — wrapper דחה את הקריאה (ZodError על type
-    coercion). נפרס ידנית בעדכון הבא; v2 ממשיך לשרת והקליינט מסתדר עם
-    שדות חסרים.
+  - הפריסה דרך MCP נכשלה בתחילה (ZodError) כי ה-project ID שב-MCP
+    server היה stale; אחרי שהמשתמשת ריענן את ה-MCP ה-list_projects
+    החזיר את ה-ID הנכון (`rzlvuaqbvfzkunbyyvbc`) והפריסה עברה
+    ל-version 4. מעכשיו ה-AI ימלא את כל השדות החסרים בעצמו.
 
   **קומיט:** `feat(brief/8.3.1): visual reorder-day agenda + bulk actions`

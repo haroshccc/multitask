@@ -3686,3 +3686,30 @@ Hero: "החלל לחשוב. החלל לעשות."
   של handleDragEnd עם adjustments לעולם של GanttRow.
 
   **קומיט:** `feat(gantt): wave 14.A+B — selection + complete + bulk toolbar`
+
+- **2026-05-03 — גל 14.C: ↑/↓ reorder arrows ב-GanttTable.**
+
+  **טריגר:** המשתמשת ביקשה drag rows למעלה/למטה. drag-to-nest דרך
+  dnd-kit על `<tr>` הסתבך טכנית (table layout + position:relative
+  לא משחקים יפה עם 3 absolute strips ל-3-zone drop). פתרון
+  פרגמטי: ↑/↓ buttons לreorder, drag-to-nest נדחה לwave נפרד.
+
+  **GanttTable:**
+  - prop חדש `onMoveTaskInOrder?: (taskId, direction: -1 | 1) => void`.
+  - Component `<ReorderArrows>` ב-actions cell — שני chevrons
+    זה-מעל-זה, hover-revealed (group-hover/sel).
+  - actions cell התרחב מ-w-12 ל-w-20 (drag handle הוסר; arrows +
+    selection + complete במקומם).
+
+  **Gantt.tsx:**
+  - `handleMoveTaskInOrder` עם הלוגיקה הזהה ל-list reorder:
+    מוצא peers ב-(parent_task_id, task_list_id), midpoint סדר
+    בין השכן והשכן-של-השכן. אם שווה ל-target (legacy data) —
+    bump ב-±0.5. wrapped ב-pushUndo.
+  - מועבר ל-GanttTable בשני ה-layouts.
+
+  **drag-to-nest (להמשך):** מימוש 3-zone strips על tr דורש
+  שינוי מבני (div+grid במקום table). כדאי לטפל בזה אם המשתמשת
+  תבקש במפורש — לא קריטי לMVP.
+
+  **קומיט:** `feat(gantt): wave 14.C — reorder arrows in GanttTable`

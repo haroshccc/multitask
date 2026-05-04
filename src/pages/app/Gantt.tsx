@@ -22,11 +22,13 @@ import {
 } from "@/components/gantt/gantt-utils";
 import {
   useAllTaskDependencies,
+  useArchiveProject,
   useCreateProject,
   useCreateTask,
   useCreateTaskList,
   useEvents,
   useListVisibility,
+  useMoveTaskToList,
   useProjects,
   useSetListVisibility,
   useTaskLists,
@@ -121,6 +123,8 @@ export function Gantt() {
   const createProject = useCreateProject();
   const updateTaskList = useUpdateTaskList();
   const createTask = useCreateTask();
+  const archiveProject = useArchiveProject();
+  const moveTaskToList = useMoveTaskToList();
 
   const windowStart = useMemo(() => {
     const span = defaultSpanDays(zoom);
@@ -345,6 +349,82 @@ export function Gantt() {
     }
   };
 
+  /** Demote the currently-selected project to a single list: archives
+   *  the project, and:
+   *    - 1 list → just clears its `project_id` and switches scope to it
+   *    - N lists → creates a new merged list, moves every task into it,
+   *      switches scope. The original lists become orphans (still
+   *      accessible via the lists table) but the project goes to archive.
+   *  Either way the user keeps every task. Confirms before mutating
+   *  because archiving a project is hard to recover from inside the UI. */
+  const handleConvertProjectToList = async () => {
+    if (source.kind !== "project") return;
+    const project = projects.find((p) => p.id === source.id);
+    if (!project) return;
+    const projectLists = lists.filter((l) => l.project_id === source.id);
+
+    if (projectLists.length === 0) {
+      if (
+        !window.confirm(
+          `הפרויקט "${project.name}" ריק. להעבירו לארכיון?`
+        )
+      ) {
+        return;
+      }
+      await archiveProject.mutateAsync(source.id);
+      setSource({ kind: "all" });
+      return;
+    }
+
+    if (projectLists.length === 1) {
+      const list = projectLists[0]!;
+      if (
+        !window.confirm(
+          `להפוך את הפרויקט "${project.name}" לרשימה? הפרויקט יועבר לארכיון; הרשימה והמשימות יישארו.`
+        )
+      ) {
+        return;
+      }
+      await updateTaskList.mutateAsync({
+        listId: list.id,
+        patch: { project_id: null },
+      });
+      await archiveProject.mutateAsync(source.id);
+      setSource({ kind: "list", id: list.id });
+      return;
+    }
+
+    // Multiple lists — needs a confirmation that's explicit about the merge.
+    if (
+      !window.confirm(
+        `הפרויקט "${project.name}" מכיל ${projectLists.length} רשימות. ` +
+          `כל המשימות יועברו לרשימה חדשה אחת בשם הפרויקט; הפרויקט יועבר לארכיון. להמשיך?`
+      )
+    ) {
+      return;
+    }
+    const newList = await createTaskList.mutateAsync({
+      name: project.name,
+      kind: "custom",
+      color: project.color,
+      emoji: project.emoji,
+    });
+    // Move every task currently scoped to this project.
+    const tasksToMove = tasks.filter(
+      (t) =>
+        !!t.task_list_id &&
+        projectLists.some((l) => l.id === t.task_list_id)
+    );
+    for (const t of tasksToMove) {
+      await moveTaskToList.mutateAsync({
+        taskId: t.id,
+        listId: newList.id,
+      });
+    }
+    await archiveProject.mutateAsync(source.id);
+    setSource({ kind: "list", id: newList.id });
+  };
+
   /** Promote the currently-selected list into a project: create a new
    *  project, attach the list to it via project_id, then re-scope the
    *  Gantt to the project so the user sees the same tasks but now under
@@ -415,6 +495,7 @@ export function Gantt() {
           onCreateNewList={handleCreateNewList}
           onCreateNewProject={handleCreateNewProject}
           onConvertListToProject={handleConvertListToProject}
+          onConvertProjectToList={handleConvertProjectToList}
           filtersActiveCount={filtersActiveCount}
           filtersOpen={filtersOpen}
           onToggleFilters={() => setFiltersOpen((v) => !v)}

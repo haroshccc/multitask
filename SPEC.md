@@ -3563,3 +3563,52 @@ Hero: "החלל לחשוב. החלל לעשות."
   של בחירה ("איזו list לשמר?"). זה גל נפרד אם המשתמשת תבקש.
 
   **קומיט:** `feat(gantt): wave 9.4 — create new list/project + convert list→project + inline + task row`
+
+- **2026-05-03 — גלים 10–13: column manager + parent completion + project→list + bug fixes.**
+
+  **גל 10 — Column manager בגאנט.** Hook חדש `useGanttColumnPrefs`
+  (ב-localStorage `multitask.gantt.columnPrefs.v1`) שמחזיק
+  `Array<{id, visible, label}>` per-user. ב-`GanttTable` נוסף
+  עמודת th תחתונה צרה (`w-8`) עם אייקון `Settings2` שפותח popover
+  עם רשימת ה-standard columns + checkbox visibility. ה-`title`
+  סומן `alwaysVisible` כי זה זהות השורה. כל th עוטף `<ColumnHeader>`
+  שתומך ב-double-click → input לשינוי שם, Enter/blur committs,
+  Escape בטל. כל cell ב-row עטוף ב-`{cols.isVisible(id) && <td>}`,
+  עם td תחתון ריק (`w-8`) ל-alignment עם ה-header.
+
+  **גל 11 — Parent completion rollup.** ב-`tasksService.completeTask`
+  אחרי ה-update הראשי, נקרא `bubbleParentCompletion(taskId)` שמטפס
+  ב-`parent_task_id` chain ובכל איטרציה:
+  - אם **כל ה-siblings** completed וה-parent לא → marks parent done.
+  - אם **לפחות sibling אחד פתוח** וה-parent done → un-marks ל-todo.
+  - אחרת (parent כבר במצב נכון) → loop נעצר.
+  - cap של 32 depth כדי למנוע runaway אם יש cycle ב-parent_task_id
+    (שלא אמור להתרחש אבל הגנה מ-loop).
+
+  זה אומר שסימון תת-משימה אחרונה אוטומטית מסיים את האם, וביטול
+  סימון של תת-משימה אוטומטית פותח את האם — בדיוק כמו
+  ה-rollup הויזואלי של תאריכים, רק לcompletion state.
+
+  **גל 12 — Project → List conversion (הפוך).** ב-`Gantt.tsx`
+  נוסף `handleConvertProjectToList`:
+  - **0 רשימות:** confirmation → archive project → source=all.
+  - **1 רשימה:** confirmation → `list.project_id=null` →
+    archive project → source=list.
+  - **N רשימות:** confirmation מפורש על המיזוג → יוצר רשימה
+    חדשה עם שם הפרויקט → לכל task ב-project עושה `moveTaskToList`
+    לרשימה החדשה → archive project → source=newList. הרשימות
+    המקוריות הופכות ל-orphans (ניתנות לארכוב נפרדת ב-Tasks page).
+
+  ב-`SourcePicker` נוסף כפתור "הפוך את 'X' לרשימה" שמופיע רק כש
+  `source.kind="project"` ו-`onConvertProjectToList` מסופק.
+
+  **גל 13 — Bug fix: deadline_at נמחק בעריכת משימה.** ב-`TaskEditModal.saveAll`
+  ה-`prevPatch` כלל את `deadline_at` אבל ה-`newPatch` השמיט אותו.
+  כל שמירה של משימה עם דד-ליין הייתה מוחקת אותו (כי `null`
+  נשלח ל-DB). הוסף `deadline_at: deadlineAt` ל-`newPatch`.
+
+  **באגים שאותרו אבל לא בעיה אקטיבית:** orderedIds drift נשאר
+  thoeretical (race קצרה בלבד; לא ראיתי תקלה אקטיבית). cast
+  על `item.source` ב-CalendarDayView מוגן ע"י early return.
+
+  **קומיט:** `feat: gantt column mgr + parent completion + project→list + deadline save fix`

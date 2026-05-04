@@ -3713,3 +3713,31 @@ Hero: "החלל לחשוב. החלל לעשות."
   תבקש במפורש — לא קריטי לMVP.
 
   **קומיט:** `feat(gantt): wave 14.C — reorder arrows in GanttTable`
+
+---
+
+## סיכום סשן 2026-05-03 — 17 גלים, 8 שטחי עבודה
+
+| # | תחום | מה נעשה |
+|---|------|---------|
+| 8.3.1 | Daily Brief AI | ReorderDay כאג'נדה ויזואלית, bulk approve/dismiss, edge function v6 (max_tokens 8192, חוקים קשיחים להצעות) ו-v7 (deadline awareness) |
+| 8.4 | Daily Brief AI | `deadline_at` ב-context של ה-AI |
+| Tasks 1 | מסך משימות | urgency default 0, popover portal, sticky banners בערימה, hover highlight, "לא משויכות" אופקי |
+| Tasks 2 | מסך משימות | 3-zone drag (above/nest/below), multi-select store + checkbox + Shift+click, BulkActionsToolbar |
+| Tasks 3 | מסך משימות | undo coverage מלא — create/title/delete (כולל subtree restore via fetchTaskSubtree), TaskEditModal save snapshot |
+| Tasks 4 | מסך משימות | `deadline_at` column + migration + index + UI ב-TaskEditModal + badge ב-row |
+| Tasks 5 | מסך משימות | drag עם cascade של list_id ל-descendants, select cascade ל-children, list reorder |
+| Tasks 6+7 | מסך משימות | list reorder ב-popover, banner controls (hide/color/reorder arrows) |
+| Calendar 8 | מסך יומן | `deadline_at` כ-pill 15 דקות עם hourglass + underline בצבע ה-list, `taskToItem` default 15-min |
+| Gantt 9 | מסך גאנט | 8 שלבים: layout toggle (side/stacked), GanttTable ערוכה, source picker (single), dependencies cell, parent rollup ויזואלי, anchor date picker, יצירת רשימה/פרויקט מהתפריט, המרה list↔project |
+| Gantt 10 | מסך גאנט | Column manager (show/hide + rename + popover) |
+| 11 | services | Parent completion bubble — auto-complete parent כשכל הילדים completed |
+| 12 | מסך גאנט | Project → list conversion (1 רשימה / N רשימות עם merge) |
+| 13 | bug fixes | TaskEditModal deadline_at חסר ב-newPatch (data loss בעריכה), BulkActions undo missing status, list reorder collision |
+| 14 | מסך גאנט | Selection checkbox + completion circle + bulk toolbar בגאנט, ↑/↓ reorder arrows |
+
+**שדה DB חדש:** `tasks.deadline_at TIMESTAMP WITH TIME ZONE` + index.
+**Edge function:** v7 deployed (max_tokens 8192, hard rules, deadline awareness).
+**Hooks חדשים:** `useGanttColumnPrefs`, `useTaskSelectionStore`, `useRestoreTasks`.
+**Components חדשים:** `BulkActionsToolbar`, `BriefReorderDayCard`, `GanttTable`, `SourcePicker`, `AnchorDatePicker`.
+

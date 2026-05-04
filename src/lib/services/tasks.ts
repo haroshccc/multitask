@@ -226,7 +226,70 @@ export async function setTaskParent(
   taskId: string,
   parentId: string | null
 ): Promise<Task> {
-  return updateTask(taskId, { parent_task_id: parentId });
+  // Capture the old parent before changing so we can re-evaluate it too.
+  const { data: cur } = await supabase
+    .from("tasks")
+    .select("parent_task_id")
+    .eq("id", taskId)
+    .maybeSingle();
+  const oldParentId = cur?.parent_task_id ?? null;
+
+  const result = await updateTask(taskId, { parent_task_id: parentId });
+
+  // Bubble completion for the new parent chain.
+  if (parentId) {
+    await bubbleParentCompletion(taskId).catch((err) =>
+      console.warn("parent completion bubble (new parent) failed:", err)
+    );
+  }
+  // Re-evaluate the old parent chain (the moved task is no longer a child there).
+  if (oldParentId && oldParentId !== parentId) {
+    await reevalParentChain(oldParentId).catch((err) =>
+      console.warn("parent completion bubble (old parent) failed:", err)
+    );
+  }
+  return result;
+}
+
+/** Directly re-evaluate a parent's completion from its remaining children,
+ *  then walk up. Used when a child is moved OUT of a parent. */
+async function reevalParentChain(parentId: string): Promise<void> {
+  let cursor = parentId;
+  for (let depth = 0; depth < 32; depth++) {
+    const { data: parent } = await supabase
+      .from("tasks")
+      .select("id, parent_task_id, completed_at")
+      .eq("id", cursor)
+      .maybeSingle();
+    if (!parent) return;
+
+    const { data: children } = await supabase
+      .from("tasks")
+      .select("id, completed_at")
+      .eq("parent_task_id", cursor);
+
+    // No children left — leave parent's own completion state unchanged.
+    if (!children || children.length === 0) return;
+
+    const allDone = children.every((c) => !!c.completed_at);
+    const parentDone = !!parent.completed_at;
+
+    if (allDone && !parentDone) {
+      await supabase
+        .from("tasks")
+        .update({ completed_at: new Date().toISOString(), status: "done" })
+        .eq("id", cursor);
+    } else if (!allDone && parentDone) {
+      await supabase
+        .from("tasks")
+        .update({ completed_at: null, status: "todo" })
+        .eq("id", cursor);
+    } else {
+      return; // No state change — chain stops.
+    }
+    if (!parent.parent_task_id) return;
+    cursor = parent.parent_task_id;
+  }
 }
 
 /**

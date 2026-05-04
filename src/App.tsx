@@ -1,19 +1,43 @@
+import { lazy, Suspense } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { useAuth } from "@/lib/auth/AuthContext";
 import { Landing } from "@/pages/Landing";
 import { AuthCallback } from "@/pages/AuthCallback";
 import { Onboarding } from "@/pages/Onboarding";
 import { AppShell } from "@/components/layout/AppShell";
-import { Dashboard } from "@/pages/app/Dashboard";
-import { Tasks } from "@/pages/app/Tasks";
-import { Calendar } from "@/pages/app/Calendar";
-import { Gantt } from "@/pages/app/Gantt";
-import { Recordings } from "@/pages/app/Recordings";
-import { Thoughts } from "@/pages/app/Thoughts";
-import { Projects } from "@/pages/app/Projects";
-import { ProjectDetail } from "@/pages/app/ProjectDetail";
-import { Settings } from "@/pages/app/Settings";
-import { Admin } from "@/pages/app/Admin";
+
+// Lazy-loaded app pages — each gets its own chunk, dramatically reducing the
+// initial bundle sent to the browser on first load.
+const Dashboard = lazy(() =>
+  import("@/pages/app/Dashboard").then((m) => ({ default: m.Dashboard }))
+);
+const Tasks = lazy(() =>
+  import("@/pages/app/Tasks").then((m) => ({ default: m.Tasks }))
+);
+const Calendar = lazy(() =>
+  import("@/pages/app/Calendar").then((m) => ({ default: m.Calendar }))
+);
+const Gantt = lazy(() =>
+  import("@/pages/app/Gantt").then((m) => ({ default: m.Gantt }))
+);
+const Recordings = lazy(() =>
+  import("@/pages/app/Recordings").then((m) => ({ default: m.Recordings }))
+);
+const Thoughts = lazy(() =>
+  import("@/pages/app/Thoughts").then((m) => ({ default: m.Thoughts }))
+);
+const Projects = lazy(() =>
+  import("@/pages/app/Projects").then((m) => ({ default: m.Projects }))
+);
+const ProjectDetail = lazy(() =>
+  import("@/pages/app/ProjectDetail").then((m) => ({ default: m.ProjectDetail }))
+);
+const Settings = lazy(() =>
+  import("@/pages/app/Settings").then((m) => ({ default: m.Settings }))
+);
+const Admin = lazy(() =>
+  import("@/pages/app/Admin").then((m) => ({ default: m.Admin }))
+);
 
 function RequireAuth({ children }: { children: JSX.Element }) {
   const { session, loading, memberships } = useAuth();
@@ -71,16 +95,86 @@ export default function App() {
           </RequireAuth>
         }
       >
-        <Route index element={<Dashboard />} />
-        <Route path="tasks" element={<Tasks />} />
-        <Route path="calendar" element={<Calendar />} />
-        <Route path="gantt" element={<Gantt />} />
-        <Route path="recordings" element={<Recordings />} />
-        <Route path="thoughts" element={<Thoughts />} />
-        <Route path="projects" element={<Projects />} />
-        <Route path="projects/:projectId" element={<ProjectDetail />} />
-        <Route path="settings" element={<Settings />} />
-        <Route path="admin" element={<Admin />} />
+        <Route
+          index
+          element={
+            <Suspense fallback={<LoadingShell />}>
+              <Dashboard />
+            </Suspense>
+          }
+        />
+        <Route
+          path="tasks"
+          element={
+            <Suspense fallback={<LoadingShell />}>
+              <Tasks />
+            </Suspense>
+          }
+        />
+        <Route
+          path="calendar"
+          element={
+            <Suspense fallback={<LoadingShell />}>
+              <Calendar />
+            </Suspense>
+          }
+        />
+        <Route
+          path="gantt"
+          element={
+            <Suspense fallback={<LoadingShell />}>
+              <Gantt />
+            </Suspense>
+          }
+        />
+        <Route
+          path="recordings"
+          element={
+            <Suspense fallback={<LoadingShell />}>
+              <Recordings />
+            </Suspense>
+          }
+        />
+        <Route
+          path="thoughts"
+          element={
+            <Suspense fallback={<LoadingShell />}>
+              <Thoughts />
+            </Suspense>
+          }
+        />
+        <Route
+          path="projects"
+          element={
+            <Suspense fallback={<LoadingShell />}>
+              <Projects />
+            </Suspense>
+          }
+        />
+        <Route
+          path="projects/:projectId"
+          element={
+            <Suspense fallback={<LoadingShell />}>
+              <ProjectDetail />
+            </Suspense>
+          }
+        />
+        <Route
+          path="settings"
+          element={
+            <Suspense fallback={<LoadingShell />}>
+              <Settings />
+            </Suspense>
+          }
+        />
+        <Route
+          path="admin"
+          element={
+            <Suspense fallback={<LoadingShell />}>
+              <Admin />
+            </Suspense>
+          }
+        />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

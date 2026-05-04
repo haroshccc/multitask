@@ -1,4 +1,12 @@
 import { useMemo, useState, useEffect } from "react";
+import {
+  DndContext,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  pointerWithin,
+  type DragEndEvent,
+} from "@dnd-kit/core";
 import { ScreenScaffold } from "@/components/layout/ScreenScaffold";
 import {
   FilterBar,
@@ -33,12 +41,14 @@ import {
   useProjects,
   useReorderTasks,
   useSetListVisibility,
+  useSetTaskParent,
   useTaskLists,
   useTasks,
   useUpdateEvent,
   useUpdateTask,
   useUpdateTaskList,
 } from "@/lib/hooks";
+import { useProjectCustomFields } from "@/lib/hooks/useTaskCustomFields";
 import type { GanttSource } from "@/components/gantt/GanttChrome";
 import { useTaskSelectionStore } from "@/lib/selection/store";
 import { pushUndo } from "@/lib/undo/store";
@@ -129,7 +139,17 @@ export function Gantt() {
   const createTask = useCreateTask();
   const archiveProject = useArchiveProject();
   const moveTaskToList = useMoveTaskToList();
+  const setTaskParent = useSetTaskParent();
   const reorderTasks = useReorderTasks();
+
+  const dndSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
+  );
+
+  // Fetch custom fields for the currently-scoped project (null when "all" or
+  // "list" scope — custom fields are per-project).
+  const scopedProjectId = source.kind === "project" ? source.id : null;
+  const { data: customFields = [] } = useProjectCustomFields(scopedProjectId);
 
   const windowStart = useMemo(() => {
     const span = defaultSpanDays(zoom);
@@ -515,6 +535,159 @@ export function Gantt() {
     setSource({ kind: "project", id: project.id });
   };
 
+  /** Prevent dropping a task onto one of its own descendants (cycle guard). */
+  const isGanttDescendant = (
+    taskId: string,
+    potentialAncestorId: string
+  ): boolean => {
+    let current: string | null = taskId;
+    const visited = new Set<string>();
+    while (current) {
+      if (visited.has(current)) break;
+      visited.add(current);
+      if (current === potentialAncestorId) return true;
+      const t = tasks.find((x) => x.id === current);
+      current = t?.parent_task_id ?? null;
+    }
+    return false;
+  };
+
+  /**
+   * Handle drag-end from the GanttTable rows. Three cases:
+   *   gantt-task-before → place dragged as sibling BEFORE target
+   *   gantt-task-nest   → make dragged a child of target
+   *   gantt-task-after  → place dragged as sibling AFTER target
+   */
+  const handleGanttDragEnd = (e: DragEndEvent) => {
+    const { active, over } = e;
+    if (!over) return;
+
+    type ActiveData = {
+      type: "gantt-task";
+      taskId: string;
+      listId: string | null;
+      parentTaskId: string | null;
+    };
+    type OverData =
+      | {
+          type: "gantt-task-nest";
+          taskId: string;
+          listId: string | null;
+        }
+      | {
+          type: "gantt-task-before" | "gantt-task-after";
+          taskId: string;
+          listId: string | null;
+          parentTaskId: string | null;
+        };
+
+    const activeData = active.data.current as ActiveData | undefined;
+    const overData = over.data.current as OverData | undefined;
+    if (!activeData || !overData) return;
+    if (activeData.type !== "gantt-task") return;
+    if (!activeData.taskId || !overData.taskId) return;
+    if (activeData.taskId === overData.taskId) return;
+
+    if (overData.type === "gantt-task-nest") {
+      // Drop-onto: make the active task a child of the target.
+      if (isGanttDescendant(overData.taskId, activeData.taskId)) return;
+      const prevParent = activeData.parentTaskId;
+      const prevListId = activeData.listId;
+      const nextListId = overData.listId;
+      setTaskParent.mutate({ taskId: activeData.taskId, parentId: overData.taskId });
+      if (prevListId !== nextListId && nextListId) {
+        moveTaskToList.mutate({ taskId: activeData.taskId, listId: nextListId });
+      }
+      pushUndo({
+        description: "קינון משימה",
+        undo: () => {
+          setTaskParent.mutate({ taskId: activeData.taskId, parentId: prevParent });
+          if (prevListId !== nextListId && prevListId !== undefined) {
+            moveTaskToList.mutate({ taskId: activeData.taskId, listId: prevListId });
+          }
+        },
+        redo: () => {
+          setTaskParent.mutate({ taskId: activeData.taskId, parentId: overData.taskId });
+          if (prevListId !== nextListId && nextListId) {
+            moveTaskToList.mutate({ taskId: activeData.taskId, listId: nextListId });
+          }
+        },
+      });
+      return;
+    }
+
+    // before / after: place as sibling of the target
+    if (
+      overData.type === "gantt-task-before" ||
+      overData.type === "gantt-task-after"
+    ) {
+      const targetTask = tasks.find((t) => t.id === overData.taskId);
+      if (!targetTask) return;
+
+      const nextParentId = targetTask.parent_task_id ?? null;
+      const nextListId = targetTask.task_list_id;
+      const prevParentId = activeData.parentTaskId;
+      const prevListId = activeData.listId;
+      const direction = overData.type === "gantt-task-before" ? -1 : 1;
+
+      // Find sibling peers of the target in its scope.
+      const peers = tasks
+        .filter(
+          (t) =>
+            (t.parent_task_id ?? null) === nextParentId &&
+            t.task_list_id === nextListId
+        )
+        .sort((a, b) => a.sort_order - b.sort_order);
+
+      const targetIdx = peers.findIndex((t) => t.id === targetTask.id);
+      if (targetIdx === -1) return;
+
+      // Neighbour is the task on the far side of the target in the drop direction.
+      const farIdx = targetIdx + direction;
+      const far = peers[farIdx];
+      let newSortOrder: number;
+      if (direction === -1) {
+        // before target: land between [far-before-target] and [target]
+        const farBefore = peers[targetIdx - 1];
+        newSortOrder = farBefore
+          ? (farBefore.sort_order + targetTask.sort_order) / 2
+          : targetTask.sort_order - 1;
+      } else {
+        // after target: land between [target] and [far-after-target]
+        newSortOrder = far
+          ? (targetTask.sort_order + far.sort_order) / 2
+          : targetTask.sort_order + 1;
+      }
+
+      const prevSortOrder =
+        tasks.find((t) => t.id === activeData.taskId)?.sort_order ?? 0;
+
+      setTaskParent.mutate({ taskId: activeData.taskId, parentId: nextParentId });
+      if (prevListId !== nextListId) {
+        moveTaskToList.mutate({ taskId: activeData.taskId, listId: nextListId });
+      }
+      reorderTasks.mutate([{ id: activeData.taskId, sort_order: newSortOrder }]);
+
+      pushUndo({
+        description: "סידור משימה",
+        undo: () => {
+          setTaskParent.mutate({ taskId: activeData.taskId, parentId: prevParentId });
+          if (prevListId !== nextListId && prevListId !== undefined) {
+            moveTaskToList.mutate({ taskId: activeData.taskId, listId: prevListId });
+          }
+          reorderTasks.mutate([{ id: activeData.taskId, sort_order: prevSortOrder }]);
+        },
+        redo: () => {
+          setTaskParent.mutate({ taskId: activeData.taskId, parentId: nextParentId });
+          if (prevListId !== nextListId) {
+            moveTaskToList.mutate({ taskId: activeData.taskId, listId: nextListId });
+          }
+          reorderTasks.mutate([{ id: activeData.taskId, sort_order: newSortOrder }]);
+        },
+      });
+    }
+  };
+
   const unifiedLists = useMemo(
     () =>
       lists.map((l) => ({
@@ -603,21 +776,61 @@ export function Gantt() {
             onToggleSidebar={() => setSidebarCollapsed((v) => !v)}
           />
         ) : tableLayout === "side" ? (
-          <div className="flex gap-2 items-stretch">
-            <div className="basis-1/3 min-w-0 shrink-0">
+          <DndContext
+            sensors={dndSensors}
+            collisionDetection={pointerWithin}
+            onDragEnd={handleGanttDragEnd}
+          >
+            <div className="flex gap-2 items-stretch">
+              <div className="basis-1/3 min-w-0 shrink-0">
+                <GanttTable
+                  rows={visibleRows}
+                  deps={deps}
+                  criticalSet={criticalSet}
+                  onRowClick={handleRowClick}
+                  layout="side"
+                  onCreateTask={
+                    source.kind === "all" ? undefined : handleCreateTaskInScope
+                  }
+                  onMoveTaskInOrder={handleMoveTaskInOrder}
+                  customFields={customFields}
+                />
+              </div>
+              <div className="basis-2/3 min-w-0 grow">
+                <GanttGrid
+                  rows={visibleRows}
+                  deps={deps}
+                  zoom={zoom}
+                  windowStart={windowStart}
+                  windowEnd={windowEnd}
+                  criticalSet={criticalSet}
+                  onRowClick={handleRowClick}
+                  onBarChange={handleBarChange}
+                  onCreateAt={handleGanttCreateAt}
+                  hideInternalSidebar
+                />
+              </div>
+            </div>
+          </DndContext>
+        ) : (
+          <DndContext
+            sensors={dndSensors}
+            collisionDetection={pointerWithin}
+            onDragEnd={handleGanttDragEnd}
+          >
+            <div className="flex flex-col gap-2">
               <GanttTable
                 rows={visibleRows}
                 deps={deps}
                 criticalSet={criticalSet}
                 onRowClick={handleRowClick}
-                layout="side"
+                layout="stacked"
                 onCreateTask={
                   source.kind === "all" ? undefined : handleCreateTaskInScope
                 }
                 onMoveTaskInOrder={handleMoveTaskInOrder}
+                customFields={customFields}
               />
-            </div>
-            <div className="basis-2/3 min-w-0 grow">
               <GanttGrid
                 rows={visibleRows}
                 deps={deps}
@@ -631,33 +844,7 @@ export function Gantt() {
                 hideInternalSidebar
               />
             </div>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-2">
-            <GanttTable
-              rows={visibleRows}
-              deps={deps}
-              criticalSet={criticalSet}
-              onRowClick={handleRowClick}
-              layout="stacked"
-              onCreateTask={
-                source.kind === "all" ? undefined : handleCreateTaskInScope
-              }
-              onMoveTaskInOrder={handleMoveTaskInOrder}
-            />
-            <GanttGrid
-              rows={visibleRows}
-              deps={deps}
-              zoom={zoom}
-              windowStart={windowStart}
-              windowEnd={windowEnd}
-              criticalSet={criticalSet}
-              onRowClick={handleRowClick}
-              onBarChange={handleBarChange}
-              onCreateAt={handleGanttCreateAt}
-              hideInternalSidebar
-            />
-          </div>
+          </DndContext>
         )}
       </div>
 

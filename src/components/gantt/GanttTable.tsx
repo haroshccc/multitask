@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useDraggable, useDroppable } from "@dnd-kit/core";
 import {
   ChevronDown,
   ChevronUp,
+  GripVertical,
   Link2,
   Settings2,
   Trash2,
@@ -22,46 +24,50 @@ import {
   useTaskSelectionStore,
 } from "@/lib/selection/store";
 import { pushUndo } from "@/lib/undo/store";
-import type { Task, TaskDependency } from "@/lib/types/domain";
+import type { Task, TaskCustomField, TaskDependency } from "@/lib/types/domain";
 import type { GanttRow } from "./gantt-utils";
 
 const ROW_HEIGHT = 40;
 const HEADER_HEIGHT = 64; // matches GanttGrid timeline header
 
+/** Build the CSS grid-template-columns string from the current column prefs. */
+function buildGridTemplate(
+  cols: ReturnType<typeof useGanttColumnPrefs>,
+  visibleCustomFields: TaskCustomField[]
+): string {
+  const parts = ["80px", "minmax(200px,1fr)"];
+  if (cols.isVisible("urgency")) parts.push("56px");
+  if (cols.isVisible("status")) parts.push("96px");
+  if (cols.isVisible("scheduled_at")) parts.push("144px");
+  if (cols.isVisible("deadline_at")) parts.push("144px");
+  if (cols.isVisible("duration_minutes")) parts.push("64px");
+  if (cols.isVisible("dependencies")) parts.push("80px");
+  for (let i = 0; i < visibleCustomFields.length; i++) parts.push("120px");
+  parts.push("32px"); // settings icon column
+  return parts.join(" ");
+}
+
 interface GanttTableProps {
   rows: GanttRow[];
-  /** Every dependency in the org — used by the dependencies cell to look
-   *  up which tasks each row depends on. */
   deps: TaskDependency[];
-  /** Critical-path rows get a warm tint, mirroring the grid. */
   criticalSet: Set<string>;
-  /** Click on a row → open the full edit modal (same handler as the bar). */
   onRowClick: (row: GanttRow) => void;
-  /** When `stacked`, the table claims a viewport-bounded height with its own
-   *  vertical scroll so the Gantt below stays in view. When `side`, the
-   *  table grows to fit the rows (the surrounding flex handles overflow). */
   layout: "side" | "stacked";
-  /** Add a task with the given title to the current scope. When provided
-   *  the table renders an inline + new row at the bottom; omitted when
-   *  the scope is "all" because there's no obvious destination list. */
   onCreateTask?: (title: string) => Promise<void> | void;
-  /** Move a task one slot earlier or later in its sibling order. -1 = up,
-   *  +1 = down. Only meaningful for non-event task rows. */
   onMoveTaskInOrder?: (taskId: string, direction: -1 | 1) => void;
+  /** Custom fields of the currently-scoped project (only present when
+   *  source.kind === "project"). Used to populate the custom field column
+   *  section in the column manager and to render cells. */
+  customFields?: TaskCustomField[];
 }
 
 /**
- * Editable Gantt table — the left/top "MS Project" pane that shows every row
- * with its key fields exposed for inline edit. Vertically aligned with the
- * Gantt timeline (same row height + header height) so a row in the table
- * lines up with its bar in the grid.
+ * Editable Gantt table — CSS-grid-based (not a <table>) so each row can be
+ * position:relative and host the three @dnd-kit droppable zones needed for
+ * drag-to-reorder and drag-to-nest (above / into / below).
  *
- * Wave 9.2 — initial column set: title, urgency (3-bar chip), status,
- * scheduled_at, deadline_at, duration_minutes. All edits go through
- * `useUpdateTask` and are wrapped in `pushUndo`. Phase rows render with a
- * leading colored stripe, bold font, and a subtle background — mirroring
- * the existing Gantt sidebar treatment so the visual identity carries
- * through.
+ * Wave 9.2 — initial table.
+ * Wave 14.C — converted <table> → CSS grid for drag-to-nest support.
  */
 export function GanttTable({
   rows,
@@ -71,6 +77,7 @@ export function GanttTable({
   layout,
   onCreateTask,
   onMoveTaskInOrder,
+  customFields = [],
 }: GanttTableProps) {
   const updateTask = useUpdateTask();
   const completeTask = useCompleteTask();
@@ -79,9 +86,15 @@ export function GanttTable({
   const [newTitle, setNewTitle] = useState("");
   const cols = useGanttColumnPrefs();
   const [colMgrOpen, setColMgrOpen] = useState(false);
+  const visibleCustomFields = useMemo(
+    () => customFields.filter((cf) => cols.isVisible(cf.id)),
+    [customFields, cols]
+  );
+  const gridTemplate = useMemo(
+    () => buildGridTemplate(cols, visibleCustomFields),
+    [cols, visibleCustomFields]
+  );
 
-  // Index dependencies by task — for each task id, the list of tasks it
-  // depends on (i.e. predecessors that must finish first).
   const depsByTask = useMemo(() => {
     const m = new Map<string, TaskDependency[]>();
     for (const d of deps) {
@@ -92,9 +105,6 @@ export function GanttTable({
     return m;
   }, [deps]);
 
-  // All visible task rows — used by the dependency picker to limit choices
-  // to what's currently on the Gantt (cross-list deps require a wider scope
-  // and are rare; deferred).
   const visibleTaskMap = useMemo(() => {
     const m = new Map<string, GanttRow>();
     for (const r of rows) {
@@ -125,83 +135,126 @@ export function GanttTable({
       )}
     >
       <div className="overflow-auto scrollbar-thin">
-        <table className="w-full text-[12px] tabular-nums border-collapse">
-          <thead
-            className="sticky top-0 z-10 bg-ink-50/95 backdrop-blur-sm"
+        <div role="table" className="w-full text-[12px] tabular-nums">
+          {/* ── Sticky header ── */}
+          <div
+            role="rowgroup"
+            className="sticky top-0 z-10 bg-ink-50/95 backdrop-blur-sm border-b border-ink-200"
             style={{ height: HEADER_HEIGHT }}
           >
-            <tr className="border-b border-ink-200">
-              <th className="w-20 px-1 py-2" aria-label="פעולות שורה" />
-              <th className="text-start font-semibold text-ink-700 px-2 py-2 min-w-[200px]">
+            <div
+              role="row"
+              className="grid items-center h-full"
+              style={{ gridTemplateColumns: gridTemplate }}
+            >
+              <div
+                role="columnheader"
+                className="px-1 py-2"
+                aria-label="פעולות שורה"
+              />
+              <div
+                role="columnheader"
+                className="text-start font-semibold text-ink-700 px-2 py-2 min-w-[200px]"
+              >
                 <ColumnHeader
                   id="title"
                   label={cols.getLabel("title", "משימה")}
-                  onRename={(label) => cols.renameColumn("title", label)}
+                  onRename={(l) => cols.renameColumn("title", l)}
                   align="start"
                 />
-              </th>
+              </div>
               {cols.isVisible("urgency") && (
-                <th className="text-center font-semibold text-ink-700 px-1 py-2 w-14">
+                <div
+                  role="columnheader"
+                  className="text-center font-semibold text-ink-700 px-1 py-2"
+                >
                   <ColumnHeader
                     id="urgency"
                     label={cols.getLabel("urgency", "דחיפות")}
-                    onRename={(label) => cols.renameColumn("urgency", label)}
+                    onRename={(l) => cols.renameColumn("urgency", l)}
                   />
-                </th>
+                </div>
               )}
               {cols.isVisible("status") && (
-                <th className="text-center font-semibold text-ink-700 px-1 py-2 w-24">
+                <div
+                  role="columnheader"
+                  className="text-center font-semibold text-ink-700 px-1 py-2"
+                >
                   <ColumnHeader
                     id="status"
                     label={cols.getLabel("status", "סטטוס")}
-                    onRename={(label) => cols.renameColumn("status", label)}
+                    onRename={(l) => cols.renameColumn("status", l)}
                   />
-                </th>
+                </div>
               )}
               {cols.isVisible("scheduled_at") && (
-                <th className="text-center font-semibold text-ink-700 px-1 py-2 w-36">
+                <div
+                  role="columnheader"
+                  className="text-center font-semibold text-ink-700 px-1 py-2"
+                >
                   <ColumnHeader
                     id="scheduled_at"
                     label={cols.getLabel("scheduled_at", "תזמון")}
-                    onRename={(label) => cols.renameColumn("scheduled_at", label)}
+                    onRename={(l) => cols.renameColumn("scheduled_at", l)}
                   />
-                </th>
+                </div>
               )}
               {cols.isVisible("deadline_at") && (
-                <th className="text-center font-semibold text-ink-700 px-1 py-2 w-36">
+                <div
+                  role="columnheader"
+                  className="text-center font-semibold text-ink-700 px-1 py-2"
+                >
                   <ColumnHeader
                     id="deadline_at"
                     label={cols.getLabel("deadline_at", "דד-ליין")}
-                    onRename={(label) => cols.renameColumn("deadline_at", label)}
+                    onRename={(l) => cols.renameColumn("deadline_at", l)}
                   />
-                </th>
+                </div>
               )}
               {cols.isVisible("duration_minutes") && (
-                <th className="text-center font-semibold text-ink-700 px-1 py-2 w-16">
+                <div
+                  role="columnheader"
+                  className="text-center font-semibold text-ink-700 px-1 py-2"
+                >
                   <ColumnHeader
                     id="duration_minutes"
                     label={cols.getLabel("duration_minutes", "משך (ד׳)")}
-                    onRename={(label) =>
-                      cols.renameColumn("duration_minutes", label)
-                    }
+                    onRename={(l) => cols.renameColumn("duration_minutes", l)}
                   />
-                </th>
+                </div>
               )}
               {cols.isVisible("dependencies") && (
-                <th className="text-center font-semibold text-ink-700 px-1 py-2 w-20">
+                <div
+                  role="columnheader"
+                  className="text-center font-semibold text-ink-700 px-1 py-2"
+                >
                   <ColumnHeader
                     id="dependencies"
                     label={cols.getLabel("dependencies", "תלויות")}
-                    onRename={(label) =>
-                      cols.renameColumn("dependencies", label)
-                    }
+                    onRename={(l) => cols.renameColumn("dependencies", l)}
                   />
-                </th>
+                </div>
               )}
-              {/* Column manager — opens a popover with show/hide toggles for
-                  every standard column. The "title" column is always visible
-                  so it doesn't appear in the toggle list. */}
-              <th className="w-8 px-0 py-0 align-middle">
+              {/* Custom field column headers */}
+              {visibleCustomFields.map((cf) => (
+                <div
+                  key={cf.id}
+                  role="columnheader"
+                  className="text-center font-semibold text-ink-700 px-1 py-2"
+                >
+                  <ColumnHeader
+                    id={cf.id}
+                    label={cols.getLabel(cf.id, cf.label)}
+                    onRename={(l) => cols.renameColumn(cf.id, l)}
+                  />
+                </div>
+              ))}
+
+              {/* Column manager button */}
+              <div
+                role="columnheader"
+                className="flex items-center justify-center px-0 py-0"
+              >
                 <div className="relative">
                   <button
                     type="button"
@@ -261,6 +314,58 @@ export function GanttTable({
                             </button>
                           );
                         })}
+                        {/* Custom fields section — only shown when scoped
+                            to a project that has custom fields. */}
+                        {customFields.length > 0 && (
+                          <>
+                            <div className="text-[10px] font-semibold text-ink-400 uppercase tracking-wider px-3 py-1 border-t border-ink-100 mt-1">
+                              שדות מותאמים אישית
+                            </div>
+                            {customFields.map((cf) => {
+                              const visible = cols.isVisible(cf.id);
+                              return (
+                                <button
+                                  key={cf.id}
+                                  type="button"
+                                  onClick={() => {
+                                    if (visible) {
+                                      cols.toggleVisible(cf.id);
+                                    } else {
+                                      cols.enableCustomField(cf.id);
+                                    }
+                                  }}
+                                  className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-start hover:bg-ink-50"
+                                >
+                                  <span
+                                    className={cn(
+                                      "w-3 h-3 rounded-sm border flex items-center justify-center shrink-0",
+                                      visible
+                                        ? "bg-primary-500 border-primary-500"
+                                        : "border-ink-300 bg-white"
+                                    )}
+                                  >
+                                    {visible && (
+                                      <svg
+                                        viewBox="0 0 20 20"
+                                        fill="currentColor"
+                                        className="w-2 h-2 text-white"
+                                      >
+                                        <path
+                                          fillRule="evenodd"
+                                          d="M16.704 5.29a1 1 0 010 1.415l-8 8a1 1 0 01-1.415 0l-4-4a1 1 0 011.415-1.414L8 12.586l7.29-7.293a1 1 0 011.415 0z"
+                                          clipRule="evenodd"
+                                        />
+                                      </svg>
+                                    )}
+                                  </span>
+                                  <span className="flex-1 truncate">
+                                    {cols.getLabel(cf.id, cf.label)}
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </>
+                        )}
                         <div className="text-[10px] text-ink-400 px-3 py-1.5 border-t border-ink-100 mt-1">
                           לחיצה כפולה על כותרת עמודה לשינוי השם
                         </div>
@@ -268,267 +373,448 @@ export function GanttTable({
                     </>
                   )}
                 </div>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => {
-              const isCritical =
-                r.kind === "task" && !!r.task && criticalSet.has(r.task.id);
-              const isPhase = !!r.isPhase;
-              const isEvent = r.kind === "event";
-              const isUnscheduled = !!r.unscheduled;
-              return (
-                <tr
-                  key={r.id}
-                  className={cn(
-                    "border-b border-ink-150 hover:bg-ink-100",
-                    // Scheduled = light background (white). Unscheduled =
-                    // distinctly darker tint so the eye picks them out as
-                    // "needs attention". Phases keep their own subtle tint;
-                    // critical-path rows tinted warm red.
-                    isUnscheduled ? "bg-ink-100" : "bg-white",
-                    r.completed && "opacity-60",
-                    isCritical && "bg-danger-500/5",
-                    isPhase && !isUnscheduled && "bg-ink-50/60 font-semibold",
-                    isPhase && isUnscheduled && "font-semibold"
-                  )}
-                  style={{
-                    height: ROW_HEIGHT,
-                    ...(isPhase
-                      ? ({
-                          borderInlineStartWidth: 4,
-                          borderInlineStartColor: r.accentColor ?? "#6b6b80",
-                        } as React.CSSProperties)
-                      : {}),
-                  }}
-                >
-                  {/* Row actions — up/down reorder arrows, selection
-                      checkbox, completion circle. Arrows + checkbox show
-                      on hover; circle is always visible. */}
-                  <td className="w-20 px-1 py-1 align-middle">
-                    {r.kind === "task" && r.task ? (
-                      <div className="flex items-center gap-0.5 group/sel">
-                        {onMoveTaskInOrder && (
-                          <ReorderArrows
-                            onUp={() => onMoveTaskInOrder(r.task!.id, -1)}
-                            onDown={() => onMoveTaskInOrder(r.task!.id, 1)}
-                          />
-                        )}
-                        <SelectionCheckbox taskId={r.task.id} />
-                        <CompletionCircle
-                          taskId={r.task.id}
-                          completed={!!r.task.completed_at}
-                          accent={r.accentColor ?? "#6b6b80"}
-                          onToggle={(next) =>
-                            completeTask.mutate({
-                              taskId: r.task!.id,
-                              completed: next,
-                            })
-                          }
-                        />
-                      </div>
-                    ) : null}
-                  </td>
-                  {/* Title — clickable to open full edit modal. The text
-                      itself is also editable inline (commits on blur). */}
-                  <td className="px-2 py-1">
-                    <div
-                      className="flex items-center gap-2"
-                      style={{ paddingInlineStart: r.depth * 16 }}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => onRowClick(r)}
-                        className="w-1.5 h-1.5 rounded-full shrink-0 hover:scale-150 transition-transform"
-                        style={{
-                          backgroundColor: isCritical
-                            ? "#ef4444"
-                            : isEvent
-                            ? "#3b82f6"
-                            : isPhase
-                            ? r.accentColor ?? "#6b6b80"
-                            : "#a8a8bc",
-                        }}
-                        title="פתח עריכה מלאה"
-                      />
-                      {r.kind === "task" && r.task ? (
-                        <TitleCell
-                          task={r.task}
-                          onCommit={(next) => {
-                            const prev = { title: r.task!.title };
-                            update(
-                              r.task!.id,
-                              { title: next },
-                              "שינוי כותרת",
-                              prev
-                            );
-                          }}
-                        />
-                      ) : (
-                        <span className="truncate flex-1 min-w-0">
-                          {r.title}
-                        </span>
-                      )}
-                    </div>
-                  </td>
+              </div>
+            </div>
+          </div>
 
-                  {cols.isVisible("urgency") && (
-                    <td className="px-1 py-1 text-center">
-                      {r.kind === "task" && r.task && (
-                        <UrgencyMiniChip
-                          value={r.task.urgency}
-                          onChange={(v) =>
-                            update(
-                              r.task!.id,
-                              { urgency: v },
-                              "שינוי דחיפות",
-                              { urgency: r.task!.urgency }
-                            )
-                          }
-                        />
-                      )}
-                    </td>
-                  )}
+          {/* ── Body rows ── */}
+          <div role="rowgroup">
+            {rows.map((r) => (
+              <GanttTableBodyRow
+                key={r.id}
+                row={r}
+                gridTemplate={gridTemplate}
+                cols={cols}
+                criticalSet={criticalSet}
+                taskDeps={depsByTask.get(r.task?.id ?? "") ?? []}
+                visibleTaskMap={visibleTaskMap}
+                visibleCustomFields={visibleCustomFields}
+                onRowClick={onRowClick}
+                onUpdate={update}
+                onComplete={(taskId, completed) =>
+                  completeTask.mutate({ taskId, completed })
+                }
+                onAddDep={
+                  r.kind === "task" && r.task
+                    ? (predecessorId) =>
+                        createDep.mutate({
+                          taskId: r.task!.id,
+                          dependsOnTaskId: predecessorId,
+                        })
+                    : undefined
+                }
+                onRemoveDep={(depId) => deleteDep.mutate(depId)}
+                onMoveTaskInOrder={onMoveTaskInOrder}
+              />
+            ))}
+          </div>
 
-                  {cols.isVisible("status") && (
-                    <td className="px-1 py-1 text-center">
-                      {r.kind === "task" && r.task && (
-                        <span className="text-[10px] text-ink-600 px-1.5 py-0.5 rounded-md bg-ink-100">
-                          {r.task.status}
-                        </span>
-                      )}
-                    </td>
-                  )}
-
-                  {cols.isVisible("scheduled_at") && (
-                    <td className="px-1 py-1 text-center">
-                      {r.kind === "task" && r.task && (
-                        <DateTimeCell
-                          value={r.task.scheduled_at}
-                          onCommit={(next) => {
-                            update(
-                              r.task!.id,
-                              { scheduled_at: next },
-                              "שינוי תזמון",
-                              { scheduled_at: r.task!.scheduled_at }
-                            );
-                          }}
-                        />
-                      )}
-                    </td>
-                  )}
-
-                  {cols.isVisible("deadline_at") && (
-                    <td className="px-1 py-1 text-center">
-                      {r.kind === "task" && r.task && (
-                        <DateTimeCell
-                          value={r.task.deadline_at}
-                          onCommit={(next) => {
-                            update(
-                              r.task!.id,
-                              { deadline_at: next },
-                              "שינוי דד-ליין",
-                              { deadline_at: r.task!.deadline_at }
-                            );
-                          }}
-                        />
-                      )}
-                    </td>
-                  )}
-
-                  {cols.isVisible("duration_minutes") && (
-                    <td className="px-1 py-1 text-center">
-                      {r.kind === "task" && r.task && (
-                        <NumberCell
-                          value={r.task.duration_minutes}
-                          onCommit={(next) => {
-                            update(
-                              r.task!.id,
-                              { duration_minutes: next },
-                              "שינוי משך",
-                              { duration_minutes: r.task!.duration_minutes }
-                            );
-                          }}
-                        />
-                      )}
-                    </td>
-                  )}
-
-                  {cols.isVisible("dependencies") && (
-                    <td className="px-1 py-1 text-center">
-                      {r.kind === "task" && r.task && (
-                        <DependenciesCell
-                          task={r.task}
-                          deps={depsByTask.get(r.task.id) ?? []}
-                          visibleTaskMap={visibleTaskMap}
-                          onAdd={(predecessorId) => {
-                            createDep.mutate({
-                              taskId: r.task!.id,
-                              dependsOnTaskId: predecessorId,
-                            });
-                          }}
-                          onRemove={(depId) => {
-                            deleteDep.mutate(depId);
-                          }}
-                        />
-                      )}
-                    </td>
-                  )}
-                  {/* Trailing cell to align with the column-manager header. */}
-                  <td className="w-8" />
-                </tr>
-              );
-            })}
-            {/* Inline + new task row — only shown when the scope picks a
-                concrete destination (a list or a project). With "all"
-                selected we don't know which list a new task should land
-                in, so the affordance is suppressed. Enter or blur commits;
-                the input clears so the user can keep typing rows. */}
-            {onCreateTask && (
-              <tr
-                className="border-b border-ink-150 bg-primary-50/40 hover:bg-primary-50"
-                style={{ height: ROW_HEIGHT }}
+          {/* ── Inline new-task row ── */}
+          {onCreateTask && (
+            <div
+              role="row"
+              className="grid border-b border-ink-150 bg-primary-50/40 hover:bg-primary-50"
+              style={{ gridTemplateColumns: gridTemplate, height: ROW_HEIGHT }}
+            >
+              {/* Spans all columns via the first cell taking full width */}
+              <div
+                role="cell"
+                className="col-span-full px-4 flex items-center gap-2"
+                style={{ gridColumn: "1 / -1" }}
               >
-                <td className="px-2 py-1" colSpan={9}>
-                  <div className="flex items-center gap-2">
-                    <span className="text-primary-600 text-sm">+</span>
-                    <input
-                      value={newTitle}
-                      onChange={(e) => setNewTitle(e.target.value)}
-                      onKeyDown={async (e) => {
-                        if (e.key === "Enter") {
-                          const trimmed = newTitle.trim();
-                          if (!trimmed) return;
-                          await onCreateTask(trimmed);
-                          setNewTitle("");
-                        }
-                        if (e.key === "Escape") setNewTitle("");
-                      }}
-                      onBlur={async () => {
-                        const trimmed = newTitle.trim();
-                        if (!trimmed) return;
-                        await onCreateTask(trimmed);
-                        setNewTitle("");
-                      }}
-                      placeholder="הוספת משימה חדשה..."
-                      className="flex-1 min-w-0 bg-transparent border-0 outline-none text-sm placeholder:text-ink-400 py-0.5"
-                    />
-                  </div>
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+                <span className="text-primary-600 text-sm">+</span>
+                <input
+                  value={newTitle}
+                  onChange={(e) => setNewTitle(e.target.value)}
+                  onKeyDown={async (e) => {
+                    if (e.key === "Enter") {
+                      const trimmed = newTitle.trim();
+                      if (!trimmed) return;
+                      await onCreateTask(trimmed);
+                      setNewTitle("");
+                    }
+                    if (e.key === "Escape") setNewTitle("");
+                  }}
+                  onBlur={async () => {
+                    const trimmed = newTitle.trim();
+                    if (!trimmed) return;
+                    await onCreateTask(trimmed);
+                    setNewTitle("");
+                  }}
+                  placeholder="הוספת משימה חדשה..."
+                  className="flex-1 min-w-0 bg-transparent border-0 outline-none text-sm placeholder:text-ink-400 py-0.5"
+                />
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
-// Cell components — kept inline so the table file stays self-contained;
-// they're tiny and only meaningful in this context. Each commits on blur or
-// Enter, reverts on Escape, and stays in sync with the underlying task when
-// realtime updates push new values in.
+// ─── Body Row ────────────────────────────────────────────────────────────────
+
+interface GanttTableBodyRowProps {
+  row: GanttRow;
+  gridTemplate: string;
+  cols: ReturnType<typeof useGanttColumnPrefs>;
+  criticalSet: Set<string>;
+  taskDeps: TaskDependency[];
+  visibleTaskMap: Map<string, GanttRow>;
+  visibleCustomFields: TaskCustomField[];
+  onRowClick: (row: GanttRow) => void;
+  onUpdate: (
+    taskId: string,
+    patch: Partial<Task>,
+    description: string,
+    prev: Partial<Task>
+  ) => void;
+  onComplete: (taskId: string, completed: boolean) => void;
+  onAddDep?: (predecessorId: string) => void;
+  onRemoveDep: (depId: string) => void;
+  onMoveTaskInOrder?: (taskId: string, direction: -1 | 1) => void;
+}
+
+/**
+ * Single Gantt table row — a CSS-grid div (not a <tr>) with position:relative
+ * so the three @dnd-kit droppable zones can be absolutely positioned inside.
+ *
+ * Drop zones:
+ *   before (top 25%)  → sibling above
+ *   nest   (mid 50%)  → child of this task
+ *   after  (bot 25%)  → sibling below
+ */
+function GanttTableBodyRow({
+  row,
+  gridTemplate,
+  cols,
+  criticalSet,
+  taskDeps,
+  visibleTaskMap,
+  visibleCustomFields,
+  onRowClick,
+  onUpdate,
+  onComplete,
+  onAddDep,
+  onRemoveDep,
+  onMoveTaskInOrder,
+}: GanttTableBodyRowProps) {
+  const isTask = row.kind === "task" && !!row.task;
+  const isCritical = isTask && criticalSet.has(row.task!.id);
+  const isPhase = !!row.isPhase;
+  const isEvent = row.kind === "event";
+  const isUnscheduled = !!row.unscheduled;
+
+  // ── Draggable ──
+  const {
+    attributes,
+    listeners,
+    setNodeRef: setDragRef,
+    isDragging,
+  } = useDraggable({
+    id: `gantt-task:${row.id}`,
+    data: {
+      type: "gantt-task",
+      taskId: row.task?.id,
+      listId: row.task?.task_list_id ?? null,
+      parentTaskId: row.task?.parent_task_id ?? null,
+    },
+    disabled: !isTask,
+  });
+
+  // ── Drop zones ──
+  const { setNodeRef: setBeforeRef, isOver: isOverBefore } = useDroppable({
+    id: `gantt-before:${row.id}`,
+    data: {
+      type: "gantt-task-before",
+      taskId: row.task?.id,
+      listId: row.task?.task_list_id ?? null,
+      parentTaskId: row.task?.parent_task_id ?? null,
+    },
+    disabled: !isTask,
+  });
+
+  const { setNodeRef: setNestRef, isOver: isOverNest } = useDroppable({
+    id: `gantt-nest:${row.id}`,
+    data: {
+      type: "gantt-task-nest",
+      taskId: row.task?.id,
+      listId: row.task?.task_list_id ?? null,
+    },
+    disabled: !isTask,
+  });
+
+  const { setNodeRef: setAfterRef, isOver: isOverAfter } = useDroppable({
+    id: `gantt-after:${row.id}`,
+    data: {
+      type: "gantt-task-after",
+      taskId: row.task?.id,
+      listId: row.task?.task_list_id ?? null,
+      parentTaskId: row.task?.parent_task_id ?? null,
+    },
+    disabled: !isTask,
+  });
+
+  return (
+    <div
+      ref={setDragRef}
+      role="row"
+      className={cn(
+        "relative grid border-b border-ink-150 hover:bg-ink-100 group/sel",
+        isUnscheduled ? "bg-ink-100" : "bg-white",
+        row.completed && "opacity-60",
+        isCritical && "bg-danger-500/5",
+        isPhase && !isUnscheduled && "bg-ink-50/60 font-semibold",
+        isPhase && isUnscheduled && "font-semibold",
+        isDragging && "opacity-40",
+        isOverNest && !isDragging && "bg-primary-50 ring-1 ring-inset ring-primary-300"
+      )}
+      style={{
+        height: ROW_HEIGHT,
+        gridTemplateColumns: gridTemplate,
+        ...(isPhase
+          ? ({
+              borderInlineStartWidth: 4,
+              borderInlineStartColor: row.accentColor ?? "#6b6b80",
+            } as React.CSSProperties)
+          : {}),
+      }}
+    >
+      {/* ── Drop zones (invisible strips, pointer-events:none) ── */}
+      {isTask && (
+        <>
+          <div
+            ref={setBeforeRef}
+            className="absolute top-0 inset-x-0 h-1/4 pointer-events-none z-10"
+            aria-hidden
+          />
+          <div
+            ref={setNestRef}
+            className="absolute top-1/4 inset-x-0 h-1/2 pointer-events-none z-10"
+            aria-hidden
+          />
+          <div
+            ref={setAfterRef}
+            className="absolute bottom-0 inset-x-0 h-1/4 pointer-events-none z-10"
+            aria-hidden
+          />
+          {isOverBefore && !isDragging && (
+            <div
+              className="absolute top-0 inset-x-1 h-0.5 bg-primary-500 rounded-full pointer-events-none z-20"
+              aria-hidden
+            />
+          )}
+          {isOverAfter && !isDragging && (
+            <div
+              className="absolute bottom-0 inset-x-1 h-0.5 bg-primary-500 rounded-full pointer-events-none z-20"
+              aria-hidden
+            />
+          )}
+        </>
+      )}
+
+      {/* ── Actions cell ── */}
+      <div
+        role="cell"
+        className="px-1 py-1 flex items-center gap-0.5"
+      >
+        {isTask && row.task && (
+          <>
+            {/* Drag handle */}
+            <button
+              {...attributes}
+              {...listeners}
+              type="button"
+              className="opacity-0 group-hover/sel:opacity-100 cursor-grab active:cursor-grabbing text-ink-400 hover:text-ink-700 shrink-0"
+              aria-label="גרור"
+            >
+              <GripVertical className="w-3 h-3" />
+            </button>
+            {onMoveTaskInOrder && (
+              <ReorderArrows
+                onUp={() => onMoveTaskInOrder(row.task!.id, -1)}
+                onDown={() => onMoveTaskInOrder(row.task!.id, 1)}
+              />
+            )}
+            <SelectionCheckbox taskId={row.task.id} />
+            <CompletionCircle
+              taskId={row.task.id}
+              completed={!!row.task.completed_at}
+              accent={row.accentColor ?? "#6b6b80"}
+              onToggle={(next) => onComplete(row.task!.id, next)}
+            />
+          </>
+        )}
+      </div>
+
+      {/* ── Title cell ── */}
+      <div
+        role="cell"
+        className="px-2 py-1 flex items-center gap-2 min-w-0"
+        style={{ paddingInlineStart: `${8 + row.depth * 16}px` }}
+      >
+        <button
+          type="button"
+          onClick={() => onRowClick(row)}
+          className="w-1.5 h-1.5 rounded-full shrink-0 hover:scale-150 transition-transform"
+          style={{
+            backgroundColor: isCritical
+              ? "#ef4444"
+              : isEvent
+              ? "#3b82f6"
+              : isPhase
+              ? row.accentColor ?? "#6b6b80"
+              : "#a8a8bc",
+          }}
+          title="פתח עריכה מלאה"
+        />
+        {isTask && row.task ? (
+          <TitleCell
+            task={row.task}
+            onCommit={(next) =>
+              onUpdate(row.task!.id, { title: next }, "שינוי כותרת", {
+                title: row.task!.title,
+              })
+            }
+          />
+        ) : (
+          <span className="truncate flex-1 min-w-0">{row.title}</span>
+        )}
+      </div>
+
+      {/* ── Conditional cells ── */}
+      {cols.isVisible("urgency") && (
+        <div role="cell" className="px-1 py-1 flex items-center justify-center">
+          {isTask && row.task && (
+            <UrgencyMiniChip
+              value={row.task.urgency}
+              onChange={(v) =>
+                onUpdate(
+                  row.task!.id,
+                  { urgency: v },
+                  "שינוי דחיפות",
+                  { urgency: row.task!.urgency }
+                )
+              }
+            />
+          )}
+        </div>
+      )}
+
+      {cols.isVisible("status") && (
+        <div role="cell" className="px-1 py-1 flex items-center justify-center">
+          {isTask && row.task && (
+            <span className="text-[10px] text-ink-600 px-1.5 py-0.5 rounded-md bg-ink-100">
+              {row.task.status}
+            </span>
+          )}
+        </div>
+      )}
+
+      {cols.isVisible("scheduled_at") && (
+        <div role="cell" className="px-1 py-1 flex items-center justify-center">
+          {isTask && row.task && (
+            <DateTimeCell
+              value={row.task.scheduled_at}
+              onCommit={(next) =>
+                onUpdate(
+                  row.task!.id,
+                  { scheduled_at: next },
+                  "שינוי תזמון",
+                  { scheduled_at: row.task!.scheduled_at }
+                )
+              }
+            />
+          )}
+        </div>
+      )}
+
+      {cols.isVisible("deadline_at") && (
+        <div role="cell" className="px-1 py-1 flex items-center justify-center">
+          {isTask && row.task && (
+            <DateTimeCell
+              value={row.task.deadline_at}
+              onCommit={(next) =>
+                onUpdate(
+                  row.task!.id,
+                  { deadline_at: next },
+                  "שינוי דד-ליין",
+                  { deadline_at: row.task!.deadline_at }
+                )
+              }
+            />
+          )}
+        </div>
+      )}
+
+      {cols.isVisible("duration_minutes") && (
+        <div role="cell" className="px-1 py-1 flex items-center justify-center">
+          {isTask && row.task && (
+            <NumberCell
+              value={row.task.duration_minutes}
+              onCommit={(next) =>
+                onUpdate(
+                  row.task!.id,
+                  { duration_minutes: next },
+                  "שינוי משך",
+                  { duration_minutes: row.task!.duration_minutes }
+                )
+              }
+            />
+          )}
+        </div>
+      )}
+
+      {cols.isVisible("dependencies") && (
+        <div role="cell" className="px-1 py-1 flex items-center justify-center">
+          {isTask && row.task && onAddDep && (
+            <DependenciesCell
+              task={row.task}
+              deps={taskDeps}
+              visibleTaskMap={visibleTaskMap}
+              onAdd={onAddDep}
+              onRemove={onRemoveDep}
+            />
+          )}
+        </div>
+      )}
+
+      {/* ── Custom field cells ── */}
+      {visibleCustomFields.map((cf) => (
+        <div
+          key={cf.id}
+          role="cell"
+          className="px-1 py-1 flex items-center justify-center"
+        >
+          {isTask && row.task && (
+            <GanttCustomFieldCell
+              field={cf}
+              task={row.task}
+              onSave={(value) => {
+                const prev =
+                  (row.task!.custom_fields as Record<string, unknown> | null) ??
+                  {};
+                const next = { ...prev, [cf.id]: value };
+                onUpdate(
+                  row.task!.id,
+                  { custom_fields: next as Task["custom_fields"] },
+                  "עדכון שדה",
+                  { custom_fields: row.task!.custom_fields }
+                );
+              }}
+            />
+          )}
+        </div>
+      ))}
+
+      {/* Trailing cell — aligns with the column-manager header */}
+      <div role="cell" />
+    </div>
+  );
+}
+
+// ─── Cell sub-components ─────────────────────────────────────────────────────
 
 function TitleCell({
   task,
@@ -569,7 +855,6 @@ function DateTimeCell({
   value: string | null;
   onCommit: (next: string | null) => void;
 }) {
-  // datetime-local needs YYYY-MM-DDTHH:mm in local time, not ISO/UTC.
   const toLocalInput = (iso: string | null): string => {
     if (!iso) return "";
     const d = new Date(iso);
@@ -605,7 +890,9 @@ function NumberCell({
   value: number | null;
   onCommit: (next: number | null) => void;
 }) {
-  const [draft, setDraft] = useState<string>(value == null ? "" : String(value));
+  const [draft, setDraft] = useState<string>(
+    value == null ? "" : String(value)
+  );
   useEffect(() => setDraft(value == null ? "" : String(value)), [value]);
   return (
     <input
@@ -641,10 +928,13 @@ function DependenciesCell({
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState("");
 
-  // Choices: every visible task except this one. Linked predecessors are
-  // surfaced first so the most-relevant rows are at the top.
   const choices = useMemo(() => {
-    const out: Array<{ id: string; title: string; isLinked: boolean; depId?: string }> = [];
+    const out: Array<{
+      id: string;
+      title: string;
+      isLinked: boolean;
+      depId?: string;
+    }> = [];
     for (const [id, row] of visibleTaskMap) {
       if (id === task.id) continue;
       const dep = deps.find((d) => d.depends_on_task_id === id);
@@ -679,7 +969,9 @@ function DependenciesCell({
         }
       >
         <Link2 className="w-3 h-3" />
-        {deps.length > 0 && <span className="font-mono">{deps.length}</span>}
+        {deps.length > 0 && (
+          <span className="font-mono">{deps.length}</span>
+        )}
       </button>
       {open && (
         <>
@@ -827,11 +1119,6 @@ function UrgencyMiniChip({
   );
 }
 
-/**
- * Column header — renders the label, supports double-click to rename
- * inline (commits on Enter or blur, reverts on Escape). The default
- * label is restored if the user clears the input.
- */
 function ColumnHeader({
   id: _id,
   label,
@@ -890,12 +1177,6 @@ function ColumnHeader({
   );
 }
 
-/**
- * Selection checkbox — wires into the shared task selection store. Hidden
- * by default (opacity-0) and revealed on hover, OR shown immediately
- * when the row is already selected so the user has a clear anchor.
- * Shift+click extends a range from the current anchor.
- */
 function SelectionCheckbox({ taskId }: { taskId: string }) {
   const isSelected = useIsTaskSelected(taskId);
   return (
@@ -932,11 +1213,6 @@ function SelectionCheckbox({ taskId }: { taskId: string }) {
   );
 }
 
-/**
- * Completion circle — same affordance as the tasks-screen TaskRow but at
- * a smaller size to fit the table row. Uses the row's accent color so it
- * reads as connected to the list, not a generic checkbox.
- */
 function CompletionCircle({
   taskId: _taskId,
   completed,
@@ -983,12 +1259,191 @@ function CompletionCircle({
   );
 }
 
-/**
- * ↑ / ↓ buttons that move the row one slot earlier or later in its
- * sibling order. Hover-revealed so they don't crowd the row. The actual
- * sort_order math lives in Gantt.tsx — this component just emits the
- * direction.
- */
+/** Compact custom field cell for the Gantt table. Supports the common field
+ *  types inline; complex types (file, multiselect) are read-only badges. */
+function GanttCustomFieldCell({
+  field,
+  task,
+  onSave,
+}: {
+  field: TaskCustomField;
+  task: Task;
+  onSave: (value: unknown) => void;
+}) {
+  const cf = (task.custom_fields as Record<string, unknown> | null) ?? {};
+  const value = cf[field.id] ?? null;
+
+  switch (field.field_type) {
+    case "text":
+    case "url":
+    case "location":
+    case "person":
+      return (
+        <GanttCfTextCell
+          value={(value as string) ?? ""}
+          onSave={onSave}
+        />
+      );
+    case "number":
+    case "time":
+      return (
+        <GanttCfNumberCell
+          value={value as number | null}
+          onSave={onSave}
+        />
+      );
+    case "date":
+      return (
+        <GanttCfDateCell value={(value as string) ?? ""} onSave={onSave} />
+      );
+    case "checkbox":
+      return (
+        <button
+          type="button"
+          onClick={() => onSave(!value)}
+          className={cn(
+            "w-4 h-4 rounded border-2 flex items-center justify-center transition-colors",
+            value ? "bg-primary-500 border-primary-500 text-white" : "border-ink-300"
+          )}
+        >
+          {value && (
+            <svg viewBox="0 0 20 20" fill="currentColor" className="w-2.5 h-2.5">
+              <path fillRule="evenodd" d="M16.704 5.29a1 1 0 010 1.415l-8 8a1 1 0 01-1.415 0l-4-4a1 1 0 011.415-1.414L8 12.586l7.29-7.293a1 1 0 011.415 0z" clipRule="evenodd" />
+            </svg>
+          )}
+        </button>
+      );
+    case "stars": {
+      const stars = Math.min(5, Math.max(0, (value as number) ?? 0));
+      return (
+        <div className="flex gap-0.5">
+          {[1, 2, 3, 4, 5].map((n) => (
+            <button
+              key={n}
+              type="button"
+              onClick={() => onSave(n === stars ? 0 : n)}
+              className={cn(
+                "text-[10px]",
+                n <= stars ? "text-amber-400" : "text-ink-200"
+              )}
+            >
+              ★
+            </button>
+          ))}
+        </div>
+      );
+    }
+    case "select": {
+      const opts = (field.options as Array<{ value: string; label: string }> | null) ?? [];
+      return (
+        <select
+          value={(value as string) ?? ""}
+          onChange={(e) => onSave(e.target.value || null)}
+          className="text-[10px] bg-transparent border border-transparent hover:border-ink-200 focus:border-primary-400 outline-none rounded-sm px-1 py-0.5 w-full truncate"
+        >
+          <option value="">—</option>
+          {opts.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      );
+    }
+    case "tag": {
+      const tags = (value as string[]) ?? [];
+      return (
+        <span className="text-[10px] text-ink-600 truncate">
+          {tags.join(", ") || "—"}
+        </span>
+      );
+    }
+    default:
+      return (
+        <span className="text-[10px] text-ink-300 truncate">—</span>
+      );
+  }
+}
+
+function GanttCfTextCell({
+  value,
+  onSave,
+}: {
+  value: string;
+  onSave: (v: string) => void;
+}) {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => setDraft(value), [value]);
+  return (
+    <input
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => {
+        if (draft !== value) onSave(draft || null);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+        if (e.key === "Escape") setDraft(value);
+      }}
+      className="text-[10px] bg-transparent border border-transparent hover:border-ink-200 focus:border-primary-400 outline-none rounded-sm px-1 py-0.5 w-full truncate"
+    />
+  );
+}
+
+function GanttCfNumberCell({
+  value,
+  onSave,
+}: {
+  value: number | null;
+  onSave: (v: number | null) => void;
+}) {
+  const [draft, setDraft] = useState(value == null ? "" : String(value));
+  useEffect(() => setDraft(value == null ? "" : String(value)), [value]);
+  return (
+    <input
+      type="number"
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => {
+        const n = draft === "" ? null : Number(draft);
+        if (n !== value && (n === null || !isNaN(n))) onSave(n);
+      }}
+      className="w-14 text-center text-[10px] bg-transparent border border-transparent hover:border-ink-200 focus:border-primary-400 outline-none rounded-sm px-1 py-0.5"
+    />
+  );
+}
+
+function GanttCfDateCell({
+  value,
+  onSave,
+}: {
+  value: string;
+  onSave: (v: string | null) => void;
+}) {
+  const toDateInput = (iso: string): string => {
+    if (!iso) return "";
+    try {
+      return new Date(iso).toISOString().slice(0, 10);
+    } catch {
+      return "";
+    }
+  };
+  const [draft, setDraft] = useState(toDateInput(value));
+  useEffect(() => setDraft(toDateInput(value)), [value]);
+  return (
+    <input
+      type="date"
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => {
+        const next = draft ? new Date(draft).toISOString() : null;
+        if (next !== (value || null)) onSave(next);
+      }}
+      className="text-[10px] bg-transparent border border-transparent hover:border-ink-200 focus:border-primary-400 outline-none rounded-sm px-1 py-0.5 w-full"
+    />
+  );
+}
+
 function ReorderArrows({
   onUp,
   onDown,

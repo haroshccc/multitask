@@ -72,7 +72,11 @@ export function useGanttColumnPrefs() {
     const std = GANTT_STANDARD_COLUMNS.find((c) => c.id === id);
     if (std?.alwaysVisible) return true;
     const pref = byId.get(id);
-    if (!pref) return true; // default = visible
+    if (!pref) {
+      // Standard columns default to visible; unknown ids (custom fields) default
+      // to hidden — the user explicitly adds them via the column manager.
+      return !!std;
+    }
     return pref.visible;
   };
 
@@ -110,5 +114,19 @@ export function useGanttColumnPrefs() {
     });
   };
 
-  return { isVisible, getLabel, toggleVisible, renameColumn };
+  /** Enable a custom field column (adds it as visible=true in storage). */
+  const enableCustomField = (fieldId: string) => {
+    setPrefs((curr) => {
+      const idx = curr.findIndex((p) => p.id === fieldId);
+      if (idx !== -1) {
+        // Already stored — flip to visible.
+        const next = [...curr];
+        next[idx] = { ...next[idx]!, visible: true };
+        return next;
+      }
+      return [...curr, { id: fieldId, visible: true }];
+    });
+  };
+
+  return { isVisible, getLabel, toggleVisible, renameColumn, enableCustomField };
 }

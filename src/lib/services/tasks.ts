@@ -127,10 +127,80 @@ export async function updateTask(taskId: string, patch: TaskUpdate): Promise<Tas
 }
 
 export async function completeTask(taskId: string, completed: boolean): Promise<Task> {
-  return updateTask(taskId, {
+  const result = await updateTask(taskId, {
     completed_at: completed ? new Date().toISOString() : null,
     status: completed ? "done" : "todo",
   });
+  // Bubble the completion state up through parents:
+  //   - If we just completed a task and all of its parent's children are
+  //     now done, mark the parent done too (recursively).
+  //   - If we just uncompleted a task and the parent was marked done,
+  //     un-mark it (because at least one child is open again).
+  // This keeps the parent rollup honest even when the user toggles a
+  // single subtask from anywhere in the app.
+  await bubbleParentCompletion(taskId).catch((err) => {
+    console.warn("parent completion bubble failed:", err);
+  });
+  return result;
+}
+
+/**
+ * Walk from `taskId` up through `parent_task_id` chain, syncing each
+ * parent's completion state with its children:
+ *   all children done   → parent gets `completed_at` set + status="done"
+ *   any child open      → parent's `completed_at` cleared + status="todo"
+ * Already-correct parents are left alone (so we don't churn updated_at).
+ */
+async function bubbleParentCompletion(taskId: string): Promise<void> {
+  let cursor = taskId;
+  // Defensive cap to avoid runaway loops if the parent_task_id chain ever
+  // contains a cycle (shouldn't, but better safe than blocking writes).
+  for (let depth = 0; depth < 32; depth++) {
+    const { data: task } = await supabase
+      .from("tasks")
+      .select("id, parent_task_id")
+      .eq("id", cursor)
+      .maybeSingle();
+    if (!task?.parent_task_id) return;
+    const parentId = task.parent_task_id;
+
+    const { data: parent } = await supabase
+      .from("tasks")
+      .select("id, completed_at")
+      .eq("id", parentId)
+      .maybeSingle();
+    if (!parent) return;
+
+    const { data: siblings } = await supabase
+      .from("tasks")
+      .select("id, completed_at")
+      .eq("parent_task_id", parentId);
+    if (!siblings || siblings.length === 0) return;
+
+    const allDone = siblings.every((s) => !!s.completed_at);
+    const parentDone = !!parent.completed_at;
+
+    if (allDone && !parentDone) {
+      await supabase
+        .from("tasks")
+        .update({
+          completed_at: new Date().toISOString(),
+          status: "done",
+        })
+        .eq("id", parentId);
+    } else if (!allDone && parentDone) {
+      await supabase
+        .from("tasks")
+        .update({ completed_at: null, status: "todo" })
+        .eq("id", parentId);
+    } else {
+      // Parent already in the correct state — chain stops here. Walking
+      // further wouldn't change anything because the bubble's only signal
+      // is "this child changed", and the parent didn't.
+      return;
+    }
+    cursor = parentId;
+  }
 }
 
 export async function reorderTasks(

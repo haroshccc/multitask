@@ -78,6 +78,10 @@ interface GanttChromeProps {
    *  project + sets list.project_id). Only meaningful when
    *  source.kind === "list". */
   onConvertListToProject?: () => void;
+  /** Demote the currently-selected project to a list (archives the
+   *  project, optionally merging multiple lists into one). Only
+   *  meaningful when source.kind === "project". */
+  onConvertProjectToList?: () => void;
 
   // Filter panel toggle
   filtersActiveCount: number;
@@ -145,6 +149,7 @@ export function GanttChrome({
   onCreateNewList,
   onCreateNewProject,
   onConvertListToProject,
+  onConvertProjectToList,
   filtersActiveCount,
   filtersOpen,
   onToggleFilters,
@@ -191,6 +196,7 @@ export function GanttChrome({
         onCreateNewList={onCreateNewList}
         onCreateNewProject={onCreateNewProject}
         onConvertListToProject={onConvertListToProject}
+        onConvertProjectToList={onConvertProjectToList}
       />
 
       {/* Date nav. The "היום" button snaps to today; the dated label
@@ -428,6 +434,7 @@ function SourcePicker({
   onCreateNewList,
   onCreateNewProject,
   onConvertListToProject,
+  onConvertProjectToList,
 }: {
   source: GanttSource;
   sourceLabel: string;
@@ -437,6 +444,7 @@ function SourcePicker({
   onCreateNewList?: () => void;
   onCreateNewProject?: () => void;
   onConvertListToProject?: () => void;
+  onConvertProjectToList?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -592,6 +600,23 @@ function SourcePicker({
                   >
                     <FolderKanban className="w-3.5 h-3.5" />
                     הפוך את "{sourceLabel}" לפרויקט
+                  </button>
+                )}
+
+                {/* Demote the selected project to a list. The handler
+                    decides whether to merge multiple lists; the dropdown
+                    just exposes the action. */}
+                {source.kind === "project" && onConvertProjectToList && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onConvertProjectToList();
+                      setOpen(false);
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-start text-ink-700 hover:bg-ink-50 border-t border-ink-100 mt-1 pt-2"
+                  >
+                    <ListIcon2 className="w-3.5 h-3.5" />
+                    הפוך את "{sourceLabel}" לרשימה
                   </button>
                 )}
               </div>

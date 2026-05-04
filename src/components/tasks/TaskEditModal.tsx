@@ -314,6 +314,7 @@ export function TaskEditModal({
       location: location || null,
       external_url: externalUrl || null,
       scheduled_at: scheduledAt,
+      deadline_at: deadlineAt,
       duration_minutes: durationMinutes,
       estimated_hours:
         estimatedMinutes != null ? minutesToHours(estimatedMinutes) : null,

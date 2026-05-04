@@ -128,18 +128,31 @@ export function BulkActionsToolbar({ allTasks }: BulkActionsToolbarProps) {
   };
 
   const applyComplete = () => {
-    const prev = snapshot("completed_at");
+    // Snapshot both completed_at AND status — completeTask() mutates both
+    // (status → "done"/"todo"), so undo has to put each task back to its
+    // exact prior state, not just clear completed_at and let status drift.
+    const prevCompleted = snapshot("completed_at");
+    const prevStatus = snapshot("status");
     for (const id of ids) {
       completeTask.mutate({ taskId: id, completed: true });
     }
     pushUndo({
       description: `סימון השלמה (${count})`,
       undo: () => {
-        for (const [id, p] of prev) {
-          // If the task was already completed, leave it; else uncomplete it.
-          if (p == null) {
-            completeTask.mutate({ taskId: id, completed: false });
-          }
+        for (const id of ids) {
+          const wasCompleted = prevCompleted.get(id);
+          // If the task was already completed pre-bulk, leave it alone.
+          if (wasCompleted != null) continue;
+          // Otherwise restore both fields with a single update — bypassing
+          // completeTask() because that would force status to "todo" even
+          // if the task was previously "in_progress" or another value.
+          updateTask.mutate({
+            taskId: id,
+            patch: {
+              completed_at: null,
+              status: (prevStatus.get(id) as string | undefined) ?? "todo",
+            },
+          });
         }
       },
       redo: () => {

@@ -3612,3 +3612,37 @@ Hero: "החלל לחשוב. החלל לעשות."
   על `item.source` ב-CalendarDayView מוגן ע"י early return.
 
   **קומיט:** `feat: gantt column mgr + parent completion + project→list + deadline save fix`
+
+- **2026-05-03 — גל 13.1: bug fixes משלל סקירה שנייה.**
+
+  אחרי מעבר באגים שני, שלושה תיקונים אמיתיים:
+
+  **Bug 6 — BulkActionsToolbar undo לא משחזר status.** ה-`applyComplete`
+  צילם רק `completed_at` אבל `completeTask()` משנה גם את
+  `status: "done"/"todo"`. ה-undo רק ניקה את `completed_at` אז
+  משימה שהייתה `in_progress` חזרה כ-`todo` במקום ל-`in_progress`.
+  הוסף snapshot של `status`, ובundo משתמשים ב-`updateTask` ישירות
+  עם שני השדות במקום `completeTask` (שהיה דורס שוב את ה-status).
+
+  **Bug 1 — list reorder collision כש-sort_order זהה.** ב-
+  `handleMoveListInOrder` כש-neighbour ו-farther יש להם
+  sort_order זהה, ה-midpoint שלהם שווה ל-target הנוכחי → no-op
+  שקט. הוסף guard: אם `newSortOrder === target.sort_order`,
+  bump ב-`±0.5` כדי שהשינוי באמת ייכנס.
+
+  **Bug 2 — color picker וtripti menu נפתחים יחד.** בTaskColumn
+  כש-menu פתוח והמשתמשת לוחצת על עיגול הצבע, ה-menu לא נסגר
+  והשניים מרונדרים יחד. תיקון: ה-onClick של עיגול הצבע מנקה
+  `menuOpen` לפני שמכריז על `colorOpen`.
+
+  **Bug 3 (לא תקף):** UnassignedBanner הוא רכיב נפרד שאינו משתמש
+  ב-TaskColumn, ולכן אין arrows על הunassigned column ממילא.
+
+  **שני edge cases מינוריים שלא טופלו:**
+  - Calendar: completed→uncomplete→deadline חוזר. זה מתאים — אם
+    משימה לא הושלמה, ה-deadline עדיין רלוונטי. לא באג.
+  - Gantt: לא ניתן לתזמן משימה ע"י לחיצה על ה-timeline בשורה של
+    משימה לא מתוזמנת. ה-`onCreateAt` יוצר אירוע חדש, לא מתזמן
+    משימה קיימת. UX gap, לא באג; שווה wave עתידי.
+
+  **קומיט:** `fix: bulk-undo status, list-reorder collision, color picker conflict`

@@ -121,11 +121,19 @@ export function Tasks() {
     // Compute a sort_order that lands between neighbour and farther.
     // If farther is missing we're at the boundary — bump past neighbour
     // by ±1 (the sort_order column is double-precision).
-    const newSortOrder = farther
+    let newSortOrder = farther
       ? (neighbour.sort_order + farther.sort_order) / 2
       : direction === -1
       ? neighbour.sort_order - 1
       : neighbour.sort_order + 1;
+    // Edge case: if neighbour and farther carry identical sort_order
+    // values (legacy data, or two lists created at the same instant), the
+    // midpoint equals neighbour.sort_order which equals target.sort_order —
+    // the move is silently a no-op. Bump by a small, direction-aware delta
+    // so the reorder actually takes effect.
+    if (newSortOrder === target.sort_order) {
+      newSortOrder = neighbour.sort_order + (direction === -1 ? -0.5 : 0.5);
+    }
     const prevSortOrder = target.sort_order;
     reorderLists.mutate([{ id: listId, sort_order: newSortOrder }]);
     pushUndo({

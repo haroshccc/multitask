@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link2, Settings2, Trash2 } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronUp,
+  Link2,
+  Settings2,
+  Trash2,
+} from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import {
   useCompleteTask,
@@ -39,6 +45,9 @@ interface GanttTableProps {
    *  the table renders an inline + new row at the bottom; omitted when
    *  the scope is "all" because there's no obvious destination list. */
   onCreateTask?: (title: string) => Promise<void> | void;
+  /** Move a task one slot earlier or later in its sibling order. -1 = up,
+   *  +1 = down. Only meaningful for non-event task rows. */
+  onMoveTaskInOrder?: (taskId: string, direction: -1 | 1) => void;
 }
 
 /**
@@ -61,6 +70,7 @@ export function GanttTable({
   onRowClick,
   layout,
   onCreateTask,
+  onMoveTaskInOrder,
 }: GanttTableProps) {
   const updateTask = useUpdateTask();
   const completeTask = useCompleteTask();
@@ -121,7 +131,7 @@ export function GanttTable({
             style={{ height: HEADER_HEIGHT }}
           >
             <tr className="border-b border-ink-200">
-              <th className="w-12 px-1 py-2" aria-label="פעולות שורה" />
+              <th className="w-20 px-1 py-2" aria-label="פעולות שורה" />
               <th className="text-start font-semibold text-ink-700 px-2 py-2 min-w-[200px]">
                 <ColumnHeader
                   id="title"
@@ -293,13 +303,18 @@ export function GanttTable({
                       : {}),
                   }}
                 >
-                  {/* Row actions — selection checkbox (for the bulk
-                      toolbar) + completion circle. Both shrink-0; the
-                      checkbox shows on hover or when the row is already
-                      selected, mirroring the tasks screen. */}
-                  <td className="w-12 px-1 py-1 align-middle">
+                  {/* Row actions — up/down reorder arrows, selection
+                      checkbox, completion circle. Arrows + checkbox show
+                      on hover; circle is always visible. */}
+                  <td className="w-20 px-1 py-1 align-middle">
                     {r.kind === "task" && r.task ? (
-                      <div className="flex items-center gap-1.5 group/sel">
+                      <div className="flex items-center gap-0.5 group/sel">
+                        {onMoveTaskInOrder && (
+                          <ReorderArrows
+                            onUp={() => onMoveTaskInOrder(r.task!.id, -1)}
+                            onDown={() => onMoveTaskInOrder(r.task!.id, 1)}
+                          />
+                        )}
                         <SelectionCheckbox taskId={r.task.id} />
                         <CompletionCircle
                           taskId={r.task.id}
@@ -965,5 +980,48 @@ function CompletionCircle({
         </svg>
       )}
     </button>
+  );
+}
+
+/**
+ * ↑ / ↓ buttons that move the row one slot earlier or later in its
+ * sibling order. Hover-revealed so they don't crowd the row. The actual
+ * sort_order math lives in Gantt.tsx — this component just emits the
+ * direction.
+ */
+function ReorderArrows({
+  onUp,
+  onDown,
+}: {
+  onUp: () => void;
+  onDown: () => void;
+}) {
+  return (
+    <div className="flex flex-col opacity-0 group-hover/sel:opacity-100 transition-opacity">
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onUp();
+        }}
+        className="p-0 leading-none rounded hover:bg-ink-100 text-ink-400 hover:text-ink-700"
+        title="העבר למעלה"
+        aria-label="העבר למעלה"
+      >
+        <ChevronUp className="w-3 h-3" />
+      </button>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onDown();
+        }}
+        className="p-0 leading-none rounded hover:bg-ink-100 text-ink-400 hover:text-ink-700"
+        title="העבר למטה"
+        aria-label="העבר למטה"
+      >
+        <ChevronDown className="w-3 h-3" />
+      </button>
+    </div>
   );
 }

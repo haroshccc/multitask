@@ -38,6 +38,9 @@ interface GanttGridProps {
    *  is rendering an external `GanttTable` instead and only wants the
    *  timeline. */
   hideInternalSidebar?: boolean;
+  /** Click on an unscheduled task's row in the timeline → schedule it at
+   *  the clicked date (defaults to 09:00 on that day). */
+  onScheduleTask?: (row: GanttRow, date: Date) => void;
 }
 
 export function GanttGrid({
@@ -53,6 +56,7 @@ export function GanttGrid({
   sidebarCollapsed,
   onToggleSidebar,
   hideInternalSidebar,
+  onScheduleTask,
 }: GanttGridProps) {
   const pxPerDay = pxPerDayFn(zoom);
   const totalDays = Math.max(
@@ -265,14 +269,26 @@ export function GanttGrid({
               {rows.map((r, i) => {
                 const isCritical =
                   r.kind === "task" && !!r.task && criticalSet.has(r.task.id);
+                const isUnscheduledTask =
+                  r.kind === "task" && !!r.unscheduled && !!r.task;
+                const canScheduleHere = isUnscheduledTask && !!onScheduleTask;
                 return (
                   <div
                     key={r.id + "-row-line"}
                     className={cn(
                       "absolute inset-x-0 border-b border-ink-150",
-                      isCritical && "bg-danger-500/5"
+                      isCritical && "bg-danger-500/5",
+                      canScheduleHere && "cursor-pointer hover:bg-primary-500/5"
                     )}
                     style={{ top: i * ROW_HEIGHT, height: ROW_HEIGHT }}
+                    onClick={canScheduleHere ? (e) => {
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      const x = isRtl ? rect.right - e.clientX : e.clientX - rect.left;
+                      const days = x / pxPerDay;
+                      const date = new Date(windowStart.getTime() + days * DAY_MS);
+                      date.setHours(9, 0, 0, 0);
+                      onScheduleTask!(r, date);
+                    } : undefined}
                   />
                 );
               })}

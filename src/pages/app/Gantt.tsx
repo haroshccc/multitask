@@ -316,6 +316,14 @@ export function Gantt() {
     }
   };
 
+  const handleScheduleTask = (row: GanttRow, date: Date) => {
+    if (row.kind === "task" && row.task) {
+      const scheduled_at = date.toISOString();
+      pushUndo({ type: "task", id: row.task.id, prev: row.task });
+      updateTask.mutate({ taskId: row.task.id, patch: { scheduled_at } });
+    }
+  };
+
   const toggleListVisibility = (listId: string) => {
     const current = visibility?.hidden_list_ids ?? [];
     const next = current.includes(listId)
@@ -772,6 +780,7 @@ export function Gantt() {
             onRowClick={handleRowClick}
             onBarChange={handleBarChange}
             onCreateAt={handleGanttCreateAt}
+            onScheduleTask={handleScheduleTask}
             sidebarCollapsed={sidebarCollapsed}
             onToggleSidebar={() => setSidebarCollapsed((v) => !v)}
           />
@@ -807,6 +816,7 @@ export function Gantt() {
                   onRowClick={handleRowClick}
                   onBarChange={handleBarChange}
                   onCreateAt={handleGanttCreateAt}
+                  onScheduleTask={handleScheduleTask}
                   hideInternalSidebar
                 />
               </div>
@@ -841,6 +851,7 @@ export function Gantt() {
                 onRowClick={handleRowClick}
                 onBarChange={handleBarChange}
                 onCreateAt={handleGanttCreateAt}
+                onScheduleTask={handleScheduleTask}
                 hideInternalSidebar
               />
             </div>

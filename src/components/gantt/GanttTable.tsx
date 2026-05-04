@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link2, Settings2, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import {
+  useCompleteTask,
   useCreateTaskDependency,
   useDeleteTaskDependency,
   useUpdateTask,
@@ -10,6 +11,10 @@ import {
   GANTT_STANDARD_COLUMNS,
   useGanttColumnPrefs,
 } from "@/lib/hooks/useGanttColumnPrefs";
+import {
+  useIsTaskSelected,
+  useTaskSelectionStore,
+} from "@/lib/selection/store";
 import { pushUndo } from "@/lib/undo/store";
 import type { Task, TaskDependency } from "@/lib/types/domain";
 import type { GanttRow } from "./gantt-utils";
@@ -58,6 +63,7 @@ export function GanttTable({
   onCreateTask,
 }: GanttTableProps) {
   const updateTask = useUpdateTask();
+  const completeTask = useCompleteTask();
   const createDep = useCreateTaskDependency();
   const deleteDep = useDeleteTaskDependency();
   const [newTitle, setNewTitle] = useState("");
@@ -115,6 +121,7 @@ export function GanttTable({
             style={{ height: HEADER_HEIGHT }}
           >
             <tr className="border-b border-ink-200">
+              <th className="w-12 px-1 py-2" aria-label="פעולות שורה" />
               <th className="text-start font-semibold text-ink-700 px-2 py-2 min-w-[200px]">
                 <ColumnHeader
                   id="title"
@@ -286,6 +293,28 @@ export function GanttTable({
                       : {}),
                   }}
                 >
+                  {/* Row actions — selection checkbox (for the bulk
+                      toolbar) + completion circle. Both shrink-0; the
+                      checkbox shows on hover or when the row is already
+                      selected, mirroring the tasks screen. */}
+                  <td className="w-12 px-1 py-1 align-middle">
+                    {r.kind === "task" && r.task ? (
+                      <div className="flex items-center gap-1.5 group/sel">
+                        <SelectionCheckbox taskId={r.task.id} />
+                        <CompletionCircle
+                          taskId={r.task.id}
+                          completed={!!r.task.completed_at}
+                          accent={r.accentColor ?? "#6b6b80"}
+                          onToggle={(next) =>
+                            completeTask.mutate({
+                              taskId: r.task!.id,
+                              completed: next,
+                            })
+                          }
+                        />
+                      </div>
+                    ) : null}
+                  </td>
                   {/* Title — clickable to open full edit modal. The text
                       itself is also editable inline (commits on blur). */}
                   <td className="px-2 py-1">
@@ -446,7 +475,7 @@ export function GanttTable({
                 className="border-b border-ink-150 bg-primary-50/40 hover:bg-primary-50"
                 style={{ height: ROW_HEIGHT }}
               >
-                <td className="px-2 py-1" colSpan={8}>
+                <td className="px-2 py-1" colSpan={9}>
                   <div className="flex items-center gap-2">
                     <span className="text-primary-600 text-sm">+</span>
                     <input
@@ -842,6 +871,99 @@ function ColumnHeader({
       title="לחיצה כפולה לשינוי השם"
     >
       {label}
+    </button>
+  );
+}
+
+/**
+ * Selection checkbox — wires into the shared task selection store. Hidden
+ * by default (opacity-0) and revealed on hover, OR shown immediately
+ * when the row is already selected so the user has a clear anchor.
+ * Shift+click extends a range from the current anchor.
+ */
+function SelectionCheckbox({ taskId }: { taskId: string }) {
+  const isSelected = useIsTaskSelected(taskId);
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        const store = useTaskSelectionStore.getState();
+        if (e.shiftKey) {
+          store.shiftSelect(taskId);
+        } else {
+          store.toggle(taskId);
+        }
+      }}
+      aria-label={isSelected ? "בטל סימון" : "סמן משימה"}
+      aria-pressed={isSelected}
+      className={cn(
+        "shrink-0 w-3.5 h-3.5 rounded-sm border-2 flex items-center justify-center transition-all",
+        isSelected
+          ? "bg-primary-500 border-primary-500 text-white opacity-100"
+          : "border-ink-300 hover:border-primary-500 opacity-0 group-hover/sel:opacity-100"
+      )}
+    >
+      {isSelected && (
+        <svg viewBox="0 0 20 20" fill="currentColor" className="w-2.5 h-2.5">
+          <path
+            fillRule="evenodd"
+            d="M16.704 5.29a1 1 0 010 1.415l-8 8a1 1 0 01-1.415 0l-4-4a1 1 0 011.415-1.414L8 12.586l7.29-7.293a1 1 0 011.415 0z"
+            clipRule="evenodd"
+          />
+        </svg>
+      )}
+    </button>
+  );
+}
+
+/**
+ * Completion circle — same affordance as the tasks-screen TaskRow but at
+ * a smaller size to fit the table row. Uses the row's accent color so it
+ * reads as connected to the list, not a generic checkbox.
+ */
+function CompletionCircle({
+  taskId: _taskId,
+  completed,
+  accent,
+  onToggle,
+}: {
+  taskId: string;
+  completed: boolean;
+  accent: string;
+  onToggle: (completed: boolean) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onToggle(!completed);
+      }}
+      className={cn(
+        "shrink-0 w-4 h-4 rounded-sm border-2 flex items-center justify-center transition-all",
+        completed
+          ? "text-white border-transparent"
+          : "border-ink-300 hover:border-ink-500"
+      )}
+      style={
+        completed
+          ? { backgroundColor: accent, borderColor: accent }
+          : undefined
+      }
+      aria-label={completed ? "בטל השלמה" : "סמן כהושלמה"}
+      aria-pressed={completed}
+      title={completed ? "בטל השלמה" : "סמן כהושלמה"}
+    >
+      {completed && (
+        <svg viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3">
+          <path
+            fillRule="evenodd"
+            d="M16.704 5.29a1 1 0 010 1.415l-8 8a1 1 0 01-1.415 0l-4-4a1 1 0 011.415-1.414L8 12.586l7.29-7.293a1 1 0 011.415 0z"
+            clipRule="evenodd"
+          />
+        </svg>
+      )}
     </button>
   );
 }

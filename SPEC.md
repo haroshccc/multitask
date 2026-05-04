@@ -3646,3 +3646,43 @@ Hero: "החלל לחשוב. החלל לעשות."
     משימה קיימת. UX gap, לא באג; שווה wave עתידי.
 
   **קומיט:** `fix: bulk-undo status, list-reorder collision, color picker conflict`
+
+- **2026-05-03 — גל 14.A+B: selection + completion + bulk toolbar בגאנט.**
+
+  **טריגר:** המשתמשת:
+  > "אין לי איך לסמן גם לא משימה אחת, זה ישר פותח לי את המשימה.
+  >  ויכולת סימון כמה משימות יחד, עם פתיחת באנר קטן למטה כמו
+  >  שעשית לי במסך המשימות."
+
+  **14.A — Selection checkbox + completion circle בכל row.**
+
+  ב-`GanttTable` נוסף td חדש בעמודה ראשונה (`w-12`) המכיל:
+  1. **Selection checkbox** — אותו pattern כמו TaskRow: שקוף עד
+     hover, מלא כשנבחר. Click=toggle, Shift+click=range דרך
+     `useTaskSelectionStore`.
+  2. **Completion circle** — circle עם accent color של ה-row
+     (color של הphase / list). click ישיר מסמן/מבטל סימון של
+     המשימה דרך `useCompleteTask`. ה-bubble של Wave 11
+     מטפל ב-rollup של ה-parent אחרי השינוי.
+
+  ה-th של העמודה הזו ריק (רק `aria-label`). ה-`+ new task`
+  row העדכן ל-colSpan=9.
+
+  **14.B — BulkActionsToolbar ב-Gantt page.**
+
+  הוספת `<BulkActionsToolbar allTasks={tasks} />` ב-`Gantt.tsx`
+  ליד ה-modals — אותו רכיב שמופעל ב-Tasks screen. הוא floats
+  ב-bottom של המסך ומופיע אוטומטית כש ≥1 משימה נבחרת.
+
+  בנוסף, `Gantt.tsx` מחשב `orderedTaskIds` מ-`visibleRows`
+  ומעדכן את ה-`useTaskSelectionStore.setOrderedIds` ב-effect —
+  זה מה ש-Shift+click צריך כדי לפתור range select.
+
+  cleanup ב-unmount: `useTaskSelectionStore.getState().clear()`
+  כשעוברים מהדף, כדי שהבחירה לא תזלוג למסך הבא.
+
+  **14.C — drag rows (גל המשך).** מימוש 3-zone drag כמו ב-Tasks
+  screen ידחה ל-commit נפרד — דורש עטיפה של DndContext ושיכפול
+  של handleDragEnd עם adjustments לעולם של GanttRow.
+
+  **קומיט:** `feat(gantt): wave 14.A+B — selection + complete + bulk toolbar`

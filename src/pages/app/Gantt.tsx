@@ -6,6 +6,7 @@ import {
   type FilterField,
 } from "@/components/filters/FilterBar";
 import { TaskEditModal } from "@/components/tasks/TaskEditModal";
+import { BulkActionsToolbar } from "@/components/tasks/BulkActionsToolbar";
 import { EventEditModal } from "@/components/calendar/EventEditModal";
 import { GanttChrome } from "@/components/gantt/GanttChrome";
 import { GanttGrid } from "@/components/gantt/GanttGrid";
@@ -38,6 +39,7 @@ import {
   useUpdateTaskList,
 } from "@/lib/hooks";
 import type { GanttSource } from "@/components/gantt/GanttChrome";
+import { useTaskSelectionStore } from "@/lib/selection/store";
 
 export function Gantt() {
   const [zoom, setZoom] = useState<GanttZoom>("week");
@@ -191,6 +193,27 @@ export function Gantt() {
       r.kind === "task" && r.task ? criticalSet.has(r.task.id) : false
     );
   }, [rows, showCriticalOnly, criticalSet]);
+
+  // Publish the visible task ids into the shared selection store so the
+  // BulkActionsToolbar's Shift+click range select resolves correctly.
+  const orderedTaskIds = useMemo(
+    () =>
+      visibleRows
+        .filter((r) => r.kind === "task" && r.task)
+        .map((r) => r.task!.id),
+    [visibleRows]
+  );
+  useEffect(() => {
+    useTaskSelectionStore.getState().setOrderedIds(orderedTaskIds);
+  }, [orderedTaskIds]);
+
+  // Clear the selection when leaving / scope-switching so a stale set
+  // doesn't haunt the next view.
+  useEffect(() => {
+    return () => {
+      useTaskSelectionStore.getState().clear();
+    };
+  }, []);
 
   const fields: FilterField[] = useMemo(
     () => [
@@ -595,6 +618,8 @@ export function Gantt() {
           </div>
         )}
       </div>
+
+      <BulkActionsToolbar allTasks={tasks} />
 
       <TaskEditModal
         taskId={editingTaskId}

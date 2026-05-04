@@ -396,7 +396,13 @@ export function TaskColumn({
         {canEdit && (
           <button
             type="button"
-            onClick={() => setColorOpen((v) => !v)}
+            onClick={() => {
+              // Close the kebab menu if it's open so the two popovers
+              // never render at the same time (the user only wanted the
+              // color picker; the menu's a separate path).
+              setMenuOpen(false);
+              setColorOpen((v) => !v);
+            }}
             className="shrink-0 w-4 h-4 rounded-full border border-ink-200 hover:scale-110 transition-transform"
             style={{ backgroundColor: listColor }}
             title="שנה צבע"

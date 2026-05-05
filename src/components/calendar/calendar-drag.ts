@@ -114,6 +114,27 @@ export interface HoverInfo {
   x: number;
   y: number;
   label: string;
+  /**
+   * During a resize gesture: render a full-width horizontal line at this
+   * viewport Y across the given column bounds. Gives clear "edge is here"
+   * feedback without the browser's whole-block ghost.
+   */
+  resizeEdge?: { left: number; right: number; top: number };
+}
+
+let _emptyImg: HTMLImageElement | null = null;
+
+/**
+ * A transparent 1×1 GIF used as the drag image for resize gestures so the
+ * browser shows no block-ghost — only our custom edge line + pill tooltip.
+ */
+export function emptyDragImage(): HTMLImageElement {
+  if (!_emptyImg && typeof document !== "undefined") {
+    _emptyImg = new Image(1, 1);
+    _emptyImg.src =
+      "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+  }
+  return _emptyImg ?? new Image(1, 1);
 }
 
 /**

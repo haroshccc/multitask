@@ -2,7 +2,6 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { queryKeys, queryFamilies } from "@/lib/query-keys";
 import * as service from "@/lib/services/food";
 import type {
-  Meal,
   MealInsert,
   MealUpdate,
   MealCategory,
@@ -13,7 +12,6 @@ import type {
   IngredientCategory,
   IngredientCategoryInsert,
   IngredientCategoryUpdate,
-  IngredientUnit,
   IngredientUnitInsert,
   IngredientUnitUpdate,
   MealIngredient,

@@ -7,7 +7,6 @@ import {
   MIN,
   addDays,
   clipItem,
-  formatHour,
   isMultiDay,
   isOverdueTask,
   isPast,

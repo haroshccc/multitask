@@ -111,9 +111,11 @@ export function TaskRow({
   const [draft, setDraft] = useState(task.title);
   const [collapsed, setCollapsed] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(
-    null
-  );
+  const [menuPos, setMenuPos] = useState<{
+    top: number;
+    right?: number;
+    left?: number;
+  } | null>(null);
   const [duplicateToListOpen, setDuplicateToListOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -123,10 +125,17 @@ export function TaskRow({
     const el = menuTriggerRef.current;
     if (el) {
       const r = el.getBoundingClientRect();
-      setMenuPos({
-        top: r.bottom + 4,
-        right: Math.max(8, window.innerWidth - r.right),
-      });
+      // Anchor to whichever edge keeps the menu on-screen. In RTL the ⋯
+      // button lands near the left edge; using `right` there would push the
+      // menu far off-screen to the left.
+      if (r.left < window.innerWidth / 2) {
+        setMenuPos({ top: r.bottom + 4, left: Math.max(8, r.left) });
+      } else {
+        setMenuPos({
+          top: r.bottom + 4,
+          right: Math.max(8, window.innerWidth - r.right),
+        });
+      }
     }
     setMenuOpen(true);
   };
@@ -909,7 +918,7 @@ export function TaskRow({
               <div className="fixed inset-0 z-[60]" onClick={closeMenu} />
               <div
                 className="fixed w-64 md:w-56 bg-white border border-ink-200 rounded-xl shadow-lift z-[61] py-1 text-sm max-h-[80vh] overflow-y-auto"
-                style={{ top: menuPos.top, right: menuPos.right }}
+                style={{ top: menuPos.top, right: menuPos.right, left: menuPos.left }}
               >
                 {/* Mobile-only: the inline badges collapsed into the menu as
                     interactive rows so the task row itself stays minimal. */}

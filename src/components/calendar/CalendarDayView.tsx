@@ -540,6 +540,9 @@ export function CalendarBlock({
               accent={accent}
               size="sm"
               className="mt-0.5"
+              occurrenceStart={
+                item.id.split(":").length === 3 ? item.start : undefined
+              }
             />
           )}
           <span
@@ -642,6 +645,9 @@ function AllDayChip({
         completed={item.completed}
         accent={accent}
         size="sm"
+        occurrenceStart={
+          item.id.split(":").length === 3 ? item.start : undefined
+        }
       />
       <span
         className={cn(

@@ -607,6 +607,9 @@ function MultiDayBand({
           completed={item.completed}
           accent={accent}
           size="sm"
+          occurrenceStart={
+            item.id.split(":").length === 3 ? item.start : undefined
+          }
         />
       )}
       <span className={cn(item.completed && "line-through", "truncate flex-1")}>

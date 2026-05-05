@@ -1473,6 +1473,7 @@ export type Database = {
           approver_user_id: string | null
           assignee_user_id: string | null
           completed_at: string | null
+          completed_occurrences: Json
           completion_submitted_at: string | null
           created_at: string
           custom_fields: Json
@@ -1515,6 +1516,7 @@ export type Database = {
           approver_user_id?: string | null
           assignee_user_id?: string | null
           completed_at?: string | null
+          completed_occurrences?: Json
           completion_submitted_at?: string | null
           created_at?: string
           custom_fields?: Json
@@ -1557,6 +1559,7 @@ export type Database = {
           approver_user_id?: string | null
           assignee_user_id?: string | null
           completed_at?: string | null
+          completed_occurrences?: Json
           completion_submitted_at?: string | null
           created_at?: string
           custom_fields?: Json

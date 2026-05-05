@@ -31,6 +31,7 @@ import {
 import { pushUndo } from "@/lib/undo/store";
 import { useThought } from "@/lib/hooks/useThoughts";
 import { ThoughtEditModal } from "@/components/thoughts/ThoughtEditModal";
+import { RrulePicker } from "@/components/calendar/RrulePicker";
 import {
   useActiveTimer,
   useStartTimer,
@@ -141,6 +142,7 @@ export function TaskEditModal({
   const [externalUrl, setExternalUrl] = useState("");
   const [scheduledAt, setScheduledAt] = useState<string | null>(null); // ISO
   const [deadlineAt, setDeadlineAt] = useState<string | null>(null); // ISO — hard deadline, distinct from scheduledAt
+  const [recurrenceRule, setRecurrenceRule] = useState<string | null>(null);
   const [durationMinutes, setDurationMinutes] = useState<number | null>(null);
   const [estimatedMinutes, setEstimatedMinutes] = useState<number | null>(null);
   const [assigneeId, setAssigneeId] = useState<string | null>(null);
@@ -160,6 +162,7 @@ export function TaskEditModal({
       setExternalUrl(task.external_url ?? "");
       setScheduledAt(task.scheduled_at ?? null);
       setDeadlineAt(task.deadline_at ?? null);
+      setRecurrenceRule(task.recurrence_rule ?? null);
       setAssigneeId(task.assignee_user_id ?? null);
       setDurationMinutes(task.duration_minutes ?? null);
       setEstimatedMinutes(hoursToMinutes(task.estimated_hours ?? null));
@@ -180,6 +183,7 @@ export function TaskEditModal({
       setExternalUrl("");
       setScheduledAt(createDraft.scheduled_at ?? null);
       setDeadlineAt(null);
+      setRecurrenceRule(null);
       setAssigneeId(null);
       setDurationMinutes(createDraft.duration_minutes ?? null);
       setEstimatedMinutes(
@@ -214,6 +218,7 @@ export function TaskEditModal({
       externalUrl !== (task.external_url ?? "") ||
       scheduledAt !== (task.scheduled_at ?? null) ||
       deadlineAt !== (task.deadline_at ?? null) ||
+      recurrenceRule !== (task.recurrence_rule ?? null) ||
       durationMinutes !== (task.duration_minutes ?? null) ||
       estimatedMinutes !== hoursToMinutes(task.estimated_hours ?? null) ||
       isPhase !== !!task.is_phase ||
@@ -233,6 +238,7 @@ export function TaskEditModal({
     externalUrl,
     scheduledAt,
     deadlineAt,
+    recurrenceRule,
     durationMinutes,
     estimatedMinutes,
     isPhase,
@@ -262,6 +268,7 @@ export function TaskEditModal({
           external_url: externalUrl || null,
           scheduled_at: scheduledAt,
           deadline_at: deadlineAt,
+          recurrence_rule: recurrenceRule,
           duration_minutes: durationMinutes,
           estimated_hours:
             estimatedMinutes != null ? minutesToHours(estimatedMinutes) : null,
@@ -298,6 +305,7 @@ export function TaskEditModal({
       external_url: task.external_url,
       scheduled_at: task.scheduled_at,
       deadline_at: task.deadline_at,
+      recurrence_rule: task.recurrence_rule,
       duration_minutes: task.duration_minutes,
       estimated_hours: task.estimated_hours,
       is_phase: task.is_phase,
@@ -315,6 +323,7 @@ export function TaskEditModal({
       external_url: externalUrl || null,
       scheduled_at: scheduledAt,
       deadline_at: deadlineAt,
+      recurrence_rule: recurrenceRule,
       duration_minutes: durationMinutes,
       estimated_hours:
         estimatedMinutes != null ? minutesToHours(estimatedMinutes) : null,
@@ -584,12 +593,24 @@ export function TaskEditModal({
                   </div>
 
                   <div className="pt-2 border-t border-ink-200">
+                    <Field
+                      label="חזרה"
+                      hint="המשימה תופיע ביומן בכל מופע של הכלל. סימון מופע בודד אינו סוגר את הסדרה."
+                    >
+                      <RrulePicker
+                        value={recurrenceRule}
+                        onChange={setRecurrenceRule}
+                        anchorDate={scheduledAt ? new Date(scheduledAt) : null}
+                      />
+                    </Field>
+                  </div>
+
+                  <div className="pt-2 border-t border-ink-200">
                     {task && <TaskDependenciesSection taskId={task.id} />}
                   </div>
 
                   <p className="text-xs text-ink-400">
-                    הערכת שעות בפועל עברה לטאב "זמן" ליד הסטופר. חזרה (RRULE)
-                    ומשימת-אם — בקרוב.
+                    הערכת שעות בפועל עברה לטאב "זמן" ליד הסטופר.
                   </p>
                 </div>
               )}

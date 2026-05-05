@@ -250,6 +250,9 @@ function AgendaRow({
               completed={item.completed}
               accent={accent}
               size="md"
+              occurrenceStart={
+                item.id.split(":").length === 3 ? item.start : undefined
+              }
             />
             {overdue && !item.completed && (
               <span

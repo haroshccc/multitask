@@ -1,6 +1,6 @@
 import { Check } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
-import { useCompleteTask } from "@/lib/hooks/useTasks";
+import { useCompleteTask, useToggleOccurrence } from "@/lib/hooks/useTasks";
 
 interface TaskCheckButtonProps {
   taskId: string;
@@ -12,6 +12,11 @@ interface TaskCheckButtonProps {
    *  the list color) to keep the box on-brand for that list. */
   accent?: string | null;
   className?: string;
+  /** When set, toggles the per-occurrence completion state on the task's
+   *  `completed_occurrences[]` array instead of the master `completed_at`.
+   *  Used by recurring tasks expanded into per-day instances — marking one
+   *  day done shouldn't close the whole series. */
+  occurrenceStart?: Date;
 }
 
 /**
@@ -27,8 +32,10 @@ export function TaskCheckButton({
   size = "sm",
   accent,
   className,
+  occurrenceStart,
 }: TaskCheckButtonProps) {
   const completeTask = useCompleteTask();
+  const toggleOccurrence = useToggleOccurrence();
   const sizeClass = size === "sm" ? "w-3 h-3" : "w-3.5 h-3.5";
   const checkSize = size === "sm" ? "w-2 h-2" : "w-2.5 h-2.5";
 
@@ -44,6 +51,14 @@ export function TaskCheckButton({
     <button
       onClick={(e) => {
         e.stopPropagation();
+        if (occurrenceStart) {
+          toggleOccurrence.mutate({
+            taskId,
+            occurrenceStart,
+            next: !completed,
+          });
+          return;
+        }
         completeTask.mutate({ taskId, completed: !completed });
       }}
       className={cn(

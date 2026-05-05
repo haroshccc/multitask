@@ -13,10 +13,12 @@ import {
   CornerDownLeft,
   Trash2,
   ChevronLeft,
+  Repeat2,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import {
   useCompleteTask,
+  useToggleOccurrence,
   useUpdateTask,
   useCreateTask,
   useSetTaskParent,
@@ -36,6 +38,12 @@ import { useTimeUnit, formatSeconds } from "@/lib/hooks/useTimeUnit";
 import { useMyTaskStatuses } from "@/lib/hooks/useUserTaskStatuses";
 import type { RowDisplayPrefs } from "@/lib/hooks/useRowDisplayPrefs";
 import { pushUndo } from "@/lib/undo/store";
+import {
+  isRecurring as isTaskRecurring,
+  getActiveOccurrence,
+  getCompletedOccurrences,
+  formatRelativeOccurrence,
+} from "@/lib/tasks/recurrence";
 import {
   useIsTaskSelected,
   useTaskSelectionStore,
@@ -88,6 +96,7 @@ export function TaskRow({
 
   const updateTask = useUpdateTask();
   const completeTask = useCompleteTask();
+  const toggleOccurrence = useToggleOccurrence();
   const createTask = useCreateTask();
   const setParent = useSetTaskParent();
   const duplicateTree = useDuplicateTaskTree();
@@ -247,11 +256,28 @@ export function TaskRow({
     };
   }, []);
 
-  const showAsDone = isDone || pendingComplete;
+  // Recurring task state — drives the row's "active occurrence" semantics.
+  // A row is recurring when it has both a recurrence rule and a scheduled
+  // anchor. The active occurrence is the next non-completed instance in
+  // the lookahead window; when it's in the past (or now), the row reads
+  // as bright "do this now". When it's in the future or there's no active
+  // occurrence at all, the row reads as dim+✓ ("done for now, will wake
+  // up automatically when the next slot becomes due").
+  const taskIsRecurring = isTaskRecurring(task);
+  const now = new Date();
+  const activeOccurrence = taskIsRecurring ? getActiveOccurrence(task, now) : null;
+  const recurringSlotIsPast = !!activeOccurrence && activeOccurrence <= now;
+
+  const showAsDone = taskIsRecurring
+    ? // Dim if no active occurrence in window, OR active is in the future
+      // (= we just completed the most recent slot, nothing to do until next).
+      // pendingComplete keeps the green check on during the 500ms grace.
+      pendingComplete || !recurringSlotIsPast
+    : isDone || pendingComplete;
 
   const toggleComplete = () => {
-    // Cancel a pending completion (second click within the 500ms window).
-    if (pendingComplete && !isDone) {
+    // Cancel a pending click (works for both recurring and non-recurring).
+    if (pendingComplete) {
       if (pendingTimerRef.current) {
         window.clearTimeout(pendingTimerRef.current);
         pendingTimerRef.current = null;
@@ -259,6 +285,71 @@ export function TaskRow({
       setPendingComplete(false);
       return;
     }
+
+    if (taskIsRecurring) {
+      if (recurringSlotIsPast && activeOccurrence) {
+        // BRIGHT → DIM: mark the active (overdue/now) occurrence done after
+        // the 500ms grace.
+        setPendingComplete(true);
+        pendingTimerRef.current = window.setTimeout(() => {
+          toggleOccurrence.mutate({
+            taskId: task.id,
+            occurrenceStart: activeOccurrence,
+            next: true,
+          });
+          pushUndo({
+            description: "סימון מופע",
+            undo: () =>
+              toggleOccurrence.mutate({
+                taskId: task.id,
+                occurrenceStart: activeOccurrence,
+                next: false,
+              }),
+            redo: () =>
+              toggleOccurrence.mutate({
+                taskId: task.id,
+                occurrenceStart: activeOccurrence,
+                next: true,
+              }),
+          });
+          pendingTimerRef.current = null;
+        }, 500);
+        return;
+      }
+      // DIM → BRIGHT: un-mark the most recent completed occurrence at-or
+      // -before now (the user is undoing a previous completion). Instant —
+      // no grace window because they can re-click to redo.
+      const completed = getCompletedOccurrences(task);
+      const latest = completed
+        .filter((iso) => new Date(iso).getTime() <= now.getTime())
+        .sort()
+        .reverse()[0];
+      if (latest) {
+        const occ = new Date(latest);
+        toggleOccurrence.mutate({
+          taskId: task.id,
+          occurrenceStart: occ,
+          next: false,
+        });
+        pushUndo({
+          description: "ביטול סימון מופע",
+          undo: () =>
+            toggleOccurrence.mutate({
+              taskId: task.id,
+              occurrenceStart: occ,
+              next: true,
+            }),
+          redo: () =>
+            toggleOccurrence.mutate({
+              taskId: task.id,
+              occurrenceStart: occ,
+              next: false,
+            }),
+        });
+      }
+      return;
+    }
+
     if (isDone) {
       // Un-completing: instant, no delay.
       completeTask.mutate({ taskId: task.id, completed: false });
@@ -421,6 +512,10 @@ export function TaskRow({
           isDragging && "opacity-40",
           isOverNest && "bg-primary-50 ring-1 ring-primary-300",
           isSelected && "bg-primary-50/60 ring-1 ring-primary-300",
+          // Recurring tasks whose current slot is already done go dim. The
+          // row "wakes up" automatically when the next occurrence's time
+          // becomes due (the active-occurrence calc re-runs on every render).
+          taskIsRecurring && showAsDone && !isSelected && "opacity-60",
           // Phase rows get a colored stripe on the leading edge, slightly
           // larger font, and a subtle background tint to read as a
           // group-header visually.
@@ -574,9 +669,43 @@ export function TaskRow({
           placeholder="משימה חדשה..."
           className={cn(
             "flex-1 min-w-0 bg-transparent border-0 outline-none text-sm py-0.5",
-            showAsDone && "line-through text-ink-400"
+            // Strikethrough only when the task itself is closed (master
+            // completed_at). Recurring rows stay readable because the title
+            // describes the series, not a single occurrence.
+            !taskIsRecurring && showAsDone && "line-through text-ink-400"
           )}
         />
+
+        {/* Recurrence indicator — small ↻ icon plus the next occurrence
+            label ("היום 9:00", "מחר 9:00", "ב-15 במאי 9:00"). Always visible
+            on recurring rows so the user can tell at a glance which tasks
+            repeat. */}
+        {taskIsRecurring && (
+          <span
+            className={cn(
+              "shrink-0 inline-flex items-center gap-1 text-[11px] text-ink-500 tabular-nums",
+              showAsDone && "text-ink-400"
+            )}
+            title="משימה חוזרת"
+          >
+            <Repeat2 className="w-3 h-3" />
+            {activeOccurrence ? formatRelativeOccurrence(activeOccurrence, now) : null}
+            {showAsDone && taskIsRecurring && (
+              <span
+                className="inline-flex items-center justify-center w-3 h-3 rounded-full bg-success-500/15 text-success-600"
+                title="המופע הקרוב סומן כבוצע"
+              >
+                <svg viewBox="0 0 20 20" fill="currentColor" className="w-2 h-2">
+                  <path
+                    fillRule="evenodd"
+                    d="M16.704 5.29a1 1 0 010 1.415l-8 8a1 1 0 01-1.415 0l-4-4a1 1 0 011.415-1.414L8 12.586l7.29-7.293a1 1 0 011.415 0z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+              </span>
+            )}
+          </span>
+        )}
 
         {/* All inline badges + quick actions render on desktop only. On
             mobile they collapse into the ⋯ menu below to keep the row clean. */}

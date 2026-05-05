@@ -122,6 +122,33 @@ export function useCompleteTask() {
   });
 }
 
+/** Toggles a single occurrence of a recurring task. The master row's
+ *  `completed_at` is left alone — only `completed_occurrences[]` is
+ *  patched. See `lib/tasks/recurrence.ts` for the helper that builds
+ *  the patch. */
+export function useToggleOccurrence() {
+  const qc = useQueryClient();
+  const scope = useOrgScope();
+
+  return useMutation({
+    mutationFn: ({
+      taskId,
+      occurrenceStart,
+      next,
+    }: {
+      taskId: string;
+      occurrenceStart: Date;
+      next: boolean;
+    }) => tasksService.toggleTaskOccurrence(taskId, occurrenceStart, next),
+    onSuccess: (task) => {
+      qc.setQueryData(queryKeys.task(task.id), task);
+      if (scope.organizationId) {
+        qc.invalidateQueries({ queryKey: queryFamilies.allTasks(scope.organizationId) });
+      }
+    },
+  });
+}
+
 export function useReorderTasks() {
   const qc = useQueryClient();
   const scope = useOrgScope();

@@ -153,8 +153,48 @@ export function Calendar() {
         const listColor = listColorById.get(t.task_list_id ?? "") ?? null;
         // Scheduled work block (only if there's a scheduled_at).
         if (t.scheduled_at) {
-          const item = taskToItem(t, listColor);
-          if (item) out.push(item);
+          const base = taskToItem(t, listColor);
+          if (base) {
+            // Recurring task → expand into per-day occurrences. The master
+            // is the anchor; each occurrence is its own CalendarItem with
+            // a synthesized id like `task:abc:1234567890` and a per-occurrence
+            // `completed` flag based on `completed_occurrences[]`.
+            if (t.recurrence_rule) {
+              const anchorStart = base.start;
+              const duration = base.end.getTime() - anchorStart.getTime();
+              const occurrences = expandRrule(
+                t.recurrence_rule,
+                anchorStart,
+                range.from,
+                range.to
+              );
+              const completedSet = new Set(
+                Array.isArray(t.completed_occurrences)
+                  ? (t.completed_occurrences as unknown[]).filter(
+                      (x): x is string => typeof x === "string"
+                    )
+                  : []
+              );
+              for (const occStart of occurrences) {
+                out.push({
+                  ...base,
+                  id: `${base.id}:${occStart.getTime()}`,
+                  start: occStart,
+                  end: new Date(occStart.getTime() + duration),
+                  completed: completedSet.has(occStart.toISOString()),
+                });
+              }
+              if (
+                occurrences.length === 0 &&
+                anchorStart >= range.from &&
+                anchorStart < range.to
+              ) {
+                out.push(base);
+              }
+            } else {
+              out.push(base);
+            }
+          }
         }
         // Deadline marker — independent of scheduling. Both can coexist for
         // the same task: a work block at 10:00 plus a deadline marker at

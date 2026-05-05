@@ -126,6 +126,32 @@ export async function updateTask(taskId: string, patch: TaskUpdate): Promise<Tas
   return data;
 }
 
+/** Toggle the per-occurrence completion of a recurring task. Adds or
+ *  removes the occurrence's ISO timestamp in `completed_occurrences[]`
+ *  without touching the master `completed_at`. Idempotent. */
+export async function toggleTaskOccurrence(
+  taskId: string,
+  occurrenceStart: Date,
+  next: boolean
+): Promise<Task> {
+  const { data: cur, error: readErr } = await supabase
+    .from("tasks")
+    .select("completed_occurrences")
+    .eq("id", taskId)
+    .maybeSingle();
+  if (readErr) throw readErr;
+  const arr = Array.isArray(cur?.completed_occurrences)
+    ? (cur!.completed_occurrences as unknown[]).filter(
+        (x): x is string => typeof x === "string"
+      )
+    : [];
+  const key = occurrenceStart.toISOString();
+  const set = new Set(arr);
+  if (next) set.add(key);
+  else set.delete(key);
+  return updateTask(taskId, { completed_occurrences: Array.from(set) });
+}
+
 export async function completeTask(taskId: string, completed: boolean): Promise<Task> {
   const result = await updateTask(taskId, {
     completed_at: completed ? new Date().toISOString() : null,

@@ -597,6 +597,9 @@ function MonthItemChip({
         completed={item.completed}
         accent={accent}
         size="sm"
+        occurrenceStart={
+          item.id.split(":").length === 3 ? item.start : undefined
+        }
       />
       <span className="shrink-0 text-ink-500 tabular-nums">
         {item.allDay

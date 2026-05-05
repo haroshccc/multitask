@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { UserPlus, ShoppingCart, ListChecks } from "lucide-react";
+import { UserPlus, ShoppingCart, ListChecks, Upload } from "lucide-react";
 import { ScreenScaffold } from "@/components/layout/ScreenScaffold";
 import { cn } from "@/lib/utils/cn";
 import { MealsTab } from "@/components/food/MealsTab";
@@ -9,6 +9,7 @@ import { TomorrowMenuBanner } from "@/components/food/TomorrowMenuBanner";
 import { ShareMenuModal } from "@/components/food/ShareMenuModal";
 import { ShoppingListExportModal } from "@/components/food/ShoppingListExportModal";
 import { MenuTaskExportModal } from "@/components/food/MenuTaskExportModal";
+import { ImportFoodDataModal } from "@/components/food/ImportFoodDataModal";
 
 type Tab = "meals" | "ingredients" | "weekly";
 
@@ -30,6 +31,7 @@ export function Food() {
   const [shareOpen, setShareOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [taskExportOpen, setTaskExportOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
 
   const handleTabChange = (next: Tab) => {
     setTab(next);
@@ -42,6 +44,15 @@ export function Food() {
       subtitle="ספריית מנות ומצרכים משותפת לבית, ותפריטים אישיים שאפשר לשתף עם משתמשים אחרים."
       actions={
         <span className="inline-flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setImportOpen(true)}
+            className="btn-ghost text-sm gap-1.5"
+            title="ייבוא מצרכים / מאכלים מ-CSV"
+          >
+            <Upload className="w-4 h-4" />
+            <span className="hidden sm:inline">ייבוא</span>
+          </button>
           <button
             type="button"
             onClick={() => setShareOpen(true)}
@@ -111,6 +122,10 @@ export function Food() {
       <MenuTaskExportModal
         open={taskExportOpen}
         onClose={() => setTaskExportOpen(false)}
+      />
+      <ImportFoodDataModal
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
       />
     </ScreenScaffold>
   );

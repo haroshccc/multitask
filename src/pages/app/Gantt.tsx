@@ -318,9 +318,17 @@ export function Gantt() {
 
   const handleScheduleTask = (row: GanttRow, date: Date) => {
     if (row.kind === "task" && row.task) {
-      const scheduled_at = date.toISOString();
-      pushUndo({ type: "task", id: row.task.id, prev: row.task });
-      updateTask.mutate({ taskId: row.task.id, patch: { scheduled_at } });
+      const taskId = row.task.id;
+      const prevScheduledAt = row.task.scheduled_at;
+      const nextScheduledAt = date.toISOString();
+      updateTask.mutate({ taskId, patch: { scheduled_at: nextScheduledAt } });
+      pushUndo({
+        description: "תזמון משימה מהציר",
+        undo: () =>
+          updateTask.mutate({ taskId, patch: { scheduled_at: prevScheduledAt } }),
+        redo: () =>
+          updateTask.mutate({ taskId, patch: { scheduled_at: nextScheduledAt } }),
+      });
     }
   };
 

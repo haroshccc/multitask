@@ -244,7 +244,7 @@ export function GanttTable({
                 >
                   <ColumnHeader
                     id={cf.id}
-                    label={cols.getLabel(cf.id, cf.label)}
+                    label={cols.getLabel(cf.id, cf.field_label)}
                     onRename={(l) => cols.renameColumn(cf.id, l)}
                   />
                 </div>
@@ -359,7 +359,7 @@ export function GanttTable({
                                     )}
                                   </span>
                                   <span className="flex-1 truncate">
-                                    {cols.getLabel(cf.id, cf.label)}
+                                    {cols.getLabel(cf.id, cf.field_label)}
                                   </span>
                                 </button>
                               );
@@ -1379,7 +1379,7 @@ function GanttCfTextCell({
       value={draft}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={() => {
-        if (draft !== value) onSave(draft || null);
+        if (draft !== value) onSave(draft);
       }}
       onKeyDown={(e) => {
         if (e.key === "Enter") (e.target as HTMLInputElement).blur();

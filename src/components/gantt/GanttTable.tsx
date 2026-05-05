@@ -614,6 +614,7 @@ function GanttTableBodyRow({
       >
         {isTask && row.task && (
           <>
+            <SelectionCheckbox taskId={row.task.id} />
             {/* Drag handle */}
             <button
               {...attributes}
@@ -624,7 +625,6 @@ function GanttTableBodyRow({
             >
               <GripVertical className="w-3 h-3" />
             </button>
-            <SelectionCheckbox taskId={row.task.id} />
             <CompletionCircle
               taskId={row.task.id}
               completed={!!row.task.completed_at}
@@ -1208,24 +1208,52 @@ function CompletionCircle({
   completed: boolean;
   onToggle: (completed: boolean) => void;
 }) {
+  // 500ms grace window: when completing, fill green immediately and only
+  // fire the mutation after the delay so accidental clicks are reversible
+  // (a second click within the window cancels). Symmetric with TaskRow.
+  const [pendingComplete, setPendingComplete] = useState(false);
+  const pendingTimerRef = useRef<number | null>(null);
+  useEffect(() => {
+    return () => {
+      if (pendingTimerRef.current) window.clearTimeout(pendingTimerRef.current);
+    };
+  }, []);
+  const showAsDone = completed || pendingComplete;
+  const handleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (pendingComplete && !completed) {
+      if (pendingTimerRef.current) {
+        window.clearTimeout(pendingTimerRef.current);
+        pendingTimerRef.current = null;
+      }
+      setPendingComplete(false);
+      return;
+    }
+    if (completed) {
+      onToggle(false);
+      return;
+    }
+    setPendingComplete(true);
+    pendingTimerRef.current = window.setTimeout(() => {
+      onToggle(true);
+      pendingTimerRef.current = null;
+    }, 500);
+  };
   return (
     <button
       type="button"
-      onClick={(e) => {
-        e.stopPropagation();
-        onToggle(!completed);
-      }}
+      onClick={handleClick}
       className={cn(
         "shrink-0 w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all",
-        completed
+        showAsDone
           ? "bg-success-500 border-success-500 text-white"
           : "border-ink-300 hover:border-success-500"
       )}
-      aria-label={completed ? "בטל השלמה" : "סמן כהושלמה"}
-      aria-pressed={completed}
-      title={completed ? "בטל השלמה" : "סמן כהושלמה"}
+      aria-label={showAsDone ? "בטל השלמה" : "סמן כהושלמה"}
+      aria-pressed={showAsDone}
+      title={showAsDone ? "בטל השלמה" : "סמן כהושלמה"}
     >
-      {completed && (
+      {showAsDone && (
         <svg viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3">
           <path
             fillRule="evenodd"

@@ -234,14 +234,52 @@ export function TaskRow({
     }
   };
 
+  // Pending-complete state: a 500ms grace window between the click and the
+  // actual mutation. The circle fills green immediately so the user sees
+  // confirmation, but the row only moves to "completed" after the delay.
+  // A second click during the window cancels the pending completion (so
+  // accidental clicks are reversible without ever hitting the DB).
+  const [pendingComplete, setPendingComplete] = useState(false);
+  const pendingTimerRef = useRef<number | null>(null);
+  useEffect(() => {
+    return () => {
+      if (pendingTimerRef.current) window.clearTimeout(pendingTimerRef.current);
+    };
+  }, []);
+
+  const showAsDone = isDone || pendingComplete;
+
   const toggleComplete = () => {
-    const next = !isDone;
-    completeTask.mutate({ taskId: task.id, completed: next });
-    pushUndo({
-      description: next ? "סימון השלמה" : "ביטול השלמה",
-      undo: () => completeTask.mutate({ taskId: task.id, completed: !next }),
-      redo: () => completeTask.mutate({ taskId: task.id, completed: next }),
-    });
+    // Cancel a pending completion (second click within the 500ms window).
+    if (pendingComplete && !isDone) {
+      if (pendingTimerRef.current) {
+        window.clearTimeout(pendingTimerRef.current);
+        pendingTimerRef.current = null;
+      }
+      setPendingComplete(false);
+      return;
+    }
+    if (isDone) {
+      // Un-completing: instant, no delay.
+      completeTask.mutate({ taskId: task.id, completed: false });
+      pushUndo({
+        description: "ביטול השלמה",
+        undo: () => completeTask.mutate({ taskId: task.id, completed: true }),
+        redo: () => completeTask.mutate({ taskId: task.id, completed: false }),
+      });
+      return;
+    }
+    // Completing: show green check now, fire mutation after 500ms.
+    setPendingComplete(true);
+    pendingTimerRef.current = window.setTimeout(() => {
+      completeTask.mutate({ taskId: task.id, completed: true });
+      pushUndo({
+        description: "סימון השלמה",
+        undo: () => completeTask.mutate({ taskId: task.id, completed: false }),
+        redo: () => completeTask.mutate({ taskId: task.id, completed: true }),
+      });
+      pendingTimerRef.current = null;
+    }, 500);
   };
 
   const toggleTimer = () => {
@@ -489,19 +527,21 @@ export function TaskRow({
           <span className="w-3.5 shrink-0" />
         )}
 
-        {/* Completion circle — always green when done, gray border otherwise */}
+        {/* Completion circle — always green when done, gray border otherwise.
+            Uses showAsDone so the click→500ms grace window shows the green
+            check immediately. */}
         <button
           onClick={toggleComplete}
           className={cn(
             "mt-0.5 w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center transition-all",
-            isDone
+            showAsDone
               ? "bg-success-500 border-success-500 text-white"
               : "border-ink-300 hover:border-success-500"
           )}
-          aria-label={isDone ? "בטל סימון" : "סמן כהושלמה"}
+          aria-label={showAsDone ? "בטל סימון" : "סמן כהושלמה"}
           type="button"
         >
-          {isDone && (
+          {showAsDone && (
             <svg viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3">
               <path
                 fillRule="evenodd"
@@ -534,7 +574,7 @@ export function TaskRow({
           placeholder="משימה חדשה..."
           className={cn(
             "flex-1 min-w-0 bg-transparent border-0 outline-none text-sm py-0.5",
-            isDone && "line-through text-ink-400"
+            showAsDone && "line-through text-ink-400"
           )}
         />
 

@@ -594,6 +594,7 @@ export type Database = {
           sort_order: number
           status: string
           updated_at: string
+          user_id: string
         }
         Insert: {
           created_at?: string
@@ -606,6 +607,7 @@ export type Database = {
           sort_order?: number
           status?: string
           updated_at?: string
+          user_id: string
         }
         Update: {
           created_at?: string
@@ -618,6 +620,7 @@ export type Database = {
           sort_order?: number
           status?: string
           updated_at?: string
+          user_id?: string
         }
         Relationships: [
           {
@@ -636,6 +639,38 @@ export type Database = {
           },
         ]
       }
+      meal_plan_shares: {
+        Row: {
+          can_edit: boolean
+          created_at: string
+          organization_id: string
+          shared_with_user_id: string
+          sharer_user_id: string
+        }
+        Insert: {
+          can_edit?: boolean
+          created_at?: string
+          organization_id: string
+          shared_with_user_id: string
+          sharer_user_id: string
+        }
+        Update: {
+          can_edit?: boolean
+          created_at?: string
+          organization_id?: string
+          shared_with_user_id?: string
+          sharer_user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meal_plan_shares_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       meal_plan_template: {
         Row: {
           created_at: string
@@ -647,6 +682,7 @@ export type Database = {
           organization_id: string
           sort_order: number
           updated_at: string
+          user_id: string
         }
         Insert: {
           created_at?: string
@@ -658,6 +694,7 @@ export type Database = {
           organization_id: string
           sort_order?: number
           updated_at?: string
+          user_id: string
         }
         Update: {
           created_at?: string
@@ -669,6 +706,7 @@ export type Database = {
           organization_id?: string
           sort_order?: number
           updated_at?: string
+          user_id?: string
         }
         Relationships: [
           {

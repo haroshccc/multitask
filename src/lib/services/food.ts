@@ -19,10 +19,9 @@ import type {
   MealIngredientInsert,
   MealIngredientUpdate,
   MealPlanTemplate,
-  MealPlanTemplateInsert,
   MealPlanDay,
-  MealPlanDayInsert,
   MealPlanDayUpdate,
+  MealPlanShare,
 } from "@/lib/types/domain";
 
 // =============================================================================
@@ -319,14 +318,19 @@ export async function replaceMealIngredients(
 }
 
 // =============================================================================
-// Meal plan template (weekly recurring)
+// Meal plan template (weekly recurring) — per-user
 // =============================================================================
 
-export async function listMealPlanTemplate(orgId: string): Promise<MealPlanTemplate[]> {
+/** All templates the caller can read, across owners. RLS already filters
+ *  to (mine OR shared-with-me); the UI groups the result by user_id. */
+export async function listMealPlanTemplate(
+  orgId: string
+): Promise<MealPlanTemplate[]> {
   const { data, error } = await supabase
     .from("meal_plan_template")
     .select("*")
     .eq("organization_id", orgId)
+    .order("user_id", { ascending: true })
     .order("day_of_week", { ascending: true })
     .order("meal_time", { ascending: true })
     .order("sort_order", { ascending: true });
@@ -334,28 +338,13 @@ export async function listMealPlanTemplate(orgId: string): Promise<MealPlanTempl
   return data ?? [];
 }
 
-export async function createMealPlanTemplate(
-  payload: MealPlanTemplateInsert
-): Promise<MealPlanTemplate> {
-  const { data, error } = await supabase
-    .from("meal_plan_template")
-    .insert(payload)
-    .select()
-    .single();
-  if (error) throw error;
-  return data;
-}
-
-export async function deleteMealPlanTemplate(id: string): Promise<void> {
-  const { error } = await supabase.from("meal_plan_template").delete().eq("id", id);
-  if (error) throw error;
-}
-
-/** Replace all template rows for a given (day, meal_time) cell in one batch.
- *  The grid UI treats each cell as an editable bucket; rows[] is whatever the
- *  user landed on after clicks. */
+/** Replace one (day_of_week, meal_time) cell for a specific user's template.
+ *  Caller is responsible for ensuring the auth context has write access
+ *  to userId's plan (via ownership or a meal_plan_shares grant) — RLS
+ *  enforces this server-side. */
 export async function replaceMealPlanTemplateCell(
   organizationId: string,
+  userId: string,
   dayOfWeek: number,
   mealTime: string,
   mealIds: string[]
@@ -364,6 +353,7 @@ export async function replaceMealPlanTemplateCell(
     .from("meal_plan_template")
     .delete()
     .eq("organization_id", organizationId)
+    .eq("user_id", userId)
     .eq("day_of_week", dayOfWeek)
     .eq("meal_time", mealTime);
   if (delErr) throw delErr;
@@ -371,6 +361,7 @@ export async function replaceMealPlanTemplateCell(
   const { error: insErr } = await supabase.from("meal_plan_template").insert(
     mealIds.map((meal_id, i) => ({
       organization_id: organizationId,
+      user_id: userId,
       day_of_week: dayOfWeek,
       meal_time: mealTime,
       meal_id,
@@ -381,7 +372,7 @@ export async function replaceMealPlanTemplateCell(
 }
 
 // =============================================================================
-// Meal plan days (per-date plan / history)
+// Meal plan days (per-date plan / history) — per-user
 // =============================================================================
 
 export async function listMealPlanDays(
@@ -395,23 +386,12 @@ export async function listMealPlanDays(
     .eq("organization_id", orgId)
     .gte("date", fromDate)
     .lte("date", toDate)
+    .order("user_id", { ascending: true })
     .order("date", { ascending: true })
     .order("meal_time", { ascending: true })
     .order("sort_order", { ascending: true });
   if (error) throw error;
   return data ?? [];
-}
-
-export async function createMealPlanDay(
-  payload: MealPlanDayInsert
-): Promise<MealPlanDay> {
-  const { data, error } = await supabase
-    .from("meal_plan_days")
-    .insert(payload)
-    .select()
-    .single();
-  if (error) throw error;
-  return data;
 }
 
 export async function updateMealPlanDay(
@@ -428,15 +408,9 @@ export async function updateMealPlanDay(
   return data;
 }
 
-export async function deleteMealPlanDay(id: string): Promise<void> {
-  const { error } = await supabase.from("meal_plan_days").delete().eq("id", id);
-  if (error) throw error;
-}
-
-/** Replace the meals for one (date, meal_time) slot. Same idea as the
- *  template-cell replacer above — UI doesn't bother diffing per row. */
 export async function replaceMealPlanDayCell(
   organizationId: string,
+  userId: string,
   date: string,
   mealTime: string,
   mealIds: string[]
@@ -445,6 +419,7 @@ export async function replaceMealPlanDayCell(
     .from("meal_plan_days")
     .delete()
     .eq("organization_id", organizationId)
+    .eq("user_id", userId)
     .eq("date", date)
     .eq("meal_time", mealTime);
   if (delErr) throw delErr;
@@ -452,6 +427,7 @@ export async function replaceMealPlanDayCell(
   const { error: insErr } = await supabase.from("meal_plan_days").insert(
     mealIds.map((meal_id, i) => ({
       organization_id: organizationId,
+      user_id: userId,
       date,
       meal_time: mealTime,
       meal_id,
@@ -459,4 +435,48 @@ export async function replaceMealPlanDayCell(
     }))
   );
   if (insErr) throw insErr;
+}
+
+// =============================================================================
+// Meal plan shares
+// =============================================================================
+
+/** All share rows the caller can see — both outgoing (where they're the
+ *  sharer) and incoming (where they're the recipient). The UI splits
+ *  the list into the two directions for display. */
+export async function listMealPlanShares(orgId: string): Promise<MealPlanShare[]> {
+  const { data, error } = await supabase
+    .from("meal_plan_shares")
+    .select("*")
+    .eq("organization_id", orgId);
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function createMealPlanShare(payload: {
+  organization_id: string;
+  sharer_user_id: string;
+  shared_with_user_id: string;
+}): Promise<MealPlanShare> {
+  const { data, error } = await supabase
+    .from("meal_plan_shares")
+    .insert(payload)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteMealPlanShare(payload: {
+  organization_id: string;
+  sharer_user_id: string;
+  shared_with_user_id: string;
+}): Promise<void> {
+  const { error } = await supabase
+    .from("meal_plan_shares")
+    .delete()
+    .eq("organization_id", payload.organization_id)
+    .eq("sharer_user_id", payload.sharer_user_id)
+    .eq("shared_with_user_id", payload.shared_with_user_id);
+  if (error) throw error;
 }

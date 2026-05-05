@@ -103,6 +103,9 @@ export type MealPlanDay = Tables["meal_plan_days"]["Row"];
 export type MealPlanDayInsert = Tables["meal_plan_days"]["Insert"];
 export type MealPlanDayUpdate = Tables["meal_plan_days"]["Update"];
 
+export type MealPlanShare = Tables["meal_plan_shares"]["Row"];
+export type MealPlanShareInsert = Tables["meal_plan_shares"]["Insert"];
+
 export const MEAL_PLAN_DAY_STATUSES = ["planned", "eaten", "skipped"] as const;
 export type MealPlanDayStatus = (typeof MEAL_PLAN_DAY_STATUSES)[number];
 

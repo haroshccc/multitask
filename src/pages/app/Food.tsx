@@ -1,10 +1,13 @@
 import { useState } from "react";
+import { UserPlus, ShoppingCart } from "lucide-react";
 import { ScreenScaffold } from "@/components/layout/ScreenScaffold";
 import { cn } from "@/lib/utils/cn";
 import { MealsTab } from "@/components/food/MealsTab";
 import { IngredientsTab } from "@/components/food/IngredientsTab";
 import { WeeklyMenuTab } from "@/components/food/WeeklyMenuTab";
 import { TomorrowMenuBanner } from "@/components/food/TomorrowMenuBanner";
+import { ShareMenuModal } from "@/components/food/ShareMenuModal";
+import { ShoppingListExportModal } from "@/components/food/ShoppingListExportModal";
 
 type Tab = "meals" | "ingredients" | "weekly";
 
@@ -23,6 +26,8 @@ export function Food() {
     return stored === "ingredients" || stored === "weekly" ? stored : "meals";
   });
   const [ingredientsPanelOpen, setIngredientsPanelOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
 
   const handleTabChange = (next: Tab) => {
     setTab(next);
@@ -32,7 +37,29 @@ export function Food() {
   return (
     <ScreenScaffold
       title="התנהלות אוכל"
-      subtitle="ספריית מנות ומצרכים, תפריט שבועי, ובחירה לילית של תפריט המחר. משותף עם כל חברי הארגון."
+      subtitle="ספריית מנות ומצרכים משותפת לבית, ותפריטים אישיים שאפשר לשתף עם משתמשים אחרים."
+      actions={
+        <span className="inline-flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShareOpen(true)}
+            className="btn-ghost text-sm gap-1.5"
+            title="שיתוף תפריט"
+          >
+            <UserPlus className="w-4 h-4" />
+            <span className="hidden sm:inline">שיתוף</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setExportOpen(true)}
+            className="btn-dark text-sm gap-1.5"
+            title="ייצוא רשימת קניות"
+          >
+            <ShoppingCart className="w-4 h-4" />
+            <span className="hidden sm:inline">רשימת קניות</span>
+          </button>
+        </span>
+      }
     >
       <TomorrowMenuBanner />
 
@@ -64,6 +91,12 @@ export function Food() {
       )}
       {tab === "ingredients" && <IngredientsTab />}
       {tab === "weekly" && <WeeklyMenuTab />}
+
+      <ShareMenuModal open={shareOpen} onClose={() => setShareOpen(false)} />
+      <ShoppingListExportModal
+        open={exportOpen}
+        onClose={() => setExportOpen(false)}
+      />
     </ScreenScaffold>
   );
 }

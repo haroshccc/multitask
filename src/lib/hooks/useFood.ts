@@ -18,6 +18,7 @@ import type {
   MealPlanTemplate,
   MealPlanDay,
   MealPlanDayUpdate,
+  MealPlanShare,
 } from "@/lib/types/domain";
 import { useOrgScope, assertOrgScope } from "./useOrgScope";
 
@@ -340,9 +341,12 @@ export function useReplaceMealIngredients() {
 }
 
 // =============================================================================
-// Meal plan template (weekly recurring)
+// Meal plan template (weekly recurring) — per-user
 // =============================================================================
 
+/** Returns ALL templates the caller can see (owner + shared-with-me).
+ *  Caller is responsible for grouping by user_id and rendering the
+ *  active person's view. */
 export function useMealPlanTemplate() {
   const scope = useOrgScope();
   return useQuery<MealPlanTemplate[]>({
@@ -352,17 +356,20 @@ export function useMealPlanTemplate() {
   });
 }
 
-/** Replace one (day_of_week, meal_time) cell of the weekly template with
- *  a fresh ordered list of meal_ids. Empty list clears the cell. */
+/** Replace one (day_of_week, meal_time) cell for `userId`'s template.
+ *  RLS enforces that auth.uid() must own this user's plan or have an
+ *  edit-grant via meal_plan_shares. */
 export function useReplaceMealPlanTemplateCell() {
   const qc = useQueryClient();
   const scope = useOrgScope();
   return useMutation({
     mutationFn: ({
+      userId,
       dayOfWeek,
       mealTime,
       mealIds,
     }: {
+      userId: string;
       dayOfWeek: number;
       mealTime: string;
       mealIds: string[];
@@ -370,6 +377,7 @@ export function useReplaceMealPlanTemplateCell() {
       const { organizationId } = assertOrgScope(scope);
       return service.replaceMealPlanTemplateCell(
         organizationId,
+        userId,
         dayOfWeek,
         mealTime,
         mealIds
@@ -385,12 +393,9 @@ export function useReplaceMealPlanTemplateCell() {
 }
 
 // =============================================================================
-// Meal plan days (per-date plan / history)
+// Meal plan days (per-date plan / history) — per-user
 // =============================================================================
 
-/** Fetch the day-specific plan rows for a date range. The "tomorrow's
- *  menu" banner queries [today, today+1]; a future history view will
- *  query a wider window. */
 export function useMealPlanDays(fromDate: string, toDate: string) {
   const scope = useOrgScope();
   return useQuery<MealPlanDay[]>({
@@ -405,16 +410,24 @@ export function useReplaceMealPlanDayCell() {
   const scope = useOrgScope();
   return useMutation({
     mutationFn: ({
+      userId,
       date,
       mealTime,
       mealIds,
     }: {
+      userId: string;
       date: string;
       mealTime: string;
       mealIds: string[];
     }) => {
       const { organizationId } = assertOrgScope(scope);
-      return service.replaceMealPlanDayCell(organizationId, date, mealTime, mealIds);
+      return service.replaceMealPlanDayCell(
+        organizationId,
+        userId,
+        date,
+        mealTime,
+        mealIds
+      );
     },
     onSuccess: () => {
       if (scope.organizationId)
@@ -436,6 +449,85 @@ export function useUpdateMealPlanDay() {
         qc.invalidateQueries({
           queryKey: queryFamilies.allMealPlanDays(scope.organizationId),
         });
+    },
+  });
+}
+
+// =============================================================================
+// Sharing
+// =============================================================================
+
+/** All meal-plan-share rows visible to the caller, in both directions
+ *  (sharing-out and being-shared-with). */
+export function useMealPlanShares() {
+  const scope = useOrgScope();
+  return useQuery<MealPlanShare[]>({
+    queryKey: queryKeys.mealPlanShares(scope.organizationId ?? ""),
+    queryFn: () => service.listMealPlanShares(scope.organizationId!),
+    enabled: scope.enabled,
+  });
+}
+
+export function useCreateMealPlanShare() {
+  const qc = useQueryClient();
+  const scope = useOrgScope();
+  return useMutation({
+    mutationFn: (sharedWithUserId: string) => {
+      const { organizationId, userId } = assertOrgScope(scope);
+      return service.createMealPlanShare({
+        organization_id: organizationId,
+        sharer_user_id: userId,
+        shared_with_user_id: sharedWithUserId,
+      });
+    },
+    onSuccess: () => {
+      if (scope.organizationId) {
+        qc.invalidateQueries({
+          queryKey: queryFamilies.allMealPlanShares(scope.organizationId),
+        });
+        // Newly-shared user can now see additional plan rows; refresh those
+        // caches so their banner updates immediately.
+        qc.invalidateQueries({
+          queryKey: queryFamilies.allMealPlanTemplate(scope.organizationId),
+        });
+        qc.invalidateQueries({
+          queryKey: queryFamilies.allMealPlanDays(scope.organizationId),
+        });
+      }
+    },
+  });
+}
+
+export function useDeleteMealPlanShare() {
+  const qc = useQueryClient();
+  const scope = useOrgScope();
+  return useMutation({
+    mutationFn: ({
+      sharerUserId,
+      sharedWithUserId,
+    }: {
+      sharerUserId: string;
+      sharedWithUserId: string;
+    }) => {
+      const { organizationId } = assertOrgScope(scope);
+      return service.deleteMealPlanShare({
+        organization_id: organizationId,
+        sharer_user_id: sharerUserId,
+        shared_with_user_id: sharedWithUserId,
+      });
+    },
+    onSuccess: () => {
+      if (scope.organizationId) {
+        qc.invalidateQueries({
+          queryKey: queryFamilies.allMealPlanShares(scope.organizationId),
+        });
+        qc.invalidateQueries({
+          queryKey: queryFamilies.allMealPlanTemplate(scope.organizationId),
+        });
+        qc.invalidateQueries({
+          queryKey: queryFamilies.allMealPlanDays(scope.organizationId),
+        });
+      }
     },
   });
 }

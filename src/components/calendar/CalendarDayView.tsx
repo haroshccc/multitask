@@ -22,6 +22,7 @@ import {
   beginDrag,
   durationMin,
   emitHover,
+  emptyDragImage,
   endDrag,
   formatDragHoverLabel,
   getDrag,
@@ -174,6 +175,10 @@ export function CalendarDayView({
       x: e.clientX,
       y: e.clientY,
       label: formatDragHoverLabel(drag, labelStart, labelEnd),
+      resizeEdge:
+        drag.mode !== "move"
+          ? { left: rect.left, right: rect.right, top: e.clientY }
+          : undefined,
     });
   };
 
@@ -474,33 +479,6 @@ export function CalendarBlock({
   // are invalid HTML and break dragstart in some browsers.
   return (
     <>
-      {/* Lifted title — for blocks ≤ 15 min the title is rendered as a
-          separate absolute element ABOVE the block, since the 12-px tall
-          block can only fit the time range. The title sits at -14px above
-          the block's top edge, full block width, with a soft white
-          background so it remains legible against a busy column. */}
-      {titleLifted && (
-        <div
-          onClick={(e) => {
-            e.stopPropagation();
-            onClick();
-          }}
-          className={cn(
-            "absolute z-10 truncate text-[10px] leading-tight font-medium px-1 cursor-pointer",
-            "bg-white/95 rounded-sm",
-            completed && "line-through text-ink-400"
-          )}
-          style={{
-            top: `calc(${top}% - 13px)`,
-            insetInlineStart: `calc(${leftPct}% + 4px)`,
-            width: `calc(${widthPct}% - 8px)`,
-            color: isTask ? textColor : strokeColor,
-          }}
-          title={item.title}
-        >
-          {item.title}
-        </div>
-      )}
     <div
       role="button"
       tabIndex={0}
@@ -540,6 +518,11 @@ export function CalendarBlock({
           mode === "move" ? grabRatio * blockMin : 0;
         beginDrag(item, grabMinFromStart, mode);
         e.dataTransfer.effectAllowed = "move";
+        // Resize: hide the whole-block ghost — only the edge line + pill
+        // should be visible, making it clear this is a resize not a move.
+        if (mode !== "move") {
+          e.dataTransfer.setDragImage(emptyDragImage(), 0, 0);
+        }
         try {
           e.dataTransfer.setData("text/plain", item.id);
         } catch {
@@ -548,7 +531,8 @@ export function CalendarBlock({
       }}
       onDragEnd={() => endDrag()}
       className={cn(
-        "absolute rounded-md px-1.5 py-1 text-[11px] text-start overflow-hidden transition-all hover:z-20 hover:shadow-lift group",
+        "absolute rounded-md px-1.5 text-start overflow-hidden transition-all hover:z-20 hover:shadow-lift group",
+        titleLifted ? "py-0" : "py-1 text-[11px]",
         draggable && "cursor-grab active:cursor-grabbing"
       )}
       style={{
@@ -603,42 +587,55 @@ export function CalendarBlock({
         </>
       )}
 
-      <div className="relative">
-        {/* Time range — always shown so the user can read "from-to" at a
-            glance and during drag. In compact mode (week view) the digits
-            shrink to fit but the range stays visible. */}
-        <div
-          className={cn(
-            "font-medium leading-tight tabular-nums",
-            compact ? "text-[9px]" : "text-[10px]",
-            isTask ? "text-ink-500" : "text-white/90"
-          )}
-        >
-          {formatHour(item.start, tz)} עד {formatHour(item.end, tz)}
-        </div>
-        <div className="flex items-start gap-1">
-          {isTask && (
-            <TaskCheckButton
-              taskId={(item.source as { id: string }).id}
-              completed={completed}
-              accent={accent}
-              size="sm"
-              className="mt-0.5"
-              occurrenceStart={
-                item.id.split(":").length === 3 ? item.start : undefined
-              }
-            />
-          )}
-          <span
-            className={cn(
-              "font-medium leading-tight truncate flex-1 min-w-0",
-              completed && "line-through"
-            )}
-          >
+      {titleLifted ? (
+        /* Compact single-line for ≤15 min blocks — time + title side by side.
+           Nothing rendered above the block, so adjacent blocks are never covered. */
+        <div className="flex items-center gap-1 h-full leading-none overflow-hidden">
+          <span className={cn("text-[9px] tabular-nums font-medium shrink-0", isTask ? "text-ink-400" : "text-white/80")}>
+            {`${String(item.start.getHours()).padStart(2, "0")}:${String(item.start.getMinutes()).padStart(2, "0")}`}
+          </span>
+          <span className={cn("text-[9px] font-medium truncate flex-1 min-w-0", completed && "line-through")}>
             {item.title}
           </span>
         </div>
-      </div>
+      ) : (
+        <div className="relative">
+          {/* Time range — always shown so the user can read "from-to" at a
+              glance and during drag. In compact mode (week view) the digits
+              shrink to fit but the range stays visible. */}
+          <div
+            className={cn(
+              "font-medium leading-tight tabular-nums",
+              compact ? "text-[9px]" : "text-[10px]",
+              isTask ? "text-ink-500" : "text-white/90"
+            )}
+          >
+            {formatHour(item.start, tz)} עד {formatHour(item.end, tz)}
+          </div>
+          <div className="flex items-start gap-1">
+            {isTask && (
+              <TaskCheckButton
+                taskId={(item.source as { id: string }).id}
+                completed={completed}
+                accent={accent}
+                size="sm"
+                className="mt-0.5"
+                occurrenceStart={
+                  item.id.split(":").length === 3 ? item.start : undefined
+                }
+              />
+            )}
+            <span
+              className={cn(
+                "font-medium leading-tight truncate flex-1 min-w-0",
+                completed && "line-through"
+              )}
+            >
+              {item.title}
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Completed tasks get a full diagonal line across the block too — a
           second, heavier cue for quick scanning. */}

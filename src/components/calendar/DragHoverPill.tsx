@@ -18,20 +18,37 @@ export function DragHoverPill() {
   if (!info || typeof document === "undefined") return null;
 
   return createPortal(
-    <div
-      // Below the cursor, slightly to the side, with `pointer-events-none`
-      // so the label never absorbs the drop event.
-      style={{
-        position: "fixed",
-        left: info.x + 14,
-        top: info.y + 14,
-        zIndex: 9999,
-        pointerEvents: "none",
-      }}
-      className="rounded-md bg-ink-900 text-white text-xs font-semibold px-2 py-1 shadow-lift tabular-nums"
-    >
-      {info.label}
-    </div>,
+    <>
+      {/* Horizontal edge line shown during resize — spans the drop column at
+          the cursor Y so the user sees exactly where the block edge will land. */}
+      {info.resizeEdge && (
+        <div
+          style={{
+            position: "fixed",
+            left: info.resizeEdge.left,
+            top: info.resizeEdge.top,
+            width: info.resizeEdge.right - info.resizeEdge.left,
+            height: 2,
+            zIndex: 9998,
+            pointerEvents: "none",
+          }}
+          className="bg-primary-500 shadow-sm"
+        />
+      )}
+      {/* Floating time-range pill below the cursor. */}
+      <div
+        style={{
+          position: "fixed",
+          left: info.x + 14,
+          top: info.y + 14,
+          zIndex: 9999,
+          pointerEvents: "none",
+        }}
+        className="rounded-md bg-ink-900 text-white text-xs font-semibold px-2 py-1 shadow-lift tabular-nums"
+      >
+        {info.label}
+      </div>
+    </>,
     document.body
   );
 }

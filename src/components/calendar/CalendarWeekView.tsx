@@ -21,6 +21,7 @@ import {
   type ItemDropHandler,
   beginDrag,
   emitHover,
+  emptyDragImage,
   endDrag,
   formatDragHoverLabel,
   getDrag,
@@ -190,6 +191,10 @@ export function CalendarWeekView({
       x: e.clientX,
       y: e.clientY,
       label: formatDragHoverLabel(drag, labelStart, labelEnd),
+      resizeEdge:
+        drag.mode !== "move"
+          ? { left: rect.left, right: rect.right, top: e.clientY }
+          : undefined,
     });
   };
 
@@ -653,6 +658,8 @@ function ResizeHandle({
         e.stopPropagation();
         beginDrag(item, 0, edge === "start" ? "resize-start" : "resize-end");
         e.dataTransfer.effectAllowed = "move";
+        // Hide block ghost — only edge line + pill visible during resize.
+        e.dataTransfer.setDragImage(emptyDragImage(), 0, 0);
         try {
           e.dataTransfer.setData("text/plain", item.id);
         } catch {

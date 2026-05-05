@@ -443,15 +443,64 @@ export function CalendarBlock({
   };
 
   const draggable = isItemDraggable(item);
-  // Resize handles only show on timed (non-allDay), non-deadline blocks that
-  // are also draggable — multi-day/all-day bands have their own handles in
-  // the band rendering paths.
+  // Resize is enabled on timed (non-allDay), non-deadline blocks that are
+  // also draggable. Multi-day/all-day bands have their own band-edge
+  // handles in the band rendering paths.
   const resizable = draggable && !item.allDay && item.kind !== "deadline";
+
+  // The title gets lifted out of the block when the duration is too short
+  // for it to fit inside (≤ 15 min ≈ 12px tall, where the time line alone
+  // already eats the whole height). The lifted title is absolutely
+  // positioned above the block so it remains associated visually but
+  // doesn't fight the time-line for space.
+  const blockMinutes = durationMin(item);
+  const titleLifted = blockMinutes <= 15;
+
+  // Resolve the would-be drag mode from the grab position. Top 20% =
+  // resize-start, bottom 20% = resize-end, otherwise move. This frees us
+  // from needing separate strip elements that don't fit on short blocks
+  // — every block size now resizes naturally.
+  const resolveDragMode = (
+    grabRatio: number
+  ): "move" | "resize-start" | "resize-end" => {
+    if (!resizable) return "move";
+    if (grabRatio < 0.2) return "resize-start";
+    if (grabRatio > 0.8) return "resize-end";
+    return "move";
+  };
 
   // Render as a `<div role="button">` rather than a `<button>` because the
   // block hosts a nested `<button>` (the TaskCheckButton) — nested buttons
   // are invalid HTML and break dragstart in some browsers.
   return (
+    <>
+      {/* Lifted title — for blocks ≤ 15 min the title is rendered as a
+          separate absolute element ABOVE the block, since the 12-px tall
+          block can only fit the time range. The title sits at -14px above
+          the block's top edge, full block width, with a soft white
+          background so it remains legible against a busy column. */}
+      {titleLifted && (
+        <div
+          onClick={(e) => {
+            e.stopPropagation();
+            onClick();
+          }}
+          className={cn(
+            "absolute z-10 truncate text-[10px] leading-tight font-medium px-1 cursor-pointer",
+            "bg-white/95 rounded-sm",
+            completed && "line-through text-ink-400"
+          )}
+          style={{
+            top: `calc(${top}% - 13px)`,
+            insetInlineStart: `calc(${leftPct}% + 4px)`,
+            width: `calc(${widthPct}% - 8px)`,
+            color: isTask ? textColor : strokeColor,
+          }}
+          title={item.title}
+        >
+          {item.title}
+        </div>
+      )}
     <div
       role="button"
       tabIndex={0}
@@ -465,18 +514,31 @@ export function CalendarBlock({
           onClick();
         }
       }}
+      onMouseMove={(e) => {
+        // Live cursor hint — ns-resize when the cursor is near a top/bottom
+        // edge, grab in the middle. Pure visual; the actual drag-mode is
+        // resolved again at dragstart from the same grabRatio formula.
+        if (!resizable) return;
+        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+        const ratio = (e.clientY - rect.top) / Math.max(rect.height, 1);
+        const next =
+          ratio < 0.2 || ratio > 0.8 ? "ns-resize" : "grab";
+        const el = e.currentTarget as HTMLElement;
+        if (el.style.cursor !== next) el.style.cursor = next;
+      }}
       draggable={draggable}
       onDragStart={(e) => {
         if (!draggable) return;
-        // Where on the block did the user grab it? Translate to "minutes
-        // from item.start" so the drop can reconstruct the requested time
-        // even when the cursor isn't at the block's top.
         const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
         const blockMin = durationMin(item);
         const grabPxFromTop = e.clientY - rect.top;
+        const grabRatio = grabPxFromTop / Math.max(rect.height, 1);
+        const mode = resolveDragMode(grabRatio);
+        // Only "move" needs the grab offset; resize gestures peg the drop
+        // point directly to the cursor.
         const grabMinFromStart =
-          (grabPxFromTop / Math.max(rect.height, 1)) * blockMin;
-        beginDrag(item, grabMinFromStart);
+          mode === "move" ? grabRatio * blockMin : 0;
+        beginDrag(item, grabMinFromStart, mode);
         e.dataTransfer.effectAllowed = "move";
         try {
           e.dataTransfer.setData("text/plain", item.id);
@@ -501,22 +563,20 @@ export function CalendarBlock({
       }}
       title={itemTooltip(item)}
     >
-      {/* Resize handles — top and bottom strips that hover-reveal on the
-          block. Each fires its own drag with a different mode so the drop
-          handler updates either start or end (not both). stopPropagation
-          on dragstart prevents the parent block's "move" drag from firing
-          for the same gesture. */}
-      {resizable && (
+      {/* Resize affordances — visual-only hairlines on top/bottom edges
+          that fade in on hover. Pointer-events:none so the parent's
+          mousemove + dragstart still own the gesture; the edges are just
+          a hint that the user can drag from the top/bottom 20% of the
+          block to resize. */}
+      {resizable && blockMinutes > 15 && (
         <>
-          <ResizeStrip
-            edge="top"
-            item={item}
-            accent={strokeColor}
+          <div
+            className="absolute inset-x-0 top-0 h-1.5 opacity-0 group-hover:opacity-70 transition-opacity rounded-t-md pointer-events-none"
+            style={{ backgroundColor: strokeColor }}
           />
-          <ResizeStrip
-            edge="bottom"
-            item={item}
-            accent={strokeColor}
+          <div
+            className="absolute inset-x-0 bottom-0 h-1.5 opacity-0 group-hover:opacity-70 transition-opacity rounded-b-md pointer-events-none"
+            style={{ backgroundColor: strokeColor }}
           />
         </>
       )}
@@ -606,6 +666,7 @@ export function CalendarBlock({
           color = calendar color + fill = override color, set above. No
           extra indicator needed.) */}
     </div>
+    </>
   );
 }
 
@@ -688,52 +749,6 @@ function AllDayChip({
         />
       )}
     </button>
-  );
-}
-
-/**
- * Thin grab strip on the top or bottom edge of a timed block. Fires its
- * own HTML5 drag with mode="resize-start" or "resize-end". Hover-revealed
- * so the block's chrome stays clean when the user isn't actively reaching
- * for a resize.
- */
-export function ResizeStrip({
-  edge,
-  item,
-  accent,
-}: {
-  edge: "top" | "bottom";
-  item: CalendarItem;
-  accent: string;
-}) {
-  return (
-    <div
-      role="separator"
-      aria-label={edge === "top" ? "שינוי שעת התחלה" : "שינוי שעת סיום"}
-      title={edge === "top" ? "גרור לשינוי שעת התחלה" : "גרור לשינוי שעת סיום"}
-      draggable
-      onMouseDown={(e) => e.stopPropagation()}
-      onClick={(e) => e.stopPropagation()}
-      onDragStart={(e) => {
-        e.stopPropagation();
-        beginDrag(item, 0, edge === "top" ? "resize-start" : "resize-end");
-        e.dataTransfer.effectAllowed = "move";
-        try {
-          e.dataTransfer.setData("text/plain", item.id);
-        } catch {
-          /* ignore */
-        }
-      }}
-      onDragEnd={() => endDrag()}
-      className={cn(
-        "absolute inset-x-0 h-1.5 cursor-ns-resize z-10",
-        // Hairline strip that brightens on hover. Sits flush with the
-        // block's rounded corner so it reads as part of the edge.
-        "opacity-0 group-hover:opacity-90 transition-opacity",
-        edge === "top" ? "top-0 rounded-t-md" : "bottom-0 rounded-b-md"
-      )}
-      style={{ backgroundColor: accent }}
-    />
   );
 }
 

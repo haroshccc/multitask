@@ -591,10 +591,7 @@ export function CalendarBlock({
       )}
 
       {titleLifted ? (
-        /* Compact single-line for ≤30 min blocks — time · title · [checkbox].
-           Checkbox sits at the flex-end so in RTL it appears on the opposite
-           side from the time label. overflow-hidden on the block clips it
-           cleanly if the block is very short. */
+        /* Compact single-line for ≤30 min blocks: [time] [title] [dot?] [☐] */
         <div className="flex items-center gap-1 h-full leading-none overflow-hidden">
           <span className={cn("text-[9px] tabular-nums font-medium shrink-0", isTask ? "text-ink-400" : "text-white/80")}>
             {`${String(item.start.getHours()).padStart(2, "0")}:${String(item.start.getMinutes()).padStart(2, "0")}`}
@@ -602,6 +599,9 @@ export function CalendarBlock({
           <span className={cn("text-[9px] font-medium truncate flex-1 min-w-0", completed && "line-through")}>
             {item.title}
           </span>
+          {isTask && overdue && !completed && (
+            <span className="w-1.5 h-1.5 rounded-full bg-danger-500 shrink-0" title="באיחור" />
+          )}
           {isTask && (
             <TaskCheckButton
               taskId={(item.source as { id: string }).id}
@@ -616,9 +616,6 @@ export function CalendarBlock({
         </div>
       ) : (
         <div className="relative">
-          {/* Time range — always shown so the user can read "from-to" at a
-              glance and during drag. In compact mode (week view) the digits
-              shrink to fit but the range stays visible. */}
           <div
             className={cn(
               "font-medium leading-tight tabular-nums",
@@ -628,6 +625,7 @@ export function CalendarBlock({
           >
             {formatHour(item.start, tz)} עד {formatHour(item.end, tz)}
           </div>
+          {/* [title] [dot?] [☐] — dot sits inline between title and checkbox */}
           <div className="flex items-start gap-1">
             <span
               className={cn(
@@ -637,6 +635,9 @@ export function CalendarBlock({
             >
               {item.title}
             </span>
+            {isTask && overdue && !completed && (
+              <span className="w-1.5 h-1.5 rounded-full bg-danger-500 shrink-0 mt-1" title="באיחור" />
+            )}
             {isTask && (
               <TaskCheckButton
                 taskId={(item.source as { id: string }).id}
@@ -662,16 +663,6 @@ export function CalendarBlock({
             background:
               "linear-gradient(to bottom right, transparent calc(50% - 1px), rgba(45,45,58,0.5) 50%, transparent calc(50% + 1px))",
           }}
-        />
-      )}
-
-      {/* Overdue marker — a tiny red dot in the top-end corner. Replaces
-          the older "tint the whole block red" treatment, which made the
-          calendar visually loud when many tasks slipped. */}
-      {isTask && overdue && !completed && (
-        <span
-          className="absolute top-1 start-1 w-1.5 h-1.5 rounded-full bg-danger-500 pointer-events-none"
-          title="באיחור"
         />
       )}
 

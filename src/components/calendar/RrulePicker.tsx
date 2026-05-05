@@ -8,10 +8,11 @@ import { cn } from "@/lib/utils/cn";
  * day-of-month, yearly, plus an optional "until" date.
  *
  * For DAILY/WEEKLY rules the user can pick a single time-of-day, or toggle
- * "multiple times per day" and add several slots (e.g. medication every 4
- * hours: 09:00, 13:00, 17:00, 21:00). Times are encoded as BYHOUR/BYMINUTE
- * in the RRULE; multiple slots become BYHOUR=h1,h2,...;BYMINUTE=m1,m2,...
- * which the calendar's expandRrule() expands as a cartesian product per day.
+ * "multiple times per day" and add several slots (e.g. 08:00, 13:30, 21:15).
+ * Multi-slot mode emits a custom BYSLOT=hh:mm,hh:mm,... param so arbitrary
+ * tuples round-trip without the cartesian expansion that BYHOUR×BYMINUTE
+ * would force. Single-slot mode keeps the standard BYHOUR/BYMINUTE form for
+ * backward compatibility with existing data.
  *
  * Round-trips through an RFC 5545 RRULE string (the format Google Calendar
  * and the `recurrence_rule` column already speak). Outputs `null` when
@@ -41,7 +42,8 @@ interface RrulePickerProps {
   anchorDate?: Date | null;
 }
 
-/** "HH:MM" string used by the time inputs and serialized into BYHOUR/BYMINUTE. */
+/** "HH:MM" string used by the time inputs. Single-slot recurrences serialize
+ *  to BYHOUR+BYMINUTE; multi-slot recurrences use the custom BYSLOT list. */
 type TimeSlot = string;
 
 export function RrulePicker({ value, onChange, anchorDate }: RrulePickerProps) {
@@ -303,9 +305,8 @@ interface Parsed {
   freq: Freq;
   interval: number;
   byday?: WeekdayKey[];
-  /** Each "HH:MM" entry is one slot per day. May be derived from BYHOUR +
-   *  BYMINUTE in the RRULE; if both have multiple entries we expand the
-   *  cartesian product to mirror what `expandRrule` does at render time. */
+  /** Each "HH:MM" entry is one slot per day. Comes from BYSLOT verbatim, or
+   *  from the BYHOUR×BYMINUTE cartesian expansion (legacy data path). */
   times?: TimeSlot[];
   until?: string;
 }
@@ -327,6 +328,24 @@ function parse(s: string | null | undefined): Parsed | null {
         (WEEKDAY_KEYS as readonly string[]).includes(d)
       )
     : undefined;
+  // BYSLOT (custom) — explicit "hh:mm,hh:mm,..." list. Wins over BYHOUR/
+  // BYMINUTE because it preserves arbitrary tuples without cartesian noise.
+  const slotList = map.BYSLOT
+    ? map.BYSLOT.split(",")
+        .map((s) => {
+          const [h, m] = s.trim().split(":").map(Number);
+          return { h, m: m ?? 0 };
+        })
+        .filter(
+          ({ h, m }) =>
+            Number.isInteger(h) &&
+            h >= 0 &&
+            h < 24 &&
+            Number.isInteger(m) &&
+            m >= 0 &&
+            m < 60
+        )
+    : undefined;
   const hours = map.BYHOUR
     ? map.BYHOUR.split(",")
         .map((h) => Number(h.trim()))
@@ -338,7 +357,14 @@ function parse(s: string | null | undefined): Parsed | null {
         .filter((n) => Number.isInteger(n) && n >= 0 && n < 60)
     : undefined;
   let times: TimeSlot[] | undefined;
-  if (hours && hours.length > 0) {
+  if (slotList && slotList.length > 0) {
+    times = slotList
+      .sort((a, b) => a.h - b.h || a.m - b.m)
+      .map(
+        ({ h, m }) =>
+          `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`
+      );
+  } else if (hours && hours.length > 0) {
     const ms = minutes && minutes.length > 0 ? minutes : [0];
     times = [];
     for (const h of hours.sort((a, b) => a - b)) {
@@ -365,19 +391,35 @@ function build(p: Parsed): string {
   if (p.interval && p.interval > 1) parts.push(`INTERVAL=${p.interval}`);
   if (p.byday && p.byday.length > 0) parts.push(`BYDAY=${p.byday.join(",")}`);
   if (p.times && p.times.length > 0) {
-    // Encode as BYHOUR + BYMINUTE. Values are unique-sorted; expandRrule
-    // recombines them as a cartesian product. We dedupe each axis so the
-    // emitted slots match exactly what the user picked when minutes are
-    // consistent — for mixed minutes the cartesian still produces the right
-    // intersection plus a few extras that round-trip cleanly.
-    const hours = Array.from(
-      new Set(p.times.map((t) => Number(t.split(":")[0])))
-    ).sort((a, b) => a - b);
-    const mins = Array.from(
-      new Set(p.times.map((t) => Number(t.split(":")[1] ?? 0)))
-    ).sort((a, b) => a - b);
-    parts.push(`BYHOUR=${hours.join(",")}`);
-    parts.push(`BYMINUTE=${mins.join(",")}`);
+    // Dedupe + sort the slot list. Single slot uses standard BYHOUR/BYMINUTE
+    // for RFC 5545 compatibility; multi-slot uses the custom BYSLOT extension
+    // so arbitrary times like (08:00, 13:30, 21:15) round-trip without the
+    // cartesian expansion BYHOUR×BYMINUTE would force.
+    const seen = new Set<string>();
+    const slots: Array<{ h: number; m: number }> = [];
+    for (const t of p.times) {
+      const [hStr, mStr] = t.split(":");
+      const h = Number(hStr);
+      const m = Number(mStr ?? 0);
+      const key = `${h}:${m}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      slots.push({ h, m });
+    }
+    slots.sort((a, b) => a.h - b.h || a.m - b.m);
+    if (slots.length === 1) {
+      parts.push(`BYHOUR=${slots[0].h}`);
+      parts.push(`BYMINUTE=${slots[0].m}`);
+    } else {
+      parts.push(
+        `BYSLOT=${slots
+          .map(
+            ({ h, m }) =>
+              `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`
+          )
+          .join(",")}`
+      );
+    }
   }
   if (p.until) {
     const compact = p.until

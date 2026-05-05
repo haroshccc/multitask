@@ -442,6 +442,11 @@ interface ParsedRrule {
   /** BYMINUTE — list of minutes (0..59). Defaults to [0] when byhour is set
    *  but byminute is missing. */
   byminute?: number[];
+  /** BYSLOT — non-standard extension that lists explicit "HH:MM" slots per
+   *  day. When present, it OVERRIDES byhour/byminute and avoids the cartesian
+   *  product expansion (so arbitrary tuples like 08:00, 13:30, 21:15 round-
+   *  trip cleanly). The picker emits this for multi-slot recurrences. */
+  byslot?: Array<{ h: number; m: number }>;
   until?: Date;
 }
 
@@ -471,6 +476,22 @@ function parseRrule(raw: string): ParsedRrule | null {
         .map((m) => Number(m.trim()))
         .filter((n) => Number.isInteger(n) && n >= 0 && n < 60)
     : undefined;
+  const byslot = map.BYSLOT
+    ? map.BYSLOT.split(",")
+        .map((s) => {
+          const [h, m] = s.trim().split(":").map(Number);
+          return { h, m: m ?? 0 };
+        })
+        .filter(
+          ({ h, m }) =>
+            Number.isInteger(h) &&
+            h >= 0 &&
+            h < 24 &&
+            Number.isInteger(m) &&
+            m >= 0 &&
+            m < 60
+        )
+    : undefined;
   let until: Date | undefined;
   if (map.UNTIL) {
     // RRULE UNTIL is either YYYYMMDD or YYYYMMDDTHHMMSSZ.
@@ -484,7 +505,7 @@ function parseRrule(raw: string): ParsedRrule | null {
       );
     }
   }
-  return { freq, interval, byday, byhour, byminute, until };
+  return { freq, interval, byday, byhour, byminute, byslot, until };
 }
 
 /**
@@ -500,16 +521,16 @@ export function expandRrule(
 ): Date[] {
   const parsed = parseRrule(rule);
   if (!parsed) return [];
-  const { freq, interval, byday, byhour, byminute, until } = parsed;
+  const { freq, interval, byday, byhour, byminute, byslot, until } = parsed;
 
   const effectiveEnd = until && until < windowEnd ? until : windowEnd;
   if (anchor >= effectiveEnd) return [];
 
   const out: Date[] = [];
-  // When BYHOUR/BYMINUTE explicitly drive time slots, compare against the
-  // anchor's DATE only — otherwise an anchor at 14:00 with a "9:00 daily"
+  // When BYHOUR/BYMINUTE/BYSLOT explicitly drive time slots, compare against
+  // the anchor's DATE only — otherwise an anchor at 14:00 with a "9:00 daily"
   // rule would lose today's 9:00 slot for being "before the anchor".
-  const useDateOnlyCompare = !!(byhour || byminute);
+  const useDateOnlyCompare = !!(byhour || byminute || byslot);
   const anchorDateOnly = (() => {
     const x = new Date(anchor);
     x.setHours(0, 0, 0, 0);
@@ -525,13 +546,19 @@ export function expandRrule(
     out.push(d);
   };
 
-  // Time-of-day slots — when BYHOUR/BYMINUTE are present, expand each day
-  // into N slots (cartesian product). Otherwise fall back to the anchor's
-  // time. Sorted ascending so occurrences emit in chronological order.
-  const hours = byhour && byhour.length > 0 ? [...byhour].sort((a, b) => a - b) : [anchor.getHours()];
-  const minutes = byminute && byminute.length > 0 ? [...byminute].sort((a, b) => a - b) : byhour && byhour.length > 0 ? [0] : [anchor.getMinutes()];
-  const slotsPerDay: Array<{ h: number; m: number }> = [];
-  for (const h of hours) for (const m of minutes) slotsPerDay.push({ h, m });
+  // Time-of-day slots — BYSLOT (if present) lists explicit per-day slots and
+  // bypasses cartesian expansion. Otherwise BYHOUR/BYMINUTE are combined as a
+  // cartesian product. Otherwise fall back to the anchor's time. Sorted
+  // ascending so occurrences emit in chronological order.
+  let slotsPerDay: Array<{ h: number; m: number }>;
+  if (byslot && byslot.length > 0) {
+    slotsPerDay = [...byslot].sort((a, b) => (a.h - b.h) || (a.m - b.m));
+  } else {
+    const hours = byhour && byhour.length > 0 ? [...byhour].sort((a, b) => a - b) : [anchor.getHours()];
+    const minutes = byminute && byminute.length > 0 ? [...byminute].sort((a, b) => a - b) : byhour && byhour.length > 0 ? [0] : [anchor.getMinutes()];
+    slotsPerDay = [];
+    for (const h of hours) for (const m of minutes) slotsPerDay.push({ h, m });
+  }
 
   // Helper: emit every slot for a given y/m/d, in order.
   const pushDay = (y: number, mo: number, d: number) => {

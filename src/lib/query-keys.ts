@@ -98,6 +98,12 @@ export const queryKeys = {
   // Daily brief (Phase 8.2 / 8.3)
   dailyBrief: (userId: string, view: string, anchor: string) =>
     ["daily-brief", userId, view, anchor] as const,
+
+  // Food planning
+  meals: (orgId: string) => ["meals", orgId] as const,
+  ingredients: (orgId: string) => ["ingredients", orgId] as const,
+  mealCategories: (orgId: string) => ["meal-categories", orgId] as const,
+  ingredientCategories: (orgId: string) => ["ingredient-categories", orgId] as const,
 } as const;
 
 /**
@@ -121,4 +127,8 @@ export const queryFamilies = {
   recordingFamily: (recordingId: string) => ["recording", recordingId] as const,
   thoughtFamily: (thoughtId: string) => ["thought", thoughtId] as const,
   eventFamily: (eventId: string) => ["event", eventId] as const,
+  allMeals: (orgId: string) => ["meals", orgId] as const,
+  allIngredients: (orgId: string) => ["ingredients", orgId] as const,
+  allMealCategories: (orgId: string) => ["meal-categories", orgId] as const,
+  allIngredientCategories: (orgId: string) => ["ingredient-categories", orgId] as const,
 } as const;

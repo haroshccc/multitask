@@ -8,6 +8,7 @@ import {
   Mic,
   Lightbulb,
   FolderKanban,
+  UtensilsCrossed,
   Settings as SettingsIcon,
   Shield,
   LogOut,
@@ -45,6 +46,7 @@ const NAV: NavItem[] = [
   { to: "/app/recordings", label: "הקלטות", icon: Mic },
   { to: "/app/thoughts", label: "מחשבות", icon: Lightbulb },
   { to: "/app/projects", label: "פרויקטים", icon: FolderKanban },
+  { to: "/app/food", label: "אוכל", icon: UtensilsCrossed },
 ];
 
 export function AppShell() {

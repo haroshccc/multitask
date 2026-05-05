@@ -29,6 +29,9 @@ const Thoughts = lazy(() =>
 const Projects = lazy(() =>
   import("@/pages/app/Projects").then((m) => ({ default: m.Projects }))
 );
+const Food = lazy(() =>
+  import("@/pages/app/Food").then((m) => ({ default: m.Food }))
+);
 const ProjectDetail = lazy(() =>
   import("@/pages/app/ProjectDetail").then((m) => ({ default: m.ProjectDetail }))
 );
@@ -148,6 +151,14 @@ export default function App() {
           element={
             <Suspense fallback={<LoadingShell />}>
               <Projects />
+            </Suspense>
+          }
+        />
+        <Route
+          path="food"
+          element={
+            <Suspense fallback={<LoadingShell />}>
+              <Food />
             </Suspense>
           }
         />

@@ -39,7 +39,15 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "calendar_day_notes_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       daily_briefs: {
         Row: {
@@ -84,39 +92,12 @@ export type Database = {
           user_id?: string
           view?: string
         }
-        Relationships: []
-      }
-      event_participants: {
-        Row: {
-          added_at: string
-          event_id: string
-          id: string
-          responded_at: string | null
-          rsvp_status: Database["public"]["Enums"]["event_rsvp_status"]
-          user_id: string
-        }
-        Insert: {
-          added_at?: string
-          event_id: string
-          id?: string
-          responded_at?: string | null
-          rsvp_status?: Database["public"]["Enums"]["event_rsvp_status"]
-          user_id: string
-        }
-        Update: {
-          added_at?: string
-          event_id?: string
-          id?: string
-          responded_at?: string | null
-          rsvp_status?: Database["public"]["Enums"]["event_rsvp_status"]
-          user_id?: string
-        }
         Relationships: [
           {
-            foreignKeyName: "event_participants_event_id_fkey"
-            columns: ["event_id"]
+            foreignKeyName: "daily_briefs_organization_id_fkey"
+            columns: ["organization_id"]
             isOneToOne: false
-            referencedRelation: "events"
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
@@ -167,7 +148,57 @@ export type Database = {
           sort_order?: number
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "event_calendars_linked_task_list_id_fkey"
+            columns: ["linked_task_list_id"]
+            isOneToOne: false
+            referencedRelation: "task_lists"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_calendars_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      event_participants: {
+        Row: {
+          added_at: string
+          event_id: string
+          id: string
+          responded_at: string | null
+          rsvp_status: Database["public"]["Enums"]["event_rsvp_status"]
+          user_id: string
+        }
+        Insert: {
+          added_at?: string
+          event_id: string
+          id?: string
+          responded_at?: string | null
+          rsvp_status?: Database["public"]["Enums"]["event_rsvp_status"]
+          user_id: string
+        }
+        Update: {
+          added_at?: string
+          event_id?: string
+          id?: string
+          responded_at?: string | null
+          rsvp_status?: Database["public"]["Enums"]["event_rsvp_status"]
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_participants_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       events: {
         Row: {
@@ -253,6 +284,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "events_calendar_id_fkey"
+            columns: ["calendar_id"]
+            isOneToOne: false
+            referencedRelation: "event_calendars"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "events_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
@@ -285,6 +323,315 @@ export type Database = {
             columns: ["source_thought_id"]
             isOneToOne: false
             referencedRelation: "thoughts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ingredient_categories: {
+        Row: {
+          color: string | null
+          created_at: string
+          id: string
+          name: string
+          organization_id: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string
+          id?: string
+          name: string
+          organization_id: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          color?: string | null
+          created_at?: string
+          id?: string
+          name?: string
+          organization_id?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ingredient_categories_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ingredient_units: {
+        Row: {
+          amount: number
+          calories: number | null
+          carbs_g: number | null
+          created_at: string
+          fat_g: number | null
+          id: string
+          ingredient_id: string
+          is_default: boolean
+          organization_id: string
+          protein_g: number | null
+          sort_order: number
+          unit_name: string
+          updated_at: string
+        }
+        Insert: {
+          amount?: number
+          calories?: number | null
+          carbs_g?: number | null
+          created_at?: string
+          fat_g?: number | null
+          id?: string
+          ingredient_id: string
+          is_default?: boolean
+          organization_id: string
+          protein_g?: number | null
+          sort_order?: number
+          unit_name: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          calories?: number | null
+          carbs_g?: number | null
+          created_at?: string
+          fat_g?: number | null
+          id?: string
+          ingredient_id?: string
+          is_default?: boolean
+          organization_id?: string
+          protein_g?: number | null
+          sort_order?: number
+          unit_name?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ingredient_units_ingredient_id_fkey"
+            columns: ["ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ingredient_units_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ingredients: {
+        Row: {
+          category_id: string | null
+          created_at: string
+          id: string
+          is_complete: boolean
+          name: string
+          notes: string | null
+          organization_id: string
+          owner_id: string
+          updated_at: string
+        }
+        Insert: {
+          category_id?: string | null
+          created_at?: string
+          id?: string
+          is_complete?: boolean
+          name: string
+          notes?: string | null
+          organization_id: string
+          owner_id: string
+          updated_at?: string
+        }
+        Update: {
+          category_id?: string | null
+          created_at?: string
+          id?: string
+          is_complete?: boolean
+          name?: string
+          notes?: string | null
+          organization_id?: string
+          owner_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ingredients_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "ingredient_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ingredients_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      meal_categories: {
+        Row: {
+          color: string | null
+          created_at: string
+          id: string
+          name: string
+          organization_id: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string
+          id?: string
+          name: string
+          organization_id: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          color?: string | null
+          created_at?: string
+          id?: string
+          name?: string
+          organization_id?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meal_categories_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      meal_ingredients: {
+        Row: {
+          created_at: string
+          id: string
+          ingredient_id: string
+          meal_id: string
+          organization_id: string
+          quantity: number
+          sort_order: number
+          unit_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          ingredient_id: string
+          meal_id: string
+          organization_id: string
+          quantity?: number
+          sort_order?: number
+          unit_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          ingredient_id?: string
+          meal_id?: string
+          organization_id?: string
+          quantity?: number
+          sort_order?: number
+          unit_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meal_ingredients_ingredient_id_fkey"
+            columns: ["ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meal_ingredients_meal_id_fkey"
+            columns: ["meal_id"]
+            isOneToOne: false
+            referencedRelation: "meals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meal_ingredients_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meal_ingredients_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "ingredient_units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      meals: {
+        Row: {
+          category_id: string | null
+          created_at: string
+          id: string
+          meal_times: string[]
+          name: string
+          notes: string | null
+          organization_id: string
+          owner_id: string
+          servings: number
+          updated_at: string
+        }
+        Insert: {
+          category_id?: string | null
+          created_at?: string
+          id?: string
+          meal_times?: string[]
+          name: string
+          notes?: string | null
+          organization_id: string
+          owner_id: string
+          servings?: number
+          updated_at?: string
+        }
+        Update: {
+          category_id?: string | null
+          created_at?: string
+          id?: string
+          meal_times?: string[]
+          name?: string
+          notes?: string | null
+          organization_id?: string
+          owner_id?: string
+          servings?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meals_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "meal_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meals_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
@@ -822,6 +1169,95 @@ export type Database = {
           },
         ]
       }
+      recording_list_assignments: {
+        Row: {
+          assigned_at: string
+          list_id: string
+          recording_id: string
+          sort_order_in_list: number
+        }
+        Insert: {
+          assigned_at?: string
+          list_id: string
+          recording_id: string
+          sort_order_in_list?: number
+        }
+        Update: {
+          assigned_at?: string
+          list_id?: string
+          recording_id?: string
+          sort_order_in_list?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recording_list_assignments_list_id_fkey"
+            columns: ["list_id"]
+            isOneToOne: false
+            referencedRelation: "recording_lists"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recording_list_assignments_recording_id_fkey"
+            columns: ["recording_id"]
+            isOneToOne: false
+            referencedRelation: "recordings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      recording_lists: {
+        Row: {
+          archive_expires_at: string | null
+          archived_at: string | null
+          color: string | null
+          created_at: string
+          emoji: string | null
+          id: string
+          is_archived: boolean
+          name: string
+          organization_id: string
+          owner_id: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          archive_expires_at?: string | null
+          archived_at?: string | null
+          color?: string | null
+          created_at?: string
+          emoji?: string | null
+          id?: string
+          is_archived?: boolean
+          name: string
+          organization_id: string
+          owner_id: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          archive_expires_at?: string | null
+          archived_at?: string | null
+          color?: string | null
+          created_at?: string
+          emoji?: string | null
+          id?: string
+          is_archived?: boolean
+          name?: string
+          organization_id?: string
+          owner_id?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recording_lists_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       recording_speakers: {
         Row: {
           created_at: string
@@ -920,6 +1356,7 @@ export type Database = {
           language: string
           merged_into: string | null
           mime_type: string
+          multipart_upload_id: string | null
           organization_id: string
           owner_id: string
           project_id: string | null
@@ -934,7 +1371,6 @@ export type Database = {
           status: Database["public"]["Enums"]["recording_status"]
           storage_key: string
           storage_provider: Database["public"]["Enums"]["storage_provider"]
-          multipart_upload_id: string | null
           summary: string | null
           tags: string[]
           task_list_id: string | null
@@ -957,6 +1393,7 @@ export type Database = {
           language?: string
           merged_into?: string | null
           mime_type?: string
+          multipart_upload_id?: string | null
           organization_id: string
           owner_id: string
           project_id?: string | null
@@ -971,7 +1408,6 @@ export type Database = {
           status?: Database["public"]["Enums"]["recording_status"]
           storage_key: string
           storage_provider?: Database["public"]["Enums"]["storage_provider"]
-          multipart_upload_id?: string | null
           summary?: string | null
           tags?: string[]
           task_list_id?: string | null
@@ -994,6 +1430,7 @@ export type Database = {
           language?: string
           merged_into?: string | null
           mime_type?: string
+          multipart_upload_id?: string | null
           organization_id?: string
           owner_id?: string
           project_id?: string | null
@@ -1008,7 +1445,6 @@ export type Database = {
           status?: Database["public"]["Enums"]["recording_status"]
           storage_key?: string
           storage_provider?: Database["public"]["Enums"]["storage_provider"]
-          multipart_upload_id?: string | null
           summary?: string | null
           tags?: string[]
           task_list_id?: string | null
@@ -1018,6 +1454,20 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "recordings_event_calendar_id_fkey"
+            columns: ["event_calendar_id"]
+            isOneToOne: false
+            referencedRelation: "event_calendars"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recordings_merged_into_fkey"
+            columns: ["merged_into"]
+            isOneToOne: false
+            referencedRelation: "recordings"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "recordings_organization_id_fkey"
             columns: ["organization_id"]
@@ -1037,102 +1487,6 @@ export type Database = {
             columns: ["task_list_id"]
             isOneToOne: false
             referencedRelation: "task_lists"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "recordings_event_calendar_id_fkey"
-            columns: ["event_calendar_id"]
-            isOneToOne: false
-            referencedRelation: "event_calendars"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      recording_lists: {
-        Row: {
-          archive_expires_at: string | null
-          archived_at: string | null
-          color: string | null
-          created_at: string
-          emoji: string | null
-          id: string
-          is_archived: boolean
-          name: string
-          organization_id: string
-          owner_id: string
-          sort_order: number
-          updated_at: string
-        }
-        Insert: {
-          archive_expires_at?: string | null
-          archived_at?: string | null
-          color?: string | null
-          created_at?: string
-          emoji?: string | null
-          id?: string
-          is_archived?: boolean
-          name: string
-          organization_id: string
-          owner_id: string
-          sort_order?: number
-          updated_at?: string
-        }
-        Update: {
-          archive_expires_at?: string | null
-          archived_at?: string | null
-          color?: string | null
-          created_at?: string
-          emoji?: string | null
-          id?: string
-          is_archived?: boolean
-          name?: string
-          organization_id?: string
-          owner_id?: string
-          sort_order?: number
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "recording_lists_organization_id_fkey"
-            columns: ["organization_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      recording_list_assignments: {
-        Row: {
-          assigned_at: string
-          list_id: string
-          recording_id: string
-          sort_order_in_list: number
-        }
-        Insert: {
-          assigned_at?: string
-          list_id: string
-          recording_id: string
-          sort_order_in_list?: number
-        }
-        Update: {
-          assigned_at?: string
-          list_id?: string
-          recording_id?: string
-          sort_order_in_list?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: "recording_list_assignments_list_id_fkey"
-            columns: ["list_id"]
-            isOneToOne: false
-            referencedRelation: "recording_lists"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "recording_list_assignments_recording_id_fkey"
-            columns: ["recording_id"]
-            isOneToOne: false
-            referencedRelation: "recordings"
             referencedColumns: ["id"]
           },
         ]
@@ -1227,7 +1581,9 @@ export type Database = {
           recording_id: string | null
           size_bytes: number | null
           storage_key: string | null
-          storage_provider: Database["public"]["Enums"]["storage_provider"] | null
+          storage_provider:
+            | Database["public"]["Enums"]["storage_provider"]
+            | null
           task_id: string
           thought_id: string | null
           url: string | null
@@ -1244,7 +1600,9 @@ export type Database = {
           recording_id?: string | null
           size_bytes?: number | null
           storage_key?: string | null
-          storage_provider?: Database["public"]["Enums"]["storage_provider"] | null
+          storage_provider?:
+            | Database["public"]["Enums"]["storage_provider"]
+            | null
           task_id: string
           thought_id?: string | null
           url?: string | null
@@ -1261,7 +1619,9 @@ export type Database = {
           recording_id?: string | null
           size_bytes?: number | null
           storage_key?: string | null
-          storage_provider?: Database["public"]["Enums"]["storage_provider"] | null
+          storage_provider?:
+            | Database["public"]["Enums"]["storage_provider"]
+            | null
           task_id?: string
           thought_id?: string | null
           url?: string | null
@@ -1449,6 +1809,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "task_lists_linked_event_calendar_id_fkey"
+            columns: ["linked_event_calendar_id"]
+            isOneToOne: false
+            referencedRelation: "event_calendars"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "task_lists_organization_id_fkey"
             columns: ["organization_id"]
@@ -1984,30 +2351,6 @@ export type Database = {
         }
         Relationships: []
       }
-      user_thought_preferences: {
-        Row: {
-          auto_transcribe_recorded_thoughts: boolean
-          created_at: string
-          recording_ai_prompts: Json
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          auto_transcribe_recorded_thoughts?: boolean
-          created_at?: string
-          recording_ai_prompts?: Json
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          auto_transcribe_recorded_thoughts?: boolean
-          created_at?: string
-          recording_ai_prompts?: Json
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
       user_saved_filters: {
         Row: {
           created_at: string
@@ -2078,6 +2421,30 @@ export type Database = {
           kind?: Database["public"]["Enums"]["task_status_kind"]
           label?: string
           sort_order?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_thought_preferences: {
+        Row: {
+          auto_transcribe_recorded_thoughts: boolean
+          created_at: string
+          recording_ai_prompts: Json
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          auto_transcribe_recorded_thoughts?: boolean
+          created_at?: string
+          recording_ai_prompts?: Json
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          auto_transcribe_recorded_thoughts?: boolean
+          created_at?: string
+          recording_ai_prompts?: Json
           updated_at?: string
           user_id?: string
         }
@@ -2177,10 +2544,6 @@ export type Database = {
         }
         Returns: string
       }
-      reset_user_task_statuses: {
-        Args: Record<string, never>
-        Returns: undefined
-      }
       find_organizations_by_email_domain: {
         Args: { p_email: string }
         Returns: {
@@ -2217,6 +2580,11 @@ export type Database = {
       promote_self_to_super_admin_if_allowed: { Args: never; Returns: boolean }
       recalc_task_actual_seconds: {
         Args: { p_task: string }
+        Returns: undefined
+      }
+      reset_user_task_statuses: { Args: never; Returns: undefined }
+      seed_user_default_statuses: {
+        Args: { p_user_id: string }
         Returns: undefined
       }
       show_limit: { Args: never; Returns: number }
@@ -2334,16 +2702,23 @@ export type Database = {
       project_pricing_mode: "fixed_price" | "hourly" | "quote"
       project_spare_mode: "percent" | "hours"
       push_platform: "web" | "ios" | "android"
-      recording_source: "thought" | "call" | "meeting" | "other" | "recording" | "whatsapp" | "upload"
+      recording_source:
+        | "thought"
+        | "call"
+        | "meeting"
+        | "other"
+        | "recording"
+        | "whatsapp"
+        | "upload"
       recording_status:
         | "recording"
         | "uploaded"
         | "transcribing"
         | "extracting"
         | "ready"
+        | "error"
         | "processing"
         | "processed"
-        | "error"
       share_entity_type:
         | "task"
         | "task_list"
@@ -2530,13 +2905,13 @@ export const Constants = {
         "select",
         "multiselect",
         "stars",
+        "checkbox",
+        "url",
+        "file",
         "time",
         "location",
         "person",
         "tag",
-        "checkbox",
-        "url",
-        "file",
       ],
       dashboard_screen: [
         "home",
@@ -2547,6 +2922,7 @@ export const Constants = {
         "thoughts",
         "projects",
         "pricing",
+        "project_detail",
       ],
       dependency_relation: [
         "finish_to_start",
@@ -2571,16 +2947,24 @@ export const Constants = {
       project_pricing_mode: ["fixed_price", "hourly", "quote"],
       project_spare_mode: ["percent", "hours"],
       push_platform: ["web", "ios", "android"],
-      recording_source: ["thought", "call", "meeting", "other", "recording", "whatsapp", "upload"],
+      recording_source: [
+        "thought",
+        "call",
+        "meeting",
+        "other",
+        "recording",
+        "whatsapp",
+        "upload",
+      ],
       recording_status: [
         "recording",
         "uploaded",
         "transcribing",
         "extracting",
         "ready",
+        "error",
         "processing",
         "processed",
-        "error",
       ],
       share_entity_type: [
         "task",

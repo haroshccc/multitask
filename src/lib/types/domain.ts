@@ -70,6 +70,50 @@ export type CalendarDayNote = Tables["calendar_day_notes"]["Row"];
 export type CalendarDayNoteInsert = Tables["calendar_day_notes"]["Insert"];
 export type CalendarDayNoteUpdate = Tables["calendar_day_notes"]["Update"];
 
+// Food planning ---------------------------------------------------------------
+export type MealCategory = Tables["meal_categories"]["Row"];
+export type MealCategoryInsert = Tables["meal_categories"]["Insert"];
+export type MealCategoryUpdate = Tables["meal_categories"]["Update"];
+
+export type IngredientCategory = Tables["ingredient_categories"]["Row"];
+export type IngredientCategoryInsert = Tables["ingredient_categories"]["Insert"];
+export type IngredientCategoryUpdate = Tables["ingredient_categories"]["Update"];
+
+export type Ingredient = Tables["ingredients"]["Row"];
+export type IngredientInsert = Tables["ingredients"]["Insert"];
+export type IngredientUpdate = Tables["ingredients"]["Update"];
+
+export type IngredientUnit = Tables["ingredient_units"]["Row"];
+export type IngredientUnitInsert = Tables["ingredient_units"]["Insert"];
+export type IngredientUnitUpdate = Tables["ingredient_units"]["Update"];
+
+export type Meal = Tables["meals"]["Row"];
+export type MealInsert = Tables["meals"]["Insert"];
+export type MealUpdate = Tables["meals"]["Update"];
+
+export type MealIngredient = Tables["meal_ingredients"]["Row"];
+export type MealIngredientInsert = Tables["meal_ingredients"]["Insert"];
+export type MealIngredientUpdate = Tables["meal_ingredients"]["Update"];
+
+/** Time-of-day a meal can fit. App-level enum on top of the free-form text[]
+ *  column — keeps the DB schema flexible while constraining the UI. */
+export const MEAL_TIME_KEYS = [
+  "breakfast",
+  "lunch",
+  "dinner",
+  "between",
+  "snack",
+] as const;
+export type MealTimeKey = (typeof MEAL_TIME_KEYS)[number];
+
+export const MEAL_TIME_LABELS: Record<MealTimeKey, string> = {
+  breakfast: "בוקר",
+  lunch: "צהריים",
+  dinner: "ערב",
+  between: "ביניים",
+  snack: "נשנוש",
+};
+
 export type Thought = Tables["thoughts"]["Row"];
 export type ThoughtInsert = Tables["thoughts"]["Insert"];
 export type ThoughtUpdate = Tables["thoughts"]["Update"];

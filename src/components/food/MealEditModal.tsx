@@ -111,6 +111,25 @@ export function MealEditModal({ open, onClose, meal }: MealEditModalProps) {
     }
   }, [open, meal]);
 
+  // Live nutrition preview — re-computed on every change. MUST stay above
+  // the `if (!open)` early return so the hooks order is stable.
+  const totals = useMemo(() => {
+    return computeMealNutrition(
+      rows
+        .filter((r) => r.ingredientId)
+        .map((r) => ({
+          ingredient_id: r.ingredientId!,
+          unit_id: r.unitId,
+          quantity: Number(r.quantity) || 0,
+        })),
+      unitsById,
+      (ingredientId) => {
+        const i = ingredientsById.get(ingredientId);
+        return i?.units.find((u) => u.is_default) ?? i?.units[0];
+      }
+    );
+  }, [rows, unitsById, ingredientsById]);
+
   if (!open) return null;
 
   const toggleMealTime = (t: MealTimeKey) => {
@@ -144,24 +163,6 @@ export function MealEditModal({ open, onClose, meal }: MealEditModalProps) {
   const removeRow = (idx: number) => {
     setRows((arr) => (arr.length === 1 ? arr : arr.filter((_, i) => i !== idx)));
   };
-
-  // Live nutrition preview — re-computed on every change.
-  const totals = useMemo(() => {
-    return computeMealNutrition(
-      rows
-        .filter((r) => r.ingredientId)
-        .map((r) => ({
-          ingredient_id: r.ingredientId!,
-          unit_id: r.unitId,
-          quantity: Number(r.quantity) || 0,
-        })),
-      unitsById,
-      (ingredientId) => {
-        const i = ingredientsById.get(ingredientId);
-        return i?.units.find((u) => u.is_default) ?? i?.units[0];
-      }
-    );
-  }, [rows, unitsById, ingredientsById]);
 
   const handleSave = async () => {
     if (!name.trim()) return;

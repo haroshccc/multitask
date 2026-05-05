@@ -629,6 +629,14 @@ export function CalendarBlock({
             {formatHour(item.start, tz)} עד {formatHour(item.end, tz)}
           </div>
           <div className="flex items-start gap-1">
+            <span
+              className={cn(
+                "font-medium leading-tight truncate flex-1 min-w-0",
+                completed && "line-through"
+              )}
+            >
+              {item.title}
+            </span>
             {isTask && (
               <TaskCheckButton
                 taskId={(item.source as { id: string }).id}
@@ -641,14 +649,6 @@ export function CalendarBlock({
                 }
               />
             )}
-            <span
-              className={cn(
-                "font-medium leading-tight truncate flex-1 min-w-0",
-                completed && "line-through"
-              )}
-            >
-              {item.title}
-            </span>
           </div>
         </div>
       )}
@@ -670,7 +670,7 @@ export function CalendarBlock({
           calendar visually loud when many tasks slipped. */}
       {isTask && overdue && !completed && (
         <span
-          className="absolute top-1 end-1 w-1.5 h-1.5 rounded-full bg-danger-500 pointer-events-none"
+          className="absolute top-1 start-1 w-1.5 h-1.5 rounded-full bg-danger-500 pointer-events-none"
           title="באיחור"
         />
       )}

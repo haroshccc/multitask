@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import {
-  ChevronDown,
-  ChevronUp,
   GripVertical,
   Link2,
   Settings2,
@@ -54,7 +52,6 @@ interface GanttTableProps {
   onRowClick: (row: GanttRow) => void;
   layout: "side" | "stacked";
   onCreateTask?: (title: string) => Promise<void> | void;
-  onMoveTaskInOrder?: (taskId: string, direction: -1 | 1) => void;
   /** Custom fields of the currently-scoped project (only present when
    *  source.kind === "project"). Used to populate the custom field column
    *  section in the column manager and to render cells. */
@@ -76,7 +73,6 @@ export function GanttTable({
   onRowClick,
   layout,
   onCreateTask,
-  onMoveTaskInOrder,
   customFields = [],
 }: GanttTableProps) {
   const updateTask = useUpdateTask();
@@ -404,7 +400,6 @@ export function GanttTable({
                     : undefined
                 }
                 onRemoveDep={(depId) => deleteDep.mutate(depId)}
-                onMoveTaskInOrder={onMoveTaskInOrder}
               />
             ))}
           </div>
@@ -473,7 +468,6 @@ interface GanttTableBodyRowProps {
   onComplete: (taskId: string, completed: boolean) => void;
   onAddDep?: (predecessorId: string) => void;
   onRemoveDep: (depId: string) => void;
-  onMoveTaskInOrder?: (taskId: string, direction: -1 | 1) => void;
 }
 
 /**
@@ -498,7 +492,6 @@ function GanttTableBodyRow({
   onComplete,
   onAddDep,
   onRemoveDep,
-  onMoveTaskInOrder,
 }: GanttTableBodyRowProps) {
   const isTask = row.kind === "task" && !!row.task;
   const isCritical = isTask && criticalSet.has(row.task!.id);
@@ -631,12 +624,6 @@ function GanttTableBodyRow({
             >
               <GripVertical className="w-3 h-3" />
             </button>
-            {onMoveTaskInOrder && (
-              <ReorderArrows
-                onUp={() => onMoveTaskInOrder(row.task!.id, -1)}
-                onDown={() => onMoveTaskInOrder(row.task!.id, 1)}
-              />
-            )}
             <SelectionCheckbox taskId={row.task.id} />
             <CompletionCircle
               taskId={row.task.id}
@@ -1194,7 +1181,7 @@ function SelectionCheckbox({ taskId }: { taskId: string }) {
       aria-label={isSelected ? "בטל סימון" : "סמן משימה"}
       aria-pressed={isSelected}
       className={cn(
-        "shrink-0 w-3.5 h-3.5 rounded-sm border-2 flex items-center justify-center transition-all",
+        "shrink-0 w-3.5 h-3.5 rounded-[3px] border-2 flex items-center justify-center transition-all",
         isSelected
           ? "bg-primary-500 border-primary-500 text-white opacity-100"
           : "border-ink-300 hover:border-primary-500 opacity-0 group-hover/sel:opacity-100"
@@ -1232,7 +1219,7 @@ function CompletionCircle({
         onToggle(!completed);
       }}
       className={cn(
-        "shrink-0 w-4 h-4 rounded-sm border-2 flex items-center justify-center transition-all",
+        "shrink-0 w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all",
         completed
           ? "text-white border-transparent"
           : "border-ink-300 hover:border-ink-500"
@@ -1444,39 +1431,3 @@ function GanttCfDateCell({
   );
 }
 
-function ReorderArrows({
-  onUp,
-  onDown,
-}: {
-  onUp: () => void;
-  onDown: () => void;
-}) {
-  return (
-    <div className="flex flex-col opacity-0 group-hover/sel:opacity-100 transition-opacity">
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          onUp();
-        }}
-        className="p-0 leading-none rounded hover:bg-ink-100 text-ink-400 hover:text-ink-700"
-        title="העבר למעלה"
-        aria-label="העבר למעלה"
-      >
-        <ChevronUp className="w-3 h-3" />
-      </button>
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          onDown();
-        }}
-        className="p-0 leading-none rounded hover:bg-ink-100 text-ink-400 hover:text-ink-700"
-        title="העבר למטה"
-        aria-label="העבר למטה"
-      >
-        <ChevronDown className="w-3 h-3" />
-      </button>
-    </div>
-  );
-}

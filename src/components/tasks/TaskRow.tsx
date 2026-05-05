@@ -438,7 +438,7 @@ export function TaskRow({
           aria-label={isSelected ? "בטל סימון" : "סמן משימה"}
           aria-pressed={isSelected}
           className={cn(
-            "shrink-0 mt-0.5 w-4 h-4 rounded-sm border-2 flex items-center justify-center transition-all",
+            "shrink-0 mt-0.5 w-4 h-4 rounded-[3px] border-2 flex items-center justify-center transition-all",
             isSelected
               ? "bg-primary-500 border-primary-500 text-white opacity-100"
               : "border-ink-300 hover:border-primary-500 opacity-0 group-hover:opacity-100"
@@ -493,7 +493,7 @@ export function TaskRow({
         <button
           onClick={toggleComplete}
           className={cn(
-            "mt-0.5 w-4 h-4 rounded-sm border-2 shrink-0 flex items-center justify-center transition-all",
+            "mt-0.5 w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center transition-all",
             isDone
               ? "text-white border-transparent"
               : "border-ink-300 hover:border-ink-500"

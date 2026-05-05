@@ -374,43 +374,6 @@ export function Gantt() {
     setSource({ kind: "project", id: project.id });
   };
 
-  /** Move a task one slot earlier (-1) or later (+1) among its siblings.
-   *  Same midpoint sort_order math as the Tasks screen — find peers in
-   *  the same `parent_task_id` + `task_list_id` scope, take a midpoint
-   *  between the new neighbours. Wrapped in pushUndo. */
-  const handleMoveTaskInOrder = (taskId: string, direction: -1 | 1) => {
-    const target = tasks.find((t) => t.id === taskId);
-    if (!target) return;
-    const peers = tasks
-      .filter(
-        (t) =>
-          (t.parent_task_id ?? null) === (target.parent_task_id ?? null) &&
-          t.task_list_id === target.task_list_id
-      )
-      .sort((a, b) => a.sort_order - b.sort_order);
-    const idx = peers.findIndex((t) => t.id === taskId);
-    if (idx === -1) return;
-    const swapIdx = idx + direction;
-    if (swapIdx < 0 || swapIdx >= peers.length) return;
-    const neighbour = peers[swapIdx]!;
-    const farther = peers[swapIdx + direction];
-    let newSortOrder = farther
-      ? (neighbour.sort_order + farther.sort_order) / 2
-      : direction === -1
-      ? neighbour.sort_order - 1
-      : neighbour.sort_order + 1;
-    if (newSortOrder === target.sort_order) {
-      newSortOrder = neighbour.sort_order + (direction === -1 ? -0.5 : 0.5);
-    }
-    const prev = target.sort_order;
-    reorderTasks.mutate([{ id: taskId, sort_order: newSortOrder }]);
-    pushUndo({
-      description: "סידור מחדש",
-      undo: () => reorderTasks.mutate([{ id: taskId, sort_order: prev }]),
-      redo: () => reorderTasks.mutate([{ id: taskId, sort_order: newSortOrder }]),
-    });
-  };
-
   /** Inline-create a task within the current scope. For a list scope the
    *  task lands in that list. For a project scope it lands in the
    *  project's first list (creating one if the project somehow has none).
@@ -809,7 +772,6 @@ export function Gantt() {
                   onCreateTask={
                     source.kind === "all" ? undefined : handleCreateTaskInScope
                   }
-                  onMoveTaskInOrder={handleMoveTaskInOrder}
                   customFields={customFields}
                 />
               </div>
@@ -846,7 +808,6 @@ export function Gantt() {
                 onCreateTask={
                   source.kind === "all" ? undefined : handleCreateTaskInScope
                 }
-                onMoveTaskInOrder={handleMoveTaskInOrder}
                 customFields={customFields}
               />
               <GanttGrid

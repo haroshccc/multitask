@@ -628,7 +628,6 @@ function GanttTableBodyRow({
             <CompletionCircle
               taskId={row.task.id}
               completed={!!row.task.completed_at}
-              accent={row.accentColor ?? "#6b6b80"}
               onToggle={(next) => onComplete(row.task!.id, next)}
             />
           </>
@@ -1181,14 +1180,14 @@ function SelectionCheckbox({ taskId }: { taskId: string }) {
       aria-label={isSelected ? "בטל סימון" : "סמן משימה"}
       aria-pressed={isSelected}
       className={cn(
-        "shrink-0 w-3.5 h-3.5 rounded-[3px] border-2 flex items-center justify-center transition-all",
+        "shrink-0 w-3 h-3 rounded-[3px] border-2 flex items-center justify-center transition-all",
         isSelected
           ? "bg-primary-500 border-primary-500 text-white opacity-100"
           : "border-ink-300 hover:border-primary-500 opacity-0 group-hover/sel:opacity-100"
       )}
     >
       {isSelected && (
-        <svg viewBox="0 0 20 20" fill="currentColor" className="w-2.5 h-2.5">
+        <svg viewBox="0 0 20 20" fill="currentColor" className="w-2 h-2">
           <path
             fillRule="evenodd"
             d="M16.704 5.29a1 1 0 010 1.415l-8 8a1 1 0 01-1.415 0l-4-4a1 1 0 011.415-1.414L8 12.586l7.29-7.293a1 1 0 011.415 0z"
@@ -1203,12 +1202,10 @@ function SelectionCheckbox({ taskId }: { taskId: string }) {
 function CompletionCircle({
   taskId: _taskId,
   completed,
-  accent,
   onToggle,
 }: {
   taskId: string;
   completed: boolean;
-  accent: string;
   onToggle: (completed: boolean) => void;
 }) {
   return (
@@ -1221,14 +1218,9 @@ function CompletionCircle({
       className={cn(
         "shrink-0 w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all",
         completed
-          ? "text-white border-transparent"
-          : "border-ink-300 hover:border-ink-500"
+          ? "bg-success-500 border-success-500 text-white"
+          : "border-ink-300 hover:border-success-500"
       )}
-      style={
-        completed
-          ? { backgroundColor: accent, borderColor: accent }
-          : undefined
-      }
       aria-label={completed ? "בטל השלמה" : "סמן כהושלמה"}
       aria-pressed={completed}
       title={completed ? "בטל השלמה" : "סמן כהושלמה"}

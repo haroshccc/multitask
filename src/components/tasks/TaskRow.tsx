@@ -438,14 +438,14 @@ export function TaskRow({
           aria-label={isSelected ? "בטל סימון" : "סמן משימה"}
           aria-pressed={isSelected}
           className={cn(
-            "shrink-0 mt-0.5 w-4 h-4 rounded-[3px] border-2 flex items-center justify-center transition-all",
+            "shrink-0 mt-1 w-3 h-3 rounded-[3px] border-2 flex items-center justify-center transition-all",
             isSelected
               ? "bg-primary-500 border-primary-500 text-white opacity-100"
               : "border-ink-300 hover:border-primary-500 opacity-0 group-hover:opacity-100"
           )}
         >
           {isSelected && (
-            <svg viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3">
+            <svg viewBox="0 0 20 20" fill="currentColor" className="w-2 h-2">
               <path
                 fillRule="evenodd"
                 d="M16.704 5.29a1 1 0 010 1.415l-8 8a1 1 0 01-1.415 0l-4-4a1 1 0 011.415-1.414L8 12.586l7.29-7.293a1 1 0 011.415 0z"
@@ -489,23 +489,15 @@ export function TaskRow({
           <span className="w-3.5 shrink-0" />
         )}
 
-        {/* Checkbox — fill + border take the list's color if set, otherwise success */}
+        {/* Completion circle — always green when done, gray border otherwise */}
         <button
           onClick={toggleComplete}
           className={cn(
             "mt-0.5 w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center transition-all",
             isDone
-              ? "text-white border-transparent"
-              : "border-ink-300 hover:border-ink-500"
+              ? "bg-success-500 border-success-500 text-white"
+              : "border-ink-300 hover:border-success-500"
           )}
-          style={
-            isDone
-              ? {
-                  backgroundColor: "var(--list-color, #10b981)",
-                  borderColor: "var(--list-color, #10b981)",
-                }
-              : undefined
-          }
           aria-label={isDone ? "בטל סימון" : "סמן כהושלמה"}
           type="button"
         >

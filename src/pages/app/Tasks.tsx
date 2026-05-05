@@ -105,45 +105,12 @@ export function Tasks() {
    *  pinned-first, then sort_order asc — so we operate inside one of
    *  those two groups (a pinned list stays among pinned, an unpinned
    *  one stays among unpinned) and rewrite its sort_order to land
-   *  between the new neighbours. */
-  const handleMoveListInOrder = (listId: string, direction: -1 | 1) => {
-    const target = lists.find((l) => l.id === listId);
-    if (!target) return;
-    const peers = lists
-      .filter((l) => !!l.is_pinned === !!target.is_pinned)
-      .sort((a, b) => a.sort_order - b.sort_order);
-    const idx = peers.findIndex((l) => l.id === listId);
-    if (idx === -1) return;
-    const swapIdx = idx + direction;
-    if (swapIdx < 0 || swapIdx >= peers.length) return;
-    const neighbour = peers[swapIdx]!;
-    const farther = peers[swapIdx + direction];
-    // Compute a sort_order that lands between neighbour and farther.
-    // If farther is missing we're at the boundary — bump past neighbour
-    // by ±1 (the sort_order column is double-precision).
-    let newSortOrder = farther
-      ? (neighbour.sort_order + farther.sort_order) / 2
-      : direction === -1
-      ? neighbour.sort_order - 1
-      : neighbour.sort_order + 1;
-    // Edge case: if neighbour and farther carry identical sort_order
-    // values (legacy data, or two lists created at the same instant), the
-    // midpoint equals neighbour.sort_order which equals target.sort_order —
-    // the move is silently a no-op. Bump by a small, direction-aware delta
-    // so the reorder actually takes effect.
-    if (newSortOrder === target.sort_order) {
-      newSortOrder = neighbour.sort_order + (direction === -1 ? -0.5 : 0.5);
-    }
-    const prevSortOrder = target.sort_order;
-    reorderLists.mutate([{ id: listId, sort_order: newSortOrder }]);
-    pushUndo({
-      description: "סידור רשימות",
-      undo: () =>
-        reorderLists.mutate([{ id: listId, sort_order: prevSortOrder }]),
-      redo: () =>
-        reorderLists.mutate([{ id: listId, sort_order: newSortOrder }]),
-    });
-  };
+   *  between the new neighbours.
+   *
+   *  We deliberately work off `visibleLists` (not `lists`) so hidden
+   *  lists never interpose: if the user can't see a list, swapping past
+   *  it would be a visual no-op and the arrow would feel broken.
+   *  (Defined further down, after visibleLists is in scope.) */
 
   // Allow ?edit=<taskId> in the URL to pre-open the TaskEditModal — used by
   // the QuickCapture "+ משימה חדשה" action to land the user directly on an
@@ -216,6 +183,70 @@ export function Tasks() {
       return a.sort_order - b.sort_order;
     });
   }, [lists, hiddenSet]);
+
+  const handleMoveListInOrder = (listId: string, direction: -1 | 1) => {
+    const target = visibleLists.find((l) => l.id === listId);
+    if (!target) return;
+    const peers = visibleLists
+      .filter((l) => !!l.is_pinned === !!target.is_pinned)
+      .sort((a, b) => a.sort_order - b.sort_order);
+    const idx = peers.findIndex((l) => l.id === listId);
+    if (idx === -1) return;
+    const swapIdx = idx + direction;
+    if (swapIdx < 0 || swapIdx >= peers.length) return;
+    const neighbour = peers[swapIdx]!;
+    const farther = peers[swapIdx + direction];
+    // Compute a sort_order that lands between neighbour and farther.
+    // If farther is missing we're at the boundary — bump past neighbour
+    // by ±1 (the sort_order column is double-precision).
+    let newSortOrder = farther
+      ? (neighbour.sort_order + farther.sort_order) / 2
+      : direction === -1
+      ? neighbour.sort_order - 1
+      : neighbour.sort_order + 1;
+    // Edge case: if neighbour and farther carry identical sort_order
+    // values (legacy data, or two lists created at the same instant), the
+    // midpoint equals neighbour.sort_order which equals target.sort_order —
+    // the move is silently a no-op. Bump by a small, direction-aware delta
+    // so the reorder actually takes effect.
+    if (newSortOrder === target.sort_order) {
+      newSortOrder = neighbour.sort_order + (direction === -1 ? -0.5 : 0.5);
+    }
+    const prevSortOrder = target.sort_order;
+    reorderLists.mutate([{ id: listId, sort_order: newSortOrder }]);
+    pushUndo({
+      description: "סידור רשימות",
+      undo: () =>
+        reorderLists.mutate([{ id: listId, sort_order: prevSortOrder }]),
+      redo: () =>
+        reorderLists.mutate([{ id: listId, sort_order: newSortOrder }]),
+    });
+  };
+
+  /**
+   * Per-peer-group first/last flags for the reorder arrows. Computed once
+   * across visibleLists so each TaskColumn can show its arrows enabled or
+   * disabled based on its position WITHIN ITS PEER GROUP (pinned vs
+   * unpinned), not across the whole sidebar — otherwise an unpinned list
+   * at the very top of the unpinned group would still see "up" enabled
+   * (because pinned lists sit above it), but the click would be a no-op.
+   */
+  const listEdgeFlags = useMemo(() => {
+    const out = new Map<string, { isFirst: boolean; isLast: boolean }>();
+    const groups: Record<"pinned" | "unpinned", typeof visibleLists> = {
+      pinned: [],
+      unpinned: [],
+    };
+    for (const l of visibleLists) {
+      (l.is_pinned ? groups.pinned : groups.unpinned).push(l);
+    }
+    for (const group of [groups.pinned, groups.unpinned]) {
+      group.forEach((l, i) => {
+        out.set(l.id, { isFirst: i === 0, isLast: i === group.length - 1 });
+      });
+    }
+    return out;
+  }, [visibleLists]);
 
   // Flatten visible trees into an ordered list of task ids — used by the
   // multi-select store to resolve Shift+click range selection across rows.
@@ -638,6 +669,8 @@ export function Tasks() {
                     name: l.name,
                     emoji: l.emoji,
                     color: l.color,
+                    is_pinned: !!l.is_pinned,
+                    sort_order: l.sort_order,
                   }))}
                   hiddenListIds={hiddenSet}
                   onToggleListVisibility={toggleListVisibility}
@@ -679,7 +712,7 @@ export function Tasks() {
                 />
               </div>
               <div className="flex flex-col gap-3">
-                {visibleLists.map((list, idx) => (
+                {visibleLists.map((list) => (
                   <TaskColumn
                     key={list.id}
                     list={list}
@@ -690,8 +723,8 @@ export function Tasks() {
                     onOpenEdit={setEditingTaskId}
                     onHide={() => toggleListVisibility(list.id)}
                     onMoveInOrder={(dir) => handleMoveListInOrder(list.id, dir)}
-                    isFirst={idx === 0}
-                    isLast={idx === visibleLists.length - 1}
+                    isFirst={listEdgeFlags.get(list.id)?.isFirst ?? true}
+                    isLast={listEdgeFlags.get(list.id)?.isLast ?? true}
                     layout="stack"
                   />
                 ))}
@@ -709,6 +742,8 @@ export function Tasks() {
                   name: l.name,
                   emoji: l.emoji,
                   color: l.color,
+                  is_pinned: !!l.is_pinned,
+                  sort_order: l.sort_order,
                 }))}
                 hiddenListIds={hiddenSet}
                 onToggleListVisibility={toggleListVisibility}
@@ -750,7 +785,7 @@ export function Tasks() {
 
                 <div className="flex-1 min-w-0 overflow-x-auto scrollbar-thin">
                   <div className="flex items-stretch gap-3 pb-2">
-                    {visibleLists.map((list, idx) => (
+                    {visibleLists.map((list) => (
                       <TaskColumn
                         key={list.id}
                         list={list}
@@ -766,8 +801,8 @@ export function Tasks() {
                         onMoveInOrder={(dir) =>
                           handleMoveListInOrder(list.id, dir)
                         }
-                        isFirst={idx === 0}
-                        isLast={idx === visibleLists.length - 1}
+                        isFirst={listEdgeFlags.get(list.id)?.isFirst ?? true}
+                        isLast={listEdgeFlags.get(list.id)?.isLast ?? true}
                         layout="columns"
                       />
                     ))}

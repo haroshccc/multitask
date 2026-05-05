@@ -274,7 +274,8 @@ export function Calendar() {
   };
 
   const handleItemClick = (item: CalendarItem) => {
-    if (item.kind === "task") setEditingTaskId((item.source as { id: string }).id);
+    if (item.kind === "task" || item.kind === "deadline")
+      setEditingTaskId((item.source as { id: string }).id);
     else setEditingEventId((item.source as { id: string }).id);
   };
 
@@ -318,6 +319,13 @@ export function Calendar() {
             (newEnd.getTime() - newStart.getTime()) / 60_000
           ),
         },
+      });
+    } else if (item.kind === "deadline") {
+      // Dragging a deadline marker → update the task's deadline_at.
+      const taskId = (item.source as { id: string }).id;
+      updateTask.mutate({
+        taskId,
+        patch: { deadline_at: newStart.toISOString() },
       });
     } else {
       const eventId = (item.source as { id: string }).id;

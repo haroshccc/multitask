@@ -143,6 +143,23 @@ export function TaskEditModal({
   const [scheduledAt, setScheduledAt] = useState<string | null>(null); // ISO
   const [deadlineAt, setDeadlineAt] = useState<string | null>(null); // ISO — hard deadline, distinct from scheduledAt
   const [recurrenceRule, setRecurrenceRule] = useState<string | null>(null);
+
+  // Recurring tasks need a scheduled_at to anchor expansion. When the user
+  // enables recurrence on a task with no scheduled_at, auto-seed it with
+  // today at the rule's first BYHOUR time (or 09:00 default). The user can
+  // adjust the date afterward — we just guarantee the data is consistent so
+  // the row's ↻ + dim treatment shows up immediately.
+  useEffect(() => {
+    if (!recurrenceRule) return;
+    if (scheduledAt) return;
+    const hourMatch = recurrenceRule.match(/BYHOUR=(\d+)/);
+    const minuteMatch = recurrenceRule.match(/BYMINUTE=(\d+)/);
+    const h = hourMatch ? Number(hourMatch[1]) : 9;
+    const min = minuteMatch ? Number(minuteMatch[1]) : 0;
+    const today = new Date();
+    today.setHours(h, min, 0, 0);
+    setScheduledAt(today.toISOString());
+  }, [recurrenceRule, scheduledAt]);
   const [durationMinutes, setDurationMinutes] = useState<number | null>(null);
   const [estimatedMinutes, setEstimatedMinutes] = useState<number | null>(null);
   const [assigneeId, setAssigneeId] = useState<string | null>(null);

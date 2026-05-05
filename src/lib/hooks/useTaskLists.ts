@@ -112,7 +112,32 @@ export function useReorderTaskLists() {
   return useMutation({
     mutationFn: (updates: { id: string; sort_order: number }[]) =>
       service.reorderTaskLists(updates),
-    onSuccess: () => {
+    // Optimistic update — without it, rapid arrow-clicks see stale `lists`
+    // (the second click computes the same sort_order as the first because
+    // the cache hasn't refreshed yet) and the row appears stuck.
+    onMutate: async (updates) => {
+      if (!scope.organizationId) return;
+      const queryKey = queryFamilies.allTaskLists(scope.organizationId);
+      await qc.cancelQueries({ queryKey });
+      const snapshots = qc.getQueriesData<TaskList[]>({ queryKey });
+      const patchById = new Map(updates.map((u) => [u.id, u.sort_order]));
+      qc.setQueriesData<TaskList[]>({ queryKey }, (prev) => {
+        if (!prev) return prev;
+        return prev.map((l) =>
+          patchById.has(l.id)
+            ? { ...l, sort_order: patchById.get(l.id)! }
+            : l
+        );
+      });
+      return { snapshots };
+    },
+    onError: (_err, _updates, context) => {
+      if (!context?.snapshots) return;
+      for (const [key, data] of context.snapshots) {
+        qc.setQueryData(key, data);
+      }
+    },
+    onSettled: () => {
       if (scope.organizationId) {
         qc.invalidateQueries({
           queryKey: queryFamilies.allTaskLists(scope.organizationId),

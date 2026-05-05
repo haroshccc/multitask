@@ -116,6 +116,60 @@ export interface HoverInfo {
   label: string;
 }
 
+/**
+ * Build the live drag-tooltip label. Shows the would-be time range plus
+ * the resulting duration; for resize gestures it also reports the delta
+ * (+30 דק׳ / -15 דק׳) so the user knows precisely how much they're
+ * trimming or extending. Move gestures get just the duration since the
+ * length doesn't change.
+ */
+export function formatDragHoverLabel(
+  drag: { item: CalendarItem; mode: DragMode },
+  newStart: Date,
+  newEnd: Date
+): string {
+  const startLabel = formatHourMinute(newStart);
+  const endLabel = formatHourMinute(newEnd);
+  const newDurMin = Math.max(
+    0,
+    Math.round((newEnd.getTime() - newStart.getTime()) / MIN)
+  );
+  const oldDurMin = Math.max(
+    0,
+    Math.round((drag.item.end.getTime() - drag.item.start.getTime()) / MIN)
+  );
+  const range = `${startLabel} ← ${endLabel}`;
+  const dur = formatDurationCompact(newDurMin);
+  if (drag.mode === "move") {
+    return `${range} · ${dur}`;
+  }
+  // Resize — surface the delta. Positive = extended, negative = trimmed.
+  const deltaMin = newDurMin - oldDurMin;
+  if (deltaMin === 0) return `${range} · ${dur}`;
+  const sign = deltaMin > 0 ? "+" : "−";
+  return `${range} · ${dur} (${sign}${formatDurationCompact(Math.abs(deltaMin))})`;
+}
+
+/**
+ * Compact hour:minute label, always 2-digit on both sides. We can't reuse
+ * calendar-utils' formatHour here because that one switches to "10 בבוקר"
+ * style for round hours, which is too verbose for a drag tooltip.
+ */
+function formatHourMinute(d: Date): string {
+  const h = String(d.getHours()).padStart(2, "0");
+  const m = String(d.getMinutes()).padStart(2, "0");
+  return `${h}:${m}`;
+}
+
+function formatDurationCompact(min: number): string {
+  if (min < 60) return `${min} דק׳`;
+  const hours = Math.floor(min / 60);
+  const rem = min % 60;
+  if (rem === 0) return hours === 1 ? "שעה" : hours === 2 ? "שעתיים" : `${hours} שעות`;
+  // 1:30, 2:15 etc — compact for non-round durations.
+  return `${hours}:${String(rem).padStart(2, "0")} ש׳`;
+}
+
 const hoverListeners = new Set<(info: HoverInfo | null) => void>();
 
 export function subscribeHover(fn: (info: HoverInfo | null) => void): () => void {

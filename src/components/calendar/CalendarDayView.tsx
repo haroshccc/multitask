@@ -23,6 +23,7 @@ import {
   durationMin,
   emitHover,
   endDrag,
+  formatDragHoverLabel,
   getDrag,
   isItemDraggable,
 } from "./calendar-drag";
@@ -172,7 +173,7 @@ export function CalendarDayView({
     emitHover({
       x: e.clientX,
       y: e.clientY,
-      label: `${formatHour(labelStart)} עד ${formatHour(labelEnd)}`,
+      label: formatDragHoverLabel(drag, labelStart, labelEnd),
     });
   };
 
@@ -442,6 +443,10 @@ export function CalendarBlock({
   };
 
   const draggable = isItemDraggable(item);
+  // Resize handles only show on timed (non-allDay), non-deadline blocks that
+  // are also draggable — multi-day/all-day bands have their own handles in
+  // the band rendering paths.
+  const resizable = draggable && !item.allDay && item.kind !== "deadline";
 
   // Render as a `<div role="button">` rather than a `<button>` because the
   // block hosts a nested `<button>` (the TaskCheckButton) — nested buttons
@@ -481,7 +486,7 @@ export function CalendarBlock({
       }}
       onDragEnd={() => endDrag()}
       className={cn(
-        "absolute rounded-md px-1.5 py-1 text-[11px] text-start overflow-hidden transition-all hover:z-20 hover:shadow-lift",
+        "absolute rounded-md px-1.5 py-1 text-[11px] text-start overflow-hidden transition-all hover:z-20 hover:shadow-lift group",
         draggable && "cursor-grab active:cursor-grabbing"
       )}
       style={{
@@ -496,6 +501,25 @@ export function CalendarBlock({
       }}
       title={itemTooltip(item)}
     >
+      {/* Resize handles — top and bottom strips that hover-reveal on the
+          block. Each fires its own drag with a different mode so the drop
+          handler updates either start or end (not both). stopPropagation
+          on dragstart prevents the parent block's "move" drag from firing
+          for the same gesture. */}
+      {resizable && (
+        <>
+          <ResizeStrip
+            edge="top"
+            item={item}
+            accent={strokeColor}
+          />
+          <ResizeStrip
+            edge="bottom"
+            item={item}
+            accent={strokeColor}
+          />
+        </>
+      )}
       {/* Actual time overlay — a solid-filled band in the task's list color
           sitting inside the outlined planned block, in the same column at the
           y-range of the time entry. This gives the "planned vs actual" read
@@ -664,6 +688,52 @@ function AllDayChip({
         />
       )}
     </button>
+  );
+}
+
+/**
+ * Thin grab strip on the top or bottom edge of a timed block. Fires its
+ * own HTML5 drag with mode="resize-start" or "resize-end". Hover-revealed
+ * so the block's chrome stays clean when the user isn't actively reaching
+ * for a resize.
+ */
+export function ResizeStrip({
+  edge,
+  item,
+  accent,
+}: {
+  edge: "top" | "bottom";
+  item: CalendarItem;
+  accent: string;
+}) {
+  return (
+    <div
+      role="separator"
+      aria-label={edge === "top" ? "שינוי שעת התחלה" : "שינוי שעת סיום"}
+      title={edge === "top" ? "גרור לשינוי שעת התחלה" : "גרור לשינוי שעת סיום"}
+      draggable
+      onMouseDown={(e) => e.stopPropagation()}
+      onClick={(e) => e.stopPropagation()}
+      onDragStart={(e) => {
+        e.stopPropagation();
+        beginDrag(item, 0, edge === "top" ? "resize-start" : "resize-end");
+        e.dataTransfer.effectAllowed = "move";
+        try {
+          e.dataTransfer.setData("text/plain", item.id);
+        } catch {
+          /* ignore */
+        }
+      }}
+      onDragEnd={() => endDrag()}
+      className={cn(
+        "absolute inset-x-0 h-1.5 cursor-ns-resize z-10",
+        // Hairline strip that brightens on hover. Sits flush with the
+        // block's rounded corner so it reads as part of the edge.
+        "opacity-0 group-hover:opacity-90 transition-opacity",
+        edge === "top" ? "top-0 rounded-t-md" : "bottom-0 rounded-b-md"
+      )}
+      style={{ backgroundColor: accent }}
+    />
   );
 }
 

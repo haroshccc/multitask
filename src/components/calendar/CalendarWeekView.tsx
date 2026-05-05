@@ -23,6 +23,7 @@ import {
   beginDrag,
   emitHover,
   endDrag,
+  formatDragHoverLabel,
   getDrag,
   isItemDraggable,
 } from "./calendar-drag";
@@ -189,7 +190,7 @@ export function CalendarWeekView({
     emitHover({
       x: e.clientX,
       y: e.clientY,
-      label: `${formatHour(labelStart)} עד ${formatHour(labelEnd)}`,
+      label: formatDragHoverLabel(drag, labelStart, labelEnd),
     });
   };
 

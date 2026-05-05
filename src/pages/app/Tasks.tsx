@@ -105,11 +105,15 @@ export function Tasks() {
    *  pinned-first, then sort_order asc — so we operate inside one of
    *  those two groups (a pinned list stays among pinned, an unpinned
    *  one stays among unpinned) and rewrite its sort_order to land
-   *  between the new neighbours. */
+   *  between the new neighbours.
+   *
+   *  We deliberately work off `visibleLists` (not `lists`) so hidden
+   *  lists never interpose: if the user can't see a list, swapping past
+   *  it would be a visual no-op and the arrow would feel broken. */
   const handleMoveListInOrder = (listId: string, direction: -1 | 1) => {
-    const target = lists.find((l) => l.id === listId);
+    const target = visibleLists.find((l) => l.id === listId);
     if (!target) return;
-    const peers = lists
+    const peers = visibleLists
       .filter((l) => !!l.is_pinned === !!target.is_pinned)
       .sort((a, b) => a.sort_order - b.sort_order);
     const idx = peers.findIndex((l) => l.id === listId);
@@ -144,6 +148,31 @@ export function Tasks() {
         reorderLists.mutate([{ id: listId, sort_order: newSortOrder }]),
     });
   };
+
+  /**
+   * Per-peer-group first/last flags for the reorder arrows. Computed once
+   * across visibleLists so each TaskColumn can show its arrows enabled or
+   * disabled based on its position WITHIN ITS PEER GROUP (pinned vs
+   * unpinned), not across the whole sidebar — otherwise an unpinned list
+   * at the very top of the unpinned group would still see "up" enabled
+   * (because pinned lists sit above it), but the click would be a no-op.
+   */
+  const listEdgeFlags = useMemo(() => {
+    const out = new Map<string, { isFirst: boolean; isLast: boolean }>();
+    const groups: Record<"pinned" | "unpinned", typeof visibleLists> = {
+      pinned: [],
+      unpinned: [],
+    };
+    for (const l of visibleLists) {
+      (l.is_pinned ? groups.pinned : groups.unpinned).push(l);
+    }
+    for (const group of [groups.pinned, groups.unpinned]) {
+      group.forEach((l, i) => {
+        out.set(l.id, { isFirst: i === 0, isLast: i === group.length - 1 });
+      });
+    }
+    return out;
+  }, [visibleLists]);
 
   // Allow ?edit=<taskId> in the URL to pre-open the TaskEditModal — used by
   // the QuickCapture "+ משימה חדשה" action to land the user directly on an
@@ -679,7 +708,7 @@ export function Tasks() {
                 />
               </div>
               <div className="flex flex-col gap-3">
-                {visibleLists.map((list, idx) => (
+                {visibleLists.map((list) => (
                   <TaskColumn
                     key={list.id}
                     list={list}
@@ -690,8 +719,8 @@ export function Tasks() {
                     onOpenEdit={setEditingTaskId}
                     onHide={() => toggleListVisibility(list.id)}
                     onMoveInOrder={(dir) => handleMoveListInOrder(list.id, dir)}
-                    isFirst={idx === 0}
-                    isLast={idx === visibleLists.length - 1}
+                    isFirst={listEdgeFlags.get(list.id)?.isFirst ?? true}
+                    isLast={listEdgeFlags.get(list.id)?.isLast ?? true}
                     layout="stack"
                   />
                 ))}
@@ -750,7 +779,7 @@ export function Tasks() {
 
                 <div className="flex-1 min-w-0 overflow-x-auto scrollbar-thin">
                   <div className="flex items-stretch gap-3 pb-2">
-                    {visibleLists.map((list, idx) => (
+                    {visibleLists.map((list) => (
                       <TaskColumn
                         key={list.id}
                         list={list}
@@ -766,8 +795,8 @@ export function Tasks() {
                         onMoveInOrder={(dir) =>
                           handleMoveListInOrder(list.id, dir)
                         }
-                        isFirst={idx === 0}
-                        isLast={idx === visibleLists.length - 1}
+                        isFirst={listEdgeFlags.get(list.id)?.isFirst ?? true}
+                        isLast={listEdgeFlags.get(list.id)?.isLast ?? true}
                         layout="columns"
                       />
                     ))}

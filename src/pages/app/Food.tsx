@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { UserPlus, ShoppingCart } from "lucide-react";
+import { UserPlus, ShoppingCart, ListChecks } from "lucide-react";
 import { ScreenScaffold } from "@/components/layout/ScreenScaffold";
 import { cn } from "@/lib/utils/cn";
 import { MealsTab } from "@/components/food/MealsTab";
@@ -8,6 +8,7 @@ import { WeeklyMenuTab } from "@/components/food/WeeklyMenuTab";
 import { TomorrowMenuBanner } from "@/components/food/TomorrowMenuBanner";
 import { ShareMenuModal } from "@/components/food/ShareMenuModal";
 import { ShoppingListExportModal } from "@/components/food/ShoppingListExportModal";
+import { MenuTaskExportModal } from "@/components/food/MenuTaskExportModal";
 
 type Tab = "meals" | "ingredients" | "weekly";
 
@@ -28,6 +29,7 @@ export function Food() {
   const [ingredientsPanelOpen, setIngredientsPanelOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+  const [taskExportOpen, setTaskExportOpen] = useState(false);
 
   const handleTabChange = (next: Tab) => {
     setTab(next);
@@ -52,11 +54,20 @@ export function Food() {
           <button
             type="button"
             onClick={() => setExportOpen(true)}
-            className="btn-dark text-sm gap-1.5"
-            title="ייצוא רשימת קניות"
+            className="btn-ghost text-sm gap-1.5"
+            title="ייצוא רשימת קניות לוואטסאפ"
           >
             <ShoppingCart className="w-4 h-4" />
-            <span className="hidden sm:inline">רשימת קניות</span>
+            <span className="hidden sm:inline">לוואטסאפ</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setTaskExportOpen(true)}
+            className="btn-dark text-sm gap-1.5"
+            title="ייצוא למשימות (בישול / קניות)"
+          >
+            <ListChecks className="w-4 h-4" />
+            <span className="hidden sm:inline">למשימות</span>
           </button>
         </span>
       }
@@ -96,6 +107,10 @@ export function Food() {
       <ShoppingListExportModal
         open={exportOpen}
         onClose={() => setExportOpen(false)}
+      />
+      <MenuTaskExportModal
+        open={taskExportOpen}
+        onClose={() => setTaskExportOpen(false)}
       />
     </ScreenScaffold>
   );

@@ -541,10 +541,10 @@ export function Tasks() {
           {pageMenuOpen && (
             <>
               <div
-                className="fixed inset-0 z-20"
+                className="fixed inset-0 z-40"
                 onClick={() => setPageMenuOpen(false)}
               />
-              <div className="absolute end-0 mt-1 w-64 bg-white border border-ink-200 rounded-xl shadow-lift z-30 py-1 text-sm">
+              <div className="absolute end-0 mt-1 w-64 bg-white border border-ink-200 rounded-xl shadow-lift z-50 py-1 text-sm">
                 {/* Max-visible columns stepper (lives here, unified with other page settings) */}
                 <div className="flex items-center gap-2 px-3 py-2 text-ink-700">
                   <Columns className="w-4 h-4 shrink-0" />

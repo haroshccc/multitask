@@ -435,6 +435,13 @@ interface ParsedRrule {
   freq: "DAILY" | "WEEKLY" | "MONTHLY" | "YEARLY";
   interval: number;
   byday?: number[]; // 0..6
+  /** BYHOUR — list of hours (0..23). Combined with byminute as a cartesian
+   *  product to produce multiple occurrences per day. Used for tasks like
+   *  "every day at 9 and 17". */
+  byhour?: number[];
+  /** BYMINUTE — list of minutes (0..59). Defaults to [0] when byhour is set
+   *  but byminute is missing. */
+  byminute?: number[];
   until?: Date;
 }
 
@@ -454,6 +461,16 @@ function parseRrule(raw: string): ParsedRrule | null {
         .map((d) => WEEKDAY_TO_INDEX[d.trim().toUpperCase()])
         .filter((n) => n !== undefined)
     : undefined;
+  const byhour = map.BYHOUR
+    ? map.BYHOUR.split(",")
+        .map((h) => Number(h.trim()))
+        .filter((n) => Number.isInteger(n) && n >= 0 && n < 24)
+    : undefined;
+  const byminute = map.BYMINUTE
+    ? map.BYMINUTE.split(",")
+        .map((m) => Number(m.trim()))
+        .filter((n) => Number.isInteger(n) && n >= 0 && n < 60)
+    : undefined;
   let until: Date | undefined;
   if (map.UNTIL) {
     // RRULE UNTIL is either YYYYMMDD or YYYYMMDDTHHMMSSZ.
@@ -467,7 +484,7 @@ function parseRrule(raw: string): ParsedRrule | null {
       );
     }
   }
-  return { freq, interval, byday, until };
+  return { freq, interval, byday, byhour, byminute, until };
 }
 
 /**
@@ -483,19 +500,48 @@ export function expandRrule(
 ): Date[] {
   const parsed = parseRrule(rule);
   if (!parsed) return [];
-  const { freq, interval, byday, until } = parsed;
+  const { freq, interval, byday, byhour, byminute, until } = parsed;
 
   const effectiveEnd = until && until < windowEnd ? until : windowEnd;
   if (anchor >= effectiveEnd) return [];
 
   const out: Date[] = [];
+  // When BYHOUR/BYMINUTE explicitly drive time slots, compare against the
+  // anchor's DATE only — otherwise an anchor at 14:00 with a "9:00 daily"
+  // rule would lose today's 9:00 slot for being "before the anchor".
+  const useDateOnlyCompare = !!(byhour || byminute);
+  const anchorDateOnly = (() => {
+    const x = new Date(anchor);
+    x.setHours(0, 0, 0, 0);
+    return x;
+  })();
   const push = (d: Date) => {
     if (d < windowStart || d >= effectiveEnd) return;
-    if (d < anchor) return; // recurrence can't predate the master
+    if (useDateOnlyCompare) {
+      const dateOnly = new Date(d);
+      dateOnly.setHours(0, 0, 0, 0);
+      if (dateOnly < anchorDateOnly) return;
+    } else if (d < anchor) return; // recurrence can't predate the master
     out.push(d);
   };
 
-  // Helper: replicate the anchor's time on a given y/m/d.
+  // Time-of-day slots — when BYHOUR/BYMINUTE are present, expand each day
+  // into N slots (cartesian product). Otherwise fall back to the anchor's
+  // time. Sorted ascending so occurrences emit in chronological order.
+  const hours = byhour && byhour.length > 0 ? [...byhour].sort((a, b) => a - b) : [anchor.getHours()];
+  const minutes = byminute && byminute.length > 0 ? [...byminute].sort((a, b) => a - b) : byhour && byhour.length > 0 ? [0] : [anchor.getMinutes()];
+  const slotsPerDay: Array<{ h: number; m: number }> = [];
+  for (const h of hours) for (const m of minutes) slotsPerDay.push({ h, m });
+
+  // Helper: emit every slot for a given y/m/d, in order.
+  const pushDay = (y: number, mo: number, d: number) => {
+    for (const { h, m } of slotsPerDay) {
+      push(new Date(y, mo, d, h, m, 0, 0));
+    }
+  };
+
+  // Helper: replicate the anchor's time on a given y/m/d. Used by MONTHLY
+  // and YEARLY which don't support BYHOUR yet.
   const withAnchorTime = (y: number, m: number, d: number): Date => {
     const x = new Date(y, m, d, anchor.getHours(), anchor.getMinutes(), anchor.getSeconds(), anchor.getMilliseconds());
     return x;
@@ -505,8 +551,9 @@ export function expandRrule(
     // Walk day by day, stepping `interval` at a time, starting at anchor.
     // Cap at maxOccurrences to avoid runaway loops on malformed rules.
     const cursor = new Date(anchor);
+    cursor.setHours(0, 0, 0, 0);
     for (let i = 0; i < maxOccurrences && cursor < effectiveEnd; i++) {
-      push(new Date(cursor));
+      pushDay(cursor.getFullYear(), cursor.getMonth(), cursor.getDate());
       cursor.setDate(cursor.getDate() + interval);
     }
     return out;
@@ -526,8 +573,7 @@ export function expandRrule(
       for (let d = 0; d < 7; d++) {
         if (!daySet.has(d)) continue;
         const day = addDays(weekStart, d);
-        const dt = withAnchorTime(day.getFullYear(), day.getMonth(), day.getDate());
-        push(dt);
+        pushDay(day.getFullYear(), day.getMonth(), day.getDate());
       }
     }
     return out;

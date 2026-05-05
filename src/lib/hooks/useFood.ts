@@ -15,6 +15,9 @@ import type {
   IngredientUnitInsert,
   IngredientUnitUpdate,
   MealIngredient,
+  MealPlanTemplate,
+  MealPlanDay,
+  MealPlanDayUpdate,
 } from "@/lib/types/domain";
 import { useOrgScope, assertOrgScope } from "./useOrgScope";
 
@@ -332,6 +335,107 @@ export function useReplaceMealIngredients() {
     onSuccess: () => {
       if (scope.organizationId)
         qc.invalidateQueries({ queryKey: queryFamilies.allMeals(scope.organizationId) });
+    },
+  });
+}
+
+// =============================================================================
+// Meal plan template (weekly recurring)
+// =============================================================================
+
+export function useMealPlanTemplate() {
+  const scope = useOrgScope();
+  return useQuery<MealPlanTemplate[]>({
+    queryKey: queryKeys.mealPlanTemplate(scope.organizationId ?? ""),
+    queryFn: () => service.listMealPlanTemplate(scope.organizationId!),
+    enabled: scope.enabled,
+  });
+}
+
+/** Replace one (day_of_week, meal_time) cell of the weekly template with
+ *  a fresh ordered list of meal_ids. Empty list clears the cell. */
+export function useReplaceMealPlanTemplateCell() {
+  const qc = useQueryClient();
+  const scope = useOrgScope();
+  return useMutation({
+    mutationFn: ({
+      dayOfWeek,
+      mealTime,
+      mealIds,
+    }: {
+      dayOfWeek: number;
+      mealTime: string;
+      mealIds: string[];
+    }) => {
+      const { organizationId } = assertOrgScope(scope);
+      return service.replaceMealPlanTemplateCell(
+        organizationId,
+        dayOfWeek,
+        mealTime,
+        mealIds
+      );
+    },
+    onSuccess: () => {
+      if (scope.organizationId)
+        qc.invalidateQueries({
+          queryKey: queryFamilies.allMealPlanTemplate(scope.organizationId),
+        });
+    },
+  });
+}
+
+// =============================================================================
+// Meal plan days (per-date plan / history)
+// =============================================================================
+
+/** Fetch the day-specific plan rows for a date range. The "tomorrow's
+ *  menu" banner queries [today, today+1]; a future history view will
+ *  query a wider window. */
+export function useMealPlanDays(fromDate: string, toDate: string) {
+  const scope = useOrgScope();
+  return useQuery<MealPlanDay[]>({
+    queryKey: queryKeys.mealPlanDays(scope.organizationId ?? "", fromDate, toDate),
+    queryFn: () => service.listMealPlanDays(scope.organizationId!, fromDate, toDate),
+    enabled: scope.enabled,
+  });
+}
+
+export function useReplaceMealPlanDayCell() {
+  const qc = useQueryClient();
+  const scope = useOrgScope();
+  return useMutation({
+    mutationFn: ({
+      date,
+      mealTime,
+      mealIds,
+    }: {
+      date: string;
+      mealTime: string;
+      mealIds: string[];
+    }) => {
+      const { organizationId } = assertOrgScope(scope);
+      return service.replaceMealPlanDayCell(organizationId, date, mealTime, mealIds);
+    },
+    onSuccess: () => {
+      if (scope.organizationId)
+        qc.invalidateQueries({
+          queryKey: queryFamilies.allMealPlanDays(scope.organizationId),
+        });
+    },
+  });
+}
+
+export function useUpdateMealPlanDay() {
+  const qc = useQueryClient();
+  const scope = useOrgScope();
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: MealPlanDayUpdate }) =>
+      service.updateMealPlanDay(id, patch),
+    onSuccess: () => {
+      if (scope.organizationId)
+        qc.invalidateQueries({
+          queryKey: queryFamilies.allMealPlanDays(scope.organizationId),
+        });
     },
   });
 }

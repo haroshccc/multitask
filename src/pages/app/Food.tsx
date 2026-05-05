@@ -1,8 +1,10 @@
 import { useState } from "react";
-import { ScreenScaffold, ComingSoon } from "@/components/layout/ScreenScaffold";
+import { ScreenScaffold } from "@/components/layout/ScreenScaffold";
 import { cn } from "@/lib/utils/cn";
 import { MealsTab } from "@/components/food/MealsTab";
 import { IngredientsTab } from "@/components/food/IngredientsTab";
+import { WeeklyMenuTab } from "@/components/food/WeeklyMenuTab";
+import { TomorrowMenuBanner } from "@/components/food/TomorrowMenuBanner";
 
 type Tab = "meals" | "ingredients" | "weekly";
 
@@ -32,6 +34,8 @@ export function Food() {
       title="התנהלות אוכל"
       subtitle="ספריית מנות ומצרכים, תפריט שבועי, ובחירה לילית של תפריט המחר. משותף עם כל חברי הארגון."
     >
+      <TomorrowMenuBanner />
+
       <div className="card overflow-visible mb-3 px-2 py-1.5">
         <nav className="flex items-center gap-1">
           {TABS.map((t) => (
@@ -59,9 +63,7 @@ export function Food() {
         />
       )}
       {tab === "ingredients" && <IngredientsTab />}
-      {tab === "weekly" && (
-        <ComingSoon description="כאן תוכלו לבנות תפריט שבועי קבוע ולבחור כל לילה מה אוכלים מחר. בקרוב — שלב ב'." />
-      )}
+      {tab === "weekly" && <WeeklyMenuTab />}
     </ScreenScaffold>
   );
 }

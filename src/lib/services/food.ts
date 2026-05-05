@@ -18,6 +18,11 @@ import type {
   MealIngredient,
   MealIngredientInsert,
   MealIngredientUpdate,
+  MealPlanTemplate,
+  MealPlanTemplateInsert,
+  MealPlanDay,
+  MealPlanDayInsert,
+  MealPlanDayUpdate,
 } from "@/lib/types/domain";
 
 // =============================================================================
@@ -308,6 +313,149 @@ export async function replaceMealIngredients(
       unit_id: r.unit_id,
       quantity: r.quantity,
       sort_order: r.sort_order,
+    }))
+  );
+  if (insErr) throw insErr;
+}
+
+// =============================================================================
+// Meal plan template (weekly recurring)
+// =============================================================================
+
+export async function listMealPlanTemplate(orgId: string): Promise<MealPlanTemplate[]> {
+  const { data, error } = await supabase
+    .from("meal_plan_template")
+    .select("*")
+    .eq("organization_id", orgId)
+    .order("day_of_week", { ascending: true })
+    .order("meal_time", { ascending: true })
+    .order("sort_order", { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function createMealPlanTemplate(
+  payload: MealPlanTemplateInsert
+): Promise<MealPlanTemplate> {
+  const { data, error } = await supabase
+    .from("meal_plan_template")
+    .insert(payload)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteMealPlanTemplate(id: string): Promise<void> {
+  const { error } = await supabase.from("meal_plan_template").delete().eq("id", id);
+  if (error) throw error;
+}
+
+/** Replace all template rows for a given (day, meal_time) cell in one batch.
+ *  The grid UI treats each cell as an editable bucket; rows[] is whatever the
+ *  user landed on after clicks. */
+export async function replaceMealPlanTemplateCell(
+  organizationId: string,
+  dayOfWeek: number,
+  mealTime: string,
+  mealIds: string[]
+): Promise<void> {
+  const { error: delErr } = await supabase
+    .from("meal_plan_template")
+    .delete()
+    .eq("organization_id", organizationId)
+    .eq("day_of_week", dayOfWeek)
+    .eq("meal_time", mealTime);
+  if (delErr) throw delErr;
+  if (mealIds.length === 0) return;
+  const { error: insErr } = await supabase.from("meal_plan_template").insert(
+    mealIds.map((meal_id, i) => ({
+      organization_id: organizationId,
+      day_of_week: dayOfWeek,
+      meal_time: mealTime,
+      meal_id,
+      sort_order: i,
+    }))
+  );
+  if (insErr) throw insErr;
+}
+
+// =============================================================================
+// Meal plan days (per-date plan / history)
+// =============================================================================
+
+export async function listMealPlanDays(
+  orgId: string,
+  fromDate: string,
+  toDate: string
+): Promise<MealPlanDay[]> {
+  const { data, error } = await supabase
+    .from("meal_plan_days")
+    .select("*")
+    .eq("organization_id", orgId)
+    .gte("date", fromDate)
+    .lte("date", toDate)
+    .order("date", { ascending: true })
+    .order("meal_time", { ascending: true })
+    .order("sort_order", { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function createMealPlanDay(
+  payload: MealPlanDayInsert
+): Promise<MealPlanDay> {
+  const { data, error } = await supabase
+    .from("meal_plan_days")
+    .insert(payload)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateMealPlanDay(
+  id: string,
+  patch: MealPlanDayUpdate
+): Promise<MealPlanDay> {
+  const { data, error } = await supabase
+    .from("meal_plan_days")
+    .update(patch)
+    .eq("id", id)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteMealPlanDay(id: string): Promise<void> {
+  const { error } = await supabase.from("meal_plan_days").delete().eq("id", id);
+  if (error) throw error;
+}
+
+/** Replace the meals for one (date, meal_time) slot. Same idea as the
+ *  template-cell replacer above — UI doesn't bother diffing per row. */
+export async function replaceMealPlanDayCell(
+  organizationId: string,
+  date: string,
+  mealTime: string,
+  mealIds: string[]
+): Promise<void> {
+  const { error: delErr } = await supabase
+    .from("meal_plan_days")
+    .delete()
+    .eq("organization_id", organizationId)
+    .eq("date", date)
+    .eq("meal_time", mealTime);
+  if (delErr) throw delErr;
+  if (mealIds.length === 0) return;
+  const { error: insErr } = await supabase.from("meal_plan_days").insert(
+    mealIds.map((meal_id, i) => ({
+      organization_id: organizationId,
+      date,
+      meal_time: mealTime,
+      meal_id,
+      sort_order: i,
     }))
   );
   if (insErr) throw insErr;

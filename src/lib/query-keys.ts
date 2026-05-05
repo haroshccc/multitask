@@ -104,6 +104,9 @@ export const queryKeys = {
   ingredients: (orgId: string) => ["ingredients", orgId] as const,
   mealCategories: (orgId: string) => ["meal-categories", orgId] as const,
   ingredientCategories: (orgId: string) => ["ingredient-categories", orgId] as const,
+  mealPlanTemplate: (orgId: string) => ["meal-plan-template", orgId] as const,
+  mealPlanDays: (orgId: string, from: string, to: string) =>
+    ["meal-plan-days", orgId, from, to] as const,
 } as const;
 
 /**
@@ -131,4 +134,6 @@ export const queryFamilies = {
   allIngredients: (orgId: string) => ["ingredients", orgId] as const,
   allMealCategories: (orgId: string) => ["meal-categories", orgId] as const,
   allIngredientCategories: (orgId: string) => ["ingredient-categories", orgId] as const,
+  allMealPlanTemplate: (orgId: string) => ["meal-plan-template", orgId] as const,
+  allMealPlanDays: (orgId: string) => ["meal-plan-days", orgId] as const,
 } as const;

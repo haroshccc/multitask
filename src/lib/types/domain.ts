@@ -95,6 +95,30 @@ export type MealIngredient = Tables["meal_ingredients"]["Row"];
 export type MealIngredientInsert = Tables["meal_ingredients"]["Insert"];
 export type MealIngredientUpdate = Tables["meal_ingredients"]["Update"];
 
+export type MealPlanTemplate = Tables["meal_plan_template"]["Row"];
+export type MealPlanTemplateInsert = Tables["meal_plan_template"]["Insert"];
+export type MealPlanTemplateUpdate = Tables["meal_plan_template"]["Update"];
+
+export type MealPlanDay = Tables["meal_plan_days"]["Row"];
+export type MealPlanDayInsert = Tables["meal_plan_days"]["Insert"];
+export type MealPlanDayUpdate = Tables["meal_plan_days"]["Update"];
+
+export const MEAL_PLAN_DAY_STATUSES = ["planned", "eaten", "skipped"] as const;
+export type MealPlanDayStatus = (typeof MEAL_PLAN_DAY_STATUSES)[number];
+
+/** 0 = Sunday, … 6 = Saturday (ISO/JS Date.getDay() convention). */
+export const DAY_OF_WEEK_KEYS = [0, 1, 2, 3, 4, 5, 6] as const;
+export type DayOfWeek = (typeof DAY_OF_WEEK_KEYS)[number];
+export const DAY_OF_WEEK_LABELS: Record<DayOfWeek, string> = {
+  0: "ראשון",
+  1: "שני",
+  2: "שלישי",
+  3: "רביעי",
+  4: "חמישי",
+  5: "שישי",
+  6: "שבת",
+};
+
 /** Time-of-day a meal can fit. App-level enum on top of the free-form text[]
  *  column — keeps the DB schema flexible while constraining the UI. */
 export const MEAL_TIME_KEYS = [

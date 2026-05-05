@@ -582,6 +582,111 @@ export type Database = {
           },
         ]
       }
+      meal_plan_days: {
+        Row: {
+          created_at: string
+          date: string
+          id: string
+          meal_id: string
+          meal_time: string
+          notes: string | null
+          organization_id: string
+          sort_order: number
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          date: string
+          id?: string
+          meal_id: string
+          meal_time: string
+          notes?: string | null
+          organization_id: string
+          sort_order?: number
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          id?: string
+          meal_id?: string
+          meal_time?: string
+          notes?: string | null
+          organization_id?: string
+          sort_order?: number
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meal_plan_days_meal_id_fkey"
+            columns: ["meal_id"]
+            isOneToOne: false
+            referencedRelation: "meals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meal_plan_days_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      meal_plan_template: {
+        Row: {
+          created_at: string
+          day_of_week: number
+          id: string
+          meal_id: string
+          meal_time: string
+          notes: string | null
+          organization_id: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          day_of_week: number
+          id?: string
+          meal_id: string
+          meal_time: string
+          notes?: string | null
+          organization_id: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          day_of_week?: number
+          id?: string
+          meal_id?: string
+          meal_time?: string
+          notes?: string | null
+          organization_id?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meal_plan_template_meal_id_fkey"
+            columns: ["meal_id"]
+            isOneToOne: false
+            referencedRelation: "meals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meal_plan_template_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       meals: {
         Row: {
           category_id: string | null

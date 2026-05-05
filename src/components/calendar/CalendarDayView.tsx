@@ -459,7 +459,10 @@ export function CalendarBlock({
   // positioned above the block so it remains associated visually but
   // doesn't fight the time-line for space.
   const blockMinutes = durationMin(item);
-  const titleLifted = blockMinutes <= 15;
+  // Blocks ≤ 30 min are too short for two lines (time + title) with py-1
+  // padding at the minimum hour-height of 36 px (30 min = 18 px).
+  // Use a compact single-line layout instead; keep the full layout above.
+  const titleLifted = blockMinutes <= 30;
 
   // Resolve the would-be drag mode from the grab position. Top 20% =
   // resize-start, bottom 20% = resize-end, otherwise move. This frees us
@@ -552,7 +555,7 @@ export function CalendarBlock({
           mousemove + dragstart still own the gesture; the edges are just
           a hint that the user can drag from the top/bottom 20% of the
           block to resize. */}
-      {resizable && blockMinutes > 15 && (
+      {resizable && blockMinutes > 30 && (
         <>
           <div
             className="absolute inset-x-0 top-0 h-1.5 opacity-0 group-hover:opacity-70 transition-opacity rounded-t-md pointer-events-none"
@@ -588,8 +591,10 @@ export function CalendarBlock({
       )}
 
       {titleLifted ? (
-        /* Compact single-line for ≤15 min blocks — time + title side by side.
-           Nothing rendered above the block, so adjacent blocks are never covered. */
+        /* Compact single-line for ≤30 min blocks — time · title · [checkbox].
+           Checkbox sits at the flex-end so in RTL it appears on the opposite
+           side from the time label. overflow-hidden on the block clips it
+           cleanly if the block is very short. */
         <div className="flex items-center gap-1 h-full leading-none overflow-hidden">
           <span className={cn("text-[9px] tabular-nums font-medium shrink-0", isTask ? "text-ink-400" : "text-white/80")}>
             {`${String(item.start.getHours()).padStart(2, "0")}:${String(item.start.getMinutes()).padStart(2, "0")}`}
@@ -597,6 +602,17 @@ export function CalendarBlock({
           <span className={cn("text-[9px] font-medium truncate flex-1 min-w-0", completed && "line-through")}>
             {item.title}
           </span>
+          {isTask && (
+            <TaskCheckButton
+              taskId={(item.source as { id: string }).id}
+              completed={completed}
+              accent={accent}
+              size="sm"
+              occurrenceStart={
+                item.id.split(":").length === 3 ? item.start : undefined
+              }
+            />
+          )}
         </div>
       ) : (
         <div className="relative">

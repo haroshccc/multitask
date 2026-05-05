@@ -8,14 +8,13 @@ import { cn } from "@/lib/utils/cn";
  * day-of-month, yearly, plus an optional "until" date.
  *
  * For DAILY/WEEKLY rules the user can pick a single time-of-day, or toggle
- * "multiple times per day" and add several slots (e.g. medication every 4
- * hours: 09:00, 13:00, 17:00, 21:00). Times are encoded as BYHOUR/BYMINUTE
- * in the RRULE; multiple slots become BYHOUR=h1,h2,...;BYMINUTE=m1,m2,...
- * which the calendar's expandRrule() expands as a cartesian product per day.
+ * "multiple times per day". Multi-time mode uses an explicit HOURS × MINUTES
+ * grid: the user selects which hours to fire and which minute-offsets within
+ * each hour. This maps directly to BYHOUR/BYMINUTE in the RRULE — which the
+ * calendar's expandRrule() expands as a cartesian product — so there is no
+ * round-trip information loss.
  *
- * Round-trips through an RFC 5545 RRULE string (the format Google Calendar
- * and the `recurrence_rule` column already speak). Outputs `null` when
- * recurrence is off.
+ * Round-trips through an RFC 5545 RRULE string. Outputs `null` when off.
  */
 
 type Freq = "DAILY" | "WEEKLY" | "MONTHLY" | "YEARLY";
@@ -35,14 +34,10 @@ const WEEKDAY_LABELS: Record<WeekdayKey, string> = {
 interface RrulePickerProps {
   value: string | null;
   onChange: (rrule: string | null) => void;
-  /** Anchor date (starts_at for events / due_at for tasks), used to seed the
-   *  initial weekday / day-of-month / month. Not required, we pull sensible
-   *  defaults if missing. */
   anchorDate?: Date | null;
 }
 
-/** "HH:MM" string used by the time inputs and serialized into BYHOUR/BYMINUTE. */
-type TimeSlot = string;
+type TimeSlot = string; // "HH:MM"
 
 export function RrulePicker({ value, onChange, anchorDate }: RrulePickerProps) {
   const parsed = useMemo(() => parse(value), [value]);
@@ -53,12 +48,38 @@ export function RrulePicker({ value, onChange, anchorDate }: RrulePickerProps) {
     parsed?.byday ?? weekdayFromDate(anchorDate)
   );
   const [until, setUntil] = useState<string>(parsed?.until ?? "");
-  const [times, setTimes] = useState<TimeSlot[]>(
-    parsed?.times ?? [defaultTime(anchorDate)]
+
+  // Single-time mode: one explicit "HH:MM" slot.
+  const [singleTime, setSingleTime] = useState<string>(
+    parsed?.times?.[0] ?? defaultTime(anchorDate)
   );
+
+  // Multi-time mode: explicit hours × minute-offsets grid.
+  // Stored as two sorted number arrays so they always match BYHOUR/BYMINUTE
+  // semantics — the calendar fires at EVERY combination.
+  const [gridHours, setGridHours] = useState<number[]>(() => {
+    if (parsed?.times && parsed.times.length > 0) {
+      return [
+        ...new Set(parsed.times.map((t) => parseInt(t.split(":")[0]))),
+      ].sort((a, b) => a - b);
+    }
+    return [anchorDate ? anchorDate.getHours() : 9];
+  });
+  const [gridMinutes, setGridMinutes] = useState<number[]>(() => {
+    if (parsed?.times && parsed.times.length > 1) {
+      return [
+        ...new Set(parsed.times.map((t) => parseInt(t.split(":")[1] ?? "0"))),
+      ].sort((a, b) => a - b);
+    }
+    return [0];
+  });
   const [multiTimes, setMultiTimes] = useState<boolean>(
     (parsed?.times?.length ?? 1) > 1
   );
+
+  // Inline "add hour" flow.
+  const [addingHour, setAddingHour] = useState(false);
+  const [newHourDraft, setNewHourDraft] = useState("");
 
   // Stay in sync if parent value changes externally.
   useEffect(() => {
@@ -74,21 +95,36 @@ export function RrulePicker({ value, onChange, anchorDate }: RrulePickerProps) {
     if (p.byday) setByday(p.byday);
     if (p.until) setUntil(p.until);
     if (p.times && p.times.length > 0) {
-      setTimes(p.times);
-      setMultiTimes(p.times.length > 1);
+      const hrs = [
+        ...new Set(p.times.map((t) => parseInt(t.split(":")[0]))),
+      ].sort((a, b) => a - b);
+      const mins = [
+        ...new Set(p.times.map((t) => parseInt(t.split(":")[1] ?? "0"))),
+      ].sort((a, b) => a - b);
+      if (p.times.length === 1) {
+        setSingleTime(p.times[0]);
+        setMultiTimes(false);
+      } else {
+        setGridHours(hrs);
+        setGridMinutes(mins);
+        setMultiTimes(true);
+      }
     }
   }, [value]);
 
-  // Time inputs only matter for DAILY/WEEKLY; for MONTHLY/YEARLY we keep the
-  // anchor's time at expansion. Single-time view collapses the array to its
-  // first slot so toggling multi off doesn't lose the user's most recent
-  // time-of-day.
   const supportsTimes = freq === "DAILY" || freq === "WEEKLY";
+
+  // Derive the flat time-slot list that goes into build().
   const effectiveTimes: TimeSlot[] = !supportsTimes
     ? []
     : multiTimes
-    ? times
-    : [times[0] ?? defaultTime(anchorDate)];
+    ? gridHours.flatMap((h) =>
+        gridMinutes.map(
+          (m) =>
+            `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`
+        )
+      )
+    : [singleTime];
 
   // Emit RRULE whenever any control changes.
   useEffect(() => {
@@ -114,33 +150,40 @@ export function RrulePicker({ value, onChange, anchorDate }: RrulePickerProps) {
     );
   };
 
-  const addTime = () => {
-    setTimes((arr) => {
-      // Insert "+1 hour" relative to the last entry as a sensible default;
-      // wraps at midnight so 23:00 → 00:00.
-      const last = arr[arr.length - 1] ?? "09:00";
-      const [h, m] = last.split(":").map(Number);
-      const next = `${String((h + 1) % 24).padStart(2, "0")}:${String(m ?? 0).padStart(2, "0")}`;
-      // Avoid duplicates — sets are simpler, but order matters in the UI so
-      // we filter manually.
-      if (arr.includes(next)) return arr;
-      return [...arr, next];
-    });
+  // --- Multi-time grid management ---
+  const commitNewHour = (raw: string) => {
+    // Accept either "HH:MM" (from time input) or a bare number string.
+    const h = parseInt(raw.split(":")[0]);
+    if (!isNaN(h) && h >= 0 && h < 24 && !gridHours.includes(h)) {
+      setGridHours((prev) => [...prev, h].sort((a, b) => a - b));
+    }
+    setAddingHour(false);
+    setNewHourDraft("");
   };
 
-  const removeTime = (idx: number) => {
-    setTimes((arr) => {
-      if (arr.length === 1) return arr; // never empty
-      return arr.filter((_, i) => i !== idx);
-    });
+  const removeHour = (h: number) => {
+    if (gridHours.length === 1) return;
+    setGridHours((prev) => prev.filter((x) => x !== h));
   };
 
-  const setTime = (idx: number, v: string) => {
-    setTimes((arr) => {
-      const next = [...arr];
-      next[idx] = v;
-      return next;
-    });
+  const toggleMinute = (m: number) => {
+    if (gridMinutes.includes(m)) {
+      if (gridMinutes.length === 1) return;
+      setGridMinutes((prev) => prev.filter((x) => x !== m));
+    } else {
+      setGridMinutes((prev) => [...prev, m].sort((a, b) => a - b));
+    }
+  };
+
+  // When enabling multi-time mode, seed the grid from the current single time.
+  const handleMultiTimesChange = (v: boolean) => {
+    if (v && !multiTimes) {
+      const h = parseInt(singleTime.split(":")[0]);
+      const m = parseInt(singleTime.split(":")[1] ?? "0");
+      setGridHours(isNaN(h) ? [9] : [h]);
+      setGridMinutes(isNaN(m) ? [0] : [m]);
+    }
+    setMultiTimes(v);
   };
 
   return (
@@ -212,48 +255,99 @@ export function RrulePicker({ value, onChange, anchorDate }: RrulePickerProps) {
                   <input
                     type="checkbox"
                     checked={multiTimes}
-                    onChange={(e) => setMultiTimes(e.target.checked)}
+                    onChange={(e) => handleMultiTimesChange(e.target.checked)}
                     className="w-3.5 h-3.5"
                   />
                   מספר פעמים ביום
                 </label>
               </div>
+
               {multiTimes ? (
-                <div className="space-y-1.5">
-                  {times.map((t, i) => (
-                    <div key={i} className="flex items-center gap-2">
-                      <input
-                        type="time"
-                        value={t}
-                        onChange={(e) => setTime(i, e.target.value)}
-                        className="field text-sm w-28 py-1"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => removeTime(i)}
-                        disabled={times.length === 1}
-                        className="p-1 rounded-md text-ink-400 hover:text-danger-600 hover:bg-danger-50 disabled:opacity-30 disabled:cursor-not-allowed"
-                        aria-label="הסר שעה"
-                        title="הסר שעה"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
+                <div className="space-y-2">
+                  {/* Active hours */}
+                  <div>
+                    <div className="text-[10px] text-ink-400 mb-1">שעות</div>
+                    <div className="flex flex-wrap items-center gap-1">
+                      {gridHours.map((h) => (
+                        <span
+                          key={h}
+                          className="inline-flex items-center gap-1 text-xs bg-ink-100 rounded-md px-2 py-0.5 font-mono"
+                        >
+                          {String(h).padStart(2, "0")}
+                          <button
+                            type="button"
+                            onClick={() => removeHour(h)}
+                            disabled={gridHours.length === 1}
+                            className="text-ink-400 hover:text-danger-600 disabled:opacity-30 disabled:cursor-not-allowed"
+                            aria-label={`הסר שעה ${h}`}
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      ))}
+                      {addingHour ? (
+                        <input
+                          type="time"
+                          value={newHourDraft}
+                          onChange={(e) => setNewHourDraft(e.target.value)}
+                          onBlur={() => commitNewHour(newHourDraft)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") commitNewHour(newHourDraft);
+                            if (e.key === "Escape") {
+                              setAddingHour(false);
+                              setNewHourDraft("");
+                            }
+                          }}
+                          className="field text-sm w-28 py-0.5"
+                          // eslint-disable-next-line jsx-a11y/no-autofocus
+                          autoFocus
+                        />
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setAddingHour(true)}
+                          className="inline-flex items-center gap-0.5 text-xs text-primary-700 hover:text-primary-900"
+                        >
+                          <Plus className="w-3 h-3" />
+                          שעה
+                        </button>
+                      )}
                     </div>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={addTime}
-                    className="inline-flex items-center gap-1 text-xs text-primary-700 hover:text-primary-900"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    הוסף שעה
-                  </button>
+                  </div>
+
+                  {/* Minute offsets */}
+                  <div>
+                    <div className="text-[10px] text-ink-400 mb-1">
+                      דקות (לכל שעה)
+                    </div>
+                    <div className="inline-flex rounded-md border border-ink-200 overflow-hidden">
+                      {[0, 15, 30, 45].map((m) => (
+                        <button
+                          key={m}
+                          type="button"
+                          onClick={() => toggleMinute(m)}
+                          className={cn(
+                            "px-2 py-1 text-xs font-mono border-e border-ink-200 last:border-e-0",
+                            gridMinutes.includes(m)
+                              ? "bg-ink-900 text-white"
+                              : "bg-white text-ink-700 hover:bg-ink-50"
+                          )}
+                        >
+                          :{String(m).padStart(2, "0")}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="text-[10px] text-ink-400">
+                    {gridHours.length * gridMinutes.length} פעמים ביום
+                  </div>
                 </div>
               ) : (
                 <input
                   type="time"
-                  value={times[0] ?? defaultTime(anchorDate)}
-                  onChange={(e) => setTime(0, e.target.value)}
+                  value={singleTime}
+                  onChange={(e) => setSingleTime(e.target.value)}
                   className="field text-sm w-28 py-1"
                 />
               )}
@@ -295,9 +389,6 @@ interface Parsed {
   freq: Freq;
   interval: number;
   byday?: WeekdayKey[];
-  /** Each "HH:MM" entry is one slot per day. May be derived from BYHOUR +
-   *  BYMINUTE in the RRULE; if both have multiple entries we expand the
-   *  cartesian product to mirror what `expandRrule` does at render time. */
   times?: TimeSlot[];
   until?: string;
 }
@@ -312,7 +403,8 @@ function parse(s: string | null | undefined): Parsed | null {
     if (k && v) map[k.toUpperCase()] = v;
   }
   const freq = (map.FREQ as Freq) ?? null;
-  if (!freq || !["DAILY", "WEEKLY", "MONTHLY", "YEARLY"].includes(freq)) return null;
+  if (!freq || !["DAILY", "WEEKLY", "MONTHLY", "YEARLY"].includes(freq))
+    return null;
   const interval = map.INTERVAL ? Number(map.INTERVAL) : 1;
   const byday = map.BYDAY
     ? map.BYDAY.split(",").filter((d): d is WeekdayKey =>
@@ -342,9 +434,7 @@ function parse(s: string | null | undefined): Parsed | null {
     }
   }
   const until = map.UNTIL
-    ? // UNTIL is YYYYMMDDTHHMMSSZ; convert back to an ISO-ish form the
-      // date input can round-trip.
-      map.UNTIL.replace(
+    ? map.UNTIL.replace(
         /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z?$/,
         "$1-$2-$3T$4:$5:$6Z"
       )
@@ -357,11 +447,6 @@ function build(p: Parsed): string {
   if (p.interval && p.interval > 1) parts.push(`INTERVAL=${p.interval}`);
   if (p.byday && p.byday.length > 0) parts.push(`BYDAY=${p.byday.join(",")}`);
   if (p.times && p.times.length > 0) {
-    // Encode as BYHOUR + BYMINUTE. Values are unique-sorted; expandRrule
-    // recombines them as a cartesian product. We dedupe each axis so the
-    // emitted slots match exactly what the user picked when minutes are
-    // consistent — for mixed minutes the cartesian still produces the right
-    // intersection plus a few extras that round-trip cleanly.
     const hours = Array.from(
       new Set(p.times.map((t) => Number(t.split(":")[0])))
     ).sort((a, b) => a - b);

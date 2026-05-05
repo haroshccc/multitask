@@ -669,6 +669,8 @@ export function Tasks() {
                     name: l.name,
                     emoji: l.emoji,
                     color: l.color,
+                    is_pinned: !!l.is_pinned,
+                    sort_order: l.sort_order,
                   }))}
                   hiddenListIds={hiddenSet}
                   onToggleListVisibility={toggleListVisibility}
@@ -740,6 +742,8 @@ export function Tasks() {
                   name: l.name,
                   emoji: l.emoji,
                   color: l.color,
+                  is_pinned: !!l.is_pinned,
+                  sort_order: l.sort_order,
                 }))}
                 hiddenListIds={hiddenSet}
                 onToggleListVisibility={toggleListVisibility}

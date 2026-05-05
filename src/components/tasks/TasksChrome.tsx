@@ -22,6 +22,8 @@ interface UnifiedList {
   name: string;
   emoji: string | null;
   color: string | null;
+  is_pinned: boolean;
+  sort_order: number;
 }
 
 interface TasksChromeProps {
@@ -94,20 +96,46 @@ export function TasksChrome({
         badge={hiddenListIds.size > 0 ? `−${hiddenListIds.size}` : undefined}
         wide
       >
-        {() => (
+        {() => {
+          // Sort all lists into the same order the columns/stack shows them:
+          // pinned first (by sort_order), then unpinned (by sort_order).
+          const sortedLists = [...lists].sort((a, b) => {
+            if (!!a.is_pinned !== !!b.is_pinned) return a.is_pinned ? -1 : 1;
+            return a.sort_order - b.sort_order;
+          });
+          // Build per-peer-group edge flags for VISIBLE lists only.
+          const visiblePinned = sortedLists.filter(
+            (l) => !hiddenListIds.has(l.id) && l.is_pinned
+          );
+          const visibleUnpinned = sortedLists.filter(
+            (l) => !hiddenListIds.has(l.id) && !l.is_pinned
+          );
+          const edgeFlags = new Map<string, { isFirst: boolean; isLast: boolean }>();
+          [visiblePinned, visibleUnpinned].forEach((group) => {
+            group.forEach((l, i) => {
+              edgeFlags.set(l.id, {
+                isFirst: i === 0,
+                isLast: i === group.length - 1,
+              });
+            });
+          });
+          return (
           <div className="py-1 max-h-72 overflow-y-auto">
             <div className="text-[10px] font-semibold text-ink-400 uppercase tracking-wider px-3 py-1 border-b border-ink-100">
               רשימות פעילות בתצוגה
             </div>
-            {lists.length === 0 ? (
+            {sortedLists.length === 0 ? (
               <p className="px-3 py-2 text-xs text-ink-500">
                 עוד אין רשימות.
               </p>
             ) : (
-              lists.map((l, idx) => {
+              sortedLists.map((l) => {
                 const hidden = hiddenListIds.has(l.id);
-                const isFirst = idx === 0;
-                const isLast = idx === lists.length - 1;
+                // Hidden lists can't be reordered (handleMoveListInOrder
+                // no-ops for them since they're absent from visibleLists).
+                const flags = edgeFlags.get(l.id);
+                const isFirst = hidden || (flags?.isFirst ?? true);
+                const isLast = hidden || (flags?.isLast ?? true);
                 return (
                   <div
                     key={l.id}
@@ -187,7 +215,8 @@ export function TasksChrome({
               </button>
             </div>
           </div>
-        )}
+          );
+        }}
       </PopoverButton>
 
       <ToggleButton

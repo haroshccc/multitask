@@ -130,6 +130,7 @@ function TranscriptionSection({
   audioElement: HTMLAudioElement | null;
 }) {
   const trigger = useTriggerRecordingProcessing();
+  const update = useUpdateRecording();
   const status = recording.status;
 
   // Once a transcript exists it must NEVER disappear from the UI — even if
@@ -151,6 +152,17 @@ function TranscriptionSection({
           Gladia מעבדת את ההקלטה. בדרך כלל לוקח דקה לכל ~10 דקות אודיו. הסטטוס
           יתעדכן אוטומטית כשהתמלול מוכן.
         </p>
+        <button
+          type="button"
+          className="text-xs font-medium text-primary-700 hover:underline disabled:opacity-50 pt-0.5"
+          disabled={update.isPending || trigger.isPending}
+          onClick={async () => {
+            await update.mutateAsync({ recordingId: recording.id, patch: { status: "uploaded" } });
+            trigger.mutate(recording.id);
+          }}
+        >
+          נתקע? נסה שוב
+        </button>
       </section>
     );
   }

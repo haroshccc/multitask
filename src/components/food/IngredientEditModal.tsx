@@ -9,6 +9,7 @@ import {
   useDeleteIngredientCategory,
   useCreateIngredient,
   useUpdateIngredient,
+  useDeleteIngredient,
   useCreateIngredientUnit,
   useUpdateIngredientUnit,
   useDeleteIngredientUnit,
@@ -87,6 +88,7 @@ export function IngredientEditModal({
   const createUnit = useCreateIngredientUnit();
   const updateUnit = useUpdateIngredientUnit();
   const deleteUnit = useDeleteIngredientUnit();
+  const deleteIngredient = useDeleteIngredient();
 
   // Reset form whenever the modal opens or the target ingredient changes.
   useEffect(() => {
@@ -398,18 +400,37 @@ export function IngredientEditModal({
           </div>
         </div>
 
-        <footer className="flex items-center justify-end gap-2 p-4 border-t border-ink-100">
-          <button type="button" onClick={onClose} className="btn-ghost">
-            ביטול
-          </button>
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={!name.trim() || saving}
-            className="btn-dark"
-          >
-            {saving ? "שומר..." : "שמור"}
-          </button>
+        <footer className="flex items-center justify-between gap-2 p-4 border-t border-ink-100">
+          <div>
+            {ingredient && (
+              <button
+                type="button"
+                onClick={async () => {
+                  if (confirm(`למחוק את "${ingredient.name}"?`)) {
+                    await deleteIngredient.mutateAsync(ingredient.id);
+                    onClose();
+                  }
+                }}
+                className="inline-flex items-center gap-1.5 text-sm text-danger-600 hover:text-danger-800 hover:bg-danger-50 px-2 py-1.5 rounded-md transition-colors"
+              >
+                <Trash2 className="w-4 h-4" />
+                מחק מצרך
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={onClose} className="btn-ghost">
+              ביטול
+            </button>
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={!name.trim() || saving}
+              className="btn-dark"
+            >
+              {saving ? "שומר..." : "שמור"}
+            </button>
+          </div>
         </footer>
       </div>
     </div>

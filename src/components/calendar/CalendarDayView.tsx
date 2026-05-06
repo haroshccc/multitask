@@ -429,7 +429,14 @@ export function CalendarBlock({
 
   if (isTask) {
     // Tasks: outline only, empty inside.
-    bg = "transparent";
+    // For assigned/delegated tasks, add a subtle tint.
+    if (item.ownershipMode === "assigned") {
+      bg = "rgba(59, 130, 246, 0.07)"; // blue tint
+    } else if (item.ownershipMode === "delegated") {
+      bg = "rgba(245, 158, 11, 0.07)"; // amber tint
+    } else {
+      bg = "transparent";
+    }
   } else {
     // Events: solid filled.
     bg = hexToRgba(accent, 0.85);
@@ -639,6 +646,15 @@ export function CalendarBlock({
             >
               {item.title}
             </span>
+            {isTask && item.ownershipMode === "assigned" && (
+              <span className="shrink-0 text-[9px] text-blue-700 bg-blue-100 px-1 rounded-full font-medium leading-tight mt-0.5">הוצאל</span>
+            )}
+            {isTask && item.ownershipMode === "delegated" && (
+              <span className="shrink-0 text-[9px] text-amber-700 bg-amber-100 px-1 rounded-full font-medium leading-tight mt-0.5">האצלתי</span>
+            )}
+            {isTask && item.pendingApproval && (
+              <span className="shrink-0 text-[9px] text-amber-700 bg-amber-100 px-1 rounded-full font-medium leading-tight mt-0.5">⏳</span>
+            )}
             {isTask && overdue && !completed && (
               <span className="w-1.5 h-1.5 rounded-full bg-danger-500 shrink-0 mt-1" title="באיחור" />
             )}

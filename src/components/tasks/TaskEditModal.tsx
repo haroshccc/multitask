@@ -51,6 +51,7 @@ import {
 } from "@/lib/hooks/useUserTaskStatuses";
 import { slugifyStatusKey } from "@/lib/services/user-task-statuses";
 import { useOrgMembers } from "@/lib/hooks/useOrgMembers";
+import { useAuth } from "@/lib/auth/AuthContext";
 import type { TimeEntry, UserTaskStatus } from "@/lib/types/domain";
 import { DateTimePicker } from "@/components/ui/DateTimePicker";
 import {
@@ -115,6 +116,7 @@ export function TaskEditModal({
   const { data: lists = [] } = useTaskLists();
   const { data: myStatuses = [] } = useMyTaskStatuses();
   const { data: orgMembers = [] } = useOrgMembers();
+  const { user } = useAuth();
   const updateTask = useUpdateTask();
   const completeTask = useCompleteTask();
   const createTask = useCreateTask();
@@ -164,6 +166,8 @@ export function TaskEditModal({
   const [durationMinutes, setDurationMinutes] = useState<number | null>(null);
   const [estimatedMinutes, setEstimatedMinutes] = useState<number | null>(null);
   const [assigneeId, setAssigneeId] = useState<string | null>(null);
+  const [requiresApproval, setRequiresApproval] = useState<boolean>(false);
+  const [approverId, setApproverId] = useState<string | null>(null);
   const [isPhase, setIsPhase] = useState<boolean>(false);
 
   // Goal / habit configuration. A task is a goal iff goalEnabled === true.
@@ -195,6 +199,8 @@ export function TaskEditModal({
       setDeadlineAt(task.deadline_at ?? null);
       setRecurrenceRule(task.recurrence_rule ?? null);
       setAssigneeId(task.assignee_user_id ?? null);
+      setRequiresApproval(task.requires_approval ?? false);
+      setApproverId(task.approver_user_id ?? null);
       setDurationMinutes(task.duration_minutes ?? null);
       setEstimatedMinutes(hoursToMinutes(task.estimated_hours ?? null));
       setIsPhase(!!task.is_phase);
@@ -261,6 +267,8 @@ export function TaskEditModal({
       status !== task.status ||
       listId !== task.task_list_id ||
       assigneeId !== (task.assignee_user_id ?? null) ||
+      requiresApproval !== (task.requires_approval ?? false) ||
+      approverId !== (task.approver_user_id ?? null) ||
       location !== (task.location ?? "") ||
       externalUrl !== (task.external_url ?? "") ||
       scheduledAt !== (task.scheduled_at ?? null) ||
@@ -290,6 +298,8 @@ export function TaskEditModal({
     status,
     listId,
     assigneeId,
+    requiresApproval,
+    approverId,
     location,
     externalUrl,
     scheduledAt,
@@ -326,6 +336,8 @@ export function TaskEditModal({
           task_list_id: listId,
           parent_task_id: null,
           assignee_user_id: assigneeId,
+          requires_approval: requiresApproval,
+          approver_user_id: requiresApproval ? approverId : null,
           tags,
           location: location || null,
           external_url: externalUrl || null,
@@ -374,6 +386,8 @@ export function TaskEditModal({
       status: task.status,
       task_list_id: task.task_list_id,
       assignee_user_id: task.assignee_user_id,
+      requires_approval: task.requires_approval,
+      approver_user_id: task.approver_user_id,
       tags: task.tags,
       location: task.location,
       external_url: task.external_url,
@@ -397,6 +411,8 @@ export function TaskEditModal({
       status,
       task_list_id: listId,
       assignee_user_id: assigneeId,
+      requires_approval: requiresApproval,
+      approver_user_id: requiresApproval ? approverId : null,
       tags,
       location: location || null,
       external_url: externalUrl || null,
@@ -576,6 +592,104 @@ export function TaskEditModal({
                         onChange={setAssigneeId}
                       />
                     </Field>
+                  </div>
+
+                  {/* Approval workflow */}
+                  <div className="rounded-xl border border-ink-200 p-3 space-y-2.5">
+                    <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={requiresApproval}
+                        onChange={(e) => setRequiresApproval(e.target.checked)}
+                        className="w-4 h-4 rounded accent-primary-500"
+                      />
+                      <span className="text-sm font-medium text-ink-700">דורש אישור לסיום</span>
+                    </label>
+
+                    {requiresApproval && (
+                      <Field label="מי מאשר?">
+                        <AssigneePicker
+                          value={approverId}
+                          members={orgMembers}
+                          onChange={setApproverId}
+                          placeholder="בחר מאשר..."
+                        />
+                      </Field>
+                    )}
+
+                    {/* Assignee action: submit for approval */}
+                    {task && task.requires_approval &&
+                      task.assignee_user_id === user?.id &&
+                      task.status === "in_progress" &&
+                      !task.completion_submitted_at && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await updateTask.mutateAsync({
+                            taskId: task.id,
+                            patch: {
+                              completion_submitted_at: new Date().toISOString(),
+                              status: "pending_approval",
+                            },
+                          });
+                        }}
+                        className="w-full py-2 rounded-xl bg-amber-500 text-white text-sm font-medium hover:bg-amber-600 transition-colors"
+                      >
+                        ✓ שלח לאישור
+                      </button>
+                    )}
+
+                    {/* Pending badge for assignee */}
+                    {task && task.status === "pending_approval" &&
+                      task.assignee_user_id === user?.id &&
+                      task.approver_user_id !== user?.id && (
+                      <div className="flex items-center gap-2 text-sm text-amber-700 bg-amber-50 rounded-xl px-3 py-2">
+                        <span>⏳</span>
+                        <span>ממתין לאישור</span>
+                      </div>
+                    )}
+
+                    {/* Approver actions: approve / reject */}
+                    {task && task.status === "pending_approval" &&
+                      task.approver_user_id === user?.id && (
+                      <div className="space-y-2">
+                        <div className="text-xs text-ink-500 text-center">ממתין לאישורך</div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              await updateTask.mutateAsync({
+                                taskId: task.id,
+                                patch: {
+                                  status: "done",
+                                  approved_at: new Date().toISOString(),
+                                  approved_by_user_id: user.id,
+                                },
+                              });
+                              onClose();
+                            }}
+                            className="py-2 rounded-xl bg-green-500 text-white text-sm font-medium hover:bg-green-600 transition-colors"
+                          >
+                            ✓ אשר
+                          </button>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              await updateTask.mutateAsync({
+                                taskId: task.id,
+                                patch: {
+                                  status: "in_progress",
+                                  completion_submitted_at: null,
+                                },
+                              });
+                            }}
+                            className="py-2 rounded-xl bg-red-100 text-red-700 text-sm font-medium hover:bg-red-200 transition-colors"
+                          >
+                            ✗ דחה
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <Field label="תיאור">
@@ -1105,10 +1219,12 @@ function AssigneePicker({
   value,
   members,
   onChange,
+  placeholder = "ללא הקצאה",
 }: {
   value: string | null;
   members: { membership: { user_id: string }; profile: { full_name: string | null; avatar_url: string | null } | null }[];
   onChange: (userId: string | null) => void;
+  placeholder?: string;
 }) {
   const current = members.find((m) => m.membership.user_id === value);
   return (
@@ -1117,7 +1233,7 @@ function AssigneePicker({
       onChange={(e) => onChange(e.target.value || null)}
       className="field"
     >
-      <option value="">ללא הקצאה</option>
+      <option value="">{placeholder}</option>
       {members.map((m) => {
         const name = m.profile?.full_name ?? m.membership.user_id;
         return (

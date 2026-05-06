@@ -1,4 +1,5 @@
 import { useMemo, useState, useEffect } from "react";
+import { useAuth } from "@/lib/auth/AuthContext";
 import {
   DndContext,
   PointerSensor,
@@ -54,6 +55,7 @@ import { useTaskSelectionStore } from "@/lib/selection/store";
 import { pushUndo } from "@/lib/undo/store";
 
 export function Gantt() {
+  const { user } = useAuth();
   const [zoom, setZoom] = useState<GanttZoom>("week");
   const [anchor, setAnchor] = useState<Date>(() => new Date());
   const [showCriticalOnly, setShowCriticalOnly] = useState(false);
@@ -201,7 +203,7 @@ export function Gantt() {
   }, [events, source.kind]);
 
   const rows = useMemo(
-    () => buildRows(filteredTasks, filteredEvents, layer, lists),
+    () => buildRows(filteredTasks, filteredEvents, layer, lists, user?.id),
     [filteredTasks, filteredEvents, layer, lists]
   );
 

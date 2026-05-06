@@ -281,6 +281,10 @@ export function GanttBar({
           done && "opacity-60",
           isEvent
             ? "bg-gradient-to-l from-primary-600 to-primary-400 border border-primary-700"
+            : row.ownershipMode === "assigned"
+            ? "bg-gradient-to-l from-blue-500 to-blue-400 border border-blue-600"
+            : row.ownershipMode === "delegated"
+            ? "bg-gradient-to-l from-amber-500 to-amber-400 border border-amber-600"
             : highlight
             ? "bg-gradient-to-l from-danger-500 to-primary-500"
             : "bg-gradient-to-l from-primary-500 to-primary-400"
@@ -295,9 +299,12 @@ export function GanttBar({
         onMouseLeave={() => setHover(false)}
         title={row.title}
       >
-        <span className="truncate px-2 pointer-events-none">
+        <span className="truncate px-2 pointer-events-none flex items-center gap-1">
           {done ? "✓ " : ""}
           {isEvent ? "● " : ""}
+          {row.ownershipMode === "assigned" && <span className="text-[9px] bg-white/30 px-1 rounded-full shrink-0">הוצאל</span>}
+          {row.ownershipMode === "delegated" && <span className="text-[9px] bg-white/30 px-1 rounded-full shrink-0">האצלתי</span>}
+          {row.pendingApproval && <span className="text-[9px] shrink-0">⏳</span>}
           {row.title}
         </span>
         <span

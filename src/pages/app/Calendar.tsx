@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useAuth } from "@/lib/auth/AuthContext";
 import { ScreenScaffold } from "@/components/layout/ScreenScaffold";
 import {
   FilterBar,
@@ -67,6 +68,7 @@ const MOBILE_BREAKPOINT_PX = 640;
 const VERTICAL_CHROME_RESERVE = 280;
 
 export function Calendar() {
+  const { user } = useAuth();
   const [view, setView] = useState<CalendarView>("week");
   const [anchor, setAnchor] = useState<Date>(() => new Date());
   const [layer, setLayer] = useState<LayerMode>("both");
@@ -170,7 +172,7 @@ export function Calendar() {
         const listColor = listColorById.get(t.task_list_id ?? "") ?? null;
         // Scheduled work block (only if there's a scheduled_at).
         if (t.scheduled_at) {
-          const base = taskToItem(t, listColor);
+          const base = taskToItem(t, listColor, user?.id);
           if (base) {
             // Recurring task → expand into per-day occurrences. The master
             // is the anchor; each occurrence is its own CalendarItem with

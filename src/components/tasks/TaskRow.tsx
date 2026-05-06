@@ -55,6 +55,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { PlanVsActualBar } from "@/components/tasks/PlanVsActualBar";
+import { useAuth } from "@/lib/auth/AuthContext";
 import type { Task } from "@/lib/types/domain";
 
 export interface TaskTreeNode {
@@ -94,6 +95,17 @@ export function TaskRow({
   display,
 }: TaskRowProps) {
   const { task, children, depth } = node;
+  const { user } = useAuth();
+  // Task ownership visual modes:
+  // 'mine'       — I own AND execute (owner==me, no assignee or assignee==me)
+  // 'delegated'  — I own but someone else executes (owner==me, assignee!=me)
+  // 'assigned'   — Someone else owns, I execute (assignee==me, owner!=me)
+  const taskOwnershipMode: "mine" | "delegated" | "assigned" =
+    user && task.owner_id !== user.id && task.assignee_user_id === user.id
+      ? "assigned"
+      : user && task.owner_id === user.id && task.assignee_user_id && task.assignee_user_id !== user.id
+      ? "delegated"
+      : "mine";
 
   const updateTask = useUpdateTask();
   const completeTask = useCompleteTask();
@@ -519,6 +531,9 @@ export function TaskRow({
         ref={setDragRef}
         className={cn(
           "group relative flex items-start gap-1.5 rounded-md transition-colors px-1.5 py-1 hover:bg-ink-50",
+          // Ownership visual modes
+          taskOwnershipMode === "assigned" && !isSelected && "bg-blue-50/60 border-s-2 border-blue-300",
+          taskOwnershipMode === "delegated" && !isSelected && "bg-amber-50/40 border-s-2 border-amber-300",
           isDragging && "opacity-40",
           isOverNest && "bg-primary-50 ring-1 ring-primary-300",
           isSelected && "bg-primary-50/60 ring-1 ring-primary-300",
@@ -685,6 +700,24 @@ export function TaskRow({
             !taskIsRecurring && showAsDone && "line-through text-ink-400"
           )}
         />
+
+        {/* Ownership badges */}
+        {taskOwnershipMode === "assigned" && (
+          <span className="shrink-0 inline-flex items-center gap-1 text-[10px] text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded-full font-medium">
+            הוצאל אליי
+          </span>
+        )}
+        {taskOwnershipMode === "delegated" && (
+          <span className="shrink-0 inline-flex items-center gap-1 text-[10px] text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded-full font-medium">
+            האצלתי
+          </span>
+        )}
+        {/* pending_approval badge */}
+        {task.status === "pending_approval" && (
+          <span className="shrink-0 inline-flex items-center gap-1 text-[10px] text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded-full font-medium">
+            ⏳ ממתין
+          </span>
+        )}
 
         {/* Recurrence indicator — small ↻ icon plus the next occurrence
             label ("היום 9:00", "מחר 9:00", "ב-15 במאי 9:00"). Always visible

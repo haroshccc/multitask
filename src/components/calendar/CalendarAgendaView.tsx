@@ -235,16 +235,35 @@ function AgendaRow({
       <button
         onClick={onClick}
         className={cn(
-          "w-full px-3 py-2 flex items-center gap-3 text-start hover:bg-ink-50",
+          "w-full px-3 py-2 flex items-center gap-2 text-start hover:bg-ink-50",
           past && "opacity-75",
           item.completed && "opacity-60"
         )}
         type="button"
       >
+        {/* Time block — fixed width so titles align */}
+        <div className="w-14 shrink-0 text-[11px] text-ink-500 tabular-nums leading-tight">
+          {item.allDay ? (
+            <span className="font-medium">כל היום</span>
+          ) : (
+            <>
+              <div>{formatHour(item.start, tz)}</div>
+              <div className="text-ink-400">{formatHour(item.end, tz)}</div>
+            </>
+          )}
+        </div>
+
+        {/* Color accent bar */}
+        <div
+          className="w-1 self-stretch rounded-full shrink-0"
+          style={{ backgroundColor: accent }}
+        />
+
         {/* Task complete-checkbox — only for tasks. Stops propagation so
-            it doesn't fire the row's edit-modal click. */}
+            it doesn't fire the row's edit-modal click. Placed next to the
+            title so the visual association is immediate. */}
         {isTask ? (
-          <div className="relative">
+          <div className="relative shrink-0">
             <TaskCheckButton
               taskId={(item.source as { id: string }).id}
               completed={item.completed}
@@ -264,24 +283,6 @@ function AgendaRow({
         ) : (
           <span className="w-4 h-4 shrink-0" />
         )}
-
-        {/* Time block — fixed width so titles align */}
-        <div className="w-20 shrink-0 text-[11px] text-ink-500 tabular-nums leading-tight">
-          {item.allDay ? (
-            <span className="font-medium">כל היום</span>
-          ) : (
-            <>
-              <div>{formatHour(item.start, tz)}</div>
-              <div className="text-ink-400">{formatHour(item.end, tz)}</div>
-            </>
-          )}
-        </div>
-
-        {/* Color accent bar */}
-        <div
-          className="w-1 self-stretch rounded-full shrink-0"
-          style={{ backgroundColor: accent }}
-        />
 
         {/* Title + meta */}
         <div className="flex-1 min-w-0">

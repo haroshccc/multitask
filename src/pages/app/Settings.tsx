@@ -133,6 +133,9 @@ function OrgTab() {
   const [showDelete, setShowDelete]     = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState("");
 
+  // Invite error
+  const [inviteError, setInviteError]   = useState<string | null>(null);
+
   const myRole   = memberships.find(m => m.organization_id === activeOrganizationId)?.role;
   const canManage = myRole === "owner" || myRole === "admin";
   const isOwner   = myRole === "owner";
@@ -161,12 +164,22 @@ function OrgTab() {
     }
   };
 
-  const handleInvite = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const doInvite = async () => {
     if (!activeOrganizationId || !inviteEmail.trim()) return;
-    const invite = await createInvite.mutateAsync({ orgId: activeOrganizationId, email: inviteEmail.trim(), role: inviteRole });
-    setLastInvite({ token: invite.token, email: inviteEmail.trim() });
-    setInviteEmail("");
+    setInviteError(null);
+    try {
+      const invite = await createInvite.mutateAsync({ orgId: activeOrganizationId, email: inviteEmail.trim(), role: inviteRole });
+      setLastInvite({ token: invite.token, email: inviteEmail.trim() });
+      setInviteEmail("");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setInviteError(msg || "שגיאה ביצירת ההזמנה — נסי שוב");
+    }
+  };
+
+  const handleInvite = (e: React.FormEvent) => {
+    e.preventDefault();
+    doInvite();
   };
 
   const copyLink = (token: string) => {
@@ -395,11 +408,12 @@ function OrgTab() {
               <h2 className="font-semibold text-ink-900 text-sm">הזמנות לקבוצה</h2>
 
               {/* Invite form */}
-              <form onSubmit={handleInvite} className="space-y-2">
+              <div className="space-y-2">
                 <div className="flex gap-2">
                   <input
                     value={inviteEmail}
-                    onChange={e => setInviteEmail(e.target.value)}
+                    onChange={e => { setInviteEmail(e.target.value); setInviteError(null); }}
+                    onKeyDown={e => e.key === "Enter" && doInvite()}
                     type="email"
                     placeholder="כתובת מייל של החבר/ה"
                     className="field flex-1 text-sm"
@@ -413,7 +427,8 @@ function OrgTab() {
                     <option value="admin">מנהל</option>
                   </select>
                   <button
-                    type="submit"
+                    type="button"
+                    onClick={doInvite}
                     disabled={!inviteEmail.trim() || createInvite.isPending}
                     className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-primary-500 text-white text-sm font-medium hover:bg-primary-600 disabled:opacity-50 shrink-0"
                   >
@@ -421,7 +436,10 @@ function OrgTab() {
                     {createInvite.isPending ? "..." : "הזמן"}
                   </button>
                 </div>
-              </form>
+                {inviteError && (
+                  <p className="text-xs text-danger-600 bg-danger-50 rounded-lg px-3 py-2">{inviteError}</p>
+                )}
+              </div>
 
               {/* Last invite result — link + mailto */}
               {lastInvite && (

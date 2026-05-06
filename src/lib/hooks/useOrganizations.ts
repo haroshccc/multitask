@@ -5,7 +5,9 @@ import {
   listUserOrganizations,
   updateOrganization,
   createOrganizationWithType,
+  deleteOrganization,
   listOrgInvites,
+  listMyPendingInvites,
   createInvite,
   revokeInvite,
   acceptInvite,
@@ -65,7 +67,28 @@ export function useCreateOrganization() {
   });
 }
 
+export function useDeleteOrganization() {
+  const qc = useQueryClient();
+  const { user, refreshProfile } = useAuth();
+  return useMutation({
+    mutationFn: (orgId: string) => deleteOrganization(orgId),
+    onSuccess: async () => {
+      qc.invalidateQueries({ queryKey: ["user-organizations", user?.id] });
+      await refreshProfile();
+    },
+  });
+}
+
 // ---- Invites ----------------------------------------------------------------
+
+export function useMyPendingInvites() {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["my-pending-invites", user?.id],
+    queryFn: () => listMyPendingInvites(),
+    enabled: !!user,
+  });
+}
 
 export function useOrgInvites(orgId: string | null) {
   return useQuery({

@@ -1,5 +1,8 @@
 import { supabase } from "@/lib/supabase/client";
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const db = supabase as any;
+
 export type OrgType = "business" | "family" | "personal";
 
 export interface OrgDetails {
@@ -33,7 +36,7 @@ export interface InviteInfo {
 }
 
 export async function getOrganization(orgId: string): Promise<OrgDetails> {
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from("organizations")
     .select("id, name, org_type, slug, created_by, created_at")
     .eq("id", orgId)
@@ -50,7 +53,7 @@ export async function listUserOrganizations(userId: string): Promise<OrgDetails[
   if (mErr) throw mErr;
   const ids = (members ?? []).map((m) => m.organization_id);
   if (ids.length === 0) return [];
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from("organizations")
     .select("id, name, org_type, slug, created_by, created_at")
     .in("id", ids)
@@ -63,7 +66,7 @@ export async function updateOrganization(
   orgId: string,
   updates: { name?: string; org_type?: OrgType }
 ) {
-  const { error } = await supabase
+  const { error } = await db
     .from("organizations")
     .update(updates)
     .eq("id", orgId);
@@ -76,7 +79,7 @@ export async function createOrganizationWithType(
   joinPassword?: string,
   suggestedEmailDomain?: string
 ) {
-  const { data, error } = await supabase.rpc("create_organization_with_type", {
+  const { data, error } = await db.rpc("create_organization_with_type", {
     p_name: name,
     p_org_type: orgType,
     p_join_password: joinPassword ?? null,
@@ -89,7 +92,7 @@ export async function createOrganizationWithType(
 // ---- Invites ----------------------------------------------------------------
 
 export async function listOrgInvites(orgId: string): Promise<OrgInvite[]> {
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from("org_invites")
     .select("*")
     .eq("organization_id", orgId)
@@ -105,7 +108,7 @@ export async function createInvite(
   email: string,
   role: "member" | "admin" = "member"
 ): Promise<OrgInvite> {
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from("org_invites")
     .insert({ organization_id: orgId, email: email.trim().toLowerCase(), role })
     .select()
@@ -115,12 +118,12 @@ export async function createInvite(
 }
 
 export async function revokeInvite(inviteId: string) {
-  const { error } = await supabase.from("org_invites").delete().eq("id", inviteId);
+  const { error } = await db.from("org_invites").delete().eq("id", inviteId);
   if (error) throw error;
 }
 
 export async function getInviteByToken(token: string): Promise<InviteInfo> {
-  const { data, error } = await supabase.rpc("get_invite_by_token", { p_token: token });
+  const { data, error } = await db.rpc("get_invite_by_token", { p_token: token });
   if (error) throw error;
   return data as InviteInfo;
 }
@@ -128,7 +131,7 @@ export async function getInviteByToken(token: string): Promise<InviteInfo> {
 export async function acceptInvite(
   token: string
 ): Promise<{ ok: boolean; organization_id?: string; error?: string }> {
-  const { data, error } = await supabase.rpc("accept_org_invite", { p_token: token });
+  const { data, error } = await db.rpc("accept_org_invite", { p_token: token });
   if (error) throw error;
   return data as { ok: boolean; organization_id?: string; error?: string };
 }

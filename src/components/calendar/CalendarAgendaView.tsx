@@ -122,6 +122,9 @@ function DayGroup({
   const tz = prefs.timezone;
   const now = new Date();
   const dayName = day.toLocaleDateString("he-IL", { weekday: "long", timeZone: tz });
+  // Mobile-friendly form: "יום שלישי" → "שלישי". Saves ~30px so the
+  // date chip can compress on narrow screens without cropping.
+  const dayNameShort = dayName.replace(/^יום\s+/, "");
   const dayNum = day.getDate();
   const monthShort = day.toLocaleDateString("he-IL", { month: "short", timeZone: tz });
   const past = day.getTime() < startOfDay(now).getTime();
@@ -139,7 +142,7 @@ function DayGroup({
           number on the right side (per spec "מימין מתחת למספר תאריך"). */}
       <div
         className={cn(
-          "flex flex-col items-stretch py-3 w-32 shrink-0 border-e px-2",
+          "flex flex-col items-stretch py-3 w-16 sm:w-32 shrink-0 border-e px-1 sm:px-2",
           today ? "border-primary-500 bg-primary-500" : "border-ink-200 bg-ink-50/60"
         )}
       >
@@ -151,15 +154,20 @@ function DayGroup({
         >
           <span
             className={cn(
-              "text-[10px] font-semibold uppercase tracking-wider leading-none mb-1",
+              "text-[10px] font-semibold uppercase tracking-wider leading-none mb-1 truncate max-w-full",
               today ? "text-white/90" : past ? "text-ink-400" : "text-ink-500"
             )}
           >
-            {today ? "היום" : dayName}
+            {today ? "היום" : (
+              <>
+                <span className="sm:hidden">{dayNameShort}</span>
+                <span className="hidden sm:inline">{dayName}</span>
+              </>
+            )}
           </span>
           <span
             className={cn(
-              "text-2xl font-bold leading-none tabular-nums",
+              "text-xl sm:text-2xl font-bold leading-none tabular-nums",
               today ? "text-white" : past ? "text-ink-500" : "text-ink-900"
             )}
           >
@@ -284,15 +292,19 @@ function AgendaRow({
           <span className="w-4 h-4 shrink-0" />
         )}
 
-        {/* Title + meta */}
+        {/* Title + meta. On mobile the title is horizontally scrollable so
+            long task names can be read in full without truncation; desktop
+            keeps the cleaner truncated look since rows are wider there. */}
         <div className="flex-1 min-w-0">
-          <div
-            className={cn(
-              "text-[13px] font-medium text-ink-900 truncate",
-              item.completed && "line-through"
-            )}
-          >
-            {item.title || <span className="italic text-ink-400">ללא כותרת</span>}
+          <div className="overflow-x-auto sm:overflow-x-hidden no-scrollbar">
+            <div
+              className={cn(
+                "text-[13px] font-medium text-ink-900 whitespace-nowrap sm:truncate",
+                item.completed && "line-through"
+              )}
+            >
+              {item.title || <span className="italic text-ink-400">ללא כותרת</span>}
+            </div>
           </div>
           <div className="text-[10px] text-ink-500 mt-0.5 flex items-center gap-2">
             <span>{isTask ? "משימה" : "אירוע"}</span>

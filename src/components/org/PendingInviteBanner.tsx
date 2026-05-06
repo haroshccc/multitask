@@ -13,14 +13,14 @@ export function PendingInviteBanner() {
   if (!user || invites.length === 0) return null;
 
   return (
-    <div className="flex flex-col gap-1 px-4 md:px-6 pt-2">
+    <div className="border-t border-amber-200 bg-amber-50">
       {invites.map((inv) => (
         <div
           key={inv.id}
-          className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 text-sm"
+          className="flex items-center gap-3 px-4 md:px-6 py-2 text-sm"
         >
           <Building2 className="w-4 h-4 text-amber-600 shrink-0" />
-          <span className="flex-1 text-ink-800">
+          <span className="flex-1 text-ink-800 text-xs">
             הוזמנת להצטרף לקבוצה <strong>{inv.org_name}</strong>
           </span>
           <button
@@ -34,17 +34,17 @@ export function PendingInviteBanner() {
             disabled={acceptInvite.isPending}
             className="flex items-center gap-1 px-3 py-1 rounded-lg bg-primary-500 text-white text-xs font-medium hover:bg-primary-600 disabled:opacity-50 shrink-0"
           >
-            <Check className="w-3.5 h-3.5" />
+            <Check className="w-3 h-3" />
             הצטרף
           </button>
           <button
             onClick={() =>
               revokeInvite.mutate({ inviteId: inv.id, orgId: inv.organization_id })
             }
-            className="p-1 rounded-lg text-ink-400 hover:text-ink-700 hover:bg-ink-100 transition-colors shrink-0"
+            className="p-1 rounded-lg text-amber-500 hover:text-amber-700 hover:bg-amber-100 transition-colors shrink-0"
             title="דחה הזמנה"
           >
-            <X className="w-4 h-4" />
+            <X className="w-3.5 h-3.5" />
           </button>
         </div>
       ))}

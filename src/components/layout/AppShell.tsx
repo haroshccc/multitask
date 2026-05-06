@@ -115,7 +115,8 @@ export function AppShell() {
   return (
     <div className="min-h-screen bg-ink-50 flex flex-col">
       {/* Top bar */}
-      <header className="sticky top-0 z-30 bg-white border-b border-ink-200 px-4 md:px-6 h-14 flex items-center justify-between gap-2">
+      <header className="sticky top-0 z-30 bg-white border-b border-ink-200">
+      <div className="px-4 md:px-6 h-14 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
           <button
             onClick={() => setSidebarOpen((v) => !v)}
@@ -237,6 +238,8 @@ export function AppShell() {
             </button>
           </div>
         </div>
+      </div>
+      <PendingInviteBanner />
       </header>
 
       {/* Body: sidebar (mobile drawer / desktop rail) + main */}
@@ -314,7 +317,6 @@ export function AppShell() {
 
         {/* Main content */}
         <main className="flex-1 min-w-0">
-          <PendingInviteBanner />
           <Outlet />
         </main>
       </div>

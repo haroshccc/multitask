@@ -436,6 +436,10 @@ export function CalendarBlock({
     textColor = "#ffffff";
     if (past) opacity = 0.55;
   }
+  // Completed tasks fade to half-strength so they visually recede behind
+  // active work. Paired with the title strikethrough this is enough cue
+  // without the heavier full-block diagonal we used to draw.
+  if (isTask && item.completed) opacity = 0.5;
 
   // Relative offsets for actuals — re-map percent within the block's own box.
   const mapActualToLocal = (topPct: number, heightPct: number) => {
@@ -652,18 +656,6 @@ export function CalendarBlock({
             )}
           </div>
         </div>
-      )}
-
-      {/* Completed tasks get a full diagonal line across the block too — a
-          second, heavier cue for quick scanning. */}
-      {isTask && completed && (
-        <div
-          className="absolute inset-0 pointer-events-none"
-          style={{
-            background:
-              "linear-gradient(to bottom right, transparent calc(50% - 1px), rgba(45,45,58,0.5) 50%, transparent calc(50% + 1px))",
-          }}
-        />
       )}
 
       {/* (Override visualization is now expressed via the block's border

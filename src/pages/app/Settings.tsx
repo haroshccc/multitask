@@ -1,13 +1,15 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { ScreenScaffold } from "@/components/layout/ScreenScaffold";
 import { cn } from "@/lib/utils/cn";
 import {
   User, Building2, Users, Bell, Trash2, Mail, Copy, Check,
-  Shield, Clock, Plus, ChevronDown, ChevronUp,
+  Shield, Clock, Plus, ChevronDown, ChevronUp, ArrowUpRight,
+  ArrowDownLeft, CheckCircle2, AlertCircle,
   type LucideIcon
 } from "lucide-react";
 import { useAuth } from "@/lib/auth/AuthContext";
 import { useOrgMembers } from "@/lib/hooks/useOrgMembers";
+import { useTasks } from "@/lib/hooks/useTasks";
 import {
   useOrganization,
   useUserOrganizations,
@@ -611,15 +613,178 @@ function OrgTab() {
 // Sharing tab
 // ---------------------------------------------------------------------------
 
+const STATUS_LABELS: Record<string, string> = {
+  todo: "לביצוע",
+  in_progress: "בביצוע",
+  pending_approval: "ממתין לאישור",
+  waiting_approval: "ממתין לאישור",
+  done: "הושלם",
+  cancelled: "בוטל",
+};
+
+const STATUS_COLORS: Record<string, string> = {
+  todo: "bg-ink-100 text-ink-500",
+  in_progress: "bg-blue-100 text-blue-700",
+  pending_approval: "bg-amber-100 text-amber-700",
+  waiting_approval: "bg-amber-100 text-amber-700",
+  done: "bg-green-100 text-green-700",
+  cancelled: "bg-ink-100 text-ink-400",
+};
+
 function SharingTab() {
-  return (
-    <div className="space-y-4">
-      <div className="card p-4">
-        <h2 className="font-semibold text-ink-900 mb-2">שיתופים פעילים</h2>
-        <p className="text-sm text-ink-500">
-          ניהול שיתופים מפורט — בקרוב. בינתיים, ניתן לשתף רשימות משימות מתוך מסך המשימות (לחיצה על ⋯ ברשימה).
+  const { user } = useAuth();
+  const { data: allTasks = [] } = useTasks();
+  const { data: members = [] } = useOrgMembers();
+
+  const nameMap = useMemo(() => {
+    const m = new Map<string, string>();
+    members.forEach(({ membership, profile }) => {
+      m.set(membership.user_id, profile?.full_name ?? `משתמש ${membership.user_id.slice(0, 6)}`);
+    });
+    return m;
+  }, [members]);
+
+  const userId = user?.id ?? "";
+
+  const activeDelegated = allTasks.filter(
+    t => t.owner_id === userId &&
+      t.assignee_user_id &&
+      t.assignee_user_id !== userId &&
+      t.status !== "done" && t.status !== "cancelled"
+  );
+
+  const activeAssignedToMe = allTasks.filter(
+    t => t.assignee_user_id === userId &&
+      t.owner_id !== userId &&
+      t.status !== "done" && t.status !== "cancelled"
+  );
+
+  const awaitingMyApproval = allTasks.filter(
+    t => t.approver_user_id === userId &&
+      (t.status === "pending_approval" || t.status === "waiting_approval")
+  );
+
+  const delegatedByPerson = useMemo(() => {
+    const map = new Map<string, typeof activeDelegated>();
+    activeDelegated.forEach(t => {
+      const key = t.assignee_user_id!;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(t);
+    });
+    return map;
+  }, [activeDelegated]);
+
+  const assignedByPerson = useMemo(() => {
+    const map = new Map<string, typeof activeAssignedToMe>();
+    activeAssignedToMe.forEach(t => {
+      const key = t.owner_id;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(t);
+    });
+    return map;
+  }, [activeAssignedToMe]);
+
+  const hasAnything = activeDelegated.length > 0 || activeAssignedToMe.length > 0 || awaitingMyApproval.length > 0;
+
+  if (!hasAnything) {
+    return (
+      <div className="card p-8 text-center space-y-2">
+        <Users className="w-8 h-8 text-ink-300 mx-auto" />
+        <p className="text-sm font-medium text-ink-600">אין שיתופים פעילים</p>
+        <p className="text-xs text-ink-400">
+          כשתאצילי משימות לאחרים או שיואצלו לך, הן יופיעו כאן.
         </p>
       </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+
+      {/* ── משימות שהאצלתי ─────────────────────────────────────────── */}
+      {activeDelegated.length > 0 && (
+        <section className="card overflow-hidden">
+          <div className="p-4 pb-2 flex items-center gap-2">
+            <ArrowUpRight className="w-4 h-4 text-amber-500" />
+            <h2 className="font-semibold text-ink-900 text-sm">האצלתי לאחרים</h2>
+            <span className="text-xs text-ink-400 bg-ink-100 px-2 py-0.5 rounded-full ms-auto">{activeDelegated.length}</span>
+          </div>
+          {Array.from(delegatedByPerson.entries()).map(([assigneeId, tasks]) => (
+            <div key={assigneeId} className="border-t border-ink-100">
+              <div className="px-4 py-2 bg-ink-50 flex items-center gap-2">
+                <div className="w-6 h-6 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center text-xs font-semibold text-white shrink-0">
+                  {(nameMap.get(assigneeId) ?? "?")[0].toUpperCase()}
+                </div>
+                <span className="text-xs font-medium text-ink-700">{nameMap.get(assigneeId) ?? assigneeId}</span>
+                <span className="text-xs text-ink-400 ms-auto">{tasks.length} משימות</span>
+              </div>
+              <div className="divide-y divide-ink-50">
+                {tasks.map(t => (
+                  <div key={t.id} className="flex items-center gap-3 px-4 py-2.5">
+                    <span className="flex-1 text-sm text-ink-700 truncate">{t.title}</span>
+                    <span className={cn("text-xs px-2 py-0.5 rounded-full shrink-0", STATUS_COLORS[t.status] ?? STATUS_COLORS.todo)}>
+                      {STATUS_LABELS[t.status] ?? t.status}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </section>
+      )}
+
+      {/* ── הוקצו לי ───────────────────────────────────────────────── */}
+      {activeAssignedToMe.length > 0 && (
+        <section className="card overflow-hidden">
+          <div className="p-4 pb-2 flex items-center gap-2">
+            <ArrowDownLeft className="w-4 h-4 text-blue-500" />
+            <h2 className="font-semibold text-ink-900 text-sm">הוקצו לי</h2>
+            <span className="text-xs text-ink-400 bg-ink-100 px-2 py-0.5 rounded-full ms-auto">{activeAssignedToMe.length}</span>
+          </div>
+          {Array.from(assignedByPerson.entries()).map(([ownerId, tasks]) => (
+            <div key={ownerId} className="border-t border-ink-100">
+              <div className="px-4 py-2 bg-ink-50 flex items-center gap-2">
+                <div className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-xs font-semibold text-white shrink-0">
+                  {(nameMap.get(ownerId) ?? "?")[0].toUpperCase()}
+                </div>
+                <span className="text-xs font-medium text-ink-700">{nameMap.get(ownerId) ?? ownerId}</span>
+                <span className="text-xs text-ink-400 ms-auto">{tasks.length} משימות</span>
+              </div>
+              <div className="divide-y divide-ink-50">
+                {tasks.map(t => (
+                  <div key={t.id} className="flex items-center gap-3 px-4 py-2.5">
+                    <span className="flex-1 text-sm text-ink-700 truncate">{t.title}</span>
+                    <span className={cn("text-xs px-2 py-0.5 rounded-full shrink-0", STATUS_COLORS[t.status] ?? STATUS_COLORS.todo)}>
+                      {STATUS_LABELS[t.status] ?? t.status}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </section>
+      )}
+
+      {/* ── ממתינות לאישורי ────────────────────────────────────────── */}
+      {awaitingMyApproval.length > 0 && (
+        <section className="card overflow-hidden">
+          <div className="p-4 pb-2 flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-amber-500" />
+            <h2 className="font-semibold text-ink-900 text-sm">ממתינות לאישורי</h2>
+            <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full ms-auto">{awaitingMyApproval.length}</span>
+          </div>
+          <div className="divide-y divide-ink-100">
+            {awaitingMyApproval.map(t => (
+              <div key={t.id} className="flex items-center gap-3 px-4 py-2.5">
+                <CheckCircle2 className="w-4 h-4 text-ink-300 shrink-0" />
+                <span className="flex-1 text-sm text-ink-700 truncate">{t.title}</span>
+                <span className="text-xs text-ink-400">{nameMap.get(t.owner_id) ?? ""}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
     </div>
   );
 }

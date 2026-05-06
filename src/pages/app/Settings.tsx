@@ -177,11 +177,6 @@ function OrgTab() {
     }
   };
 
-  const handleInvite = (e: React.FormEvent) => {
-    e.preventDefault();
-    doInvite();
-  };
-
   const copyLink = (token: string) => {
     navigator.clipboard.writeText(`${window.location.origin}/invite/${token}`);
     setCopiedToken(token);

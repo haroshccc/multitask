@@ -96,7 +96,7 @@ export function useCreateInvite() {
 export function useRevokeInvite() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ inviteId, orgId }: { inviteId: string; orgId: string }) =>
+    mutationFn: ({ inviteId }: { inviteId: string; orgId: string }) =>
       revokeInvite(inviteId),
     onSuccess: (_data, { orgId }) => {
       qc.invalidateQueries({ queryKey: ["org-invites", orgId] });

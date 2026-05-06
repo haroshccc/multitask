@@ -1,5 +1,4 @@
 import { useState, useRef, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
 import { Building2, Users, User, ChevronDown, Plus, Check } from "lucide-react";
 import { useAuth } from "@/lib/auth/AuthContext";
 import { useUserOrganizations, useCreateOrganization } from "@/lib/hooks/useOrganizations";
@@ -102,7 +101,7 @@ function CreateOrgForm({ onDone }: CreateOrgFormProps) {
 }
 
 export function OrgSwitcher() {
-  const { memberships, activeOrganizationId, setActiveOrganizationId } = useAuth();
+  const { activeOrganizationId, setActiveOrganizationId } = useAuth();
   const { data: orgs = [] } = useUserOrganizations();
   const [open, setOpen] = useState(false);
   const [showCreate, setShowCreate] = useState(false);

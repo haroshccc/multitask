@@ -3,7 +3,7 @@ import { ScreenScaffold } from "@/components/layout/ScreenScaffold";
 import { cn } from "@/lib/utils/cn";
 import {
   User, Building2, Users, Bell, Trash2, Mail, Copy, Check,
-  ChevronDown, type LucideIcon
+  type LucideIcon
 } from "lucide-react";
 import { useAuth } from "@/lib/auth/AuthContext";
 import { useOrgMembers } from "@/lib/hooks/useOrgMembers";
@@ -95,7 +95,7 @@ export function Settings() {
 // ---------------------------------------------------------------------------
 
 function OrgTab() {
-  const { user, memberships, activeOrganizationId, setActiveOrganizationId, refreshProfile } = useAuth();
+  const { user, memberships, activeOrganizationId, setActiveOrganizationId } = useAuth();
   const { data: orgs = [] } = useUserOrganizations();
   const { data: org } = useOrganization(activeOrganizationId);
   const { data: members = [] } = useOrgMembers();
@@ -114,9 +114,6 @@ function OrgTab() {
   const [inviteRole, setInviteRole]   = useState<"member" | "admin">("member");
   const [inviteSent, setInviteSent]   = useState<string | null>(null);
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
-  const [joinMode, setJoinMode]       = useState(false);
-  const [joinName, setJoinName]       = useState("");
-  const [joinPassword, setJoinPassword] = useState("");
   const [newOrgName, setNewOrgName]   = useState("");
   const [newOrgType, setNewOrgType]   = useState<OrgType>("business");
   const [newOrgPassword, setNewOrgPassword] = useState("");
@@ -159,13 +156,6 @@ function OrgTab() {
       setShowCreate(false);
       setNewOrgName(""); setNewOrgPassword("");
     }
-  };
-
-  const handleJoinOrg = async (e: React.FormEvent) => {
-    e.preventDefault();
-    // TODO: join by password RPC (existing create_organization_with_password flow)
-    // For now, surface a note.
-    alert("הצטרפות לארגון קיים על-ידי סיסמה — ממשק בקרוב.");
   };
 
   return (

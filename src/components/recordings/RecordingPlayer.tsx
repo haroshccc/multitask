@@ -9,6 +9,7 @@ import {
   useTriggerRecordingProcessing,
   useUpdateRecording,
 } from "@/lib/hooks/useRecordings";
+import { pollTranscription } from "@/lib/services/recordings";
 import {
   useRecordingLists,
   useRecordingListAssignments,
@@ -185,15 +186,36 @@ function TranscriptionSection({
           className="text-xs font-medium text-primary-700 hover:underline disabled:opacity-50 pt-0.5"
           disabled={busy}
           onClick={async () => {
+            // Poll-first retry: don't blindly create a new Gladia job. First
+            // ask Gladia what's actually happening with the existing job —
+            // each duplicate submission eats a concurrent-quota slot that
+            // Gladia won't release until the job finishes naturally (their
+            // DELETE endpoint refuses while a job is PROCESSING).
             setRetryNotice(null);
             try {
-              await update.mutateAsync({
-                recordingId: recording.id,
-                patch: { status: "uploaded", provider_job_id: null },
+              const polled = await pollTranscription(recording.id);
+              if (polled.status === "ready") {
+                setRetryNotice({ kind: "ok", msg: "התמלול הסתיים — מרענן..." });
+                return;
+              }
+              if (polled.status === "error") {
+                // Gladia gave up — safe to submit a fresh job.
+                await update.mutateAsync({
+                  recordingId: recording.id,
+                  patch: { status: "uploaded", provider_job_id: null },
+                });
+                await trigger.mutateAsync(recording.id);
+                setRetryNotice({ kind: "ok", msg: "נשלח מחדש ל-Gladia ✓" });
+                setTimeout(() => setRetryNotice(null), 4000);
+                return;
+              }
+              // Still processing on Gladia. Resubmitting now would just queue
+              // another job and eat a slot.
+              setRetryNotice({
+                kind: "ok",
+                msg: `Gladia עוד מעבד (${polled.gladia_status ?? "processing"}). ה-UI יבדוק שוב אוטומטית כל 30 שניות.`,
               });
-              await trigger.mutateAsync(recording.id);
-              setRetryNotice({ kind: "ok", msg: "נשלח מחדש ל-Gladia ✓" });
-              setTimeout(() => setRetryNotice(null), 4000);
+              setTimeout(() => setRetryNotice(null), 6000);
             } catch (e) {
               setRetryNotice({
                 kind: "err",
@@ -202,7 +224,7 @@ function TranscriptionSection({
             }
           }}
         >
-          {busy ? "שולח..." : "נתקע? נסה שוב"}
+          {busy ? "בודק..." : "בדוק סטטוס מ-Gladia"}
         </button>
       </section>
     );

@@ -249,7 +249,7 @@ export function ImportFoodDataModal({ open, onClose }: ImportFoodDataModalProps)
 
         <div className="p-4 space-y-3 overflow-y-auto flex-1">
           <div className="flex items-center gap-2 flex-wrap text-xs text-ink-600">
-            <span>פורמט מצופה (כותרת בעברית, פסיקים בין עמודות):</span>
+            <span>פורמט מצופה (כותרת בעברית; מפריד: פסיק / נקודה-פסיק / Tab — מזוהה אוטומטית):</span>
             <button
               type="button"
               onClick={fillSample}

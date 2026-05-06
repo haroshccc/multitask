@@ -9,12 +9,42 @@ import { MEAL_TIME_KEYS } from "@/lib/types/domain";
 // =============================================================================
 // CSV parsing — small, dependency-free, RFC4180-ish.
 //
-// Handles: comma separator, quoted fields, escaped quotes (""), CRLF/LF line
-// endings, and a leading BOM (Excel adds one when saving as UTF-8 CSV).
+// Handles: comma / semicolon / tab separators (auto-detected from the first
+// line), quoted fields, escaped quotes (""), CRLF/LF line endings, and a
+// leading BOM (Excel adds one when saving as UTF-8 CSV).
+//
+// Auto-detecting the separator lets users paste directly from Google Sheets
+// (tab-separated) or from European/Hebrew-locale Excel (semicolon-separated)
+// without manually reformatting their data.
 // =============================================================================
+
+/** Detect the column separator from the header line.
+ *  Counts unquoted occurrences of tab, semicolon, and comma, then picks the
+ *  winner. Defaults to comma if the line contains none of the three. */
+function detectDelimiter(firstLine: string): string {
+  let tabs = 0, semis = 0, commas = 0;
+  let inQ = false;
+  for (let i = 0; i < firstLine.length; i++) {
+    const c = firstLine[i];
+    if (c === '"') { inQ = !inQ; continue; }
+    if (inQ) continue;
+    if (c === "\t") tabs++;
+    else if (c === ";") semis++;
+    else if (c === ",") commas++;
+  }
+  if (tabs > 0 && tabs >= semis && tabs >= commas) return "\t";
+  if (semis > 0 && semis >= commas) return ";";
+  return ",";
+}
 
 export function parseCsv(input: string): string[][] {
   if (input.charCodeAt(0) === 0xfeff) input = input.slice(1);
+
+  // Detect delimiter from the first line (before any line break).
+  const firstNl = input.indexOf("\n");
+  const firstLine = firstNl !== -1 ? input.slice(0, firstNl) : input;
+  const sep = detectDelimiter(firstLine.replace(/\r$/, ""));
+
   const rows: string[][] = [];
   let row: string[] = [];
   let cell = "";
@@ -39,7 +69,7 @@ export function parseCsv(input: string): string[][] {
       inQuotes = true;
       continue;
     }
-    if (ch === ",") {
+    if (ch === sep) {
       row.push(cell);
       cell = "";
       continue;
@@ -110,6 +140,7 @@ export const INGREDIENT_CSV_SAMPLE = `שם,קטגוריה,יחידה,כמות_ל
 מלפפון,ירקות,גרם,100,15,0.7,0.1,3.6,,
 עגבנייה,ירקות,יחידה,1,22,1,0.2,4.8,כן,
 ביצה,חלבונים,יחידה,1,72,6.3,4.8,0.4,כן,
+גבינה 5%,מוצרי חלב,גרם,100,105,6.5,9,2,כן,
 שמן זית,שומנים,כפית,5,40,0,4.5,0,כן,
 שמן זית,שומנים,כף,15,120,0,13.5,0,,`;
 

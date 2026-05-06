@@ -113,9 +113,9 @@ export function AppShell() {
   };
 
   return (
-    <div className="min-h-screen bg-ink-50 flex flex-col">
-      {/* Top bar */}
-      <header className="sticky top-0 z-30 bg-white border-b border-ink-200">
+    <div className="h-screen bg-ink-50 flex flex-col overflow-hidden">
+      {/* Top bar — not sticky; lives in fixed-height flex row so it never scrolls */}
+      <header className="shrink-0 z-30 bg-white border-b border-ink-200">
       <div className="px-4 md:px-6 h-14 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
           <button
@@ -243,7 +243,7 @@ export function AppShell() {
       </header>
 
       {/* Body: sidebar (mobile drawer / desktop rail) + main */}
-      <div className="flex-1 flex">
+      <div className="flex-1 flex overflow-hidden">
         {/* Mobile drawer */}
         {sidebarOpen && (
           <div
@@ -315,8 +315,8 @@ export function AppShell() {
           </div>
         )}
 
-        {/* Main content */}
-        <main className="flex-1 min-w-0">
+        {/* Main content — the only scrolling region */}
+        <main className="flex-1 min-w-0 overflow-y-auto">
           <Outlet />
         </main>
       </div>
@@ -325,7 +325,7 @@ export function AppShell() {
           inline-end padding reserves space for the AnimatedFab so it never
           overlaps a tab. */}
       <nav
-        className="md:hidden sticky bottom-0 z-30 bg-white border-t border-ink-200 h-16 flex items-stretch"
+        className="md:hidden shrink-0 z-30 bg-white border-t border-ink-200 h-16 flex items-stretch"
         style={{ paddingInlineEnd: "88px" /* matches 64px FAB + 24px inset */ }}
       >
         {NAV.map((item) => (

@@ -108,9 +108,11 @@ export async function createInvite(
   email: string,
   role: "member" | "admin" = "member"
 ): Promise<OrgInvite> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("לא מחובר/ת לחשבון");
   const { data, error } = await db
     .from("org_invites")
-    .insert({ organization_id: orgId, email: email.trim().toLowerCase(), role })
+    .insert({ organization_id: orgId, invited_by: user.id, email: email.trim().toLowerCase(), role })
     .select()
     .single();
   if (error) throw error;

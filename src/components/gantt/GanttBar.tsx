@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Pencil } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { type GanttRow, DAY_MS } from "./gantt-utils";
+import { HalfCheckIcon } from "@/components/ui/HalfCheckIcon";
 
 interface GanttBarProps {
   row: GanttRow;
@@ -282,9 +283,9 @@ export function GanttBar({
           isEvent
             ? "bg-gradient-to-l from-primary-600 to-primary-400 border border-primary-700"
             : row.ownershipMode === "assigned"
-            ? "bg-gradient-to-l from-blue-500 to-blue-400 border border-blue-600"
+            ? "bg-gradient-to-l from-primary-500 to-primary-400 border-2 border-dotted border-ink-500"
             : row.ownershipMode === "delegated"
-            ? "bg-gradient-to-l from-amber-500 to-amber-400 border border-amber-600"
+            ? "bg-gradient-to-l from-primary-500 to-primary-400 border-2 border-dashed border-ink-500"
             : highlight
             ? "bg-gradient-to-l from-danger-500 to-primary-500"
             : "bg-gradient-to-l from-primary-500 to-primary-400"
@@ -304,7 +305,7 @@ export function GanttBar({
           {isEvent ? "● " : ""}
           {row.ownershipMode === "assigned" && <span className="text-[9px] bg-white/30 px-1 rounded-full shrink-0">הוצאל</span>}
           {row.ownershipMode === "delegated" && <span className="text-[9px] bg-white/30 px-1 rounded-full shrink-0">האצלתי</span>}
-          {row.pendingApproval && <span className="text-[9px] shrink-0">⏳</span>}
+          {row.pendingApproval && <HalfCheckIcon size={11} className="shrink-0 text-pink-200" />}
           {row.title}
         </span>
         <span

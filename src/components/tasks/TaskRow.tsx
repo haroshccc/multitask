@@ -56,6 +56,7 @@ import {
 } from "lucide-react";
 import { PlanVsActualBar } from "@/components/tasks/PlanVsActualBar";
 import { useAuth } from "@/lib/auth/AuthContext";
+import { HalfCheckIcon } from "@/components/ui/HalfCheckIcon";
 import type { Task } from "@/lib/types/domain";
 
 export interface TaskTreeNode {
@@ -531,9 +532,9 @@ export function TaskRow({
         ref={setDragRef}
         className={cn(
           "group relative flex items-start gap-1.5 rounded-md transition-colors px-1.5 py-1 hover:bg-ink-50",
-          // Ownership visual modes
-          taskOwnershipMode === "assigned" && !isSelected && "bg-blue-50/60 border-s-2 border-blue-300",
-          taskOwnershipMode === "delegated" && !isSelected && "bg-amber-50/40 border-s-2 border-amber-300",
+          // Ownership visual modes — border style only (no bg tint, avoids conflict with list colors)
+          taskOwnershipMode === "assigned" && !isSelected && "border border-dotted border-ink-400",
+          taskOwnershipMode === "delegated" && !isSelected && "border border-dashed border-ink-400",
           isDragging && "opacity-40",
           isOverNest && "bg-primary-50 ring-1 ring-primary-300",
           isSelected && "bg-primary-50/60 ring-1 ring-primary-300",
@@ -701,22 +702,33 @@ export function TaskRow({
           )}
         />
 
-        {/* Ownership badges */}
+        {/* Ownership mode micro-labels — keep small, no bg tint (border already signals mode) */}
         {taskOwnershipMode === "assigned" && (
-          <span className="shrink-0 inline-flex items-center gap-1 text-[10px] text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded-full font-medium">
-            הוצאל אליי
-          </span>
+          <span className="shrink-0 text-[9px] text-ink-500 font-medium leading-none">הוצאל</span>
         )}
         {taskOwnershipMode === "delegated" && (
-          <span className="shrink-0 inline-flex items-center gap-1 text-[10px] text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded-full font-medium">
-            האצלתי
-          </span>
+          <span className="shrink-0 text-[9px] text-ink-500 font-medium leading-none">האצלתי</span>
         )}
-        {/* pending_approval badge */}
+        {/* Pending-approval half-check — clickable by approver, static badge for everyone else */}
         {task.status === "pending_approval" && (
-          <span className="shrink-0 inline-flex items-center gap-1 text-[10px] text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded-full font-medium">
-            ⏳ ממתין
-          </span>
+          <HalfCheckIcon
+            size={14}
+            onApprove={
+              user && task.approver_user_id === user.id
+                ? (e) => {
+                    e.stopPropagation();
+                    updateTask.mutate({
+                      taskId: task.id,
+                      patch: {
+                        status: "done",
+                        approved_at: new Date().toISOString(),
+                        completed_at: new Date().toISOString(),
+                      },
+                    });
+                  }
+                : undefined
+            }
+          />
         )}
 
         {/* Recurrence indicator — small ↻ icon plus the next occurrence

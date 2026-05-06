@@ -52,8 +52,14 @@ import { useCalendarPrefs } from "@/lib/hooks/useCalendarPrefs";
 import type { FilterConfig } from "@/lib/types/domain";
 
 // Min hour-row height. Below this the layout becomes hard to read.
-const HOUR_HEIGHT_DAY_MIN = 36;
-const HOUR_HEIGHT_WEEK_MIN = 32;
+// Mobile mins are intentionally larger than desktop: the page is allowed
+// to grow beyond the viewport (scrollable), so we'd rather have roomy,
+// non-overlapping task blocks than try to cram 24h into one screen.
+const HOUR_HEIGHT_DAY_MIN_DESKTOP = 36;
+const HOUR_HEIGHT_WEEK_MIN_DESKTOP = 32;
+const HOUR_HEIGHT_DAY_MIN_MOBILE = 80;
+const HOUR_HEIGHT_WEEK_MIN_MOBILE = 72;
+const MOBILE_BREAKPOINT_PX = 640;
 // Vertical chrome above the grid that we have to subtract from the
 // viewport: top app bar, screen header, calendar chrome, optional
 // filter/stats panels, and the bottom safety margin. Approximate; the
@@ -71,12 +77,20 @@ export function Calendar() {
 
   // Dynamic hour-height — stretches the grid to fill the viewport while
   // keeping a sensible floor so rows stay readable on small displays.
-  // Re-computes on resize.
+  // Re-computes on resize. On mobile the floor is high enough that the
+  // grid intentionally overflows the viewport (the user scrolls down),
+  // since cramming 24h into one screen makes short tasks overlap visually.
   const [viewportH, setViewportH] = useState(() =>
     typeof window === "undefined" ? 900 : window.innerHeight
   );
+  const [viewportW, setViewportW] = useState(() =>
+    typeof window === "undefined" ? 1024 : window.innerWidth
+  );
   useEffect(() => {
-    const onResize = () => setViewportH(window.innerHeight);
+    const onResize = () => {
+      setViewportH(window.innerHeight);
+      setViewportW(window.innerWidth);
+    };
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, []);
@@ -84,12 +98,15 @@ export function Calendar() {
     1,
     effectiveRange.hourEnd - effectiveRange.hourStart
   );
+  const isMobile = viewportW < MOBILE_BREAKPOINT_PX;
+  const dayMin = isMobile ? HOUR_HEIGHT_DAY_MIN_MOBILE : HOUR_HEIGHT_DAY_MIN_DESKTOP;
+  const weekMin = isMobile ? HOUR_HEIGHT_WEEK_MIN_MOBILE : HOUR_HEIGHT_WEEK_MIN_DESKTOP;
   const dynamicHourHeightDay = Math.max(
-    HOUR_HEIGHT_DAY_MIN,
+    dayMin,
     Math.floor((viewportH - VERTICAL_CHROME_RESERVE) / visibleHours)
   );
   const dynamicHourHeightWeek = Math.max(
-    HOUR_HEIGHT_WEEK_MIN,
+    weekMin,
     Math.floor((viewportH - VERTICAL_CHROME_RESERVE) / visibleHours)
   );
 

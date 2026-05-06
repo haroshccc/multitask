@@ -136,6 +136,22 @@ export async function acceptInvite(
   return data as { ok: boolean; organization_id?: string; error?: string };
 }
 
+export async function deleteOrganization(orgId: string) {
+  const { error } = await db.rpc("delete_organization", { p_org_id: orgId });
+  if (error) throw error;
+}
+
+export async function listMyPendingInvites(): Promise<Array<OrgInvite & { org_name: string }>> {
+  const { data, error } = await db
+    .from("org_invites")
+    .select("*, organizations(name)")
+    .is("accepted_at", null)
+    .gt("expires_at", new Date().toISOString());
+  if (error) throw error;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (data ?? []).map((d: any) => ({ ...d, org_name: d.organizations?.name ?? "" }));
+}
+
 // ---- Member management ------------------------------------------------------
 
 export async function removeMember(orgId: string, userId: string) {

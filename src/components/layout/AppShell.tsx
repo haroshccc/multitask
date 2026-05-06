@@ -32,6 +32,7 @@ import { GlobalSearchPalette } from "@/components/search/GlobalSearchPalette";
 import { Logo } from "@/components/brand/Logo";
 import { FloatingTimerBanner } from "@/components/timer/FloatingTimerBanner";
 import { OrgSwitcher } from "@/components/org/OrgSwitcher";
+import { PendingInviteBanner } from "@/components/org/PendingInviteBanner";
 
 interface NavItem {
   to: string;
@@ -313,6 +314,7 @@ export function AppShell() {
 
         {/* Main content */}
         <main className="flex-1 min-w-0">
+          <PendingInviteBanner />
           <Outlet />
         </main>
       </div>

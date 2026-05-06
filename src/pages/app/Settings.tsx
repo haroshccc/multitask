@@ -12,6 +12,7 @@ import {
   useUserOrganizations,
   useUpdateOrganization,
   useCreateOrganization,
+  useDeleteOrganization,
   useOrgInvites,
   useCreateInvite,
   useRevokeInvite,
@@ -103,6 +104,7 @@ function OrgTab() {
 
   const updateOrg    = useUpdateOrganization();
   const createOrg    = useCreateOrganization();
+  const deleteOrg    = useDeleteOrganization();
   const createInvite = useCreateInvite();
   const revokeInvite = useRevokeInvite();
   const removeMember = useRemoveMember();
@@ -118,9 +120,12 @@ function OrgTab() {
   const [newOrgType, setNewOrgType]   = useState<OrgType>("business");
   const [newOrgPassword, setNewOrgPassword] = useState("");
   const [showCreate, setShowCreate]   = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState("");
+  const [showDelete, setShowDelete]   = useState(false);
 
   const myRole = memberships.find(m => m.organization_id === activeOrganizationId)?.role;
   const canManage = myRole === "owner" || myRole === "admin";
+  const isOwner = myRole === "owner";
 
   const handleSaveName = async () => {
     if (!activeOrganizationId || !orgName.trim()) return;
@@ -139,6 +144,15 @@ function OrgTab() {
     const invite = await createInvite.mutateAsync({ orgId: activeOrganizationId, email: inviteEmail.trim(), role: inviteRole });
     setInviteSent(invite.token);
     setInviteEmail("");
+  };
+
+  const handleDeleteOrg = async () => {
+    if (!activeOrganizationId || deleteConfirm !== org?.name) return;
+    await deleteOrg.mutateAsync(activeOrganizationId);
+    const remaining = orgs.filter(o => o.id !== activeOrganizationId);
+    setActiveOrganizationId(remaining[0]?.id ?? null);
+    setShowDelete(false);
+    setDeleteConfirm("");
   };
 
   const copyInviteLink = (token: string) => {
@@ -261,6 +275,50 @@ function OrgTab() {
                 </div>
               </div>
             )}
+
+            {/* Delete org */}
+            {isOwner && (
+              <div className="border-t border-ink-100 pt-3">
+                {!showDelete ? (
+                  <button
+                    onClick={() => setShowDelete(true)}
+                    className="flex items-center gap-1.5 text-sm text-danger-600 hover:text-red-700"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    מחק קבוצה
+                  </button>
+                ) : (
+                  <div className="space-y-2">
+                    <p className="text-xs text-danger-700 font-medium">
+                      פעולה זו תמחק את הקבוצה לצמיתות כולל כל החברים וההזמנות.
+                    </p>
+                    <p className="text-xs text-ink-500">הקלד/י את שם הקבוצה לאישור: <strong>{org.name}</strong></p>
+                    <input
+                      value={deleteConfirm}
+                      onChange={e => setDeleteConfirm(e.target.value)}
+                      placeholder={org.name}
+                      className="field text-sm w-full"
+                      autoFocus
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleDeleteOrg}
+                        disabled={deleteConfirm !== org.name || deleteOrg.isPending}
+                        className="flex-1 py-1.5 rounded-xl bg-danger-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-40"
+                      >
+                        {deleteOrg.isPending ? "מוחק..." : "מחק לצמיתות"}
+                      </button>
+                      <button
+                        onClick={() => { setShowDelete(false); setDeleteConfirm(""); }}
+                        className="px-4 py-1.5 rounded-xl border border-ink-200 text-sm text-ink-600 hover:bg-ink-50"
+                      >
+                        בטל
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Members */}
@@ -307,8 +365,13 @@ function OrgTab() {
 
             {/* Invite by email */}
             {canManage && (
-              <div className="border-t border-ink-100 pt-3">
-                <p className="text-xs font-medium text-ink-500 mb-2">הזמן חבר/ה במייל</p>
+              <div className="border-t border-ink-100 pt-3 space-y-2">
+                <div>
+                  <p className="text-xs font-medium text-ink-500">הזמן חבר/ה לקבוצה</p>
+                  <p className="text-xs text-ink-400 mt-0.5">
+                    מייל אוטומטי לא נשלח — צור/י קישור הזמנה ושלח/י אותו ידנית.
+                  </p>
+                </div>
                 <form onSubmit={handleInvite} className="flex gap-2">
                   <input value={inviteEmail} onChange={e => setInviteEmail(e.target.value)}
                     type="email" placeholder="כתובת מייל" className="field flex-1 text-sm" />
@@ -318,16 +381,27 @@ function OrgTab() {
                     <option value="admin">מנהל</option>
                   </select>
                   <button type="submit" disabled={!inviteEmail.trim() || createInvite.isPending}
-                    className="btn-primary text-sm px-3 py-1.5 flex items-center gap-1">
-                    <Mail className="w-3.5 h-3.5" /> שלח
+                    className="btn-primary text-sm px-3 py-1.5 flex items-center gap-1 shrink-0">
+                    <Mail className="w-3.5 h-3.5" /> צור קישור
                   </button>
                 </form>
                 {inviteSent && (
-                  <div className="mt-2 flex items-center gap-2 text-sm text-ink-600 bg-ink-50 rounded-xl px-3 py-2">
-                    <span className="flex-1 truncate text-xs text-ink-500">{`${window.location.origin}/invite/${inviteSent}`}</span>
-                    <button onClick={() => copyInviteLink(inviteSent)} className="shrink-0 text-primary-600 hover:text-primary-800">
-                      {copiedToken === inviteSent ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                    </button>
+                  <div className="rounded-xl border border-primary-200 bg-primary-50 px-3 py-2 space-y-1.5">
+                    <p className="text-xs font-medium text-primary-700">קישור ההזמנה מוכן — שלח/י אותו לחבר/ה:</p>
+                    <div className="flex items-center gap-2">
+                      <span className="flex-1 truncate text-xs text-ink-600 font-mono bg-white rounded-lg px-2 py-1 border border-ink-200">
+                        {`${window.location.origin}/invite/${inviteSent}`}
+                      </span>
+                      <button onClick={() => copyInviteLink(inviteSent)} className="shrink-0 p-1.5 rounded-lg text-primary-600 hover:bg-primary-100">
+                        {copiedToken === inviteSent ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
+                      </button>
+                    </div>
+                    <a
+                      href={`mailto:${inviteEmail || ""}?subject=הוזמנת להצטרף לקבוצה ${org?.name ?? ""}&body=${encodeURIComponent(`שלום,\n\nהוזמנת להצטרף לקבוצה "${org?.name ?? ""}" ב-Multitask.\n\nלחץ/י על הקישור הבא כדי להצטרף:\n${window.location.origin}/invite/${inviteSent}`)}`}
+                      className="inline-flex items-center gap-1 text-xs text-primary-600 hover:underline"
+                    >
+                      <Mail className="w-3 h-3" /> פתח מייל מוכן לשליחה
+                    </a>
                   </div>
                 )}
               </div>

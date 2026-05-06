@@ -1995,6 +1995,11 @@ export type Database = {
           duration_minutes: number | null
           estimated_hours: number | null
           external_url: string | null
+          goal_min_streak_periods: number | null
+          goal_period: string | null
+          goal_started_on: string | null
+          goal_target: number | null
+          goal_track_time: boolean
           google_event_ids: Json | null
           id: string
           is_event: boolean
@@ -2038,6 +2043,11 @@ export type Database = {
           duration_minutes?: number | null
           estimated_hours?: number | null
           external_url?: string | null
+          goal_min_streak_periods?: number | null
+          goal_period?: string | null
+          goal_started_on?: string | null
+          goal_target?: number | null
+          goal_track_time?: boolean
           google_event_ids?: Json | null
           id?: string
           is_event?: boolean
@@ -2081,6 +2091,11 @@ export type Database = {
           duration_minutes?: number | null
           estimated_hours?: number | null
           external_url?: string | null
+          goal_min_streak_periods?: number | null
+          goal_period?: string | null
+          goal_started_on?: string | null
+          goal_target?: number | null
+          goal_track_time?: boolean
           google_event_ids?: Json | null
           id?: string
           is_event?: boolean

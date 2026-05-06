@@ -19,6 +19,7 @@ import {
   Pencil,
   ExternalLink,
   Save,
+  Target,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import {
@@ -165,6 +166,19 @@ export function TaskEditModal({
   const [assigneeId, setAssigneeId] = useState<string | null>(null);
   const [isPhase, setIsPhase] = useState<boolean>(false);
 
+  // Goal / habit configuration. A task is a goal iff goalEnabled === true.
+  // When disabled, all goal_* columns are written as null (or default true
+  // for goal_track_time, which has a NOT NULL default).
+  const [goalEnabled, setGoalEnabled] = useState<boolean>(false);
+  const [goalPeriod, setGoalPeriod] = useState<"day" | "week" | "month">("week");
+  const [goalTarget, setGoalTarget] = useState<number>(3);
+  /** "Ongoing" — true means no end milestone, just track forever. */
+  const [goalForever, setGoalForever] = useState<boolean>(true);
+  const [goalMinStreak, setGoalMinStreak] = useState<number>(4);
+  /** YYYY-MM-DD; null means "use today" at save time. */
+  const [goalStartedOn, setGoalStartedOn] = useState<string | null>(null);
+  const [goalTrackTime, setGoalTrackTime] = useState<boolean>(true);
+
   useEffect(() => {
     // Edit mode: hydrate from the persisted task.
     if (task) {
@@ -184,6 +198,15 @@ export function TaskEditModal({
       setDurationMinutes(task.duration_minutes ?? null);
       setEstimatedMinutes(hoursToMinutes(task.estimated_hours ?? null));
       setIsPhase(!!task.is_phase);
+      setGoalEnabled(!!task.goal_period);
+      setGoalPeriod(
+        (task.goal_period as "day" | "week" | "month" | null) ?? "week"
+      );
+      setGoalTarget(task.goal_target ?? 3);
+      setGoalForever(task.goal_min_streak_periods == null);
+      setGoalMinStreak(task.goal_min_streak_periods ?? 4);
+      setGoalStartedOn(task.goal_started_on ?? null);
+      setGoalTrackTime(task.goal_track_time ?? true);
       return;
     }
     // Create mode: seed from the draft (if any). Closing without saving
@@ -209,6 +232,13 @@ export function TaskEditModal({
           : null
       );
       setIsPhase(false);
+      setGoalEnabled(false);
+      setGoalPeriod("week");
+      setGoalTarget(3);
+      setGoalForever(true);
+      setGoalMinStreak(4);
+      setGoalStartedOn(null);
+      setGoalTrackTime(true);
     }
   }, [task?.id, isCreate]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -239,6 +269,15 @@ export function TaskEditModal({
       durationMinutes !== (task.duration_minutes ?? null) ||
       estimatedMinutes !== hoursToMinutes(task.estimated_hours ?? null) ||
       isPhase !== !!task.is_phase ||
+      goalEnabled !== !!task.goal_period ||
+      (goalEnabled &&
+        (goalPeriod !== task.goal_period ||
+          goalTarget !== (task.goal_target ?? null) ||
+          goalForever !== (task.goal_min_streak_periods == null) ||
+          (!goalForever &&
+            goalMinStreak !== (task.goal_min_streak_periods ?? null)) ||
+          goalStartedOn !== (task.goal_started_on ?? null) ||
+          goalTrackTime !== (task.goal_track_time ?? true))) ||
       !tagsEqual
     );
   }, [
@@ -260,6 +299,13 @@ export function TaskEditModal({
     estimatedMinutes,
     isPhase,
     tags,
+    goalEnabled,
+    goalPeriod,
+    goalTarget,
+    goalForever,
+    goalMinStreak,
+    goalStartedOn,
+    goalTrackTime,
   ]);
 
   const [guardOpen, setGuardOpen] = useState(false);
@@ -290,6 +336,17 @@ export function TaskEditModal({
           estimated_hours:
             estimatedMinutes != null ? minutesToHours(estimatedMinutes) : null,
           is_phase: isPhase,
+          goal_period: goalEnabled ? goalPeriod : null,
+          goal_target: goalEnabled ? goalTarget : null,
+          goal_min_streak_periods: goalEnabled
+            ? goalForever
+              ? null
+              : goalMinStreak
+            : null,
+          goal_started_on: goalEnabled
+            ? goalStartedOn ?? new Date().toISOString().slice(0, 10)
+            : null,
+          goal_track_time: goalEnabled ? goalTrackTime : true,
           source_thought_id: createDraft?.source_thought_id ?? null,
         };
         const created = await createTask.mutateAsync(payload);
@@ -326,6 +383,11 @@ export function TaskEditModal({
       duration_minutes: task.duration_minutes,
       estimated_hours: task.estimated_hours,
       is_phase: task.is_phase,
+      goal_period: task.goal_period,
+      goal_target: task.goal_target,
+      goal_min_streak_periods: task.goal_min_streak_periods,
+      goal_started_on: task.goal_started_on,
+      goal_track_time: task.goal_track_time,
     };
     const newPatch = {
       title: title.trim() || task.title,
@@ -345,6 +407,17 @@ export function TaskEditModal({
       estimated_hours:
         estimatedMinutes != null ? minutesToHours(estimatedMinutes) : null,
       is_phase: isPhase,
+      goal_period: goalEnabled ? goalPeriod : null,
+      goal_target: goalEnabled ? goalTarget : null,
+      goal_min_streak_periods: goalEnabled
+        ? goalForever
+          ? null
+          : goalMinStreak
+        : null,
+      goal_started_on: goalEnabled
+        ? goalStartedOn ?? new Date().toISOString().slice(0, 10)
+        : null,
+      goal_track_time: goalEnabled ? goalTrackTime : true,
     };
     try {
       await updateTask.mutateAsync({ taskId: task.id, patch: newPatch });
@@ -623,6 +696,25 @@ export function TaskEditModal({
                   </div>
 
                   <div className="pt-2 border-t border-ink-200">
+                    <GoalConfigSection
+                      enabled={goalEnabled}
+                      setEnabled={setGoalEnabled}
+                      period={goalPeriod}
+                      setPeriod={setGoalPeriod}
+                      target={goalTarget}
+                      setTarget={setGoalTarget}
+                      forever={goalForever}
+                      setForever={setGoalForever}
+                      minStreak={goalMinStreak}
+                      setMinStreak={setGoalMinStreak}
+                      startedOn={goalStartedOn}
+                      setStartedOn={setGoalStartedOn}
+                      trackTime={goalTrackTime}
+                      setTrackTime={setGoalTrackTime}
+                    />
+                  </div>
+
+                  <div className="pt-2 border-t border-ink-200">
                     {task && <TaskDependenciesSection taskId={task.id} />}
                   </div>
 
@@ -782,6 +874,182 @@ function Field({
       <label className="eyebrow mb-1 block">{label}</label>
       {children}
       {hint && <p className="text-[11px] text-ink-400 mt-1">{hint}</p>}
+    </div>
+  );
+}
+
+// =============================================================================
+// Goal / habit configuration section, rendered inside the schedule tab right
+// after recurrence. Toggling "הגדר כיעד" off writes nulls to all goal_*
+// columns at save time; the section just hides the inputs locally.
+// =============================================================================
+
+const GOAL_PERIOD_OPTIONS: Array<{
+  id: "day" | "week" | "month";
+  label: string;
+  /** Word used in "X פעמים ב…". */
+  perLabel: string;
+  /** Word used for the streak unit ("ימים" / "שבועות" / "חודשים"). */
+  unitLabel: string;
+}> = [
+  { id: "day", label: "יומי", perLabel: "ביום", unitLabel: "ימים" },
+  { id: "week", label: "שבועי", perLabel: "בשבוע", unitLabel: "שבועות" },
+  { id: "month", label: "חודשי", perLabel: "בחודש", unitLabel: "חודשים" },
+];
+
+function GoalConfigSection(props: {
+  enabled: boolean;
+  setEnabled: (v: boolean) => void;
+  period: "day" | "week" | "month";
+  setPeriod: (v: "day" | "week" | "month") => void;
+  target: number;
+  setTarget: (v: number) => void;
+  forever: boolean;
+  setForever: (v: boolean) => void;
+  minStreak: number;
+  setMinStreak: (v: number) => void;
+  startedOn: string | null;
+  setStartedOn: (v: string | null) => void;
+  trackTime: boolean;
+  setTrackTime: (v: boolean) => void;
+}) {
+  const {
+    enabled,
+    setEnabled,
+    period,
+    setPeriod,
+    target,
+    setTarget,
+    forever,
+    setForever,
+    minStreak,
+    setMinStreak,
+    startedOn,
+    setStartedOn,
+    trackTime,
+    setTrackTime,
+  } = props;
+  const periodMeta =
+    GOAL_PERIOD_OPTIONS.find((p) => p.id === period) ?? GOAL_PERIOD_OPTIONS[1];
+
+  return (
+    <div>
+      <div className="eyebrow mb-1 flex items-center gap-1.5">
+        <Target className="w-3.5 h-3.5" />
+        יעד / הרגל
+      </div>
+      <div className="space-y-2.5">
+        <label className="inline-flex items-center gap-2 text-sm cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={enabled}
+            onChange={(e) => setEnabled(e.target.checked)}
+            className="w-4 h-4 rounded border-ink-300 text-primary-600 focus:ring-primary-500"
+          />
+          <span>הגדר כיעד</span>
+        </label>
+
+        {enabled && (
+          <div className="space-y-2.5 ps-6 border-s-2 border-primary-100">
+            {/* Period chips */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-xs text-ink-500 me-1">תקופה:</span>
+              {GOAL_PERIOD_OPTIONS.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => setPeriod(p.id)}
+                  className={cn(
+                    "px-2.5 py-1 text-xs rounded-md border",
+                    period === p.id
+                      ? "bg-primary-600 text-white border-primary-600"
+                      : "bg-white text-ink-700 border-ink-200 hover:bg-ink-50"
+                  )}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Target per period */}
+            <div className="flex items-center gap-2 flex-wrap text-sm">
+              <span className="text-ink-700">לבצע</span>
+              <input
+                type="number"
+                min={1}
+                value={target}
+                onChange={(e) =>
+                  setTarget(Math.max(1, Number(e.target.value) || 1))
+                }
+                className="field text-sm py-1.5 w-20"
+              />
+              <span className="text-ink-700">פעמים {periodMeta.perLabel}</span>
+            </div>
+
+            {/* Forever toggle + min streak */}
+            <div className="space-y-1.5">
+              <label className="inline-flex items-center gap-2 text-sm cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={forever}
+                  onChange={(e) => setForever(e.target.checked)}
+                  className="w-4 h-4 rounded border-ink-300 text-primary-600 focus:ring-primary-500"
+                />
+                <span>ללא סיום (ההרגל ימשיך לעד)</span>
+              </label>
+              {!forever && (
+                <div className="flex items-center gap-2 flex-wrap text-sm ps-6">
+                  <span className="text-ink-700">אבן דרך ראשונה:</span>
+                  <input
+                    type="number"
+                    min={1}
+                    value={minStreak}
+                    onChange={(e) =>
+                      setMinStreak(Math.max(1, Number(e.target.value) || 1))
+                    }
+                    className="field text-sm py-1.5 w-20"
+                  />
+                  <span className="text-ink-700">{periodMeta.unitLabel} ברצף</span>
+                </div>
+              )}
+            </div>
+
+            {/* Started-on date */}
+            <div className="flex items-center gap-2 flex-wrap text-sm">
+              <span className="text-ink-700">התחלת מעקב:</span>
+              <input
+                type="date"
+                value={startedOn ?? ""}
+                onChange={(e) => setStartedOn(e.target.value || null)}
+                className="field text-sm py-1.5 w-auto"
+                placeholder="היום"
+              />
+              <span className="text-[11px] text-ink-400">
+                ריק = יישמר היום אוטומטית
+              </span>
+            </div>
+
+            {/* Track time? */}
+            <label className="inline-flex items-center gap-2 text-sm cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={trackTime}
+                onChange={(e) => setTrackTime(e.target.checked)}
+                className="w-4 h-4 rounded border-ink-300 text-primary-600 focus:ring-primary-500"
+              />
+              <span>עקבי גם אחרי זמן בפועל (סטופר/הזנה ידנית)</span>
+            </label>
+            <p className="text-[11px] text-ink-400 ps-6 -mt-1">
+              כבוי = לא ניצור תזכורות "פעימה ללא זמן" עבור משימה זו.
+            </p>
+          </div>
+        )}
+        {!enabled && (
+          <p className="text-[11px] text-ink-400">
+            הפכי את המשימה ליעד עם מעקב סטריק והתקדמות שבועית/חודשית.
+          </p>
+        )}
+      </div>
     </div>
   );
 }

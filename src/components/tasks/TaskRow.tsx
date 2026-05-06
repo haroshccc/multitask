@@ -14,6 +14,7 @@ import {
   Trash2,
   ChevronLeft,
   Repeat2,
+  Target,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import {
@@ -713,6 +714,27 @@ export function TaskRow({
                 </svg>
               </span>
             )}
+          </span>
+        )}
+
+        {/* Goal indicator — small 🎯 chip when this task is configured as
+            a goal/habit. The Goals screen shows the streak number; here we
+            just signal at a glance that this row contributes to a goal. */}
+        {task.goal_period && (
+          <span
+            className={cn(
+              "shrink-0 inline-flex items-center gap-1 text-[11px] text-primary-700 bg-primary-50 border border-primary-200 px-1.5 py-0.5 rounded-full",
+              showAsDone && "opacity-60"
+            )}
+            title={
+              task.goal_period === "day"
+                ? `יעד: ${task.goal_target ?? 1} פעמים ביום`
+                : task.goal_period === "week"
+                  ? `יעד: ${task.goal_target ?? 1} פעמים בשבוע`
+                  : `יעד: ${task.goal_target ?? 1} פעמים בחודש`
+            }
+          >
+            <Target className="w-3 h-3" />
           </span>
         )}
 

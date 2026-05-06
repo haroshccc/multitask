@@ -93,6 +93,9 @@ export function useCreateManualTimeEntry() {
     onSuccess: (entry) => {
       qc.invalidateQueries({ queryKey: queryKeys.timeEntries(entry.task_id) });
       qc.invalidateQueries({ queryKey: queryFamilies.taskFamily(entry.task_id) });
+      // Range queries (dashboard widgets / goals screen) must also refresh
+      // — they're keyed by org+from+to, not by task_id.
+      qc.invalidateQueries({ queryKey: ["time-entries-range"] });
     },
   });
 }

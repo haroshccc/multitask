@@ -13,6 +13,8 @@ import { RangeTasks } from "@/components/dashboard/widgets/RangeTasks";
 import { RangeEvents } from "@/components/dashboard/widgets/RangeEvents";
 import { RangeProjects } from "@/components/dashboard/widgets/RangeProjects";
 import { BriefBanner } from "@/components/dashboard/widgets/BriefBanner";
+import { GoalsSummary } from "@/components/dashboard/widgets/GoalsSummary";
+import { MissingBeatTime } from "@/components/dashboard/widgets/MissingBeatTime";
 import { NotificationsStub } from "@/components/dashboard/widgets/DashboardStubs";
 
 /**
@@ -90,6 +92,27 @@ const HOME_WIDGETS: WidgetDefinition[] = [
     defaultDesktop: { x: 0, y: 20, w: 12, h: 3, minW: 4, minH: 3 },
     defaultTablet: { x: 0, y: 26, w: 8, h: 3 },
     defaultMobile: { x: 0, y: 33, w: 4, h: 3 },
+  },
+  // Goals — placed at the bottom of the default layout so existing users'
+  // saved positions stay intact; the user can drag them up in their own
+  // layout. The keys must stay stable because they're persisted.
+  {
+    key: "goals_summary",
+    title: "ההרגלים שלי",
+    component: GoalsSummary,
+    chromeStyle: "bare",
+    defaultDesktop: { x: 0, y: 23, w: 6, h: 5, minW: 4, minH: 4 },
+    defaultTablet: { x: 0, y: 29, w: 8, h: 5 },
+    defaultMobile: { x: 0, y: 36, w: 4, h: 5 },
+  },
+  {
+    key: "goals_missing_beats",
+    title: "פעימות בלי זמן",
+    component: MissingBeatTime,
+    chromeStyle: "bare",
+    defaultDesktop: { x: 6, y: 23, w: 6, h: 5, minW: 4, minH: 4 },
+    defaultTablet: { x: 0, y: 34, w: 8, h: 5 },
+    defaultMobile: { x: 0, y: 41, w: 4, h: 5 },
   },
 ];
 

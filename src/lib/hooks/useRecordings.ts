@@ -147,6 +147,31 @@ export function useTriggerRecordingProcessing() {
   });
 }
 
+/**
+ * Polls Gladia directly via the `transcribe-poll` Edge Function. Used as a
+ * fallback when the webhook is delayed or fails to deliver. Wire it up with
+ * `enabled: status === 'transcribing'` and a `refetchInterval` ~30s.
+ */
+export function useTranscriptionPoll(recordingId: string, enabled: boolean) {
+  const qc = useQueryClient();
+  return useQuery({
+    queryKey: ["transcription-poll", recordingId],
+    queryFn: async () => {
+      const out = await service.pollTranscription(recordingId);
+      if (out.status === "ready" || out.status === "error") {
+        qc.invalidateQueries({ queryKey: queryKeys.recording(recordingId) });
+      }
+      return out;
+    },
+    enabled,
+    refetchInterval: enabled ? 30_000 : false,
+    refetchIntervalInBackground: false,
+    staleTime: 0,
+    gcTime: 0,
+    retry: 1,
+  });
+}
+
 export function useSaveRecordingTranscriptEdits() {
   const qc = useQueryClient();
   const scope = useOrgScope();

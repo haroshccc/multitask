@@ -5,6 +5,7 @@ import { he } from "date-fns/locale";
 import {
   useDeleteRecording,
   useRecordingAudioUrl,
+  useTranscriptionPoll,
   useTriggerRecordingProcessing,
   useUpdateRecording,
 } from "@/lib/hooks/useRecordings";
@@ -135,6 +136,9 @@ function TranscriptionSection({
   const [retryNotice, setRetryNotice] = useState<
     { kind: "ok" | "err"; msg: string } | null
   >(null);
+  // Webhook fallback: while a job is transcribing, poll Gladia every 30s.
+  // Picks up the result if Gladia's webhook delivery is delayed or missing.
+  useTranscriptionPoll(recording.id, status === "transcribing");
 
   // Once a transcript exists it must NEVER disappear from the UI — even if
   // `status` later flips to `processing` / `processed` because the AI

@@ -462,3 +462,32 @@ export async function triggerProcessing(recordingId: string): Promise<void> {
     throw new Error(`transcribe_start_failed: ${res.status} ${detail}`);
   }
 }
+
+/**
+ * Polling fallback for Gladia transcription. The webhook is the primary path,
+ * but Gladia occasionally fails to deliver — this lets the UI poll directly
+ * and pick up the result when it's ready. Idempotent: returns no_op for
+ * recordings that aren't currently 'transcribing'.
+ */
+export async function pollTranscription(
+  recordingId: string
+): Promise<{ status: string; gladia_status?: string }> {
+  const { data: session } = await supabase.auth.getSession();
+  const jwt = session.session?.access_token;
+  if (!jwt) throw new Error("not_authenticated");
+
+  const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/transcribe-poll`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${jwt}`,
+    },
+    body: JSON.stringify({ recording_id: recordingId }),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`transcribe_poll_failed: ${res.status} ${detail}`);
+  }
+  return (await res.json()) as { status: string; gladia_status?: string };
+}

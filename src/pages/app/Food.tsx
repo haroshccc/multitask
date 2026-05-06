@@ -5,15 +5,17 @@ import { cn } from "@/lib/utils/cn";
 import { MealsTab } from "@/components/food/MealsTab";
 import { IngredientsTab } from "@/components/food/IngredientsTab";
 import { WeeklyMenuTab } from "@/components/food/WeeklyMenuTab";
+import { InteractiveMenuTab } from "@/components/food/InteractiveMenuTab";
 import { TomorrowMenuBanner } from "@/components/food/TomorrowMenuBanner";
 import { ShareMenuModal } from "@/components/food/ShareMenuModal";
 import { ShoppingListExportModal } from "@/components/food/ShoppingListExportModal";
 import { MenuTaskExportModal } from "@/components/food/MenuTaskExportModal";
 import { ImportFoodDataModal } from "@/components/food/ImportFoodDataModal";
 
-type Tab = "meals" | "ingredients" | "weekly";
+type Tab = "meals" | "ingredients" | "weekly" | "menu";
 
 const TABS: Array<{ id: Tab; label: string }> = [
+  { id: "menu", label: "תפריט אישי" },
   { id: "meals", label: "מנות" },
   { id: "ingredients", label: "מצרכים" },
   { id: "weekly", label: "תפריט שבועי" },
@@ -25,7 +27,14 @@ export function Food() {
   const [tab, setTab] = useState<Tab>(() => {
     if (typeof window === "undefined") return "meals";
     const stored = localStorage.getItem(STORAGE_KEY);
-    return stored === "ingredients" || stored === "weekly" ? stored : "meals";
+    if (
+      stored === "ingredients" ||
+      stored === "weekly" ||
+      stored === "menu"
+    ) {
+      return stored;
+    }
+    return "meals";
   });
   const [ingredientsPanelOpen, setIngredientsPanelOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
@@ -105,6 +114,7 @@ export function Food() {
         </nav>
       </div>
 
+      {tab === "menu" && <InteractiveMenuTab />}
       {tab === "meals" && (
         <MealsTab
           ingredientsPanelOpen={ingredientsPanelOpen}

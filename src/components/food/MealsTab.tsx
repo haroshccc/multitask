@@ -176,7 +176,21 @@ export function MealsTab({
                       key={m.id}
                       className="border-t border-ink-100 hover:bg-ink-50/40"
                     >
-                      <td className="p-2 font-medium text-ink-900">{m.name}</td>
+                      <td className="p-2 font-medium text-ink-900">
+                        <div className="flex items-center gap-2">
+                          {m.image_url ? (
+                            <img
+                              src={m.image_url}
+                              alt=""
+                              className="w-10 h-10 rounded-md object-cover border border-ink-200 shrink-0"
+                              loading="lazy"
+                            />
+                          ) : (
+                            <div className="w-10 h-10 rounded-md bg-ink-100 border border-ink-200 shrink-0" />
+                          )}
+                          <span className="truncate">{m.name}</span>
+                        </div>
+                      </td>
                       <td className="p-2">
                         {cat ? (
                           <span className="inline-flex items-center gap-1.5 text-xs">

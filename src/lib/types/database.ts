@@ -730,6 +730,7 @@ export type Database = {
           category_id: string | null
           created_at: string
           id: string
+          image_url: string | null
           meal_times: string[]
           name: string
           notes: string | null
@@ -742,6 +743,7 @@ export type Database = {
           category_id?: string | null
           created_at?: string
           id?: string
+          image_url?: string | null
           meal_times?: string[]
           name: string
           notes?: string | null
@@ -754,6 +756,7 @@ export type Database = {
           category_id?: string | null
           created_at?: string
           id?: string
+          image_url?: string | null
           meal_times?: string[]
           name?: string
           notes?: string | null

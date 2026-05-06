@@ -257,6 +257,51 @@ export async function deleteMeal(id: string): Promise<void> {
 }
 
 // =============================================================================
+// Meal image uploads (Supabase Storage bucket: meal-images)
+// =============================================================================
+
+const MEAL_IMAGES_BUCKET = "meal-images";
+
+/** Upload a user-picked image to the meal-images bucket. Returns the public
+ *  URL ready to drop into meals.image_url. Path convention is
+ *  `<org_id>/<random>-<sanitized-name>` so RLS on the bucket can
+ *  authorize writes by org membership while remaining unique. */
+export async function uploadMealImage(
+  organizationId: string,
+  file: File
+): Promise<string> {
+  const ext = (file.name.split(".").pop() ?? "jpg").toLowerCase();
+  const safeExt = /^[a-z0-9]+$/.test(ext) ? ext : "jpg";
+  const random =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : Math.random().toString(36).slice(2);
+  const path = `${organizationId}/${random}.${safeExt}`;
+  const { error: upErr } = await supabase.storage
+    .from(MEAL_IMAGES_BUCKET)
+    .upload(path, file, {
+      contentType: file.type || `image/${safeExt}`,
+      upsert: false,
+    });
+  if (upErr) throw upErr;
+  const { data } = supabase.storage.from(MEAL_IMAGES_BUCKET).getPublicUrl(path);
+  return data.publicUrl;
+}
+
+/** Remove a previously-uploaded image. Best-effort — ignores not-found.
+ *  Pass the FULL public URL we stored on the meal; we extract the path. */
+export async function deleteMealImage(publicUrl: string): Promise<void> {
+  // publicUrl looks like:
+  //   https://<proj>.supabase.co/storage/v1/object/public/meal-images/<path>
+  const marker = `/${MEAL_IMAGES_BUCKET}/`;
+  const idx = publicUrl.indexOf(marker);
+  if (idx === -1) return;
+  const path = publicUrl.slice(idx + marker.length);
+  if (!path) return;
+  await supabase.storage.from(MEAL_IMAGES_BUCKET).remove([path]);
+}
+
+// =============================================================================
 // Meal ingredients (junction)
 // =============================================================================
 

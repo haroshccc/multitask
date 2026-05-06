@@ -1,9 +1,10 @@
-import { useState, useEffect, useMemo } from "react";
-import { X, Plus, Trash2, AlertCircle } from "lucide-react";
+import { useState, useEffect, useMemo, useRef } from "react";
+import { X, Plus, Trash2, AlertCircle, ImagePlus, Sparkles, Link2 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { CategoryPicker } from "./CategoryPicker";
 import { IngredientPicker } from "./IngredientPicker";
 import { IngredientEditModal } from "./IngredientEditModal";
+import { useOrgScope, assertOrgScope } from "@/lib/hooks/useOrgScope";
 import {
   useMealCategories,
   useCreateMealCategory,
@@ -14,7 +15,7 @@ import {
   useUpdateMeal,
   useReplaceMealIngredients,
 } from "@/lib/hooks/useFood";
-import type { MealWithIngredients } from "@/lib/services/food";
+import { uploadMealImage, type MealWithIngredients } from "@/lib/services/food";
 import {
   MEAL_TIME_KEYS,
   MEAL_TIME_LABELS,
@@ -50,8 +51,13 @@ export function MealEditModal({ open, onClose, meal }: MealEditModalProps) {
   const [mealTimes, setMealTimes] = useState<MealTimeKey[]>([]);
   const [notes, setNotes] = useState("");
   const [servings, setServings] = useState("1");
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [imageUploading, setImageUploading] = useState(false);
+  const [imageError, setImageError] = useState<string | null>(null);
   const [rows, setRows] = useState<RowDraft[]>([emptyRow()]);
   const [saving, setSaving] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const scope = useOrgScope();
 
   // Inline-create state — when the picker fires onCreateNew, we open the
   // ingredient editor pre-filled and remember which row triggered it so we
@@ -81,6 +87,7 @@ export function MealEditModal({ open, onClose, meal }: MealEditModalProps) {
 
   useEffect(() => {
     if (!open) return;
+    setImageError(null);
     if (meal) {
       setName(meal.name);
       setCategoryId(meal.category_id);
@@ -91,6 +98,7 @@ export function MealEditModal({ open, onClose, meal }: MealEditModalProps) {
       );
       setNotes(meal.notes ?? "");
       setServings(String(meal.servings ?? 1));
+      setImageUrl(meal.image_url ?? null);
       setRows(
         meal.ingredients.length > 0
           ? meal.ingredients.map((mi) => ({
@@ -107,6 +115,7 @@ export function MealEditModal({ open, onClose, meal }: MealEditModalProps) {
       setMealTimes([]);
       setNotes("");
       setServings("1");
+      setImageUrl(null);
       setRows([emptyRow()]);
     }
   }, [open, meal]);
@@ -164,6 +173,36 @@ export function MealEditModal({ open, onClose, meal }: MealEditModalProps) {
     setRows((arr) => (arr.length === 1 ? arr : arr.filter((_, i) => i !== idx)));
   };
 
+  const handleFilePick = async (file: File) => {
+    setImageError(null);
+    if (!file.type.startsWith("image/")) {
+      setImageError("בחרי קובץ תמונה (JPG / PNG / WEBP).");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setImageError("קובץ גדול מדי (עד 5MB).");
+      return;
+    }
+    setImageUploading(true);
+    try {
+      const { organizationId } = assertOrgScope(scope);
+      const url = await uploadMealImage(organizationId, file);
+      setImageUrl(url);
+    } catch (e) {
+      setImageError(`העלאה נכשלה: ${(e as Error).message}`);
+    } finally {
+      setImageUploading(false);
+    }
+  };
+
+  const handlePasteUrl = () => {
+    const v = window.prompt("הדביקי קישור (URL) לתמונה:", imageUrl ?? "");
+    if (v == null) return;
+    const trimmed = v.trim();
+    setImageUrl(trimmed || null);
+    setImageError(null);
+  };
+
   const handleSave = async () => {
     if (!name.trim()) return;
     setSaving(true);
@@ -186,6 +225,7 @@ export function MealEditModal({ open, onClose, meal }: MealEditModalProps) {
             meal_times: mealTimes,
             notes: notes.trim() || null,
             servings: Number(servings) || 1,
+            image_url: imageUrl,
           },
         });
         mealId = meal.id;
@@ -196,6 +236,7 @@ export function MealEditModal({ open, onClose, meal }: MealEditModalProps) {
           meal_times: mealTimes,
           notes: notes.trim() || null,
           servings: Number(servings) || 1,
+          image_url: imageUrl,
         });
         mealId = created.id;
       }
@@ -231,6 +272,92 @@ export function MealEditModal({ open, onClose, meal }: MealEditModalProps) {
           </header>
 
           <div className="p-4 space-y-4">
+            {/* Image picker — drives the meal photo shown in the meals
+                table and (later) the interactive menu cards. */}
+            <div>
+              <label className="text-xs text-ink-500 mb-1 block">תמונה</label>
+              <div className="flex items-start gap-3">
+                <div
+                  className={cn(
+                    "shrink-0 rounded-md border border-dashed border-ink-300 bg-ink-50 overflow-hidden flex items-center justify-center",
+                    "w-28 h-28"
+                  )}
+                >
+                  {imageUrl ? (
+                    <img
+                      src={imageUrl}
+                      alt={name || "תמונה"}
+                      className="w-full h-full object-cover"
+                      onError={() => setImageError("הקישור לא נטען — בדקי שהוא תקין.")}
+                    />
+                  ) : (
+                    <ImagePlus className="w-7 h-7 text-ink-400" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0 flex flex-col gap-1.5">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) handleFilePick(f);
+                        e.target.value = "";
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={imageUploading}
+                      className="btn-ghost text-xs gap-1"
+                    >
+                      <ImagePlus className="w-3.5 h-3.5" />
+                      {imageUploading ? "מעלה…" : "העלי תמונה"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handlePasteUrl}
+                      disabled={imageUploading}
+                      className="btn-ghost text-xs gap-1"
+                    >
+                      <Link2 className="w-3.5 h-3.5" />
+                      הדביקי קישור
+                    </button>
+                    <button
+                      type="button"
+                      disabled
+                      title="בקרוב — הצעת תמונה אוטומטית לפי שם המנה"
+                      className="btn-ghost text-xs gap-1 opacity-60 cursor-not-allowed"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      הצע תמונה (בקרוב)
+                    </button>
+                    {imageUrl && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setImageUrl(null);
+                          setImageError(null);
+                        }}
+                        className="btn-ghost text-xs gap-1 text-danger-600 hover:text-danger-700"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        הסירי
+                      </button>
+                    )}
+                  </div>
+                  {imageError && (
+                    <div className="text-[11px] text-danger-600">{imageError}</div>
+                  )}
+                  <div className="text-[11px] text-ink-500">
+                    JPG / PNG / WEBP, עד 5MB. הקובץ נשמר בענן ומוצג בכרטיסיית המנה.
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
                 <label className="text-xs text-ink-500 mb-1 block">שם המנה</label>

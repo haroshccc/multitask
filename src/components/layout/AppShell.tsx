@@ -8,6 +8,7 @@ import {
   Mic,
   Lightbulb,
   FolderKanban,
+  Target,
   UtensilsCrossed,
   Settings as SettingsIcon,
   Shield,
@@ -41,6 +42,7 @@ interface NavItem {
 const NAV: NavItem[] = [
   { to: "/app", label: "דשבורד", icon: Home, end: true },
   { to: "/app/tasks", label: "משימות", icon: CheckSquare },
+  { to: "/app/goals", label: "יעדים", icon: Target },
   { to: "/app/calendar", label: "יומן", icon: CalendarIcon },
   { to: "/app/gantt", label: "Gantt", icon: BarChart3 },
   { to: "/app/recordings", label: "הקלטות", icon: Mic },

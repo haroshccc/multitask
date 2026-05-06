@@ -37,6 +37,10 @@ export interface CalendarItem {
   source: Task | EventRow;
   /** For tasks: true when it's a phase (visualize as a background band). */
   isPhase?: boolean;
+  /** Task ownership mode — used for visual distinction in rendering. */
+  ownershipMode?: "mine" | "delegated" | "assigned";
+  /** Whether task requires approval and is pending */
+  pendingApproval?: boolean;
 }
 
 /** Milliseconds in a minute / hour / day — tiny convenience. */
@@ -193,7 +197,11 @@ export function formatWeekRange(d: Date, timeZone?: string): string {
 
 // Item normalization ---------------------------------------------------------
 
-export function taskToItem(t: Task, listColor: string | null): CalendarItem | null {
+export function taskToItem(
+  t: Task,
+  listColor: string | null,
+  currentUserId?: string | null
+): CalendarItem | null {
   if (!t.scheduled_at) return null;
   const start = new Date(t.scheduled_at);
   // Default: a scheduled task with no explicit duration takes 15 minutes
@@ -201,6 +209,20 @@ export function taskToItem(t: Task, listColor: string | null): CalendarItem | nu
   // don't pretend I committed to a one-hour block" expectation.
   const durationMin = t.duration_minutes ?? 15;
   const end = new Date(start.getTime() + durationMin * MIN);
+
+  let ownershipMode: CalendarItem["ownershipMode"] = "mine";
+  if (currentUserId) {
+    if (t.owner_id !== currentUserId && t.assignee_user_id === currentUserId) {
+      ownershipMode = "assigned";
+    } else if (
+      t.owner_id === currentUserId &&
+      t.assignee_user_id &&
+      t.assignee_user_id !== currentUserId
+    ) {
+      ownershipMode = "delegated";
+    }
+  }
+
   return {
     id: `task:${t.id}`,
     kind: "task",
@@ -214,6 +236,8 @@ export function taskToItem(t: Task, listColor: string | null): CalendarItem | nu
     completed: !!t.completed_at,
     source: t,
     isPhase: !!t.is_phase,
+    ownershipMode,
+    pendingApproval: t.status === "pending_approval",
   };
 }
 

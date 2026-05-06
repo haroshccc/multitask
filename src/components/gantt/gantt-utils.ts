@@ -44,6 +44,10 @@ export interface GanttRow {
    *  (so the user can assign a schedule from there); the Gantt bar is
    *  suppressed. start/end are set to a placeholder = today. */
   unscheduled?: boolean;
+  /** Task ownership mode for visual distinction. */
+  ownershipMode?: "mine" | "delegated" | "assigned";
+  /** Task is pending approval. */
+  pendingApproval?: boolean;
 }
 
 // Time helpers ---------------------------------------------------------------
@@ -142,7 +146,8 @@ export function buildRows(
   tasks: Task[],
   events: EventRow[] = [],
   layer: GanttLayer = "both",
-  lists: TaskList[] = []
+  lists: TaskList[] = [],
+  currentUserId?: string | null
 ): GanttRow[] {
   const rows: GanttRow[] = [];
   const fallback = new Date();
@@ -211,6 +216,14 @@ export function buildRows(
           childrenEnd: t.is_phase ? findSubtreeEnd(t.id) : null,
           accentColor: t.is_phase ? accentForPhase(t) : undefined,
           unscheduled: !timing,
+          ownershipMode: currentUserId
+            ? t.owner_id !== currentUserId && t.assignee_user_id === currentUserId
+              ? "assigned"
+              : t.owner_id === currentUserId && t.assignee_user_id && t.assignee_user_id !== currentUserId
+              ? "delegated"
+              : "mine"
+            : "mine",
+          pendingApproval: t.status === "pending_approval",
         });
         walk(t.id, depth + 1, childPhaseId);
       }

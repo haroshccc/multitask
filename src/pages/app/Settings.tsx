@@ -3,6 +3,7 @@ import { ScreenScaffold } from "@/components/layout/ScreenScaffold";
 import { cn } from "@/lib/utils/cn";
 import {
   User, Building2, Users, Bell, Trash2, Mail, Copy, Check,
+  Shield, Clock, Plus, ChevronDown, ChevronUp,
   type LucideIcon
 } from "lucide-react";
 import { useAuth } from "@/lib/auth/AuthContext";
@@ -26,10 +27,10 @@ type Tab = "profile" | "organization" | "sharing" | "notifications";
 interface TabDef { key: Tab; label: string; icon: LucideIcon; }
 
 const TABS: TabDef[] = [
-  { key: "profile",       label: "פרופיל",   icon: User },
-  { key: "organization",  label: "ניהול קבוצה", icon: Building2 },
-  { key: "sharing",       label: "שיתופים",  icon: Users },
-  { key: "notifications", label: "התראות",   icon: Bell },
+  { key: "profile",       label: "פרופיל",      icon: User },
+  { key: "organization",  label: "ניהול קבוצה",  icon: Building2 },
+  { key: "sharing",       label: "שיתופים",      icon: Users },
+  { key: "notifications", label: "התראות",       icon: Bell },
 ];
 
 const ORG_TYPE_LABELS: Record<OrgType, string> = {
@@ -38,23 +39,27 @@ const ORG_TYPE_LABELS: Record<OrgType, string> = {
   personal: "אישי",
 };
 
+const ORG_TYPE_ICONS: Record<OrgType, LucideIcon> = {
+  business: Building2,
+  family:   Users,
+  personal: User,
+};
+
 const ROLE_LABELS: Record<string, string> = {
   owner:  "בעלים",
   admin:  "מנהל",
   member: "חבר",
 };
 
+// ---------------------------------------------------------------------------
+
 export function Settings() {
   const [tab, setTab] = useState<Tab>("organization");
 
   return (
-    <ScreenScaffold
-      narrow
-      title="הגדרות"
-      subtitle="פרופיל, ניהול קבוצה, שיתופים והתראות."
-    >
-      <div className="grid grid-cols-1 md:grid-cols-[220px,1fr] gap-4">
-        <nav className="card p-2 h-max">
+    <ScreenScaffold narrow title="הגדרות" subtitle="פרופיל, ניהול קבוצה, שיתופים והתראות.">
+      <div className="grid grid-cols-1 md:grid-cols-[200px,1fr] gap-4">
+        <nav className="card p-2 h-max sticky top-20">
           <ul className="space-y-0.5">
             {TABS.map((t) => {
               const Icon = t.icon;
@@ -66,9 +71,7 @@ export function Settings() {
                     onClick={() => setTab(t.key)}
                     className={cn(
                       "w-full flex items-center gap-2 rounded-xl px-3 py-2 text-sm transition-colors",
-                      active
-                        ? "bg-primary-50 text-primary-800 font-medium"
-                        : "text-ink-700 hover:bg-ink-100"
+                      active ? "bg-primary-50 text-primary-800 font-medium" : "text-ink-700 hover:bg-ink-100"
                     )}
                   >
                     <Icon className="w-4 h-4" />
@@ -80,7 +83,7 @@ export function Settings() {
           </ul>
         </nav>
 
-        <div>
+        <div className="min-w-0">
           {tab === "profile"       && <Placeholder text="פרופיל — בקרוב" />}
           {tab === "organization"  && <OrgTab />}
           {tab === "sharing"       && <SharingTab />}
@@ -98,7 +101,7 @@ export function Settings() {
 function OrgTab() {
   const { user, memberships, activeOrganizationId, setActiveOrganizationId } = useAuth();
   const { data: orgs = [] } = useUserOrganizations();
-  const { data: org } = useOrganization(activeOrganizationId);
+  const { data: org }       = useOrganization(activeOrganizationId);
   const { data: members = [] } = useOrgMembers();
   const { data: invites = [] } = useOrgInvites(activeOrganizationId);
 
@@ -110,22 +113,31 @@ function OrgTab() {
   const removeMember = useRemoveMember();
   const updateRole   = useUpdateMemberRole();
 
-  const [orgName, setOrgName]         = useState("");
-  const [editingName, setEditingName] = useState(false);
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole, setInviteRole]   = useState<"member" | "admin">("member");
-  const [inviteSent, setInviteSent]   = useState<string | null>(null);
-  const [copiedToken, setCopiedToken] = useState<string | null>(null);
-  const [newOrgName, setNewOrgName]   = useState("");
-  const [newOrgType, setNewOrgType]   = useState<OrgType>("business");
+  // Org selector
+  const [showCreate, setShowCreate] = useState(false);
+  const [newOrgName, setNewOrgName] = useState("");
+  const [newOrgType, setNewOrgType] = useState<OrgType>("business");
   const [newOrgPassword, setNewOrgPassword] = useState("");
-  const [showCreate, setShowCreate]   = useState(false);
-  const [deleteConfirm, setDeleteConfirm] = useState("");
-  const [showDelete, setShowDelete]   = useState(false);
 
-  const myRole = memberships.find(m => m.organization_id === activeOrganizationId)?.role;
+  // Org name editing
+  const [editingName, setEditingName] = useState(false);
+  const [orgName, setOrgName]         = useState("");
+
+  // Invite form
+  const [inviteEmail, setInviteEmail]   = useState("");
+  const [inviteRole, setInviteRole]     = useState<"member" | "admin">("member");
+  const [lastInvite, setLastInvite]     = useState<{ token: string; email: string } | null>(null);
+  const [copiedToken, setCopiedToken]   = useState<string | null>(null);
+
+  // Delete org
+  const [showDelete, setShowDelete]     = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState("");
+
+  const myRole   = memberships.find(m => m.organization_id === activeOrganizationId)?.role;
   const canManage = myRole === "owner" || myRole === "admin";
-  const isOwner = myRole === "owner";
+  const isOwner   = myRole === "owner";
+
+  // ---- Handlers ----
 
   const handleSaveName = async () => {
     if (!activeOrganizationId || !orgName.trim()) return;
@@ -136,29 +148,6 @@ function OrgTab() {
   const handleTypeChange = async (t: OrgType) => {
     if (!activeOrganizationId) return;
     await updateOrg.mutateAsync({ orgId: activeOrganizationId, updates: { org_type: t } });
-  };
-
-  const handleInvite = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!activeOrganizationId || !inviteEmail.trim()) return;
-    const invite = await createInvite.mutateAsync({ orgId: activeOrganizationId, email: inviteEmail.trim(), role: inviteRole });
-    setInviteSent(invite.token);
-    setInviteEmail("");
-  };
-
-  const handleDeleteOrg = async () => {
-    if (!activeOrganizationId || deleteConfirm !== org?.name) return;
-    await deleteOrg.mutateAsync(activeOrganizationId);
-    const remaining = orgs.filter(o => o.id !== activeOrganizationId);
-    setActiveOrganizationId(remaining[0]?.id ?? null);
-    setShowDelete(false);
-    setDeleteConfirm("");
-  };
-
-  const copyInviteLink = (token: string) => {
-    navigator.clipboard.writeText(`${window.location.origin}/invite/${token}`);
-    setCopiedToken(token);
-    setTimeout(() => setCopiedToken(null), 2000);
   };
 
   const handleCreateOrg = async (e: React.FormEvent) => {
@@ -172,88 +161,145 @@ function OrgTab() {
     }
   };
 
+  const handleInvite = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeOrganizationId || !inviteEmail.trim()) return;
+    const invite = await createInvite.mutateAsync({ orgId: activeOrganizationId, email: inviteEmail.trim(), role: inviteRole });
+    setLastInvite({ token: invite.token, email: inviteEmail.trim() });
+    setInviteEmail("");
+  };
+
+  const copyLink = (token: string) => {
+    navigator.clipboard.writeText(`${window.location.origin}/invite/${token}`);
+    setCopiedToken(token);
+    setTimeout(() => setCopiedToken(null), 2000);
+  };
+
+  const handleDeleteOrg = async () => {
+    if (!activeOrganizationId || deleteConfirm !== org?.name) return;
+    await deleteOrg.mutateAsync(activeOrganizationId);
+    const remaining = orgs.filter(o => o.id !== activeOrganizationId);
+    setActiveOrganizationId(remaining[0]?.id ?? null);
+    setShowDelete(false); setDeleteConfirm("");
+  };
+
+  // ---- Render ----
+
   return (
     <div className="space-y-4">
-      {/* Org switcher strip */}
-      <div className="card p-4 space-y-3">
+
+      {/* ── 1. בחירת קבוצה ───────────────────────────────────────────── */}
+      <section className="card p-4 space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="font-semibold text-ink-900">הקבוצות שלי</h2>
-          <button onClick={() => setShowCreate(v => !v)} className="text-sm text-primary-600 hover:underline">
-            + קבוצה חדשה
+          <h2 className="font-semibold text-ink-900 text-sm">הקבוצות שלי</h2>
+          <button
+            onClick={() => setShowCreate(v => !v)}
+            className="flex items-center gap-1 text-xs text-primary-600 hover:text-primary-800"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            קבוצה חדשה
+            {showCreate ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
           </button>
         </div>
+
         <div className="space-y-1">
-          {orgs.map(o => (
-            <button
-              key={o.id}
-              onClick={() => setActiveOrganizationId(o.id)}
-              className={cn(
-                "w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm transition-colors text-start",
-                o.id === activeOrganizationId
-                  ? "bg-ink-900 text-white"
-                  : "text-ink-700 hover:bg-ink-50"
-              )}
-            >
-              <span className="flex-1 font-medium">{o.name}</span>
-              <span className={cn("text-xs px-2 py-0.5 rounded-full", o.id === activeOrganizationId ? "bg-white/20" : "bg-ink-100 text-ink-500")}>
-                {ORG_TYPE_LABELS[o.org_type as OrgType]}
-              </span>
-              {o.id === activeOrganizationId && <Check className="w-4 h-4 shrink-0" />}
-            </button>
-          ))}
+          {orgs.map(o => {
+            const Icon = ORG_TYPE_ICONS[o.org_type as OrgType] ?? Building2;
+            const active = o.id === activeOrganizationId;
+            return (
+              <button
+                key={o.id}
+                onClick={() => setActiveOrganizationId(o.id)}
+                className={cn(
+                  "w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-colors text-start",
+                  active ? "bg-ink-900 text-white" : "text-ink-700 hover:bg-ink-50"
+                )}
+              >
+                <span className={cn("p-1 rounded-lg shrink-0", active ? "bg-white/15" : "bg-ink-100")}>
+                  <Icon className="w-3.5 h-3.5" />
+                </span>
+                <span className="flex-1 font-medium">{o.name}</span>
+                <span className={cn("text-xs", active ? "text-white/60" : "text-ink-400")}>
+                  {ORG_TYPE_LABELS[o.org_type as OrgType]}
+                </span>
+                {active && <Check className="w-3.5 h-3.5 shrink-0" />}
+              </button>
+            );
+          })}
         </div>
 
         {showCreate && (
           <form onSubmit={handleCreateOrg} className="border-t border-ink-100 pt-3 space-y-2">
-            <p className="text-xs font-medium text-ink-500">יצירת קבוצה חדשה</p>
+            <p className="text-xs font-semibold text-ink-600">יצירת קבוצה חדשה</p>
             <input
               value={newOrgName} onChange={e => setNewOrgName(e.target.value)}
-              placeholder="שם הקבוצה" className="field text-sm" autoFocus
+              placeholder="שם הקבוצה" className="field text-sm w-full" autoFocus
             />
             <div className="grid grid-cols-3 gap-1">
-              {(["business","family","personal"] as OrgType[]).map(t => (
-                <button key={t} type="button" onClick={() => setNewOrgType(t)}
-                  className={cn("py-1.5 rounded-lg text-xs border transition-colors",
-                    newOrgType === t ? "border-primary-400 bg-primary-50 text-primary-700" : "border-ink-200 text-ink-600 hover:bg-ink-50"
-                  )}>
-                  {ORG_TYPE_LABELS[t]}
-                </button>
-              ))}
+              {(["business","family","personal"] as OrgType[]).map(t => {
+                const Icon = ORG_TYPE_ICONS[t];
+                return (
+                  <button key={t} type="button" onClick={() => setNewOrgType(t)}
+                    className={cn("flex flex-col items-center gap-1 py-2 rounded-xl text-xs border transition-colors",
+                      newOrgType === t ? "border-primary-400 bg-primary-50 text-primary-700" : "border-ink-200 text-ink-600 hover:bg-ink-50"
+                    )}>
+                    <Icon className="w-4 h-4" />
+                    {ORG_TYPE_LABELS[t]}
+                  </button>
+                );
+              })}
             </div>
             {newOrgType !== "personal" && (
               <input value={newOrgPassword} onChange={e => setNewOrgPassword(e.target.value)}
-                placeholder="סיסמת הצטרפות (אופציונלי)" className="field text-sm" />
+                placeholder="סיסמת הצטרפות (אופציונלי)" className="field text-sm w-full" />
             )}
-            <button type="submit" disabled={!newOrgName.trim() || createOrg.isPending}
-              className="w-full py-2 rounded-xl bg-primary-500 text-white text-sm font-medium hover:bg-primary-600 disabled:opacity-50">
-              {createOrg.isPending ? "יוצר..." : "צור קבוצה"}
-            </button>
+            <div className="flex gap-2">
+              <button type="submit" disabled={!newOrgName.trim() || createOrg.isPending}
+                className="flex-1 py-2 rounded-xl bg-primary-500 text-white text-sm font-medium hover:bg-primary-600 disabled:opacity-50">
+                {createOrg.isPending ? "יוצר..." : "צור קבוצה"}
+              </button>
+              <button type="button" onClick={() => setShowCreate(false)}
+                className="px-4 py-2 rounded-xl border border-ink-200 text-sm text-ink-600 hover:bg-ink-50">
+                ביטול
+              </button>
+            </div>
           </form>
         )}
-      </div>
+      </section>
 
-      {/* Active org settings */}
+      {/* ── 2+3+4: Active org ────────────────────────────────────────── */}
       {org && (
         <>
-          <div className="card p-4 space-y-3">
-            <h2 className="font-semibold text-ink-900">הגדרות — {org.name}</h2>
+          {/* ── 2. פרטי הקבוצה ─────────────────────────────────────── */}
+          <section className="card p-4 space-y-4">
+            <h2 className="font-semibold text-ink-900 text-sm">פרטי הקבוצה</h2>
 
             {/* Name */}
-            <div>
-              <label className="text-xs text-ink-500 mb-1 block">שם</label>
+            <div className="space-y-1.5">
+              <label className="text-xs text-ink-500">שם הקבוצה</label>
               {editingName ? (
                 <div className="flex gap-2">
                   <input value={orgName} onChange={e => setOrgName(e.target.value)}
-                    className="field flex-1 text-sm" autoFocus />
-                  <button onClick={handleSaveName} className="btn-primary text-sm px-3 py-1.5">שמור</button>
-                  <button onClick={() => setEditingName(false)} className="btn-ghost text-sm px-3 py-1.5">בטל</button>
+                    className="field flex-1 text-sm" autoFocus
+                    onKeyDown={e => e.key === "Enter" && handleSaveName()}
+                  />
+                  <button onClick={handleSaveName} disabled={updateOrg.isPending}
+                    className="px-3 py-1.5 rounded-xl bg-primary-500 text-white text-sm hover:bg-primary-600 disabled:opacity-50">
+                    שמור
+                  </button>
+                  <button onClick={() => setEditingName(false)}
+                    className="px-3 py-1.5 rounded-xl border border-ink-200 text-sm text-ink-600 hover:bg-ink-50">
+                    בטל
+                  </button>
                 </div>
               ) : (
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-ink-800">{org.name}</span>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-ink-800">{org.name}</span>
                   {canManage && (
                     <button onClick={() => { setOrgName(org.name); setEditingName(true); }}
-                      className="text-xs text-primary-600 hover:underline">ערוך</button>
+                      className="text-xs text-primary-600 hover:underline px-2 py-1">
+                      ערוך שם
+                    </button>
                   )}
                 </div>
               )}
@@ -261,175 +307,282 @@ function OrgTab() {
 
             {/* Type */}
             {canManage && (
-              <div>
-                <label className="text-xs text-ink-500 mb-1 block">סוג</label>
-                <div className="flex gap-2">
-                  {(["business","family","personal"] as OrgType[]).map(t => (
-                    <button key={t} type="button" onClick={() => handleTypeChange(t)}
-                      className={cn("flex-1 py-1.5 rounded-xl text-sm border transition-colors",
-                        org.org_type === t ? "border-primary-400 bg-primary-50 text-primary-700 font-medium" : "border-ink-200 text-ink-600 hover:bg-ink-50"
-                      )}>
-                      {ORG_TYPE_LABELS[t]}
-                    </button>
-                  ))}
+              <div className="space-y-1.5">
+                <label className="text-xs text-ink-500">סוג קבוצה</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(["business","family","personal"] as OrgType[]).map(t => {
+                    const Icon = ORG_TYPE_ICONS[t];
+                    return (
+                      <button key={t} type="button" onClick={() => handleTypeChange(t)}
+                        className={cn(
+                          "flex flex-col items-center gap-1 py-2.5 rounded-xl text-xs border transition-colors",
+                          org.org_type === t
+                            ? "border-primary-400 bg-primary-50 text-primary-700 font-medium"
+                            : "border-ink-200 text-ink-600 hover:bg-ink-50"
+                        )}>
+                        <Icon className="w-4 h-4" />
+                        {ORG_TYPE_LABELS[t]}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}
+          </section>
 
-            {/* Delete org */}
-            {isOwner && (
-              <div className="border-t border-ink-100 pt-3">
-                {!showDelete ? (
-                  <button
-                    onClick={() => setShowDelete(true)}
-                    className="flex items-center gap-1.5 text-sm text-danger-600 hover:text-red-700"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    מחק קבוצה
-                  </button>
-                ) : (
-                  <div className="space-y-2">
-                    <p className="text-xs text-danger-700 font-medium">
-                      פעולה זו תמחק את הקבוצה לצמיתות כולל כל החברים וההזמנות.
-                    </p>
-                    <p className="text-xs text-ink-500">הקלד/י את שם הקבוצה לאישור: <strong>{org.name}</strong></p>
-                    <input
-                      value={deleteConfirm}
-                      onChange={e => setDeleteConfirm(e.target.value)}
-                      placeholder={org.name}
-                      className="field text-sm w-full"
-                      autoFocus
-                    />
-                    <div className="flex gap-2">
-                      <button
-                        onClick={handleDeleteOrg}
-                        disabled={deleteConfirm !== org.name || deleteOrg.isPending}
-                        className="flex-1 py-1.5 rounded-xl bg-danger-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-40"
-                      >
-                        {deleteOrg.isPending ? "מוחק..." : "מחק לצמיתות"}
-                      </button>
-                      <button
-                        onClick={() => { setShowDelete(false); setDeleteConfirm(""); }}
-                        className="px-4 py-1.5 rounded-xl border border-ink-200 text-sm text-ink-600 hover:bg-ink-50"
-                      >
-                        בטל
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+          {/* ── 3. חברים ───────────────────────────────────────────────── */}
+          <section className="card overflow-hidden">
+            <div className="p-4 pb-2 flex items-center justify-between">
+              <h2 className="font-semibold text-ink-900 text-sm">חברים פעילים</h2>
+              <span className="text-xs text-ink-400 bg-ink-100 px-2 py-0.5 rounded-full">{members.length}</span>
+            </div>
 
-          {/* Members */}
-          <div className="card p-4 space-y-3">
-            <h2 className="font-semibold text-ink-900">חברים ({members.length})</h2>
-            <div className="space-y-1">
+            <div className="divide-y divide-ink-100">
               {members.map(m => {
-                const isMe = m.membership.user_id === user?.id;
-                const name = m.profile?.full_name ?? m.membership.user_id.slice(0,8);
+                const isMe   = m.membership.user_id === user?.id;
+                const name   = m.profile?.full_name ?? m.membership.user_id.slice(0, 8);
+                const initials = name.slice(0, 2).toUpperCase();
                 return (
-                  <div key={m.membership.user_id} className="flex items-center gap-2 py-1.5 px-2 rounded-xl hover:bg-ink-50">
-                    <div className="w-7 h-7 rounded-full bg-ink-200 flex items-center justify-center text-xs font-medium text-ink-700 shrink-0">
-                      {name[0]?.toUpperCase()}
+                  <div key={m.membership.user_id}
+                    className="flex items-center gap-3 px-4 py-3 hover:bg-ink-50 transition-colors">
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary-400 to-primary-600 flex items-center justify-center text-xs font-semibold text-white shrink-0">
+                      {initials}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium text-ink-800 truncate">{name}{isMe && " (את/ה)"}</div>
-                      {m.profile?.avatar_url === null && m.profile?.full_name === null && (
-                        <div className="text-xs text-ink-400">{m.membership.user_id}</div>
-                      )}
+                      <div className="text-sm font-medium text-ink-800 truncate">
+                        {name}
+                        {isMe && <span className="ms-1.5 text-xs text-ink-400 font-normal">(את/ה)</span>}
+                      </div>
                     </div>
                     {canManage && !isMe ? (
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1 shrink-0">
                         <select
                           value={m.membership.role}
                           onChange={e => updateRole.mutate({ orgId: activeOrganizationId!, userId: m.membership.user_id, role: e.target.value as "owner"|"admin"|"member" })}
-                          className="text-xs border border-ink-200 rounded-lg px-2 py-1 bg-white"
+                          className="text-xs border border-ink-200 rounded-lg px-2 py-1 bg-white text-ink-700"
                         >
-                          {["owner","admin","member"].map(r => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+                          {["owner","admin","member"].map(r => (
+                            <option key={r} value={r}>{ROLE_LABELS[r]}</option>
+                          ))}
                         </select>
                         <button
-                          onClick={() => { if (confirm(`להסיר את ${name}?`)) removeMember.mutate({ orgId: activeOrganizationId!, userId: m.membership.user_id }); }}
-                          className="p-1 rounded-lg text-ink-400 hover:text-danger-600 hover:bg-danger-50 transition-colors"
+                          onClick={() => { if (confirm(`להסיר את ${name} מהקבוצה?`)) removeMember.mutate({ orgId: activeOrganizationId!, userId: m.membership.user_id }); }}
+                          className="p-1.5 rounded-lg text-ink-300 hover:text-danger-600 hover:bg-danger-50 transition-colors"
+                          title="הסר חבר"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     ) : (
-                      <span className="text-xs text-ink-400">{ROLE_LABELS[m.membership.role]}</span>
+                      <span className={cn(
+                        "text-xs px-2 py-0.5 rounded-full font-medium shrink-0",
+                        m.membership.role === "owner" ? "bg-amber-100 text-amber-700" :
+                        m.membership.role === "admin" ? "bg-blue-100 text-blue-700" :
+                        "bg-ink-100 text-ink-500"
+                      )}>
+                        {ROLE_LABELS[m.membership.role]}
+                      </span>
                     )}
                   </div>
                 );
               })}
             </div>
+          </section>
 
-            {/* Invite by email */}
-            {canManage && (
-              <div className="border-t border-ink-100 pt-3 space-y-2">
-                <div>
-                  <p className="text-xs font-medium text-ink-500">הזמן חבר/ה לקבוצה</p>
-                  <p className="text-xs text-ink-400 mt-0.5">
-                    מייל אוטומטי לא נשלח — צור/י קישור הזמנה ושלח/י אותו ידנית.
-                  </p>
-                </div>
-                <form onSubmit={handleInvite} className="flex gap-2">
-                  <input value={inviteEmail} onChange={e => setInviteEmail(e.target.value)}
-                    type="email" placeholder="כתובת מייל" className="field flex-1 text-sm" />
-                  <select value={inviteRole} onChange={e => setInviteRole(e.target.value as "member"|"admin")}
-                    className="text-sm border border-ink-200 rounded-xl px-2 py-1.5 bg-white">
+          {/* ── 4. הזמנות ─────────────────────────────────────────────── */}
+          {canManage && (
+            <section className="card p-4 space-y-4">
+              <h2 className="font-semibold text-ink-900 text-sm">הזמנות לקבוצה</h2>
+
+              {/* Invite form */}
+              <form onSubmit={handleInvite} className="space-y-2">
+                <div className="flex gap-2">
+                  <input
+                    value={inviteEmail}
+                    onChange={e => setInviteEmail(e.target.value)}
+                    type="email"
+                    placeholder="כתובת מייל של החבר/ה"
+                    className="field flex-1 text-sm"
+                  />
+                  <select
+                    value={inviteRole}
+                    onChange={e => setInviteRole(e.target.value as "member"|"admin")}
+                    className="text-sm border border-ink-200 rounded-xl px-3 py-1.5 bg-white text-ink-700 shrink-0"
+                  >
                     <option value="member">חבר</option>
                     <option value="admin">מנהל</option>
                   </select>
-                  <button type="submit" disabled={!inviteEmail.trim() || createInvite.isPending}
-                    className="btn-primary text-sm px-3 py-1.5 flex items-center gap-1 shrink-0">
-                    <Mail className="w-3.5 h-3.5" /> צור קישור
+                  <button
+                    type="submit"
+                    disabled={!inviteEmail.trim() || createInvite.isPending}
+                    className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-primary-500 text-white text-sm font-medium hover:bg-primary-600 disabled:opacity-50 shrink-0"
+                  >
+                    <Mail className="w-3.5 h-3.5" />
+                    {createInvite.isPending ? "..." : "הזמן"}
                   </button>
-                </form>
-                {inviteSent && (
-                  <div className="rounded-xl border border-primary-200 bg-primary-50 px-3 py-2 space-y-1.5">
-                    <p className="text-xs font-medium text-primary-700">קישור ההזמנה מוכן — שלח/י אותו לחבר/ה:</p>
-                    <div className="flex items-center gap-2">
-                      <span className="flex-1 truncate text-xs text-ink-600 font-mono bg-white rounded-lg px-2 py-1 border border-ink-200">
-                        {`${window.location.origin}/invite/${inviteSent}`}
-                      </span>
-                      <button onClick={() => copyInviteLink(inviteSent)} className="shrink-0 p-1.5 rounded-lg text-primary-600 hover:bg-primary-100">
-                        {copiedToken === inviteSent ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
-                      </button>
-                    </div>
-                    <a
-                      href={`mailto:${inviteEmail || ""}?subject=הוזמנת להצטרף לקבוצה ${org?.name ?? ""}&body=${encodeURIComponent(`שלום,\n\nהוזמנת להצטרף לקבוצה "${org?.name ?? ""}" ב-Multitask.\n\nלחץ/י על הקישור הבא כדי להצטרף:\n${window.location.origin}/invite/${inviteSent}`)}`}
-                      className="inline-flex items-center gap-1 text-xs text-primary-600 hover:underline"
-                    >
-                      <Mail className="w-3 h-3" /> פתח מייל מוכן לשליחה
-                    </a>
-                  </div>
-                )}
-              </div>
-            )}
+                </div>
+              </form>
 
-            {/* Pending invites */}
-            {canManage && invites.length > 0 && (
-              <div className="border-t border-ink-100 pt-3 space-y-2">
-                <p className="text-xs font-medium text-ink-500">הזמנות ממתינות ({invites.length})</p>
-                {invites.map(inv => (
-                  <div key={inv.id} className="flex items-center gap-2 text-sm">
-                    <Mail className="w-3.5 h-3.5 text-ink-400 shrink-0" />
-                    <span className="flex-1 text-ink-700">{inv.email}</span>
-                    <span className="text-xs text-ink-400">{ROLE_LABELS[inv.role]}</span>
+              {/* Last invite result — link + mailto */}
+              {lastInvite && (
+                <div className="rounded-xl border border-primary-200 bg-primary-50 p-3 space-y-2">
+                  <p className="text-xs font-semibold text-primary-700">
+                    קישור הזמנה נוצר עבור {lastInvite.email}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 truncate text-xs text-ink-600 bg-white rounded-lg px-2 py-1.5 border border-ink-200">
+                      {`${window.location.origin}/invite/${lastInvite.token}`}
+                    </code>
                     <button
-                      onClick={() => { if (confirm("לבטל הזמנה?")) revokeInvite.mutate({ inviteId: inv.id, orgId: activeOrganizationId! }); }}
-                      className="p-1 rounded-lg text-ink-400 hover:text-danger-600 hover:bg-danger-50"
+                      onClick={() => copyLink(lastInvite.token)}
+                      className="shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white border border-ink-200 text-xs text-ink-700 hover:bg-ink-50 transition-colors"
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                    <button onClick={() => copyInviteLink(inv.token)} className="p-1 rounded-lg text-ink-400 hover:text-primary-600 hover:bg-primary-50">
-                      {copiedToken === inv.token ? <Check className="w-3.5 h-3.5 text-green-600" /> : <Copy className="w-3.5 h-3.5" />}
+                      {copiedToken === lastInvite.token
+                        ? <><Check className="w-3.5 h-3.5 text-green-600" /> הועתק</>
+                        : <><Copy className="w-3.5 h-3.5" /> העתק</>
+                      }
                     </button>
                   </div>
-                ))}
+                  <div className="flex items-center gap-3">
+                    <a
+                      href={`mailto:${lastInvite.email}?subject=${encodeURIComponent(`הוזמנת להצטרף לקבוצה ${org.name}`)}&body=${encodeURIComponent(`שלום,\n\nהוזמנת להצטרף לקבוצה "${org.name}" ב-Multitask.\n\nלחץ/י על הקישור הבא:\n${window.location.origin}/invite/${lastInvite.token}`)}`}
+                      className="flex items-center gap-1 text-xs text-primary-600 hover:underline"
+                    >
+                      <Mail className="w-3 h-3" /> שלח/י במייל
+                    </a>
+                    <span className="text-ink-200 text-xs">|</span>
+                    <p className="text-xs text-ink-400">מייל אוטומטי לא נשלח — שתפי את הקישור ישירות</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Invites table */}
+              {invites.length > 0 ? (
+                <div className="rounded-xl border border-ink-200 overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-ink-50 border-b border-ink-200">
+                        <th className="text-start px-3 py-2 text-xs font-medium text-ink-500">מייל</th>
+                        <th className="text-start px-3 py-2 text-xs font-medium text-ink-500">תפקיד</th>
+                        <th className="text-start px-3 py-2 text-xs font-medium text-ink-500">סטטוס</th>
+                        <th className="text-start px-3 py-2 text-xs font-medium text-ink-500">תאריך</th>
+                        <th className="px-3 py-2"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-ink-100">
+                      {invites.map(inv => {
+                        const isExpired = new Date(inv.expires_at) < new Date();
+                        return (
+                          <tr key={inv.id} className="hover:bg-ink-50 transition-colors">
+                            <td className="px-3 py-2.5 text-ink-700 font-medium">{inv.email}</td>
+                            <td className="px-3 py-2.5">
+                              <span className={cn(
+                                "text-xs px-2 py-0.5 rounded-full font-medium",
+                                inv.role === "admin" ? "bg-blue-100 text-blue-700" : "bg-ink-100 text-ink-500"
+                              )}>
+                                {ROLE_LABELS[inv.role]}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2.5">
+                              {isExpired ? (
+                                <span className="flex items-center gap-1 text-xs text-ink-400">
+                                  <Clock className="w-3 h-3" /> פג תוקף
+                                </span>
+                              ) : (
+                                <span className="flex items-center gap-1 text-xs text-amber-600">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                                  ממתין
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2.5 text-xs text-ink-400">
+                              {new Date(inv.created_at).toLocaleDateString("he-IL", { day: "2-digit", month: "2-digit" })}
+                            </td>
+                            <td className="px-3 py-2.5">
+                              <div className="flex items-center gap-1 justify-end">
+                                <button
+                                  onClick={() => copyLink(inv.token)}
+                                  className="p-1.5 rounded-lg text-ink-400 hover:text-primary-600 hover:bg-primary-50 transition-colors"
+                                  title="העתק קישור"
+                                >
+                                  {copiedToken === inv.token
+                                    ? <Check className="w-3.5 h-3.5 text-green-600" />
+                                    : <Copy className="w-3.5 h-3.5" />
+                                  }
+                                </button>
+                                <button
+                                  onClick={() => revokeInvite.mutate({ inviteId: inv.id, orgId: activeOrganizationId! })}
+                                  className="p-1.5 rounded-lg text-ink-400 hover:text-danger-600 hover:bg-danger-50 transition-colors"
+                                  title="בטל הזמנה"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="text-xs text-ink-400 text-center py-3">אין הזמנות ממתינות</p>
+              )}
+            </section>
+          )}
+
+          {/* ── 5. אזור מסוכן ────────────────────────────────────────── */}
+          {isOwner && (
+            <section className="card p-4 border border-danger-500/20">
+              <div className="flex items-center gap-2 mb-3">
+                <Shield className="w-4 h-4 text-danger-600" />
+                <h2 className="font-semibold text-danger-700 text-sm">אזור מסוכן</h2>
               </div>
-            )}
-          </div>
+              {!showDelete ? (
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-ink-800">מחיקת הקבוצה</p>
+                    <p className="text-xs text-ink-500 mt-0.5">פעולה בלתי הפיכה — תמחק את כל החברים, ההזמנות והנתונים.</p>
+                  </div>
+                  <button
+                    onClick={() => setShowDelete(true)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-danger-300 text-sm text-danger-600 hover:bg-danger-50 transition-colors shrink-0 ms-4"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    מחק קבוצה
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <p className="text-sm text-ink-700">
+                    הקלד/י את שם הקבוצה כדי לאשר: <strong>{org.name}</strong>
+                  </p>
+                  <input
+                    value={deleteConfirm}
+                    onChange={e => setDeleteConfirm(e.target.value)}
+                    placeholder={org.name}
+                    className="field text-sm w-full"
+                    autoFocus
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleDeleteOrg}
+                      disabled={deleteConfirm !== org.name || deleteOrg.isPending}
+                      className="flex-1 py-2 rounded-xl bg-danger-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-40 transition-colors"
+                    >
+                      {deleteOrg.isPending ? "מוחק..." : "מחק לצמיתות"}
+                    </button>
+                    <button
+                      onClick={() => { setShowDelete(false); setDeleteConfirm(""); }}
+                      className="px-4 py-2 rounded-xl border border-ink-200 text-sm text-ink-600 hover:bg-ink-50"
+                    >
+                      בטל
+                    </button>
+                  </div>
+                </div>
+              )}
+            </section>
+          )}
         </>
       )}
     </div>
@@ -453,8 +606,6 @@ function SharingTab() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Placeholder
 // ---------------------------------------------------------------------------
 
 function Placeholder({ text }: { text: string }) {

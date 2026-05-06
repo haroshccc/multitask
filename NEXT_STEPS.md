@@ -4,6 +4,62 @@
 
 ---
 
+## TL;DR — מה ענינו על "מה הלאה" (תקציר מהצ'אט)
+
+### מה השלים בסשן הזה
+- **Food**: תמונות למנות (סכמה + bucket עם RLS + UI ב-MealEditModal + thumbnails) + מסך תפריט אינטראקטיבי "Wolt-like" עם בחירת תאריכים/ימים/שבועות, סקציות לפי ארוחה, כרטיסי תמונה, "שכפלי משבוע שעבר".
+- **Goals/Habits**: 5 עמודות חדשות ב-tasks · `computeGoalStats` (סטריק / X-of-Y / זמן / beats בלי זמן) · מסך `/app/goals` · 🎯 chip ב-TaskRow · 2 ווידג'טים בדשבורד (ההרגלים שלי + פעימות בלי זמן עם quick-fill ו"לא רלוונטי").
+
+### מה נשאר לפי ה-MD (תמצית)
+
+**A · AI placeholders שמחכים לחיווט** ← הכי דחוף, זה הבא בתור:
+1. "הצע תמונה" ב-MealEditModal — צריך להחליט בין DALL-E / Unsplash / משהו אחר, ואיפה ה-API key יושב.
+2. "הצע תפריט" ב-InteractiveMenuTab — preview ניתן לעריכה לפני שמירה.
+3. (אופציונלי) הצעת קטגוריה+מצרכים אוטומטית לפי שם מנה.
+
+**B · Goals polish:**
+- מספר סטריק על ה-🎯 chip ב-TaskRow (החישוב כבר קיים).
+- Filter "רק יעדים" ב-FilterBar.
+- ספארקליין בכרטיסיית יעד.
+- Toast + confetti לאבן דרך.
+- "Freeze days" כמו ב-Duolingo.
+
+**C · נושאים ישנים שעדיין פתוחים** (drag-to-nest ב-Gantt, custom fields ב-Gantt, מסך פרויקטים deep-dive, וכו').
+
+**D · פאזות שלמות שלא נגענו בהן** (חדש בסיכום הזה — ראי "פאזות לא נגיעות" למטה):
+- פאזה 6ג שלב 2 — Claude Haiku לסיכום הקלטות + חילוץ משימות.
+- פאזה 9b — Google Calendar sync דו-כיווני (placeholder בלבד היום).
+- פאזה 10 — WhatsApp inbound/outbound.
+- פאזה 11 — Notifications (יש סכמה, אין impl אמיתי מעבר ל-stub).
+- §6 — Billing / Stripe (יש hooks בסכמה, אין UI/אינטגרציה).
+- §17 (#17 בסדר הבנייה) — Landing אינטראקטיבי.
+- §20 — תמחור פרויקטים (חישובי VAT, hourly_rate, expenses) — לא ברור אם הוטמע.
+
+### הפרומט לסשן הבא — AI חיווט
+> בסשן הקודם השלמנו שני מסלולים גדולים: (1) תמונות למנות + מסך תפריט אינטראקטיבי (Wolt-like) ב-Food, ו-(2) פיצ'ר יעדים/הרגלים מלא (סכמה + מסך `/app/goals` + ווידג'טים בדשבורד + חישובי סטריק/X-of-Y/זמן/missing-beats). הכל ב-main, פרוס. קראי את `NEXT_STEPS.md` (סשן 2026-05-06 בראש), ספציפית את **חלק A — AI placeholders שמחכים לחיווט**. אני רוצה לעבור לחיווט ה-AI: שני כפתורי "בקרוב" ב-Food (`הצע תמונה` ב-MealEditModal ו-`הצע תפריט` ב-InteractiveMenuTab) צריכים להיהפך לפיצ'רים אמיתיים. תתחילי בלשאול אותי איזה ספק AI אני מעדיפה לכל אחד (Anthropic Claude לטקסט / OpenAI gpt-image-1 או Unsplash לתמונות / הצעה אחרת), ואיפה לאחסן את ה-API keys (Edge Function secret? Supabase Vault?). אל תתחילי לקודד עד שאישרתי את ה-stack. אחרי שאישרתי, בואי נעבוד שלב-שלב: (1) הצע תמונה ב-MealEditModal עם flow שלם של preview + "החלף", (2) הצע תפריט שמייצר preview ניתן לעריכה לפני שמירה, (3) חיווט "הצעה לפי שם המנה" אם נשאר זמן.
+
+---
+
+## פאזות שלא נגענו בהן (אינדקס מהיר מ-`SPEC.md`)
+
+הסעיפים האלה מוגדרים ב-SPEC אבל לא הוטמעו, או הוטמעו רק כ-placeholder. סדר הצגה לפי "סדר הבנייה" (§3 ב-SPEC) + סעיפי אינטגרציות חיצוניות.
+
+| # | פאזה / סעיף | סטטוס | מה חסר בפועל |
+|---|---|---|---|
+| 1 | **6ג שלב 2** — Claude Haiku להקלטות (§18) | 🟡 חצי | תמלול Gladia מחובר; חסר: סיכום + חילוץ משימות אוטומטי מ-transcript. הכפתור "עיבוד AI" מסתיים אחרי השלב הראשון בלבד. |
+| 2 | **9b** — סנכרון Google Calendar (§9) | ⬜ placeholder | יש כפתור "🎥 צור Meet" disabled; חסר: OAuth scope, חיווט ה-Edge Function שדוחף `events` ל-Google ומקשיב ל-webhooks. |
+| 3 | **10** — WhatsApp (§10) | ⬜ לא קיים | inbound (קליטת הודעה → מחשבה / משימה) + outbound (שליחת תזכורות) דרך מספר עסקי. כל הסכמה ב-SPEC, אין קוד. |
+| 4 | **11** — Notifications (§11) | 🟡 stub בלבד | יש `NotificationsStub` בדשבורד ושדה `notifications` ב-DB; חסר: ערוץ push (web push / email / WhatsApp), נדודי אופ-אין, ניהול העדפות. |
+| 5 | **§6** — Billing hooks / Stripe | ⬜ נדחה במכוון | שדות `plan`, `subscription_status` קיימים בסכמה. אין UI, אין Stripe webhook, אין paywall. |
+| 6 | **§17 (#17)** — Landing אינטראקטיבי | ⬜ Landing סטטי בלבד | קיים `Landing.tsx` עם content סטטי. ה-SPEC מדבר על demo אינטראקטיבי שמראה את התשתית. |
+| 7 | **§20** — תמחור פרויקטים | ⬜ סכמה בלבד | נוסחאות (`hourly_rate`, `vat_percentage`, `spare_mode`, `expenses`) מתועדות ב-SPEC. ה-`Projects.tsx` הקיים עוסק בעיקר במשימות, לא בתמחור. |
+| 8 | **§7** — Super Admin (UI מורחב) | 🟡 חלקי | יש `Admin.tsx` ו-flag `is_super_admin`. ה-SPEC מתאר עוד יכולות (cross-org views, impersonation, אנליטיקה). לא ברור עד כמה הוטמעו. |
+| 9 | **Food / Goals** (לא ב-SPEC) | ✅ הסתיים בסשן הזה | (לא חלק מה-SPEC המקורי. נוספו בסשנים האחרונים.) |
+
+> **הערה:** תאריך עדכון ה-SPEC הוא 2026-04-27 והוא מקפיא את הסטטוס באותו רגע. משם ועד היום (2026-05-06) הוסיפו את פאזה 8 (Brief AI), 17 גלים על Tasks/Calendar/Gantt, ועכשיו את Food + Goals — שלושת הקטעים האלה לא חוזרים ל-SPEC עצמו, רק ל-Changelog שלו.
+
+---
+
 ## סשן 2026-05-06 — מה השלמנו
 
 ### מסלול 1 · תמונות למנות + תפריט אינטראקטיבי (Wolt-like)

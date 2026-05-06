@@ -132,6 +132,9 @@ function TranscriptionSection({
   const trigger = useTriggerRecordingProcessing();
   const update = useUpdateRecording();
   const status = recording.status;
+  const [retryNotice, setRetryNotice] = useState<
+    { kind: "ok" | "err"; msg: string } | null
+  >(null);
 
   // Once a transcript exists it must NEVER disappear from the UI — even if
   // `status` later flips to `processing` / `processed` because the AI
@@ -142,26 +145,60 @@ function TranscriptionSection({
   }
 
   if (status === "transcribing") {
+    const ageMin = recording.updated_at
+      ? Math.floor((Date.now() - new Date(recording.updated_at).getTime()) / 60_000)
+      : null;
+    const isStuck = ageMin !== null && ageMin >= 5;
+    const busy = update.isPending || trigger.isPending;
     return (
       <section className="rounded-md border border-ink-200 bg-ink-50 px-3 py-3 space-y-1">
         <div className="flex items-center gap-1.5 text-xs font-medium text-ink-700">
           <Loader2 className="w-3.5 h-3.5 text-primary-600 animate-spin" />
           מתמללת...
+          {ageMin !== null && ageMin > 0 ? (
+            <span className="text-ink-400 font-normal">
+              ({ageMin >= 60 ? `לפני ${Math.floor(ageMin / 60)} שעות` : `לפני ${ageMin} דק'`})
+            </span>
+          ) : null}
         </div>
         <p className="text-xs text-ink-500 leading-relaxed">
-          Gladia מעבדת את ההקלטה. בדרך כלל לוקח דקה לכל ~10 דקות אודיו. הסטטוס
-          יתעדכן אוטומטית כשהתמלול מוכן.
+          {isStuck
+            ? "התמלול לוקח יותר מהצפוי. ייתכן שה-webhook מ-Gladia לא חזר. אפשר לנסות שוב."
+            : "Gladia מעבדת את ההקלטה. בדרך כלל לוקח דקה לכל ~10 דקות אודיו. הסטטוס יתעדכן אוטומטית כשהתמלול מוכן."}
         </p>
+        {retryNotice && (
+          <p
+            className={cn(
+              "text-xs font-medium pt-0.5",
+              retryNotice.kind === "ok" ? "text-emerald-700" : "text-red-700"
+            )}
+          >
+            {retryNotice.msg}
+          </p>
+        )}
         <button
           type="button"
           className="text-xs font-medium text-primary-700 hover:underline disabled:opacity-50 pt-0.5"
-          disabled={update.isPending || trigger.isPending}
+          disabled={busy}
           onClick={async () => {
-            await update.mutateAsync({ recordingId: recording.id, patch: { status: "uploaded" } });
-            trigger.mutate(recording.id);
+            setRetryNotice(null);
+            try {
+              await update.mutateAsync({
+                recordingId: recording.id,
+                patch: { status: "uploaded", provider_job_id: null },
+              });
+              await trigger.mutateAsync(recording.id);
+              setRetryNotice({ kind: "ok", msg: "נשלח מחדש ל-Gladia ✓" });
+              setTimeout(() => setRetryNotice(null), 4000);
+            } catch (e) {
+              setRetryNotice({
+                kind: "err",
+                msg: `שגיאה: ${e instanceof Error ? e.message : String(e)}`,
+              });
+            }
           }}
         >
-          נתקע? נסה שוב
+          {busy ? "שולח..." : "נתקע? נסה שוב"}
         </button>
       </section>
     );

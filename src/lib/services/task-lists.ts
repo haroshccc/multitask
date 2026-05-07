@@ -130,6 +130,7 @@ export async function setTaskListShare(
   userId: string,
   permission: "read" | "write"
 ): Promise<void> {
+  const { data: { user } } = await supabase.auth.getUser();
   const { error } = await supabase.from("shares").upsert(
     {
       organization_id: organizationId,
@@ -137,6 +138,7 @@ export async function setTaskListShare(
       entity_id: listId,
       user_id: userId,
       permission,
+      granted_by: user?.id ?? null,
     },
     { onConflict: "entity_type,entity_id,user_id" }
   );

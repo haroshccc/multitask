@@ -31,7 +31,6 @@ import { AnimatedFab } from "@/components/capture/AnimatedFab";
 import { GlobalSearchPalette } from "@/components/search/GlobalSearchPalette";
 import { Logo } from "@/components/brand/Logo";
 import { FloatingTimerBanner } from "@/components/timer/FloatingTimerBanner";
-import { OrgSwitcher } from "@/components/org/OrgSwitcher";
 import { PendingInviteBanner } from "@/components/org/PendingInviteBanner";
 
 interface NavItem {
@@ -126,9 +125,6 @@ export function AppShell() {
             {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
           <Logo markSize={28} className="min-w-0" idKey="shellLogo" />
-          <div className="hidden md:block">
-            <OrgSwitcher />
-          </div>
         </div>
 
         {/* Horizontal nav (desktop) */}

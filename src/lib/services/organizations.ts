@@ -108,15 +108,22 @@ export async function createInvite(
   email: string,
   role: "member" | "admin" = "member"
 ): Promise<OrgInvite> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error("לא מחובר/ת לחשבון");
-  const { data, error } = await db
-    .from("org_invites")
-    .insert({ organization_id: orgId, invited_by: user.id, email: email.trim().toLowerCase(), role })
-    .select()
-    .single();
+  const { data, error } = await db.rpc("create_org_invite", {
+    p_org_id: orgId,
+    p_email: email.trim().toLowerCase(),
+    p_role: role,
+  });
   if (error) throw error;
-  return data as OrgInvite;
+  const result = data as { ok: boolean; token?: string; invite_id?: string; error?: string };
+  if (!result.ok) throw new Error(result.error ?? "שגיאה ביצירת ההזמנה");
+  // Fetch the full invite row so the caller gets a proper OrgInvite object
+  const { data: inv, error: invErr } = await db
+    .from("org_invites")
+    .select("*")
+    .eq("id", result.invite_id!)
+    .single();
+  if (invErr) throw invErr;
+  return inv as OrgInvite;
 }
 
 export async function revokeInvite(inviteId: string) {

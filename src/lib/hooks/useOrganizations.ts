@@ -84,10 +84,11 @@ export function useDeleteOrganization() {
 
 export function useMyPendingInvites() {
   const { user } = useAuth();
+  const email = user?.email ?? "";
   return useQuery({
     queryKey: ["my-pending-invites", user?.id],
-    queryFn: () => listMyPendingInvites(),
-    enabled: !!user,
+    queryFn: () => listMyPendingInvites(email),
+    enabled: !!user && !!email,
   });
 }
 

@@ -22,6 +22,8 @@ export interface OrgInvite {
   role: string;
   token: string;
   accepted_at: string | null;
+  declined_at: string | null;
+  org_name_snapshot: string | null;
   expires_at: string;
   created_at: string;
 }
@@ -96,8 +98,6 @@ export async function listOrgInvites(orgId: string): Promise<OrgInvite[]> {
     .from("org_invites")
     .select("*")
     .eq("organization_id", orgId)
-    .is("accepted_at", null)
-    .gt("expires_at", new Date().toISOString())
     .order("created_at", { ascending: false });
   if (error) throw error;
   return (data ?? []) as OrgInvite[];
@@ -157,16 +157,17 @@ export async function deleteOrganization(orgId: string) {
   if (error) throw error;
 }
 
-export async function listMyPendingInvites(): Promise<Array<OrgInvite & { org_name: string }>> {
+export async function listMyPendingInvites(userEmail: string): Promise<Array<OrgInvite & { org_name: string }>> {
   const { data, error } = await db
     .from("org_invites")
     .select("*, organizations(name)")
+    .eq("email", userEmail.toLowerCase())
     .is("accepted_at", null)
     .is("declined_at", null)
     .gt("expires_at", new Date().toISOString());
   if (error) throw error;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return (data ?? []).map((d: any) => ({ ...d, org_name: d.organizations?.name ?? "" }));
+  return (data ?? []).map((d: any) => ({ ...d, org_name: d.organizations?.name ?? d.org_name_snapshot ?? "" }));
 }
 
 // ---- Member management ------------------------------------------------------

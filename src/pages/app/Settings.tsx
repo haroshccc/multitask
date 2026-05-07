@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils/cn";
 import {
   User, Building2, Users, Bell, Trash2, Mail, Copy, Check,
   Shield, Clock, Plus, ChevronDown, ChevronUp, ArrowUpRight,
-  ArrowDownLeft, CheckCircle2, AlertCircle,
+  ArrowDownLeft, CheckCircle2, AlertCircle, MessageCircle,
   type LucideIcon
 } from "lucide-react";
 import { useAuth } from "@/lib/auth/AuthContext";
@@ -461,15 +461,21 @@ function OrgTab() {
                       }
                     </button>
                   </div>
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <a
                       href={`mailto:${lastInvite.email}?subject=${encodeURIComponent(`הוזמנת להצטרף לקבוצה ${org.name}`)}&body=${encodeURIComponent(`שלום,\n\nהוזמנת להצטרף לקבוצה "${org.name}" ב-Multitask.\n\nלחץ/י על הקישור הבא:\n${window.location.origin}/invite/${lastInvite.token}`)}`}
-                      className="flex items-center gap-1 text-xs text-primary-600 hover:underline"
+                      className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg bg-white border border-ink-200 text-ink-700 hover:bg-ink-50 transition-colors"
                     >
-                      <Mail className="w-3 h-3" /> שלח/י במייל
+                      <Mail className="w-3 h-3" /> שלח במייל
                     </a>
-                    <span className="text-ink-200 text-xs">|</span>
-                    <p className="text-xs text-ink-400">מייל אוטומטי לא נשלח — שתפי את הקישור ישירות</p>
+                    <a
+                      href={`https://wa.me/?text=${encodeURIComponent(`הוזמנת להצטרף לקבוצה "${org.name}" ב-Multitask:\n${window.location.origin}/invite/${lastInvite.token}`)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg bg-green-50 border border-green-200 text-green-700 hover:bg-green-100 transition-colors"
+                    >
+                      <MessageCircle className="w-3 h-3" /> שלח בוואטסאפ
+                    </a>
                   </div>
                 </div>
               )}
@@ -489,7 +495,11 @@ function OrgTab() {
                     </thead>
                     <tbody className="divide-y divide-ink-100">
                       {invites.map(inv => {
-                        const isExpired = new Date(inv.expires_at) < new Date();
+                        const now = new Date();
+                        const isAccepted = !!inv.accepted_at;
+                        const isDeclined = !!inv.declined_at;
+                        const isExpired = !isAccepted && !isDeclined && new Date(inv.expires_at) < now;
+                        const isPending = !isAccepted && !isDeclined && !isExpired;
                         return (
                           <tr key={inv.id} className="hover:bg-ink-50 transition-colors">
                             <td className="px-3 py-2.5 text-ink-700 font-medium">{inv.email}</td>
@@ -502,11 +512,22 @@ function OrgTab() {
                               </span>
                             </td>
                             <td className="px-3 py-2.5">
-                              {isExpired ? (
+                              {isAccepted && (
+                                <span className="flex items-center gap-1 text-xs text-green-600 font-medium">
+                                  <Check className="w-3 h-3" /> התקבל
+                                </span>
+                              )}
+                              {isDeclined && (
+                                <span className="flex items-center gap-1 text-xs text-danger-500 font-medium">
+                                  <AlertCircle className="w-3 h-3" /> נדחה
+                                </span>
+                              )}
+                              {isExpired && (
                                 <span className="flex items-center gap-1 text-xs text-ink-400">
                                   <Clock className="w-3 h-3" /> פג תוקף
                                 </span>
-                              ) : (
+                              )}
+                              {isPending && (
                                 <span className="flex items-center gap-1 text-xs text-amber-600">
                                   <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
                                   ממתין
@@ -518,23 +539,36 @@ function OrgTab() {
                             </td>
                             <td className="px-3 py-2.5">
                               <div className="flex items-center gap-1 justify-end">
-                                <button
-                                  onClick={() => copyLink(inv.token)}
-                                  className="p-1.5 rounded-lg text-ink-400 hover:text-primary-600 hover:bg-primary-50 transition-colors"
-                                  title="העתק קישור"
-                                >
-                                  {copiedToken === inv.token
-                                    ? <Check className="w-3.5 h-3.5 text-green-600" />
-                                    : <Copy className="w-3.5 h-3.5" />
-                                  }
-                                </button>
-                                <button
-                                  onClick={() => revokeInvite.mutate({ inviteId: inv.id, orgId: activeOrganizationId! })}
-                                  className="p-1.5 rounded-lg text-ink-400 hover:text-danger-600 hover:bg-danger-50 transition-colors"
-                                  title="בטל הזמנה"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
+                                {isPending && (
+                                  <>
+                                    <button
+                                      onClick={() => copyLink(inv.token)}
+                                      className="p-1.5 rounded-lg text-ink-400 hover:text-primary-600 hover:bg-primary-50 transition-colors"
+                                      title="העתק קישור"
+                                    >
+                                      {copiedToken === inv.token
+                                        ? <Check className="w-3.5 h-3.5 text-green-600" />
+                                        : <Copy className="w-3.5 h-3.5" />
+                                      }
+                                    </button>
+                                    <a
+                                      href={`https://wa.me/?text=${encodeURIComponent(`הוזמנת להצטרף לקבוצה "${org?.name}" ב-Multitask:\n${window.location.origin}/invite/${inv.token}`)}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="p-1.5 rounded-lg text-green-500 hover:text-green-700 hover:bg-green-50 transition-colors"
+                                      title="שתף בוואטסאפ"
+                                    >
+                                      <MessageCircle className="w-3.5 h-3.5" />
+                                    </a>
+                                    <button
+                                      onClick={() => revokeInvite.mutate({ inviteId: inv.id, orgId: activeOrganizationId! })}
+                                      className="p-1.5 rounded-lg text-ink-400 hover:text-danger-600 hover:bg-danger-50 transition-colors"
+                                      title="בטל הזמנה"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </>
+                                )}
                               </div>
                             </td>
                           </tr>
@@ -544,7 +578,7 @@ function OrgTab() {
                   </table>
                 </div>
               ) : (
-                <p className="text-xs text-ink-400 text-center py-3">אין הזמנות ממתינות</p>
+                <p className="text-xs text-ink-400 text-center py-3">לא נשלחו הזמנות עדיין</p>
               )}
             </section>
           )}

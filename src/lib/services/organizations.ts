@@ -113,16 +113,15 @@ export async function createInvite(
     p_email: email.trim().toLowerCase(),
     p_role: role,
   });
-  if (error) throw error;
+  if (error) throw new Error(error.message ?? String(error));
   const result = data as { ok: boolean; token?: string; invite_id?: string; error?: string };
   if (!result.ok) throw new Error(result.error ?? "שגיאה ביצירת ההזמנה");
-  // Fetch the full invite row so the caller gets a proper OrgInvite object
   const { data: inv, error: invErr } = await db
     .from("org_invites")
     .select("*")
     .eq("id", result.invite_id!)
     .single();
-  if (invErr) throw invErr;
+  if (invErr) throw new Error(invErr.message ?? String(invErr));
   return inv as OrgInvite;
 }
 

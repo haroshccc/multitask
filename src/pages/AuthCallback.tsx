@@ -1,16 +1,21 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabase/client";
 import { useAuth } from "@/lib/auth/AuthContext";
+
+// Key stored in sessionStorage so it survives StrictMode re-mounts and
+// React Suspense boundaries. Cleared once the exchange completes.
+const EXCHANGE_KEY = "mt_oauth_code_exchanged";
+
+function isTransientError(msg: string) {
+  return /lock.*stolen/i.test(msg) || /state.*already.*used/i.test(msg) || /code.*already/i.test(msg);
+}
 
 export function AuthCallback() {
   const navigate = useNavigate();
   const { loading, session, profile } = useAuth();
   const [exchanging, setExchanging] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  // StrictMode mounts components twice in dev; guard against exchanging the
-  // same one-time OAuth code twice (the second attempt always fails).
-  const exchangedRef = useRef(false);
 
   useEffect(() => {
     const url = new URL(window.location.href);
@@ -28,13 +33,18 @@ export function AuthCallback() {
       return;
     }
 
-    if (exchangedRef.current) return;
-    exchangedRef.current = true;
+    // Deduplicate across re-mounts (StrictMode, Suspense) using sessionStorage.
+    // The stored value is the code itself so stale keys from old tabs don't interfere.
+    const alreadyExchanged = sessionStorage.getItem(EXCHANGE_KEY) === code;
+    if (alreadyExchanged) {
+      // Code was already sent — wait for the session to arrive via onAuthStateChange.
+      setExchanging(false);
+      return;
+    }
+    sessionStorage.setItem(EXCHANGE_KEY, code);
 
     const timeoutId = window.setTimeout(() => {
-      setError(
-        "ההתחברות אורכת יותר מהצפוי. נסי לרענן את הדף או להתחבר שוב."
-      );
+      setError("ההתחברות אורכת יותר מהצפוי. נסי לרענן את הדף או להתחבר שוב.");
       setExchanging(false);
     }, 15000);
 
@@ -42,11 +52,13 @@ export function AuthCallback() {
       .exchangeCodeForSession(code)
       .then(({ error: exchErr }) => {
         window.clearTimeout(timeoutId);
+        sessionStorage.removeItem(EXCHANGE_KEY);
         if (exchErr) {
-          // "Lock stolen" is transient contention between the exchange and
-          // onAuthStateChange — the session still arrives. Treat it as success.
-          if (/lock.*stolen/i.test(exchErr.message)) {
-            console.warn("exchange reported lock contention; treating as OK");
+          // Transient errors (lock contention, state-already-used) mean the
+          // exchange already succeeded in a parallel request — session will
+          // arrive via onAuthStateChange. Treat as success.
+          if (isTransientError(exchErr.message)) {
+            console.warn("exchange transient error; treating as OK:", exchErr.message);
             setExchanging(false);
             return;
           }
@@ -55,16 +67,14 @@ export function AuthCallback() {
           setExchanging(false);
           return;
         }
-        // Don't load profile/memberships here — AuthContext's
-        // onAuthStateChange listener already schedules that once the session
-        // is set (see the setTimeout(0) in AuthContext).
         setExchanging(false);
       })
       .catch((err) => {
         window.clearTimeout(timeoutId);
+        sessionStorage.removeItem(EXCHANGE_KEY);
         const msg = err instanceof Error ? err.message : String(err);
-        if (/lock.*stolen/i.test(msg)) {
-          console.warn("exchange reported lock contention; treating as OK");
+        if (isTransientError(msg)) {
+          console.warn("exchange transient error; treating as OK:", msg);
           setExchanging(false);
           return;
         }
@@ -80,7 +90,7 @@ export function AuthCallback() {
   // Once exchange and initial auth load are both done, route the user.
   useEffect(() => {
     if (exchanging || loading) return;
-    if (error) return; // let the user see the error, don't auto-navigate
+    if (error) return;
     if (!session) {
       navigate("/", { replace: true });
       return;

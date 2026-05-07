@@ -39,11 +39,12 @@ export function useCreateMealCategory() {
   const qc = useQueryClient();
   const scope = useOrgScope();
   return useMutation({
-    mutationFn: (input: Omit<MealCategoryInsert, "organization_id">) => {
-      const { organizationId } = assertOrgScope(scope);
+    mutationFn: (input: Omit<MealCategoryInsert, "organization_id" | "owner_id">) => {
+      const { organizationId, userId } = assertOrgScope(scope);
       return service.createMealCategory({
         ...input,
         organization_id: organizationId,
+        owner_id: userId,
       });
     },
     onSuccess: () => {
@@ -97,11 +98,12 @@ export function useCreateIngredientCategory() {
   const qc = useQueryClient();
   const scope = useOrgScope();
   return useMutation({
-    mutationFn: (input: Omit<IngredientCategoryInsert, "organization_id">) => {
-      const { organizationId } = assertOrgScope(scope);
+    mutationFn: (input: Omit<IngredientCategoryInsert, "organization_id" | "owner_id">) => {
+      const { organizationId, userId } = assertOrgScope(scope);
       return service.createIngredientCategory({
         ...input,
         organization_id: organizationId,
+        owner_id: userId,
       });
     },
     onSuccess: () => {

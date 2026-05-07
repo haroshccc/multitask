@@ -1,10 +1,11 @@
-import { useState, useMemo } from "react";
-import { Plus, Pencil, Trash2, AlertCircle, PanelRightOpen, PanelRightClose } from "lucide-react";
+import { useState, useMemo, useRef } from "react";
+import { Plus, Pencil, Trash2, AlertCircle, PanelRightOpen, PanelRightClose, Camera } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
-import { useMeals, useDeleteMeal, useMealCategories, useIngredients } from "@/lib/hooks/useFood";
+import { useMeals, useDeleteMeal, useMealCategories, useIngredients, useUpdateMeal } from "@/lib/hooks/useFood";
 import { MealEditModal } from "./MealEditModal";
 import { IngredientsTab } from "./IngredientsTab";
-import type { MealWithIngredients } from "@/lib/services/food";
+import { uploadMealImage, type MealWithIngredients } from "@/lib/services/food";
+import { useOrgScope } from "@/lib/hooks/useOrgScope";
 import {
   MEAL_TIME_KEYS,
   MEAL_TIME_LABELS,
@@ -28,6 +29,30 @@ export function MealsTab({
   const { data: categories = [] } = useMealCategories();
   const { data: ingredients = [] } = useIngredients();
   const deleteMeal = useDeleteMeal();
+
+  const updateMeal = useUpdateMeal();
+  const scope = useOrgScope();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingMealId, setUploadingMealId] = useState<string | null>(null);
+
+  const handleImageClick = (mealId: string) => {
+    setUploadingMealId(mealId);
+    fileInputRef.current?.click();
+  };
+
+  const handleImageFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !uploadingMealId || !scope.organizationId) return;
+    e.target.value = "";
+    try {
+      const url = await uploadMealImage(scope.organizationId, file);
+      await updateMeal.mutateAsync({ mealId: uploadingMealId, patch: { image_url: url } });
+    } catch {
+      // silent — MealEditModal shows its own error; table is best-effort
+    } finally {
+      setUploadingMealId(null);
+    }
+  };
 
   const [editing, setEditing] = useState<MealWithIngredients | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
@@ -178,16 +203,29 @@ export function MealsTab({
                     >
                       <td className="p-2 font-medium text-ink-900">
                         <div className="flex items-center gap-2">
-                          {m.image_url ? (
-                            <img
-                              src={m.image_url}
-                              alt=""
-                              className="w-10 h-10 rounded-md object-cover border border-ink-200 shrink-0"
-                              loading="lazy"
-                            />
-                          ) : (
-                            <div className="w-10 h-10 rounded-md bg-ink-100 border border-ink-200 shrink-0" />
-                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleImageClick(m.id)}
+                            title="לחץ להוספה/החלפה של תמונה"
+                            className="relative w-10 h-10 rounded-md shrink-0 overflow-hidden border border-ink-200 group"
+                          >
+                            {uploadingMealId === m.id ? (
+                              <div className="w-full h-full bg-ink-100 flex items-center justify-center">
+                                <div className="w-4 h-4 border-2 border-primary-400 border-t-transparent rounded-full animate-spin" />
+                              </div>
+                            ) : m.image_url ? (
+                              <>
+                                <img src={m.image_url} alt="" className="w-full h-full object-cover" loading="lazy" />
+                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                                  <Camera className="w-4 h-4 text-white" />
+                                </div>
+                              </>
+                            ) : (
+                              <div className="w-full h-full bg-ink-100 flex items-center justify-center text-ink-400 group-hover:bg-ink-200 transition-colors">
+                                <Camera className="w-4 h-4" />
+                              </div>
+                            )}
+                          </button>
                           <span className="truncate">{m.name}</span>
                         </div>
                       </td>
@@ -303,6 +341,14 @@ export function MealsTab({
           </div>
         </aside>
       )}
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleImageFile}
+      />
 
       <MealEditModal
         open={modalOpen}

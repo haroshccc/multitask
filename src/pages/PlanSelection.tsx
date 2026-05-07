@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate, Navigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth/AuthContext";
 import { supabase } from "@/lib/supabase/client";
+import { Logo } from "@/components/brand/Logo";
 
 const GRADIENT = "linear-gradient(135deg, #f59e0b 0%, #f472b6 25%, #ec4899 50%, #db2777 75%, #be185d 100%)";
 
@@ -32,57 +33,6 @@ const plans = [
   },
 ];
 
-const MLogo = () => (
-  <div
-    style={{
-      display: "flex",
-      alignItems: "center",
-      gap: 10,
-      animation: "mtSlideRight 0.7s ease both",
-    }}
-  >
-    <div
-      style={{
-        width: 44,
-        height: 44,
-        background: "rgba(255,255,255,0.15)",
-        backdropFilter: "blur(8px)",
-        borderRadius: 12,
-        border: "1.5px solid rgba(255,255,255,0.35)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-      }}
-    >
-      <svg
-        width="24"
-        height="26"
-        viewBox="0 0 100 110"
-        fill="none"
-        stroke="#f59e0b"
-        strokeWidth="13"
-        strokeLinecap="butt"
-      >
-        <path d="M 10 100 L 10 10" />
-        <path d="M 10 10 L 50 60" />
-        <path d="M 50 60 L 90 10" />
-        <path d="M 90 10 L 90 65" />
-        <path d="M 50 60 L 90 100" />
-        <path d="M 90 65 L 90 100" />
-      </svg>
-    </div>
-    <span
-      style={{
-        color: "white",
-        fontWeight: 700,
-        fontSize: 18,
-        letterSpacing: "-0.02em",
-      }}
-    >
-      multitask
-    </span>
-  </div>
-);
 
 export function PlanSelection() {
   const navigate = useNavigate();
@@ -220,8 +170,8 @@ export function PlanSelection() {
         />
 
         {/* Logo */}
-        <div style={{ marginBottom: 52 }}>
-          <MLogo />
+        <div style={{ marginBottom: 52, animation: "mtSlideRight 0.7s ease both" }}>
+          <Logo variant="white" markSize={32} idKey="planLogo" />
         </div>
 
         {/* Headline */}

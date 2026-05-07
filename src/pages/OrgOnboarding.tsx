@@ -156,7 +156,7 @@ export function OrgOnboarding() {
         {
           p_name: createName,
           p_join_password: createPassword,
-          p_suggested_email_domain: null,
+          p_suggested_email_domain: undefined,
           p_org_type: orgType,
         }
       );

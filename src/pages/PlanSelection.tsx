@@ -115,7 +115,8 @@ export function PlanSelection() {
   }
 
   if (!session) return <Navigate to="/" replace />;
-  if (profile?.onboarding_done) return <Navigate to="/app" replace />;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  if ((profile as any)?.onboarding_done) return <Navigate to="/app" replace />;
 
   const handleContinue = async () => {
     setSubmitting(true);

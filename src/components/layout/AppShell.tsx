@@ -243,7 +243,7 @@ export function AppShell() {
       </header>
 
       {/* Body: sidebar (mobile drawer / desktop rail) + main */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden min-h-0">
         {/* Mobile drawer */}
         {sidebarOpen && (
           <div
@@ -316,7 +316,7 @@ export function AppShell() {
         )}
 
         {/* Main content — the only scrolling region */}
-        <main className="flex-1 min-w-0 overflow-y-auto">
+        <main className="flex-1 min-w-0 min-h-0 overflow-y-auto">
           <Outlet />
         </main>
       </div>

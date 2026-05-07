@@ -239,13 +239,17 @@ export function PlanSelection() {
             )}
           </button>
 
+          {/* Login link */}
+          <div style={{ textAlign: "center", marginTop: 14, fontSize: 13, color: "#f59e0b", fontWeight: 600, animation: "mtFadeIn .5s ease 1s both" }}>
+            <a href="/" onClick={(e) => { e.preventDefault(); navigate("/"); }} style={{ color: "#f59e0b", textDecoration: "underline", cursor: "pointer" }}>
+              יש לך כבר חשבון? לחצי כאן להתחברות
+            </a>
+          </div>
+
           {/* Progress dots */}
-          <div style={{ display: "flex", gap: 5, justifyContent: "center", marginTop: 18 }}>
+          <div style={{ display: "flex", gap: 5, justifyContent: "center", marginTop: 14 }}>
             {[0, 1, 2].map((i) => (
-              <div key={i} style={{
-                width: i === 1 ? 24 : 24, height: 5, borderRadius: 3,
-                background: i === 1 ? GRADIENT : "#e2e2ea",
-              }} />
+              <div key={i} style={{ width: 24, height: 5, borderRadius: 3, background: i === 1 ? GRADIENT : "#e2e2ea" }} />
             ))}
           </div>
         </div>

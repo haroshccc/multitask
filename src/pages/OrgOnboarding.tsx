@@ -3,8 +3,7 @@ import { useNavigate, Navigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth/AuthContext";
 import { supabase } from "@/lib/supabase/client";
 
-const GRADIENT =
-  "linear-gradient(135deg, #f59e0b 0%, #f472b6 25%, #ec4899 50%, #db2777 75%, #be185d 100%)";
+const GRADIENT = "linear-gradient(135deg, #f59e0b 0%, #f472b6 25%, #ec4899 50%, #db2777 75%, #be185d 100%)";
 
 const MLogo = () => (
   <div style={{ display: "flex", alignItems: "center", gap: 14, animation: "mtSlideRight .7s cubic-bezier(0.34,1.3,0.64,1) both" }}>
@@ -18,45 +17,6 @@ const MLogo = () => (
   </div>
 );
 
-const BuildingIcon = () => (
-  <svg
-    width="22"
-    height="22"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <rect x="3" y="3" width="18" height="18" rx="2" />
-    <path d="M9 3v18" />
-    <path d="M3 9h6" />
-    <path d="M3 15h6" />
-    <path d="M13 7h5" />
-    <path d="M13 12h5" />
-    <path d="M13 17h5" />
-  </svg>
-);
-
-const UsersIcon = () => (
-  <svg
-    width="22"
-    height="22"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-    <circle cx="9" cy="7" r="4" />
-    <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-  </svg>
-);
-
 type Mode = "create" | "join" | null;
 type OrgType = "business" | "family" | "personal";
 
@@ -66,7 +26,6 @@ export function OrgOnboarding() {
 
   const [mode, setMode] = useState<Mode>(null);
 
-  // Create org state
   const [createName, setCreateName] = useState("");
   const [createPassword, setCreatePassword] = useState("");
   const [createShowPassword, setCreateShowPassword] = useState(false);
@@ -74,7 +33,6 @@ export function OrgOnboarding() {
   const [createError, setCreateError] = useState("");
   const [createSubmitting, setCreateSubmitting] = useState(false);
 
-  // Join org state
   const [joinName, setJoinName] = useState("");
   const [joinPassword, setJoinPassword] = useState("");
   const [joinShowPassword, setJoinShowPassword] = useState(false);
@@ -83,24 +41,8 @@ export function OrgOnboarding() {
 
   if (loading) {
     return (
-      <div
-        style={{
-          minHeight: "100vh",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <div
-          style={{
-            width: 28,
-            height: 28,
-            border: "3px solid #f3e8ff",
-            borderTop: "3px solid #ec4899",
-            borderRadius: "50%",
-            animation: "mtSpin 0.8s linear infinite",
-          }}
-        />
+      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ width: 28, height: 28, border: "3px solid #f3e8ff", borderTop: "3px solid #ec4899", borderRadius: "50%", animation: "mtSpin 0.8s linear infinite" }} />
       </div>
     );
   }
@@ -111,15 +53,12 @@ export function OrgOnboarding() {
     setCreateError("");
     setCreateSubmitting(true);
     try {
-      const { error } = await supabase.rpc(
-        "create_organization_with_password",
-        {
-          p_name: createName,
-          p_join_password: createPassword,
-          p_suggested_email_domain: undefined,
-          p_org_type: orgType,
-        }
-      );
+      const { error } = await supabase.rpc("create_organization_with_password", {
+        p_name: createName,
+        p_join_password: createPassword,
+        p_suggested_email_domain: undefined,
+        p_org_type: orgType,
+      });
       if (error) {
         setCreateError(error.message || "אירעה שגיאה. נסי שוב.");
         setCreateSubmitting(false);
@@ -138,13 +77,10 @@ export function OrgOnboarding() {
     setJoinSubmitting(true);
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error } = await (supabase as any).rpc(
-        "join_organization_by_name_and_password",
-        {
-          p_name: joinName,
-          p_join_password: joinPassword,
-        }
-      );
+      const { error } = await (supabase as any).rpc("join_organization_by_name_and_password", {
+        p_name: joinName,
+        p_join_password: joinPassword,
+      });
       if (error) {
         const msg = error.message || "";
         if (msg.includes("org_not_found")) {
@@ -177,6 +113,7 @@ export function OrgOnboarding() {
     transition: "border-color 0.15s ease",
     boxSizing: "border-box",
     direction: "rtl",
+    fontFamily: "Fredoka, sans-serif",
   };
 
   const labelStyle: React.CSSProperties = {
@@ -193,554 +130,192 @@ export function OrgOnboarding() {
     { value: "personal", label: "אחר" },
   ];
 
+  const submitBtnStyle = (disabled: boolean): React.CSSProperties => ({
+    width: "100%",
+    padding: "14px 18px",
+    borderRadius: 12,
+    background: disabled ? "#f3e8ff" : GRADIENT,
+    backgroundSize: "200% 200%",
+    animation: disabled ? "none" : "mtGradShift 6s ease infinite",
+    border: "none",
+    color: "white",
+    fontFamily: "Fredoka, sans-serif",
+    fontSize: 14,
+    fontWeight: 600,
+    cursor: disabled ? "not-allowed" : "pointer",
+    boxShadow: disabled ? "none" : "0 12px 28px -8px rgba(236,72,153,.5)",
+    opacity: disabled ? 0.7 : 1,
+    transition: "opacity 0.15s ease",
+  });
+
   return (
-    <div
-      dir="rtl"
-      style={{
-        minHeight: "100vh",
-        display: "flex",
-        flexDirection: "row-reverse",
-        fontFamily:
-          "'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif",
-        overflow: "hidden",
-      }}
-    >
+    <div dir="rtl" style={{
+      minHeight: "100vh", display: "flex", flexDirection: "row-reverse",
+      fontFamily: "Fredoka, sans-serif", overflow: "hidden",
+    }}>
       {/* LEFT: Hero panel */}
-      <div
-        style={{
-          flex: 1.05,
-          background: GRADIENT,
-          backgroundSize: "200% 200%",
-          animation: "mtGradShift 10s ease infinite",
-          position: "relative",
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "center",
-          padding: "60px 52px",
-          overflow: "hidden",
-        }}
-      >
-        {/* Dotted SVG pattern */}
-        <svg
-          style={{
-            position: "absolute",
-            inset: 0,
-            width: "100%",
-            height: "100%",
-            opacity: 0.12,
-            pointerEvents: "none",
-          }}
-        >
+      <div style={{
+        flex: 1.05, background: GRADIENT, backgroundSize: "200% 200%",
+        animation: "mtGradShift 10s ease infinite",
+        position: "relative", overflow: "hidden",
+        display: "flex", flexDirection: "column", justifyContent: "space-between",
+        padding: "56px 56px", color: "#fff",
+      }}>
+        {/* Dot pattern */}
+        <svg style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}>
           <defs>
-            <pattern
-              id="dots-org"
-              x="0"
-              y="0"
-              width="24"
-              height="24"
-              patternUnits="userSpaceOnUse"
-            >
-              <circle cx="2" cy="2" r="1.5" fill="white" />
+            <pattern id="dots-org" width="24" height="24" patternUnits="userSpaceOnUse">
+              <circle cx="2" cy="2" r="1.2" fill="rgba(255,255,255,.18)" />
             </pattern>
           </defs>
           <rect width="100%" height="100%" fill="url(#dots-org)" />
         </svg>
 
-        {/* Spinning circle 1 */}
-        <div
-          style={{
-            position: "absolute",
-            top: -80,
-            left: -80,
-            width: 320,
-            height: 320,
-            borderRadius: "50%",
-            border: "2px solid rgba(255,255,255,0.2)",
-            animation: "mtSpin 18s linear infinite",
-          }}
-        />
-        {/* Spinning circle 2 */}
-        <div
-          style={{
-            position: "absolute",
-            bottom: -100,
-            right: -60,
-            width: 260,
-            height: 260,
-            borderRadius: "50%",
-            border: "2px solid rgba(255,255,255,0.15)",
-            animation: "mtSpin 24s linear infinite reverse",
-          }}
-        />
+        {/* Decorative circle top-right */}
+        <div style={{ position: "absolute", width: 300, height: 300, borderRadius: "50%", border: "2px solid rgba(255,255,255,.18)", right: -110, top: -110, animation: "mtSpin 30s linear infinite" }} />
+        {/* Rotating diamond */}
+        <div style={{ position: "absolute", width: 170, height: 170, border: "2px solid rgba(255,255,255,.22)", right: "20%", top: "50%", transform: "rotate(45deg)", animation: "mtSpin 22s linear infinite reverse" }} />
         {/* Floating blurred square */}
-        <div
-          style={{
-            position: "absolute",
-            bottom: 120,
-            left: 40,
-            width: 80,
-            height: 80,
-            background: "rgba(255,255,255,0.1)",
-            backdropFilter: "blur(12px)",
-            borderRadius: 20,
-            animation: "mtFloat 5s ease-in-out infinite",
-          }}
-        />
+        <div style={{ position: "absolute", width: 120, height: 120, borderRadius: 30, background: "rgba(255,255,255,.18)", backdropFilter: "blur(18px)", left: "14%", bottom: "20%", animation: "mtFloat 8s ease-in-out infinite" }} />
 
         {/* Logo */}
-        <div style={{ marginBottom: 52 }}>
+        <div style={{ position: "relative", zIndex: 2 }}>
           <MLogo />
         </div>
 
-        {/* Headline */}
-        <div style={{ animation: "mtSlideUp 0.8s ease 0.1s both" }}>
-          <h1
-            style={{
-              color: "white",
-              fontSize: "clamp(2rem, 3.5vw, 2.75rem)",
-              fontWeight: 800,
-              lineHeight: 1.15,
-              margin: "0 0 8px",
-              letterSpacing: "-0.03em",
-            }}
-          >
-            לבד? עם צוות?
-          </h1>
-          <h2
-            style={{
-              color: "white",
-              fontSize: "clamp(1.4rem, 2.5vw, 1.9rem)",
-              fontWeight: 700,
-              lineHeight: 1.2,
-              margin: "0 0 16px",
-              letterSpacing: "-0.02em",
-              opacity: 0.92,
-            }}
-          >
-            את מחליטה.
+        {/* Bottom copy */}
+        <div style={{ position: "relative", zIndex: 2 }}>
+          <div style={{ fontSize: 14, fontWeight: 500, letterSpacing: ".1em", textTransform: "uppercase", opacity: 0.85, marginBottom: 18, animation: "mtFadeIn .6s ease .4s both" }}>
+            🤝 שלב 3 מתוך 3
+          </div>
+          <h2 style={{ fontSize: 54, fontWeight: 600, lineHeight: 1.05, letterSpacing: "-1.5px", marginBottom: 24 }}>
+            <div style={{ overflow: "hidden" }}>
+              <div style={{ animation: "mtSlideUp .8s cubic-bezier(0.25,0.46,0.45,0.94) .5s both" }}>לבד? עם צוות?</div>
+            </div>
+            <div style={{ overflow: "hidden" }}>
+              <div style={{ animation: "mtSlideUp .8s cubic-bezier(0.25,0.46,0.45,0.94) .7s both" }}>את מחליטה.</div>
+            </div>
           </h2>
-          <p
-            style={{
-              color: "rgba(255,255,255,0.82)",
-              fontSize: 15,
-              margin: "0 0 48px",
-              lineHeight: 1.65,
-              maxWidth: 340,
-            }}
-          >
+          <p style={{ fontSize: 17, opacity: 0.92, maxWidth: 400, lineHeight: 1.5, animation: "mtFadeIn .8s ease .9s both" }}>
             multitask עובד מצוין לבד, אבל הופך לעוצמתי במיוחד עם הצוות שלך.
           </p>
-        </div>
-
-        {/* Step indicator */}
-        <div
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 8,
-            background: "rgba(255,255,255,0.15)",
-            backdropFilter: "blur(8px)",
-            border: "1px solid rgba(255,255,255,0.25)",
-            borderRadius: 100,
-            padding: "8px 16px",
-            fontSize: 13,
-            color: "white",
-            fontWeight: 600,
-            width: "fit-content",
-            animation: "mtFadeIn 1s ease 0.4s both",
-          }}
-        >
-          ✦ שלב 2 מתוך 2
         </div>
       </div>
 
       {/* RIGHT: Form panel */}
-      <div
-        style={{
-          flex: 1,
-          background: "white",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: "60px 48px",
-          overflowY: "auto",
-        }}
-      >
-        <div style={{ width: "100%", maxWidth: 440 }}>
-          {/* Label */}
-          <div
-            style={{
-              fontSize: 11,
-              fontWeight: 700,
-              letterSpacing: "0.12em",
-              color: "#ec4899",
-              textTransform: "uppercase",
-              marginBottom: 12,
-              animation: "mtSlideLeft 0.6s ease both",
-            }}
-          >
-            ארגון (אופציונלי)
+      <div style={{
+        flex: 1, background: "white",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        padding: "56px", overflowY: "auto",
+      }}>
+        <div style={{ maxWidth: 400, width: "100%", animation: "mtSlideLeft .7s cubic-bezier(0.34,1.3,0.64,1) .2s both" }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "#ec4899", letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 10 }}>
+            ארגון <span style={{ color: "#6b6b80", fontWeight: 500 }}>(אופציונלי)</span>
           </div>
-
-          {/* Title */}
-          <h1
-            style={{
-              fontSize: "clamp(1.6rem, 2.5vw, 2rem)",
-              fontWeight: 800,
-              color: "#111827",
-              margin: "0 0 8px",
-              letterSpacing: "-0.03em",
-              animation: "mtSlideLeft 0.6s ease 0.05s both",
-            }}
-          >
+          <h1 style={{ fontSize: 32, fontWeight: 600, color: "#111118", letterSpacing: "-1px", marginBottom: 8, lineHeight: 1.15 }}>
             איך נתחיל?
           </h1>
-          <p
-            style={{
-              fontSize: 14,
-              color: "#6b7280",
-              margin: "0 0 28px",
-              lineHeight: 1.55,
-              animation: "mtSlideLeft 0.6s ease 0.08s both",
-            }}
-          >
+          <p style={{ fontSize: 14, color: "#6b6b80", marginBottom: 24, lineHeight: 1.5 }}>
             תמיד אפשר להצטרף לארגון בהמשך מההגדרות
           </p>
 
-          {/* Mode: initial selection */}
+          {/* Mode: initial card selection */}
           {mode === null && (
             <div style={{ animation: "mtSlideLeft 0.55s ease 0.1s both" }}>
-              <div
-                style={{ display: "flex", flexDirection: "column", gap: 12 }}
-              >
-                {/* Card: Create org */}
-                <button
+              <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 20 }}>
+                <div
                   onClick={() => setMode("create")}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 16,
-                    textAlign: "right",
-                    background: "white",
-                    border: "2px solid #e5e7eb",
-                    borderRadius: 16,
-                    padding: "18px 20px",
-                    cursor: "pointer",
-                    transition: "all 0.18s ease",
-                    outline: "none",
-                    width: "100%",
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.borderColor = "#f9a8d4";
-                    e.currentTarget.style.background = "#fff7fb";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.borderColor = "#e5e7eb";
-                    e.currentTarget.style.background = "white";
-                  }}
+                  onMouseEnter={(e) => { const el = e.currentTarget; el.style.borderColor = "#ec4899"; el.style.background = "#fdf2f8"; }}
+                  onMouseLeave={(e) => { const el = e.currentTarget; el.style.borderColor = "#e2e2ea"; el.style.background = "transparent"; }}
+                  style={{ padding: "18px", borderRadius: 14, background: "transparent", border: "2px solid #e2e2ea", cursor: "pointer", transition: "all .25s", display: "flex", alignItems: "center", gap: 14, animation: "mtSlideUp .55s cubic-bezier(0.34,1.3,0.64,1) .4s both" }}
                 >
-                  <div
-                    style={{
-                      width: 44,
-                      height: 44,
-                      borderRadius: 12,
-                      background:
-                        "linear-gradient(135deg, #fdf2f8 0%, #fce7f3 100%)",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      color: "#ec4899",
-                      flexShrink: 0,
-                    }}
-                  >
-                    <BuildingIcon />
+                  <div style={{ width: 48, height: 48, borderRadius: 12, flexShrink: 0, background: "#fdf2f8", color: "#ec4899", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="4" y="3" width="16" height="18" rx="2"/>
+                      <path d="M9 9h.01M15 9h.01M9 13h.01M15 13h.01M9 17h.01M15 17h.01"/>
+                    </svg>
                   </div>
-                  <div style={{ flex: 1 }}>
-                    <div
-                      style={{
-                        fontSize: 15,
-                        fontWeight: 700,
-                        color: "#111827",
-                        marginBottom: 3,
-                      }}
-                    >
-                      צרי ארגון חדש
-                    </div>
-                    <div style={{ fontSize: 13, color: "#6b7280" }}>
-                      עבודה עם צוות, משפחה, או קבוצה
-                    </div>
+                  <div style={{ flex: 1, textAlign: "right" }}>
+                    <div style={{ fontSize: 15, fontWeight: 600, color: "#111118", marginBottom: 3 }}>צרי ארגון חדש</div>
+                    <div style={{ fontSize: 12, color: "#6b6b80", lineHeight: 1.4 }}>עבודה עם צוות, משפחה, או קבוצה</div>
                   </div>
-                  <span style={{ color: "#9ca3af", fontSize: 18 }}>←</span>
-                </button>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6b6b80" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M15 18l-6-6 6-6"/>
+                  </svg>
+                </div>
 
-                {/* Card: Join org */}
-                <button
+                <div
                   onClick={() => setMode("join")}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 16,
-                    textAlign: "right",
-                    background: "white",
-                    border: "2px solid #e5e7eb",
-                    borderRadius: 16,
-                    padding: "18px 20px",
-                    cursor: "pointer",
-                    transition: "all 0.18s ease",
-                    outline: "none",
-                    width: "100%",
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.borderColor = "#f9a8d4";
-                    e.currentTarget.style.background = "#fff7fb";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.borderColor = "#e5e7eb";
-                    e.currentTarget.style.background = "white";
-                  }}
+                  onMouseEnter={(e) => { const el = e.currentTarget; el.style.borderColor = "#ec4899"; el.style.background = "#fdf2f8"; }}
+                  onMouseLeave={(e) => { const el = e.currentTarget; el.style.borderColor = "#e2e2ea"; el.style.background = "transparent"; }}
+                  style={{ padding: "18px", borderRadius: 14, background: "transparent", border: "2px solid #e2e2ea", cursor: "pointer", transition: "all .25s", display: "flex", alignItems: "center", gap: 14, animation: "mtSlideUp .55s cubic-bezier(0.34,1.3,0.64,1) .5s both" }}
                 >
-                  <div
-                    style={{
-                      width: 44,
-                      height: 44,
-                      borderRadius: 12,
-                      background:
-                        "linear-gradient(135deg, #fdf2f8 0%, #fce7f3 100%)",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      color: "#ec4899",
-                      flexShrink: 0,
-                    }}
-                  >
-                    <UsersIcon />
+                  <div style={{ width: 48, height: 48, borderRadius: 12, flexShrink: 0, background: "#fdf2f8", color: "#ec4899", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="9" cy="8" r="3.5"/>
+                      <path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/>
+                      <circle cx="17" cy="9" r="2.5"/>
+                      <path d="M14 15c0-2 1.5-3.5 3-3.5s3 1.5 3 3.5"/>
+                    </svg>
                   </div>
-                  <div style={{ flex: 1 }}>
-                    <div
-                      style={{
-                        fontSize: 15,
-                        fontWeight: 700,
-                        color: "#111827",
-                        marginBottom: 3,
-                      }}
-                    >
-                      הצטרפי לארגון קיים
-                    </div>
-                    <div style={{ fontSize: 13, color: "#6b7280" }}>
-                      קיבלת הזמנה? יש לך שם וסיסמה?
-                    </div>
+                  <div style={{ flex: 1, textAlign: "right" }}>
+                    <div style={{ fontSize: 15, fontWeight: 600, color: "#111118", marginBottom: 3 }}>הצטרפי לארגון קיים</div>
+                    <div style={{ fontSize: 12, color: "#6b6b80", lineHeight: 1.4 }}>קיבלת הזמנה? יש לך שם וסיסמה?</div>
                   </div>
-                  <span style={{ color: "#9ca3af", fontSize: 18 }}>←</span>
-                </button>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6b6b80" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M15 18l-6-6 6-6"/>
+                  </svg>
+                </div>
               </div>
 
-              {/* Skip link */}
-              <div style={{ textAlign: "center", marginTop: 24 }}>
-                <button
-                  onClick={() => navigate("/app")}
-                  style={{
-                    background: "none",
-                    border: "none",
-                    cursor: "pointer",
-                    color: "#9ca3af",
-                    fontSize: 14,
-                    fontWeight: 500,
-                    padding: "4px 8px",
-                    transition: "color 0.15s ease",
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.color = "#6b7280";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.color = "#9ca3af";
-                  }}
-                >
-                  המשיכי לבד ←
-                </button>
-              </div>
+              <button
+                onClick={() => navigate("/app")}
+                style={{ width: "100%", background: "transparent", border: "none", color: "#6b6b80", fontFamily: "inherit", fontSize: 13, fontWeight: 500, cursor: "pointer", padding: "10px", transition: "color .2s", animation: "mtFadeIn .5s ease .8s both" }}
+              >
+                המשיכי לבד ←
+              </button>
             </div>
           )}
 
           {/* Mode: create org */}
           {mode === "create" && (
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: 18,
-                animation: "mtSlideLeft 0.45s ease both",
-              }}
-            >
-              {/* Org name */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 18, animation: "mtSlideLeft 0.45s ease both" }}>
               <div>
                 <label style={labelStyle}>שם הארגון</label>
-                <input
-                  type="text"
-                  value={createName}
-                  onChange={(e) => setCreateName(e.target.value)}
-                  placeholder="לדוגמה: Acme Inc"
-                  style={inputStyle}
-                  onFocus={(e) => {
-                    e.currentTarget.style.borderColor = "#ec4899";
-                  }}
-                  onBlur={(e) => {
-                    e.currentTarget.style.borderColor = "#e5e7eb";
-                  }}
+                <input type="text" value={createName} onChange={(e) => setCreateName(e.target.value)} placeholder="לדוגמה: Acme Inc" style={inputStyle}
+                  onFocus={(e) => { e.currentTarget.style.borderColor = "#ec4899"; }}
+                  onBlur={(e) => { e.currentTarget.style.borderColor = "#e5e7eb"; }}
                 />
               </div>
-
-              {/* Org type */}
               <div>
                 <label style={labelStyle}>סוג הארגון</label>
                 <div style={{ display: "flex", gap: 8 }}>
                   {orgTypeButtons.map(({ value, label }) => (
-                    <button
-                      key={value}
-                      onClick={() => setOrgType(value)}
-                      style={{
-                        flex: 1,
-                        padding: "10px 0",
-                        border:
-                          orgType === value
-                            ? "2px solid #ec4899"
-                            : "2px solid #e5e7eb",
-                        borderRadius: 10,
-                        background:
-                          orgType === value ? "#fdf2f8" : "white",
-                        color:
-                          orgType === value ? "#be185d" : "#374151",
-                        fontSize: 13,
-                        fontWeight: 600,
-                        cursor: "pointer",
-                        transition: "all 0.15s ease",
-                        outline: "none",
-                      }}
-                    >
+                    <button key={value} onClick={() => setOrgType(value)} style={{ flex: 1, padding: "10px 0", border: orgType === value ? "2px solid #ec4899" : "2px solid #e5e7eb", borderRadius: 10, background: orgType === value ? "#fdf2f8" : "white", color: orgType === value ? "#be185d" : "#374151", fontSize: 13, fontWeight: 600, cursor: "pointer", transition: "all 0.15s ease", outline: "none", fontFamily: "inherit" }}>
                       {label}
                     </button>
                   ))}
                 </div>
               </div>
-
-              {/* Password */}
               <div>
                 <label style={labelStyle}>סיסמת הצטרפות</label>
                 <div style={{ position: "relative" }}>
-                  <input
-                    type={createShowPassword ? "text" : "password"}
-                    value={createPassword}
-                    onChange={(e) => setCreatePassword(e.target.value)}
-                    placeholder="סיסמה לאחרים להצטרף"
-                    style={{ ...inputStyle, paddingLeft: 44 }}
-                    onFocus={(e) => {
-                      e.currentTarget.style.borderColor = "#ec4899";
-                    }}
-                    onBlur={(e) => {
-                      e.currentTarget.style.borderColor = "#e5e7eb";
-                    }}
+                  <input type={createShowPassword ? "text" : "password"} value={createPassword} onChange={(e) => setCreatePassword(e.target.value)} placeholder="סיסמה לאחרים להצטרף" style={{ ...inputStyle, paddingLeft: 44 }}
+                    onFocus={(e) => { e.currentTarget.style.borderColor = "#ec4899"; }}
+                    onBlur={(e) => { e.currentTarget.style.borderColor = "#e5e7eb"; }}
                   />
-                  <button
-                    type="button"
-                    onClick={() => setCreateShowPassword((v) => !v)}
-                    style={{
-                      position: "absolute",
-                      left: 12,
-                      top: "50%",
-                      transform: "translateY(-50%)",
-                      background: "none",
-                      border: "none",
-                      cursor: "pointer",
-                      color: "#9ca3af",
-                      fontSize: 13,
-                      padding: 0,
-                      lineHeight: 1,
-                    }}
-                  >
+                  <button type="button" onClick={() => setCreateShowPassword((v) => !v)} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#9ca3af", fontSize: 13, padding: 0, lineHeight: 1 }}>
                     {createShowPassword ? "הסתר" : "הצג"}
                   </button>
                 </div>
               </div>
-
-              {/* Error */}
               {createError && (
-                <div
-                  style={{
-                    background: "#fef2f2",
-                    border: "1px solid #fecaca",
-                    borderRadius: 10,
-                    padding: "10px 14px",
-                    color: "#dc2626",
-                    fontSize: 13,
-                    fontWeight: 500,
-                  }}
-                >
-                  {createError}
-                </div>
+                <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 10, padding: "10px 14px", color: "#dc2626", fontSize: 13, fontWeight: 500 }}>{createError}</div>
               )}
-
-              {/* Submit */}
-              <button
-                onClick={handleCreate}
-                disabled={createSubmitting || !createName.trim()}
-                style={{
-                  width: "100%",
-                  padding: "15px 0",
-                  background:
-                    createSubmitting || !createName.trim()
-                      ? "#f3e8ff"
-                      : GRADIENT,
-                  backgroundSize: "200% 200%",
-                  animation:
-                    createSubmitting || !createName.trim()
-                      ? "none"
-                      : "mtGradShift 6s ease infinite",
-                  border: "none",
-                  borderRadius: 14,
-                  color: "white",
-                  fontSize: 16,
-                  fontWeight: 700,
-                  cursor:
-                    createSubmitting || !createName.trim()
-                      ? "not-allowed"
-                      : "pointer",
-                  boxShadow:
-                    createSubmitting || !createName.trim()
-                      ? "none"
-                      : "0 4px 20px rgba(236, 72, 153, 0.35)",
-                  transition: "opacity 0.15s ease",
-                  opacity: createSubmitting || !createName.trim() ? 0.6 : 1,
-                }}
-              >
+              <button onClick={handleCreate} disabled={createSubmitting || !createName.trim()} style={submitBtnStyle(createSubmitting || !createName.trim())}>
                 {createSubmitting ? "יוצרת..." : "צרי ארגון"}
               </button>
-
-              {/* Back */}
-              <button
-                onClick={() => {
-                  setMode(null);
-                  setCreateError("");
-                  setCreateName("");
-                  setCreatePassword("");
-                }}
-                style={{
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  color: "#9ca3af",
-                  fontSize: 14,
-                  fontWeight: 500,
-                  padding: "4px 0",
-                  textAlign: "center",
-                  transition: "color 0.15s ease",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.color = "#6b7280";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.color = "#9ca3af";
-                }}
-              >
+              <button onClick={() => { setMode(null); setCreateError(""); setCreateName(""); setCreatePassword(""); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#9ca3af", fontFamily: "inherit", fontSize: 13, fontWeight: 500, padding: "4px 0", textAlign: "center" }}>
                 ← חזרה
               </button>
             </div>
@@ -748,183 +323,49 @@ export function OrgOnboarding() {
 
           {/* Mode: join org */}
           {mode === "join" && (
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: 18,
-                animation: "mtSlideLeft 0.45s ease both",
-              }}
-            >
-              {/* Org name */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 18, animation: "mtSlideLeft 0.45s ease both" }}>
               <div>
                 <label style={labelStyle}>שם הארגון</label>
-                <input
-                  type="text"
-                  value={joinName}
-                  onChange={(e) => setJoinName(e.target.value)}
-                  placeholder="שם הארגון שקיבלת"
-                  style={inputStyle}
-                  onFocus={(e) => {
-                    e.currentTarget.style.borderColor = "#ec4899";
-                  }}
-                  onBlur={(e) => {
-                    e.currentTarget.style.borderColor = "#e5e7eb";
-                  }}
+                <input type="text" value={joinName} onChange={(e) => setJoinName(e.target.value)} placeholder="שם הארגון שקיבלת" style={inputStyle}
+                  onFocus={(e) => { e.currentTarget.style.borderColor = "#ec4899"; }}
+                  onBlur={(e) => { e.currentTarget.style.borderColor = "#e5e7eb"; }}
                 />
               </div>
-
-              {/* Password */}
               <div>
                 <label style={labelStyle}>סיסמת הצטרפות</label>
                 <div style={{ position: "relative" }}>
-                  <input
-                    type={joinShowPassword ? "text" : "password"}
-                    value={joinPassword}
-                    onChange={(e) => setJoinPassword(e.target.value)}
-                    placeholder="הסיסמה שקיבלת"
-                    style={{ ...inputStyle, paddingLeft: 44 }}
-                    onFocus={(e) => {
-                      e.currentTarget.style.borderColor = "#ec4899";
-                    }}
-                    onBlur={(e) => {
-                      e.currentTarget.style.borderColor = "#e5e7eb";
-                    }}
+                  <input type={joinShowPassword ? "text" : "password"} value={joinPassword} onChange={(e) => setJoinPassword(e.target.value)} placeholder="הסיסמה שקיבלת" style={{ ...inputStyle, paddingLeft: 44 }}
+                    onFocus={(e) => { e.currentTarget.style.borderColor = "#ec4899"; }}
+                    onBlur={(e) => { e.currentTarget.style.borderColor = "#e5e7eb"; }}
                   />
-                  <button
-                    type="button"
-                    onClick={() => setJoinShowPassword((v) => !v)}
-                    style={{
-                      position: "absolute",
-                      left: 12,
-                      top: "50%",
-                      transform: "translateY(-50%)",
-                      background: "none",
-                      border: "none",
-                      cursor: "pointer",
-                      color: "#9ca3af",
-                      fontSize: 13,
-                      padding: 0,
-                      lineHeight: 1,
-                    }}
-                  >
+                  <button type="button" onClick={() => setJoinShowPassword((v) => !v)} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#9ca3af", fontSize: 13, padding: 0, lineHeight: 1 }}>
                     {joinShowPassword ? "הסתר" : "הצג"}
                   </button>
                 </div>
               </div>
-
-              {/* Error */}
               {joinError && (
-                <div
-                  style={{
-                    background: "#fef2f2",
-                    border: "1px solid #fecaca",
-                    borderRadius: 10,
-                    padding: "10px 14px",
-                    color: "#dc2626",
-                    fontSize: 13,
-                    fontWeight: 500,
-                  }}
-                >
-                  {joinError}
-                </div>
+                <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 10, padding: "10px 14px", color: "#dc2626", fontSize: 13, fontWeight: 500 }}>{joinError}</div>
               )}
-
-              {/* Submit */}
-              <button
-                onClick={handleJoin}
-                disabled={
-                  joinSubmitting || !joinName.trim() || !joinPassword.trim()
-                }
-                style={{
-                  width: "100%",
-                  padding: "15px 0",
-                  background:
-                    joinSubmitting || !joinName.trim() || !joinPassword.trim()
-                      ? "#f3e8ff"
-                      : GRADIENT,
-                  backgroundSize: "200% 200%",
-                  animation:
-                    joinSubmitting || !joinName.trim() || !joinPassword.trim()
-                      ? "none"
-                      : "mtGradShift 6s ease infinite",
-                  border: "none",
-                  borderRadius: 14,
-                  color: "white",
-                  fontSize: 16,
-                  fontWeight: 700,
-                  cursor:
-                    joinSubmitting || !joinName.trim() || !joinPassword.trim()
-                      ? "not-allowed"
-                      : "pointer",
-                  boxShadow:
-                    joinSubmitting || !joinName.trim() || !joinPassword.trim()
-                      ? "none"
-                      : "0 4px 20px rgba(236, 72, 153, 0.35)",
-                  transition: "opacity 0.15s ease",
-                  opacity:
-                    joinSubmitting || !joinName.trim() || !joinPassword.trim()
-                      ? 0.6
-                      : 1,
-                }}
-              >
+              <button onClick={handleJoin} disabled={joinSubmitting || !joinName.trim() || !joinPassword.trim()} style={submitBtnStyle(joinSubmitting || !joinName.trim() || !joinPassword.trim())}>
                 {joinSubmitting ? "מצטרפת..." : "הצטרפי"}
               </button>
-
-              {/* Back */}
-              <button
-                onClick={() => {
-                  setMode(null);
-                  setJoinError("");
-                  setJoinName("");
-                  setJoinPassword("");
-                }}
-                style={{
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  color: "#9ca3af",
-                  fontSize: 14,
-                  fontWeight: 500,
-                  padding: "4px 0",
-                  textAlign: "center",
-                  transition: "color 0.15s ease",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.color = "#6b7280";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.color = "#9ca3af";
-                }}
-              >
+              <button onClick={() => { setMode(null); setJoinError(""); setJoinName(""); setJoinPassword(""); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#9ca3af", fontFamily: "inherit", fontSize: 13, fontWeight: 500, padding: "4px 0", textAlign: "center" }}>
                 ← חזרה
               </button>
             </div>
           )}
 
+          {/* Login link */}
+          <div style={{ textAlign: "center", marginTop: 14, fontSize: 13, color: "#f59e0b", fontWeight: 600, animation: "mtFadeIn .5s ease 1s both" }}>
+            <a href="/" onClick={(e) => { e.preventDefault(); navigate("/"); }} style={{ color: "#f59e0b", textDecoration: "underline", cursor: "pointer" }}>
+              יש לך כבר חשבון? לחצי כאן להתחברות
+            </a>
+          </div>
+
           {/* Progress dots */}
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "center",
-              gap: 8,
-              marginTop: 32,
-            }}
-          >
+          <div style={{ display: "flex", gap: 5, justifyContent: "center", marginTop: 14 }}>
             {[0, 1, 2].map((i) => (
-              <div
-                key={i}
-                style={{
-                  width: i === 2 ? 24 : 8,
-                  height: 8,
-                  borderRadius: 100,
-                  background:
-                    i === 2
-                      ? "linear-gradient(90deg, #ec4899, #db2777)"
-                      : "#e5e7eb",
-                  transition: "all 0.3s ease",
-                }}
-              />
+              <div key={i} style={{ width: 24, height: 5, borderRadius: 3, background: i === 2 ? GRADIENT : "#e2e2ea" }} />
             ))}
           </div>
         </div>

@@ -122,8 +122,8 @@ export function PlanSelection() {
     setSubmitting(true);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await (supabase as any).rpc("set_onboarding_done", { p_plan: selected });
-    await refreshProfile();
-    navigate("/org-setup");
+    navigate("/org-setup", { replace: true });
+    refreshProfile();
   };
 
   return (
@@ -133,8 +133,7 @@ export function PlanSelection() {
         minHeight: "100vh",
         display: "flex",
         flexDirection: "row-reverse",
-        fontFamily:
-          "'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif",
+        fontFamily: "Fredoka, Rubik, 'Segoe UI', sans-serif",
         overflow: "hidden",
       }}
     >

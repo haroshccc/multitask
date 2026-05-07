@@ -35,10 +35,10 @@ export function ShareListModal({ list, onClose }: ShareListModalProps) {
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-3xl shadow-lift w-full max-w-md overflow-hidden"
+        className="bg-white rounded-3xl shadow-lift w-full max-w-lg flex flex-col max-h-[85vh]"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="px-5 py-3 border-b border-ink-200 flex items-center justify-between">
+        <div className="px-5 py-4 border-b border-ink-200 flex items-center justify-between shrink-0">
           <div>
             <h3 className="font-semibold text-ink-900">שיתוף וסנכרון</h3>
             <p className="text-xs text-ink-500">
@@ -51,10 +51,10 @@ export function ShareListModal({ list, onClose }: ShareListModalProps) {
           </button>
         </div>
 
-        <div className="p-4 space-y-1 max-h-[60vh] overflow-y-auto">
+        <div className="p-4 space-y-1 flex-1 overflow-y-auto min-h-0">
           <p className="text-xs text-ink-500 mb-3 leading-relaxed">
-            הרשימה גלויה לכל חברי הארגון שלך. כאן אפשר להוסיף משתמשים ספציפיים
-            שיקבלו הרשאה מלאה לערוך אותה (ובעתיד — התראות כשמשהו בה משתנה).
+            הרשימה פרטית שלך. כאן אפשר לשתף אותה עם משתמשים ספציפיים מהקבוצה —
+            בחרי הרשאת עריכה או צפייה לכל אחד.
           </p>
           {members.length === 0 && (
             <p className="text-sm text-ink-500 text-center py-6">
@@ -92,7 +92,7 @@ export function ShareListModal({ list, onClose }: ShareListModalProps) {
           })}
         </div>
 
-        <div className="px-4 py-3 border-t border-ink-200 flex items-center justify-end">
+        <div className="px-4 py-3 border-t border-ink-200 flex items-center justify-end shrink-0">
           <button onClick={onClose} className="btn-ghost text-sm">
             סגור
           </button>

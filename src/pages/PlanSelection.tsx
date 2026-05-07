@@ -32,57 +32,23 @@ const plans = [
   },
 ];
 
-const MLogo = () => (
-  <div
-    style={{
-      display: "flex",
-      alignItems: "center",
-      gap: 10,
-      animation: "mtSlideRight 0.7s ease both",
-    }}
-  >
-    <div
-      style={{
-        width: 44,
-        height: 44,
-        background: "rgba(255,255,255,0.15)",
-        backdropFilter: "blur(8px)",
-        borderRadius: 12,
-        border: "1.5px solid rgba(255,255,255,0.35)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-      }}
-    >
-      <svg
-        width="24"
-        height="26"
-        viewBox="0 0 100 110"
-        fill="none"
-        stroke="#f59e0b"
-        strokeWidth="13"
-        strokeLinecap="butt"
-      >
-        <path d="M 10 100 L 10 10" />
-        <path d="M 10 10 L 50 60" />
-        <path d="M 50 60 L 90 10" />
-        <path d="M 90 10 L 90 65" />
-        <path d="M 50 60 L 90 100" />
-        <path d="M 90 65 L 90 100" />
-      </svg>
+function HeroBadgeLogo() {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 14, animation: "mtSlideRight .7s cubic-bezier(0.34,1.3,0.64,1) both" }}>
+      <div style={{
+        width: 46, height: 46, borderRadius: 11,
+        background: "rgba(255,255,255,.95)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+      }}>
+        <svg width="24" height="26" viewBox="0 0 100 110" fill="none" stroke="#ec4899" strokeWidth="13" strokeLinecap="butt">
+          <path d="M 10 100 L 10 10" /><path d="M 10 10 L 50 60" /><path d="M 50 60 L 90 10" />
+          <path d="M 90 10 L 90 65" /><path d="M 50 60 L 90 100" /><path d="M 90 65 L 90 100" />
+        </svg>
+      </div>
+      <span style={{ fontSize: 24, fontWeight: 600, color: "#fff", letterSpacing: "-.5px", fontFamily: "Fredoka, sans-serif" }}>multitask</span>
     </div>
-    <span
-      style={{
-        color: "white",
-        fontWeight: 700,
-        fontSize: 18,
-        letterSpacing: "-0.02em",
-      }}
-    >
-      multitask
-    </span>
-  </div>
-);
+  );
+}
 
 export function PlanSelection() {
   const navigate = useNavigate();
@@ -92,24 +58,8 @@ export function PlanSelection() {
 
   if (loading) {
     return (
-      <div
-        style={{
-          minHeight: "100vh",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <div
-          style={{
-            width: 28,
-            height: 28,
-            border: "3px solid #f3e8ff",
-            borderTop: "3px solid #ec4899",
-            borderRadius: "50%",
-            animation: "mtSpin 0.8s linear infinite",
-          }}
-        />
+      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ width: 28, height: 28, border: "3px solid #f3e8ff", borderTop: "3px solid #ec4899", borderRadius: "50%", animation: "mtSpin 0.8s linear infinite" }} />
       </div>
     );
   }
@@ -122,352 +72,145 @@ export function PlanSelection() {
     setSubmitting(true);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await (supabase as any).rpc("set_onboarding_done", { p_plan: selected });
-    await refreshProfile();
-    navigate("/org-setup");
+    navigate("/org-setup", { replace: true });
+    refreshProfile();
   };
 
   return (
-    <div
-      dir="rtl"
-      style={{
-        minHeight: "100vh",
-        display: "flex",
-        flexDirection: "row-reverse",
-        fontFamily:
-          "'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif",
-        overflow: "hidden",
-      }}
-    >
-      {/* LEFT: Hero panel */}
-      <div
-        style={{
-          flex: 1.05,
-          background: GRADIENT,
-          backgroundSize: "200% 200%",
-          animation: "mtGradShift 10s ease infinite",
-          position: "relative",
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "center",
-          padding: "60px 52px",
-          overflow: "hidden",
-        }}
-      >
-        {/* Dotted SVG pattern */}
-        <svg
-          style={{
-            position: "absolute",
-            inset: 0,
-            width: "100%",
-            height: "100%",
-            opacity: 0.12,
-            pointerEvents: "none",
-          }}
-        >
+    <div dir="rtl" style={{
+      minHeight: "100vh", display: "flex", flexDirection: "row-reverse",
+      fontFamily: "Fredoka, Rubik, sans-serif", overflow: "hidden",
+    }}>
+      {/* LEFT: pink hero */}
+      <div style={{
+        flex: 1.05, background: GRADIENT, backgroundSize: "200% 200%",
+        animation: "mtGradShift 10s ease infinite",
+        position: "relative", overflow: "hidden",
+        display: "flex", flexDirection: "column", justifyContent: "space-between",
+        padding: "56px 56px", color: "#fff",
+      }}>
+        {/* Dot pattern */}
+        <svg style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}>
           <defs>
-            <pattern
-              id="dots"
-              x="0"
-              y="0"
-              width="24"
-              height="24"
-              patternUnits="userSpaceOnUse"
-            >
-              <circle cx="2" cy="2" r="1.5" fill="white" />
+            <pattern id="dotsPlan" width="24" height="24" patternUnits="userSpaceOnUse">
+              <circle cx="2" cy="2" r="1.2" fill="rgba(255,255,255,.18)" />
             </pattern>
           </defs>
-          <rect width="100%" height="100%" fill="url(#dots)" />
+          <rect width="100%" height="100%" fill="url(#dotsPlan)" />
         </svg>
 
-        {/* Spinning circle 1 */}
-        <div
-          style={{
-            position: "absolute",
-            top: -80,
-            left: -80,
-            width: 320,
-            height: 320,
-            borderRadius: "50%",
-            border: "2px solid rgba(255,255,255,0.2)",
-            animation: "mtSpin 18s linear infinite",
-          }}
-        />
-        {/* Spinning circle 2 */}
-        <div
-          style={{
-            position: "absolute",
-            bottom: -100,
-            right: -60,
-            width: 260,
-            height: 260,
-            borderRadius: "50%",
-            border: "2px solid rgba(255,255,255,0.15)",
-            animation: "mtSpin 24s linear infinite reverse",
-          }}
-        />
-        {/* Floating blurred square */}
-        <div
-          style={{
-            position: "absolute",
-            bottom: 120,
-            left: 40,
-            width: 80,
-            height: 80,
-            background: "rgba(255,255,255,0.1)",
-            backdropFilter: "blur(12px)",
-            borderRadius: 20,
-            animation: "mtFloat 5s ease-in-out infinite",
-          }}
-        />
+        {/* Decorative circles */}
+        <div style={{ position: "absolute", width: 280, height: 280, borderRadius: "50%", border: "2px solid rgba(255,255,255,.18)", right: -100, top: -100, animation: "mtSpin 30s linear infinite" }} />
+        <div style={{ position: "absolute", width: 160, height: 160, border: "2px solid rgba(255,255,255,.22)", right: "18%", top: "48%", transform: "rotate(45deg)", animation: "mtSpin 22s linear infinite reverse" }} />
+        <div style={{ position: "absolute", width: 110, height: 110, borderRadius: 28, background: "rgba(255,255,255,.18)", backdropFilter: "blur(18px)", left: "12%", bottom: "18%", animation: "mtFloat 8s ease-in-out infinite" }} />
 
         {/* Logo */}
-        <div style={{ marginBottom: 52 }}>
-          <MLogo />
+        <div style={{ position: "relative", zIndex: 2 }}>
+          <HeroBadgeLogo />
         </div>
 
-        {/* Headline */}
-        <div style={{ animation: "mtSlideUp 0.8s ease 0.1s both" }}>
-          <h1
-            style={{
-              color: "white",
-              fontSize: "clamp(2rem, 3.5vw, 2.75rem)",
-              fontWeight: 800,
-              lineHeight: 1.15,
-              margin: "0 0 16px",
-              letterSpacing: "-0.03em",
-            }}
-          >
-            איזו רמה בא לך?
-          </h1>
-          <p
-            style={{
-              color: "rgba(255,255,255,0.82)",
-              fontSize: 16,
-              margin: "0 0 48px",
-              lineHeight: 1.6,
-              maxWidth: 340,
-            }}
-          >
-            כל התוכניות כוללות AI ו-sync בין מכשירים
+        {/* Bottom copy */}
+        <div style={{ position: "relative", zIndex: 2 }}>
+          <div style={{ fontSize: 14, fontWeight: 500, letterSpacing: ".1em", textTransform: "uppercase", opacity: 0.85, marginBottom: 18, animation: "mtFadeIn .6s ease .4s both" }}>
+            ✨ שלב 2 מתוך 3
+          </div>
+          <h2 style={{ fontSize: 54, fontWeight: 600, lineHeight: 1.05, letterSpacing: "-1.5px", marginBottom: 24 }}>
+            <div style={{ overflow: "hidden" }}>
+              <div style={{ animation: "mtSlideUp .8s cubic-bezier(0.25,0.46,0.45,0.94) .5s both" }}>בחרי את התוכנית</div>
+            </div>
+            <div style={{ overflow: "hidden" }}>
+              <div style={{ animation: "mtSlideUp .8s cubic-bezier(0.25,0.46,0.45,0.94) .7s both" }}>שמתאימה לך.</div>
+            </div>
+          </h2>
+          <p style={{ fontSize: 17, opacity: 0.92, maxWidth: 380, lineHeight: 1.5, animation: "mtFadeIn .8s ease .9s both" }}>
+            תמיד אפשר לשנות, לשדרג או לבטל מההגדרות. ללא התחייבות.
           </p>
-        </div>
-
-        {/* Step indicator */}
-        <div
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 8,
-            background: "rgba(255,255,255,0.15)",
-            backdropFilter: "blur(8px)",
-            border: "1px solid rgba(255,255,255,0.25)",
-            borderRadius: 100,
-            padding: "8px 16px",
-            fontSize: 13,
-            color: "white",
-            fontWeight: 600,
-            width: "fit-content",
-            animation: "mtFadeIn 1s ease 0.4s both",
-          }}
-        >
-          ✦ שלב 1 מתוך 2
+          <div style={{ display: "flex", gap: 24, marginTop: 32, animation: "mtFadeIn .8s ease 1.1s both" }}>
+            {[["14", "ימי ניסיון"], ["∞", "שינויים"], ["0₪", "התחלה"]].map(([n, l], i) => (
+              <div key={i}>
+                <div style={{ fontSize: 24, fontWeight: 600 }}>{n}</div>
+                <div style={{ fontSize: 11, opacity: 0.85 }}>{l}</div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
-      {/* RIGHT: Form panel */}
-      <div
-        style={{
-          flex: 1,
-          background: "white",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: "60px 48px",
-          overflowY: "auto",
-        }}
-      >
-        <div style={{ width: "100%", maxWidth: 440 }}>
-          {/* Label */}
-          <div
-            style={{
-              fontSize: 11,
-              fontWeight: 700,
-              letterSpacing: "0.12em",
-              color: "#ec4899",
-              textTransform: "uppercase",
-              marginBottom: 12,
-              animation: "mtSlideLeft 0.6s ease both",
-            }}
-          >
+      {/* RIGHT: form */}
+      <div style={{
+        flex: 1, background: "#fff", display: "flex", alignItems: "center",
+        justifyContent: "center", padding: "40px 44px", overflowY: "auto",
+      }}>
+        <div style={{ maxWidth: 440, width: "100%", animation: "mtSlideLeft .7s cubic-bezier(0.34,1.3,0.64,1) .2s both" }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "#ec4899", letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 10 }}>
             תוכניות
           </div>
-
-          {/* Title */}
-          <h1
-            style={{
-              fontSize: "clamp(1.6rem, 2.5vw, 2rem)",
-              fontWeight: 800,
-              color: "#111827",
-              margin: "0 0 32px",
-              letterSpacing: "-0.03em",
-              animation: "mtSlideLeft 0.6s ease 0.05s both",
-            }}
-          >
+          <h1 style={{ fontSize: 30, fontWeight: 600, color: "#111118", letterSpacing: "-.8px", marginBottom: 6, lineHeight: 1.15 }}>
             איזו רמה בא לך?
           </h1>
+          <p style={{ fontSize: 14, color: "#6b6b80", marginBottom: 24, lineHeight: 1.5 }}>
+            כל התוכניות כוללות AI ו-sync בין מכשירים
+          </p>
 
           {/* Plan cards */}
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: 12,
-              marginBottom: 32,
-            }}
-          >
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 20 }}>
             {plans.map((plan, i) => {
-              const isSelected = selected === plan.id;
+              const isSel = selected === plan.id;
               return (
-                <button
+                <div
                   key={plan.id}
                   onClick={() => setSelected(plan.id)}
                   style={{
-                    position: "relative",
-                    textAlign: "right",
-                    background: isSelected ? "#fdf2f8" : "white",
-                    border: isSelected
-                      ? "2px solid #ec4899"
-                      : "2px solid #e5e7eb",
-                    borderRadius: 16,
-                    padding: "16px 20px",
-                    cursor: "pointer",
-                    transition: "all 0.18s ease",
-                    animation: `mtSlideLeft 0.55s ease ${0.08 + i * 0.07}s both`,
-                    outline: "none",
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!isSelected) {
-                      (e.currentTarget as HTMLButtonElement).style.borderColor = "#f9a8d4";
-                      (e.currentTarget as HTMLButtonElement).style.background = "#fff7fb";
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!isSelected) {
-                      (e.currentTarget as HTMLButtonElement).style.borderColor = "#e5e7eb";
-                      (e.currentTarget as HTMLButtonElement).style.background = "white";
-                    }
+                    padding: "14px 16px", borderRadius: 14,
+                    background: isSel ? "#fdf2f8" : "transparent",
+                    border: isSel ? "2px solid #ec4899" : "2px solid #e2e2ea",
+                    cursor: "pointer", transition: "all .25s", position: "relative",
+                    animation: `mtSlideUp .5s cubic-bezier(0.34,1.3,0.64,1) ${0.4 + i * 0.08}s both`,
                   }}
                 >
-                  {/* Recommended badge */}
                   {plan.recommended && (
-                    <span
-                      style={{
-                        position: "absolute",
-                        top: -11,
-                        left: 16,
-                        background: GRADIENT,
-                        backgroundSize: "200% 200%",
-                        animation: "mtGradShift 6s ease infinite",
-                        color: "white",
-                        fontSize: 11,
-                        fontWeight: 700,
-                        padding: "3px 10px",
-                        borderRadius: 100,
-                        letterSpacing: "0.04em",
-                      }}
-                    >
-                      מומלץ
-                    </span>
+                    <div style={{
+                      position: "absolute", top: -9, left: 14,
+                      background: GRADIENT, color: "#fff",
+                      fontSize: 10, fontWeight: 600, letterSpacing: ".06em",
+                      padding: "3px 9px", borderRadius: 999,
+                      boxShadow: "0 4px 10px -2px rgba(236,72,153,.5)",
+                    }}>מומלץ</div>
                   )}
-
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "flex-start",
-                      marginBottom: 10,
-                    }}
-                  >
-                    <div style={{ textAlign: "left" }}>
-                      <span
-                        style={{
-                          fontSize: 22,
-                          fontWeight: 800,
-                          color: isSelected ? "#be185d" : "#111827",
-                          lineHeight: 1,
-                        }}
-                      >
-                        {plan.price}
-                        <span
-                          style={{ fontSize: 14, fontWeight: 600, marginRight: 2 }}
-                        >
-                          ₪
-                        </span>
-                      </span>
-                      <div
-                        style={{
-                          fontSize: 11,
-                          color: "#9ca3af",
-                          marginTop: 2,
-                        }}
-                      >
-                        /חודש
-                      </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: isSel ? 0 : 0 }}>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: 2 }}>
+                      <span style={{ fontSize: 20, fontWeight: 600, color: "#111118", letterSpacing: "-.5px" }}>{plan.price}</span>
+                      <span style={{ fontSize: 11, color: "#6b6b80" }}>₪/ח</span>
                     </div>
-                    <div>
-                      <div
-                        style={{
-                          fontSize: 16,
-                          fontWeight: 700,
-                          color: isSelected ? "#be185d" : "#111827",
-                          marginBottom: 2,
-                        }}
-                      >
-                        {plan.name}
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <div style={{
+                        width: 18, height: 18, borderRadius: "50%", flexShrink: 0,
+                        border: isSel ? "none" : "2px solid #e2e2ea",
+                        background: isSel ? "#ec4899" : "transparent",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                      }}>
+                        {isSel && <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#fff" }} />}
                       </div>
-                      <div style={{ fontSize: 13, color: "#6b7280" }}>
-                        {plan.subtitle}
+                      <div>
+                        <div style={{ fontSize: 15, fontWeight: 600, color: "#111118" }}>{plan.name}</div>
+                        <div style={{ fontSize: 11, color: "#6b6b80" }}>{plan.subtitle}</div>
                       </div>
                     </div>
                   </div>
-
-                  <ul
-                    style={{
-                      margin: 0,
-                      padding: 0,
-                      listStyle: "none",
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: 4,
-                    }}
-                  >
-                    {plan.features.map((f) => (
-                      <li
-                        key={f}
-                        style={{
-                          fontSize: 13,
-                          color: isSelected ? "#9d174d" : "#4b5563",
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 6,
-                          justifyContent: "flex-end",
-                        }}
-                      >
-                        {f}
-                        <span
-                          style={{
-                            color: isSelected ? "#ec4899" : "#9ca3af",
-                            fontSize: 14,
-                            flexShrink: 0,
-                          }}
-                        >
-                          ✓
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </button>
+                  {isSel && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 5, marginTop: 10, paddingTop: 10, borderTop: "1px solid #e2e2ea" }}>
+                      {plan.features.map((f, j) => (
+                        <div key={j} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "#111118", justifyContent: "flex-end" }}>
+                          <span>{f}</span>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                            <circle cx="12" cy="12" r="10" fill="#ec4899" />
+                            <path d="M8 12l3 3 5-6" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               );
             })}
           </div>
@@ -477,51 +220,32 @@ export function PlanSelection() {
             onClick={handleContinue}
             disabled={submitting}
             style={{
-              width: "100%",
-              padding: "15px 0",
+              width: "100%", padding: "14px 18px", borderRadius: 12,
               background: submitting ? "#f3e8ff" : GRADIENT,
               backgroundSize: "200% 200%",
               animation: submitting ? "none" : "mtGradShift 6s ease infinite",
-              border: "none",
-              borderRadius: 14,
-              color: "white",
-              fontSize: 16,
-              fontWeight: 700,
-              cursor: submitting ? "not-allowed" : "pointer",
-              letterSpacing: "0.01em",
-              boxShadow: submitting
-                ? "none"
-                : "0 4px 20px rgba(236, 72, 153, 0.35)",
-              transition: "opacity 0.15s ease",
+              color: "#fff", fontFamily: "inherit", fontSize: 14, fontWeight: 600,
+              border: "none", cursor: submitting ? "not-allowed" : "pointer",
+              boxShadow: submitting ? "none" : "0 12px 28px -8px rgba(236,72,153,.5)",
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
               opacity: submitting ? 0.7 : 1,
             }}
           >
-            {submitting ? "שומרת..." : "המשיכי ←"}
+            <span>{submitting ? "שומרת..." : "המשיכי"}</span>
+            {!submitting && (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ transform: "rotate(180deg)" }}>
+                <path d="M5 12h14M12 5l7 7-7 7" />
+              </svg>
+            )}
           </button>
 
           {/* Progress dots */}
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "center",
-              gap: 8,
-              marginTop: 28,
-            }}
-          >
+          <div style={{ display: "flex", gap: 5, justifyContent: "center", marginTop: 18 }}>
             {[0, 1, 2].map((i) => (
-              <div
-                key={i}
-                style={{
-                  width: i === 1 ? 24 : 8,
-                  height: 8,
-                  borderRadius: 100,
-                  background:
-                    i === 1
-                      ? "linear-gradient(90deg, #ec4899, #db2777)"
-                      : "#e5e7eb",
-                  transition: "all 0.3s ease",
-                }}
-              />
+              <div key={i} style={{
+                width: i === 1 ? 24 : 24, height: 5, borderRadius: 3,
+                background: i === 1 ? GRADIENT : "#e2e2ea",
+              }} />
             ))}
           </div>
         </div>

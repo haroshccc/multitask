@@ -164,7 +164,7 @@ function MemberRow({
                 className="fixed inset-0 z-10"
                 onClick={() => setMenuOpen(false)}
               />
-              <div className="absolute end-0 mt-1 w-40 bg-white border border-ink-200 rounded-xl shadow-lift z-20 py-1 text-sm">
+              <div className="absolute end-0 bottom-full mb-1 w-40 bg-white border border-ink-200 rounded-xl shadow-lift z-20 py-1 text-sm">
                 <PermItem
                   label="עריכה"
                   active={currentPermission === "write"}

@@ -5,7 +5,7 @@ import { useAuth } from "@/lib/auth/AuthContext";
 
 export function AuthCallback() {
   const navigate = useNavigate();
-  const { loading, session, memberships } = useAuth();
+  const { loading, session, profile } = useAuth();
   const [exchanging, setExchanging] = useState(true);
   const [error, setError] = useState<string | null>(null);
   // StrictMode mounts components twice in dev; guard against exchanging the
@@ -85,12 +85,14 @@ export function AuthCallback() {
       navigate("/", { replace: true });
       return;
     }
-    if (memberships.length === 0) {
-      navigate("/onboarding", { replace: true });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const onboardingDone = (profile as any)?.onboarding_done;
+    if (onboardingDone === false) {
+      navigate("/plan", { replace: true });
     } else {
       navigate("/app", { replace: true });
     }
-  }, [exchanging, loading, session, memberships, error, navigate]);
+  }, [exchanging, loading, session, profile, error, navigate]);
 
   return (
     <div className="min-h-screen bg-ink-50 flex items-center justify-center p-6">

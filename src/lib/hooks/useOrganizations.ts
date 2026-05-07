@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth/AuthContext";
+import { queryKeys } from "@/lib/query-keys";
 import {
   getOrganization,
   listUserOrganizations,
@@ -161,7 +162,7 @@ export function useRemoveMember() {
     mutationFn: ({ orgId, userId }: { orgId: string; userId: string }) =>
       removeMember(orgId, userId),
     onSuccess: (_data, { orgId }) => {
-      qc.invalidateQueries({ queryKey: ["org-members", orgId] });
+      qc.invalidateQueries({ queryKey: queryKeys.organizationMembers(orgId) });
     },
   });
 }
@@ -179,7 +180,7 @@ export function useUpdateMemberRole() {
       role: "owner" | "admin" | "member";
     }) => updateMemberRole(orgId, userId, role),
     onSuccess: (_data, { orgId }) => {
-      qc.invalidateQueries({ queryKey: ["org-members", orgId] });
+      qc.invalidateQueries({ queryKey: queryKeys.organizationMembers(orgId) });
     },
   });
 }

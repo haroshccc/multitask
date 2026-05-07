@@ -166,7 +166,7 @@ export function OrgOnboarding() {
         return;
       }
       await refreshProfile();
-      navigate("/app");
+      navigate("/welcome", { replace: true });
     } catch {
       setCreateError("אירעה שגיאה. נסי שוב.");
       setCreateSubmitting(false);
@@ -198,7 +198,7 @@ export function OrgOnboarding() {
         return;
       }
       await refreshProfile();
-      navigate("/app");
+      navigate("/welcome", { replace: true });
     } catch {
       setJoinError("אירעה שגיאה. נסי שוב.");
       setJoinSubmitting(false);

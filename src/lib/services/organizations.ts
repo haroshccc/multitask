@@ -154,6 +154,7 @@ export async function listMyPendingInvites(): Promise<Array<OrgInvite & { org_na
     .from("org_invites")
     .select("*, organizations(name)")
     .is("accepted_at", null)
+    .is("declined_at", null)
     .gt("expires_at", new Date().toISOString());
   if (error) throw error;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

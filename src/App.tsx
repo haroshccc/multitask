@@ -46,18 +46,16 @@ const Admin = lazy(() =>
 );
 
 function RequireAuth({ children }: { children: JSX.Element }) {
-  const { session, loading, memberships } = useAuth();
+  const { session, loading } = useAuth();
   if (loading) return <LoadingShell />;
   if (!session) return <Navigate to="/" replace />;
-  if (memberships.length === 0) return <Navigate to="/onboarding" replace />;
   return children;
 }
 
 function RedirectIfAuthed({ children }: { children: JSX.Element }) {
-  const { session, loading, memberships } = useAuth();
+  const { session, loading } = useAuth();
   if (loading) return <LoadingShell />;
-  if (session && memberships.length > 0) return <Navigate to="/app" replace />;
-  if (session && memberships.length === 0) return <Navigate to="/onboarding" replace />;
+  if (session) return <Navigate to="/app" replace />;
   return children;
 }
 

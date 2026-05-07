@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate, Navigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Building2, Users, Eye, EyeOff, Loader2 } from "lucide-react";
+import { Building2, Users, Eye, EyeOff, Loader2, ArrowLeft } from "lucide-react";
 import { useAuth } from "@/lib/auth/AuthContext";
 import { supabase } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils/cn";
@@ -25,8 +25,8 @@ export function Onboarding() {
   const [newPassword, setNewPassword] = useState("");
   const [newDomain, setNewDomain] = useState("");
 
-  // join org state
-  const [joinOrgId, setJoinOrgId] = useState<string>("");
+  // join org state — by name + password
+  const [joinName, setJoinName] = useState("");
   const [joinPassword, setJoinPassword] = useState("");
   const [suggested, setSuggested] = useState<SuggestedOrg[]>([]);
 
@@ -44,7 +44,7 @@ export function Onboarding() {
         if (data && data.length > 0) {
           setSuggested(data as SuggestedOrg[]);
           setMode("join");
-          setJoinOrgId(data[0].id);
+          setJoinName((data as SuggestedOrg[])[0].name);
         }
       });
   }, [userEmail]);
@@ -84,22 +84,38 @@ export function Onboarding() {
 
   const handleJoin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!joinOrgId || joinPassword.length < 1) {
-      setError("בחרי ארגון והזיני סיסמה");
+    if (!joinName.trim() || joinPassword.length < 1) {
+      setError("הזיני שם ארגון וסיסמה");
       return;
     }
     setSubmitting(true);
     setError(null);
-    const { error: rpcErr } = await supabase.rpc("join_organization_with_password", {
-      p_organization_id: joinOrgId,
+    const { data, error: rpcErr } = await supabase.rpc("join_organization_by_name_and_password", {
+      p_name: joinName.trim(),
       p_join_password: joinPassword,
     });
     if (rpcErr) {
-      setError("סיסמה שגויה או ארגון לא נמצא");
+      setError("שגיאת שרת — נסי שוב");
+      setSubmitting(false);
+      return;
+    }
+    const result = data as { ok: boolean; error?: string };
+    if (!result.ok) {
+      const msgs: Record<string, string> = {
+        org_not_found: "ארגון בשם זה לא נמצא",
+        wrong_password: "סיסמה שגויה",
+        org_has_no_password: "לארגון זה אין סיסמת הצטרפות — בקשי הזמנה מהמנהל",
+        not_authenticated: "יש להתחבר מחדש",
+      };
+      setError(msgs[result.error ?? ""] ?? "שגיאה לא ידועה");
       setSubmitting(false);
       return;
     }
     await refreshProfile();
+    navigate("/app", { replace: true });
+  };
+
+  const handleSkip = () => {
     navigate("/app", { replace: true });
   };
 
@@ -112,13 +128,13 @@ export function Onboarding() {
       >
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-ink-900 mb-2">ברוכה הבאה ל-Multitask</h1>
-          <p className="text-ink-600">נכנסת כ־{userEmail}. צרי ארגון חדש או הצטרפי לקיים.</p>
+          <p className="text-ink-600">נכנסת כ־{userEmail}.</p>
         </div>
 
         {/* Mode switcher */}
         <div className="grid grid-cols-2 gap-2 p-1 bg-ink-100 rounded-2xl mb-6">
           <button
-            onClick={() => setMode("create")}
+            onClick={() => { setMode("create"); setError(null); }}
             className={cn(
               "flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-medium transition-all",
               mode === "create" ? "bg-white shadow-soft text-ink-900" : "text-ink-600"
@@ -128,14 +144,14 @@ export function Onboarding() {
             ארגון חדש
           </button>
           <button
-            onClick={() => setMode("join")}
+            onClick={() => { setMode("join"); setError(null); }}
             className={cn(
               "flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-medium transition-all",
               mode === "join" ? "bg-white shadow-soft text-ink-900" : "text-ink-600"
             )}
           >
             <Users className="w-4 h-4" />
-            הצטרפות
+            הצטרפות לקיים
           </button>
         </div>
 
@@ -158,22 +174,13 @@ export function Onboarding() {
                 />
               </Field>
               <Field label="סיסמת הצטרפות" hint="משתפים רק למי שצריך להצטרף">
-                <div className="relative">
-                  <input
-                    className="field pe-10"
-                    type={showPassword ? "text" : "password"}
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="סיסמה חזקה"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword((v) => !v)}
-                    className="absolute inset-y-0 end-2 flex items-center text-ink-400 hover:text-ink-700"
-                  >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
+                <PasswordInput
+                  value={newPassword}
+                  onChange={setNewPassword}
+                  show={showPassword}
+                  onToggle={() => setShowPassword((v) => !v)}
+                  placeholder="סיסמה חזקה"
+                />
               </Field>
               <Field label="דומיין מוצע (אופציונלי)" hint="נניח acme.com — נזהה מהצטרפים עם מייל תואם">
                 <input
@@ -186,79 +193,90 @@ export function Onboarding() {
 
               {error && <ErrorBox>{error}</ErrorBox>}
 
-              <button
-                type="submit"
-                disabled={submitting}
-                className="btn-primary w-full"
-              >
+              <button type="submit" disabled={submitting} className="btn-primary w-full">
                 {submitting ? "יוצרת..." : "צרי ארגון"}
               </button>
             </form>
           ) : (
             <form onSubmit={handleJoin} className="space-y-4">
-              {suggested.length > 0 ? (
-                <Field label="בחרי ארגון">
-                  <select
-                    className="field"
-                    value={joinOrgId}
-                    onChange={(e) => setJoinOrgId(e.target.value)}
-                  >
-                    {suggested.map((o) => (
-                      <option key={o.id} value={o.id}>
-                        {o.name}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-              ) : (
-                <Field label="מזהה ארגון" hint="קבלי מהמנהל של הארגון">
-                  <input
-                    className="field font-mono text-xs"
-                    value={joinOrgId}
-                    onChange={(e) => setJoinOrgId(e.target.value)}
-                    placeholder="00000000-0000-0000-0000-000000000000"
-                  />
-                </Field>
-              )}
+              <Field label="שם הארגון" hint="הזיני את השם המדויק של הארגון שאת מצטרפת אליו">
+                <input
+                  className="field"
+                  value={joinName}
+                  onChange={(e) => setJoinName(e.target.value)}
+                  placeholder="שם הארגון"
+                  autoFocus
+                />
+              </Field>
 
               <Field label="סיסמת הצטרפות">
-                <div className="relative">
-                  <input
-                    className="field pe-10"
-                    type={showPassword ? "text" : "password"}
-                    value={joinPassword}
-                    onChange={(e) => setJoinPassword(e.target.value)}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword((v) => !v)}
-                    className="absolute inset-y-0 end-2 flex items-center text-ink-400 hover:text-ink-700"
-                  >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
+                <PasswordInput
+                  value={joinPassword}
+                  onChange={setJoinPassword}
+                  show={showPassword}
+                  onToggle={() => setShowPassword((v) => !v)}
+                  placeholder="קבלי מהמנהל של הארגון"
+                />
               </Field>
 
               {error && <ErrorBox>{error}</ErrorBox>}
 
-              <button
-                type="submit"
-                disabled={submitting}
-                className="btn-primary w-full"
-              >
+              <button type="submit" disabled={submitting} className="btn-primary w-full">
                 {submitting ? "מצטרפת..." : "הצטרפות לארגון"}
               </button>
             </form>
           )}
         </div>
 
+        {/* Skip — enter app without org */}
+        <button
+          onClick={handleSkip}
+          className="mt-4 flex items-center justify-center gap-1.5 text-sm text-ink-500 hover:text-ink-700 w-full"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          המשכי ללא ארגון — אוכל להצטרף בהגדרות
+        </button>
+
         <button
           onClick={signOut}
-          className="mt-6 text-sm text-ink-500 hover:text-ink-700 w-full text-center"
+          className="mt-3 text-sm text-ink-400 hover:text-ink-600 w-full text-center"
         >
           התחברות עם חשבון אחר
         </button>
       </motion.div>
+    </div>
+  );
+}
+
+function PasswordInput({
+  value,
+  onChange,
+  show,
+  onToggle,
+  placeholder,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  show: boolean;
+  onToggle: () => void;
+  placeholder?: string;
+}) {
+  return (
+    <div className="relative">
+      <input
+        className="field pe-10"
+        type={show ? "text" : "password"}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+      />
+      <button
+        type="button"
+        onClick={onToggle}
+        className="absolute inset-y-0 end-2 flex items-center text-ink-400 hover:text-ink-700"
+      >
+        {show ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+      </button>
     </div>
   );
 }

@@ -25,124 +25,207 @@ import {
   type MealPlanDay,
 } from "@/lib/types/domain";
 
-const HIDDEN_STORAGE_KEY = "multitask.food.tomorrow.hiddenUsers";
+// ---------------------------------------------------------------------------
+// Date helpers
+// ---------------------------------------------------------------------------
 
-/** Reads the set of user_ids the current user has chosen to hide from the
- *  tomorrow banner. Persists in localStorage so the choice survives reloads. */
-function loadHiddenUsers(): Set<string> {
-  if (typeof window === "undefined") return new Set();
-  try {
-    const raw = localStorage.getItem(HIDDEN_STORAGE_KEY);
-    if (!raw) return new Set();
-    const arr = JSON.parse(raw);
-    return Array.isArray(arr) ? new Set(arr.map(String)) : new Set();
-  } catch {
-    return new Set();
-  }
+function pad(n: number) {
+  return String(n).padStart(2, "0");
+}
+function isoOf(d: Date): string {
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+function plusDays(iso: string, n: number): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  const dt = new Date(y, (m ?? 1) - 1, d ?? 1);
+  dt.setDate(dt.getDate() + n);
+  return isoOf(dt);
+}
+function dowOf(iso: string): DayOfWeek {
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(y, (m ?? 1) - 1, d ?? 1).getDay() as DayOfWeek;
+}
+function labelFor(iso: string, todayIso: string, tomorrowIso: string): string {
+  const [, m, d] = iso.split("-");
+  const dowLabel = DAY_OF_WEEK_LABELS[dowOf(iso)];
+  const dateShort = `${d}/${m}`;
+  if (iso === todayIso) return `היום, ${dateShort}`;
+  if (iso === tomorrowIso) return `מחר, ${dateShort}`;
+  return `${dowLabel}, ${dateShort}`;
 }
 
-/**
- * Banner showing what's planned for tomorrow — split into one section per
- * person whose plan is visible. Each section starts from that person's
- * weekly template and overlays per-day overrides from meal_plan_days.
- *
- * The user can:
- *   • Edit any visible plan inline (RLS enforces access)
- *   • Reset a slot to fall back to that person's template
- *   • Hide individual people's sections (persists to localStorage)
- *
- * Visual cue: each person's section is bordered + tinted with their
- * deterministic color, and editing someone else's plan reads as
- * deliberate by virtue of the colored border surrounding the cells.
- */
-export function TomorrowMenuBanner() {
-  const [collapsed, setCollapsed] = useState(false);
-  const [hiddenUsers, setHiddenUsers] = useState<Set<string>>(loadHiddenUsers);
+// ---------------------------------------------------------------------------
+// Hidden-users persistence (keyed by date so each day remembers separately)
+// ---------------------------------------------------------------------------
 
-  const { tomorrowDate, tomorrowDow, tomorrowLabel } = useMemo(() => {
-    const t = new Date();
-    t.setDate(t.getDate() + 1);
-    const yyyy = t.getFullYear();
-    const mm = String(t.getMonth() + 1).padStart(2, "0");
-    const dd = String(t.getDate()).padStart(2, "0");
-    return {
-      tomorrowDate: `${yyyy}-${mm}-${dd}`,
-      tomorrowDow: t.getDay() as DayOfWeek,
-      tomorrowLabel: `${DAY_OF_WEEK_LABELS[t.getDay() as DayOfWeek]}, ${dd}/${mm}`,
-    };
-  }, []);
+const HIDDEN_KEY = "multitask.food.dayplan.hiddenUsers";
+
+function loadHiddenUsers(): Record<string, string[]> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = localStorage.getItem(HIDDEN_KEY);
+    return raw ? (JSON.parse(raw) as Record<string, string[]>) : {};
+  } catch {
+    return {};
+  }
+}
+function saveHiddenUsers(val: Record<string, string[]>) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(HIDDEN_KEY, JSON.stringify(val));
+}
+
+// ---------------------------------------------------------------------------
+// Root component — renders one DayBanner per date that has plan rows
+// ---------------------------------------------------------------------------
+
+export function TomorrowMenuBanner() {
+  const todayIso = useMemo(() => isoOf(new Date()), []);
+  const tomorrowIso = useMemo(() => plusDays(todayIso, 1), [todayIso]);
+  const endIso = useMemo(() => plusDays(todayIso, 13), [todayIso]);
 
   const { data: template = [] } = useMealPlanTemplate();
-  const { data: dayRows = [] } = useMealPlanDays(tomorrowDate, tomorrowDate);
+  const { data: allDayRows = [] } = useMealPlanDays(todayIso, endIso);
   const replaceDayCell = useReplaceMealPlanDayCell();
   const { people, me } = useFoodPeople();
 
-  // Persist hidden-users state.
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    localStorage.setItem(
-      HIDDEN_STORAGE_KEY,
-      JSON.stringify(Array.from(hiddenUsers))
-    );
-  }, [hiddenUsers]);
+  // Dates that have at least one meal_plan_days row, sorted ascending.
+  const datesWithPlan = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of allDayRows) set.add(r.date);
+    return Array.from(set).sort();
+  }, [allDayRows]);
 
-  const toggleHidden = (uid: string) => {
-    setHiddenUsers((s) => {
-      const next = new Set(s);
-      if (next.has(uid)) next.delete(uid);
-      else next.add(uid);
-      return next;
+  const [hiddenAll, setHiddenAll] = useState<Record<string, string[]>>(loadHiddenUsers);
+
+  useEffect(() => {
+    saveHiddenUsers(hiddenAll);
+  }, [hiddenAll]);
+
+  const toggleHidden = (date: string, uid: string) => {
+    setHiddenAll((prev) => {
+      const cur = new Set(prev[date] ?? []);
+      if (cur.has(uid)) cur.delete(uid);
+      else cur.add(uid);
+      return { ...prev, [date]: Array.from(cur) };
     });
   };
 
   const handleSlotChange = (
+    date: string,
     userId: string,
     mealTime: MealTimeKey,
     mealIds: string[]
   ) => {
-    replaceDayCell.mutate({
-      userId,
-      date: tomorrowDate,
-      mealTime,
-      mealIds,
-    });
+    replaceDayCell.mutate({ userId, date, mealTime, mealIds });
   };
 
-  const handleResetToTemplate = (userId: string, mealTime: MealTimeKey) => {
-    // Empty mealIds clears the day's overrides for that slot — the
-    // template re-takes over on the next render.
-    replaceDayCell.mutate({
-      userId,
-      date: tomorrowDate,
-      mealTime,
-      mealIds: [],
-    });
+  const handleResetToTemplate = (
+    date: string,
+    userId: string,
+    mealTime: MealTimeKey
+  ) => {
+    replaceDayCell.mutate({ userId, date, mealTime, mealIds: [] });
   };
 
-  const visiblePeople = people.filter((p) => !hiddenUsers.has(p.userId));
-  const hiddenList = people.filter((p) => hiddenUsers.has(p.userId));
+  if (datesWithPlan.length === 0) return null;
 
   return (
-    <div className="card border border-primary-200 bg-gradient-to-l from-amber-50/80 via-white to-white mb-3">
+    <div className="space-y-2 mb-3">
+      {datesWithPlan.map((date) => {
+        const hiddenSet = new Set(hiddenAll[date] ?? []);
+        const dayRows = allDayRows.filter((r) => r.date === date);
+        return (
+          <DayBanner
+            key={date}
+            date={date}
+            label={labelFor(date, todayIso, tomorrowIso)}
+            isTomorrow={date === tomorrowIso}
+            dow={dowOf(date)}
+            template={template}
+            dayRows={dayRows}
+            people={people}
+            me={me}
+            hiddenUsers={hiddenSet}
+            onToggleHidden={(uid) => toggleHidden(date, uid)}
+            onSlotChange={(uid, mt, ids) => handleSlotChange(date, uid, mt, ids)}
+            onResetSlot={(uid, mt) => handleResetToTemplate(date, uid, mt)}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Single-day collapsible banner
+// ---------------------------------------------------------------------------
+
+interface DayBannerProps {
+  date: string;
+  label: string;
+  isTomorrow: boolean;
+  dow: DayOfWeek;
+  template: MealPlanTemplate[];
+  dayRows: MealPlanDay[];
+  people: FoodPerson[];
+  me: FoodPerson | null;
+  hiddenUsers: Set<string>;
+  onToggleHidden: (uid: string) => void;
+  onSlotChange: (uid: string, mt: MealTimeKey, ids: string[]) => void;
+  onResetSlot: (uid: string, mt: MealTimeKey) => void;
+}
+
+function DayBanner({
+  date,
+  label,
+  isTomorrow,
+  dow,
+  template,
+  dayRows,
+  people,
+  me,
+  hiddenUsers,
+  onToggleHidden,
+  onSlotChange,
+  onResetSlot,
+}: DayBannerProps) {
+  // Default collapsed — user expands on demand.
+  const [collapsed, setCollapsed] = useState(true);
+
+  // Only show people who have at least one row for this date.
+  const peopleWithRows = useMemo(() => {
+    const uidsWithRows = new Set(dayRows.map((r) => r.user_id));
+    return people.filter((p) => uidsWithRows.has(p.userId));
+  }, [people, dayRows]);
+
+  const visiblePeople = peopleWithRows.filter((p) => !hiddenUsers.has(p.userId));
+  const hiddenList = peopleWithRows.filter((p) => hiddenUsers.has(p.userId));
+
+  const totalMeals = dayRows.length;
+
+  return (
+    <div className="card border border-primary-200 bg-gradient-to-l from-amber-50/80 via-white to-white">
       <button
         type="button"
         onClick={() => setCollapsed((v) => !v)}
         className="w-full flex items-center justify-between gap-2 px-3 py-2 text-start hover:bg-ink-50/50"
       >
-        <span className="flex items-center gap-2">
-          <Sunrise className="w-4 h-4 text-amber-500" />
-          <span className="font-medium text-ink-900 text-sm">תפריט מחר</span>
-          <span className="text-xs text-ink-500">{tomorrowLabel}</span>
-          {visiblePeople.length > 1 && (
-            <span className="text-[10px] text-ink-400">
-              · {visiblePeople.length} משתתפים
+        <span className="flex items-center gap-2 min-w-0">
+          <Sunrise className="w-4 h-4 text-amber-500 shrink-0" />
+          <span className="font-medium text-ink-900 text-sm whitespace-nowrap">
+            {isTomorrow ? "תפריט מחר" : "תפריט"}
+          </span>
+          <span className="text-xs text-ink-500 truncate">{label}</span>
+          {totalMeals > 0 && collapsed && (
+            <span className="text-[10px] bg-amber-100 text-amber-700 rounded-full px-1.5 py-0.5 whitespace-nowrap">
+              {totalMeals} מנות
             </span>
           )}
         </span>
         {collapsed ? (
-          <ChevronDown className="w-4 h-4 text-ink-400" />
+          <ChevronDown className="w-4 h-4 text-ink-400 shrink-0" />
         ) : (
-          <ChevronUp className="w-4 h-4 text-ink-400" />
+          <ChevronUp className="w-4 h-4 text-ink-400 shrink-0" />
         )}
       </button>
 
@@ -150,7 +233,7 @@ export function TomorrowMenuBanner() {
         <div className="px-3 pb-3 pt-1 space-y-3">
           {visiblePeople.length === 0 ? (
             <div className="text-xs text-ink-400 px-3 py-3 text-center">
-              כל הסעיפים מוסתרים. לחצי "הצג שוב" למטה כדי לפתוח חזרה.
+              כל הסעיפים מוסתרים.
             </div>
           ) : (
             visiblePeople.map((p) => (
@@ -158,12 +241,12 @@ export function TomorrowMenuBanner() {
                 key={p.userId}
                 person={p}
                 isMe={p.userId === me?.userId}
-                tomorrowDow={tomorrowDow}
+                dow={dow}
                 template={template}
                 dayRows={dayRows}
-                onSlotChange={handleSlotChange}
-                onResetSlot={handleResetToTemplate}
-                onHide={() => toggleHidden(p.userId)}
+                onSlotChange={(mt, ids) => onSlotChange(p.userId, mt, ids)}
+                onResetSlot={(mt) => onResetSlot(p.userId, mt)}
+                onHide={() => onToggleHidden(p.userId)}
               />
             ))
           )}
@@ -174,7 +257,7 @@ export function TomorrowMenuBanner() {
                 <button
                   key={p.userId}
                   type="button"
-                  onClick={() => toggleHidden(p.userId)}
+                  onClick={() => onToggleHidden(p.userId)}
                   className="inline-flex items-center gap-1 text-xs text-ink-500 hover:text-ink-900 px-2 py-0.5 rounded-md hover:bg-ink-50"
                   title="הצג שוב"
                 >
@@ -191,12 +274,14 @@ export function TomorrowMenuBanner() {
   );
 }
 
-/** A single person's tomorrow section. Computes effective slots: overrides
- *  from meal_plan_days take precedence over the weekly template. */
+// ---------------------------------------------------------------------------
+// One person's section inside a day banner
+// ---------------------------------------------------------------------------
+
 function PersonSection({
   person,
   isMe,
-  tomorrowDow,
+  dow,
   template,
   dayRows,
   onSlotChange,
@@ -205,11 +290,11 @@ function PersonSection({
 }: {
   person: FoodPerson;
   isMe: boolean;
-  tomorrowDow: DayOfWeek;
+  dow: DayOfWeek;
   template: MealPlanTemplate[];
   dayRows: MealPlanDay[];
-  onSlotChange: (userId: string, mealTime: MealTimeKey, mealIds: string[]) => void;
-  onResetSlot: (userId: string, mealTime: MealTimeKey) => void;
+  onSlotChange: (mealTime: MealTimeKey, mealIds: string[]) => void;
+  onResetSlot: (mealTime: MealTimeKey) => void;
   onHide: () => void;
 }) {
   const slots = useMemo(() => {
@@ -223,7 +308,7 @@ function PersonSection({
     const tplMap = new Map<string, string[]>();
     for (const r of template) {
       if (r.user_id !== person.userId) continue;
-      if (r.day_of_week !== tomorrowDow) continue;
+      if (r.day_of_week !== dow) continue;
       const list = tplMap.get(r.meal_time) ?? [];
       list.push(r.meal_id);
       tplMap.set(r.meal_time, list);
@@ -233,7 +318,7 @@ function PersonSection({
       const ids = overridden ? dayMap.get(mt)! : tplMap.get(mt) ?? [];
       return { mealTime: mt, ids, overridden };
     });
-  }, [template, dayRows, tomorrowDow, person.userId]);
+  }, [template, dayRows, dow, person.userId]);
 
   return (
     <div
@@ -251,7 +336,7 @@ function PersonSection({
           </span>
           {!isMe && (
             <span className="text-[10px] text-ink-500 italic">
-              (משותף — שינויים יישמרו אצלו/ה)
+              (שינויים יישמרו אצלו/ה)
             </span>
           )}
         </span>
@@ -283,7 +368,7 @@ function PersonSection({
             <div className="flex-1 min-w-0">
               <MealCellPicker
                 mealIds={s.ids}
-                onChange={(next) => onSlotChange(person.userId, s.mealTime, next)}
+                onChange={(next) => onSlotChange(s.mealTime, next)}
                 mealTime={s.mealTime}
                 placeholder="—"
               />
@@ -291,7 +376,7 @@ function PersonSection({
             {s.overridden && (
               <button
                 type="button"
-                onClick={() => onResetSlot(person.userId, s.mealTime)}
+                onClick={() => onResetSlot(s.mealTime)}
                 className="shrink-0 p-1.5 rounded-md text-ink-400 hover:text-ink-900 hover:bg-ink-100"
                 title="אפס לפי התפריט הקבוע"
               >

@@ -46,7 +46,7 @@ export function MealsTab({
     e.target.value = "";
     try {
       const url = await uploadMealImage(scope.organizationId, file);
-      await updateMeal.mutateAsync({ mealId: uploadingMealId, patch: { image_url: url } });
+      await updateMeal.mutateAsync({ id: uploadingMealId, patch: { image_url: url } });
     } catch {
       // silent — MealEditModal shows its own error; table is best-effort
     } finally {

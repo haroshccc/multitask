@@ -4,6 +4,9 @@ import { useAuth } from "@/lib/auth/AuthContext";
 import { Landing } from "@/pages/Landing";
 import { AuthCallback } from "@/pages/AuthCallback";
 import { Onboarding } from "@/pages/Onboarding";
+import { PlanSelection } from "@/pages/PlanSelection";
+import { OrgOnboarding } from "@/pages/OrgOnboarding";
+import { Success } from "@/pages/Success";
 import { AppShell } from "@/components/layout/AppShell";
 
 // Lazy-loaded app pages — each gets its own chunk, dramatically reducing the
@@ -91,6 +94,9 @@ export default function App() {
       <Route path="/" element={<RootRoute />} />
       <Route path="/auth/callback" element={<AuthCallback />} />
       <Route path="/onboarding" element={<Onboarding />} />
+      <Route path="/plan" element={<PlanSelection />} />
+      <Route path="/org-setup" element={<OrgOnboarding />} />
+      <Route path="/welcome" element={<Success />} />
       <Route
         path="/app"
         element={

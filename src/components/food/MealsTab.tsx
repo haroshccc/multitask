@@ -1,6 +1,5 @@
 import { useState, useMemo, useRef } from "react";
 import { Plus, Pencil, Trash2, AlertCircle, PanelRightOpen, PanelRightClose, Camera } from "lucide-react";
-import { cn } from "@/lib/utils/cn";
 import { useMeals, useDeleteMeal, useMealCategories, useIngredients, useUpdateMeal } from "@/lib/hooks/useFood";
 import { MealEditModal } from "./MealEditModal";
 import { IngredientsTab } from "./IngredientsTab";

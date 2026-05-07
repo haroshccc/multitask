@@ -95,14 +95,14 @@ export function Food() {
       <TomorrowMenuBanner />
 
       <div className="card overflow-visible mb-3 px-2 py-1.5">
-        <nav className="flex items-center gap-1">
+        <nav className="flex items-center gap-1 overflow-x-auto no-scrollbar">
           {TABS.map((t) => (
             <button
               key={t.id}
               type="button"
               onClick={() => handleTabChange(t.id)}
               className={cn(
-                "px-3 py-1.5 text-sm rounded-md transition-colors",
+                "px-3 py-1.5 text-sm rounded-md transition-colors whitespace-nowrap",
                 tab === t.id
                   ? "bg-ink-900 text-white"
                   : "text-ink-700 hover:bg-ink-100"

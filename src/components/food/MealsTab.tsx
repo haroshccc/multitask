@@ -14,9 +14,6 @@ import {
 import { computeMealNutrition, round1 } from "@/lib/food/nutrition";
 
 interface MealsTabProps {
-  /** Whether the side panel with the ingredients table is open. Lifted so
-   *  the header toggle in the parent page can drive it; kept independent of
-   *  filters/search state. */
   ingredientsPanelOpen: boolean;
   onToggleIngredientsPanel: () => void;
 }
@@ -48,7 +45,7 @@ export function MealsTab({
       const url = await uploadMealImage(scope.organizationId, file);
       await updateMeal.mutateAsync({ id: uploadingMealId, patch: { image_url: url } });
     } catch {
-      // silent — MealEditModal shows its own error; table is best-effort
+      // silent
     } finally {
       setUploadingMealId(null);
     }
@@ -84,74 +81,212 @@ export function MealsTab({
     });
   }, [meals, filterCategory, filterMealTime, search]);
 
+  const openEdit = (m: MealWithIngredients) => {
+    setEditing(m);
+    setModalOpen(true);
+  };
+
+  const confirmDelete = async (m: MealWithIngredients) => {
+    if (confirm(`למחוק את "${m.name}"?`)) {
+      await deleteMeal.mutateAsync(m.id);
+    }
+  };
+
   return (
     <div className="flex gap-4">
       <div className="flex-1 min-w-0 space-y-3">
-        {/* Toolbar */}
-        <div className="card p-2 flex items-center gap-2 flex-wrap">
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="חיפוש מנה..."
-            className="field text-sm py-1.5 w-44"
-          />
-          <select
-            value={filterCategory}
-            onChange={(e) => setFilterCategory(e.target.value)}
-            className="field text-sm py-1.5 w-36"
-          >
-            <option value="all">כל הקטגוריות</option>
-            {categories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-          <select
-            value={filterMealTime}
-            onChange={(e) =>
-              setFilterMealTime(e.target.value as MealTimeKey | "all")
-            }
-            className="field text-sm py-1.5 w-32"
-          >
-            <option value="all">כל הזמנים</option>
-            {MEAL_TIME_KEYS.map((t) => (
-              <option key={t} value={t}>
-                {MEAL_TIME_LABELS[t]}
-              </option>
-            ))}
-          </select>
-          <div className="ms-auto flex items-center gap-2">
-            <button
-              type="button"
-              onClick={onToggleIngredientsPanel}
-              className="btn-ghost text-xs gap-1.5"
-              title={ingredientsPanelOpen ? "סגור פאנל מצרכים" : "פתח פאנל מצרכים"}
+        {/* ── Toolbar ── */}
+        <div className="card p-2">
+          {/* Row 1: search + action buttons */}
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="חיפוש מנה..."
+              className="field text-sm py-1.5 flex-1 min-w-0"
+            />
+            {/* Filters inline on sm+ */}
+            <select
+              value={filterCategory}
+              onChange={(e) => setFilterCategory(e.target.value)}
+              className="hidden sm:block field text-sm py-1.5 w-36"
             >
-              {ingredientsPanelOpen ? (
-                <PanelRightClose className="w-4 h-4" />
-              ) : (
-                <PanelRightOpen className="w-4 h-4" />
-              )}
-              <span className="hidden md:inline">מצרכים</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setEditing(null);
-                setModalOpen(true);
-              }}
-              className="btn-dark text-sm gap-1.5"
+              <option value="all">כל הקטגוריות</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+            <select
+              value={filterMealTime}
+              onChange={(e) => setFilterMealTime(e.target.value as MealTimeKey | "all")}
+              className="hidden sm:block field text-sm py-1.5 w-32"
             >
-              <Plus className="w-4 h-4" />
-              מנה חדשה
-            </button>
+              <option value="all">כל הזמנים</option>
+              {MEAL_TIME_KEYS.map((t) => (
+                <option key={t} value={t}>{MEAL_TIME_LABELS[t]}</option>
+              ))}
+            </select>
+            <div className="flex items-center gap-1.5 ms-auto sm:ms-0">
+              <button
+                type="button"
+                onClick={onToggleIngredientsPanel}
+                className="btn-ghost text-xs gap-1.5 hidden sm:inline-flex"
+                title={ingredientsPanelOpen ? "סגור פאנל מצרכים" : "פתח פאנל מצרכים"}
+              >
+                {ingredientsPanelOpen ? (
+                  <PanelRightClose className="w-4 h-4" />
+                ) : (
+                  <PanelRightOpen className="w-4 h-4" />
+                )}
+                <span className="hidden md:inline">מצרכים</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => { setEditing(null); setModalOpen(true); }}
+                className="btn-dark text-sm gap-1.5 whitespace-nowrap"
+              >
+                <Plus className="w-4 h-4" />
+                <span className="hidden xs:inline">מנה חדשה</span>
+                <span className="xs:hidden">חדשה</span>
+              </button>
+            </div>
+          </div>
+          {/* Row 2 mobile-only: filters */}
+          <div className="flex items-center gap-2 mt-1.5 sm:hidden">
+            <select
+              value={filterCategory}
+              onChange={(e) => setFilterCategory(e.target.value)}
+              className="field text-sm py-1.5 flex-1"
+            >
+              <option value="all">כל הקטגוריות</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+            <select
+              value={filterMealTime}
+              onChange={(e) => setFilterMealTime(e.target.value as MealTimeKey | "all")}
+              className="field text-sm py-1.5 flex-1"
+            >
+              <option value="all">כל הזמנים</option>
+              {MEAL_TIME_KEYS.map((t) => (
+                <option key={t} value={t}>{MEAL_TIME_LABELS[t]}</option>
+              ))}
+            </select>
           </div>
         </div>
 
-        {/* Meals table */}
-        <div className="card overflow-x-auto">
+        {/* ── Mobile: card list ── */}
+        <div className="sm:hidden space-y-2">
+          {isLoading ? (
+            <div className="card p-6 text-center text-ink-400">טוען...</div>
+          ) : filtered.length === 0 ? (
+            <div className="card p-8 text-center text-ink-400">
+              {meals.length === 0
+                ? "עוד אין מנות. לחץ + מנה חדשה כדי להוסיף את הראשונה."
+                : "אין מנות שתואמות לסינון."}
+            </div>
+          ) : (
+            filtered.map((m) => {
+              const cat = m.category_id ? categoriesById.get(m.category_id) : null;
+              const totals = computeMealNutrition(
+                m.ingredients.map((mi) => ({
+                  ingredient_id: mi.ingredient_id,
+                  unit_id: mi.unit_id,
+                  quantity: Number(mi.quantity) || 0,
+                })),
+                unitsById,
+                (id) => {
+                  const i = ingredientsById.get(id);
+                  return i?.units.find((u) => u.is_default) ?? i?.units[0];
+                }
+              );
+              return (
+                <div key={m.id} className="card p-3">
+                  <div className="flex items-start gap-3">
+                    {/* Thumbnail */}
+                    <button
+                      type="button"
+                      onClick={() => handleImageClick(m.id)}
+                      title="לחץ להוספה/החלפה של תמונה"
+                      className="relative w-14 h-14 rounded-md shrink-0 overflow-hidden border border-ink-200 group"
+                    >
+                      {uploadingMealId === m.id ? (
+                        <div className="w-full h-full bg-ink-100 flex items-center justify-center">
+                          <div className="w-4 h-4 border-2 border-primary-400 border-t-transparent rounded-full animate-spin" />
+                        </div>
+                      ) : m.image_url ? (
+                        <>
+                          <img src={m.image_url} alt="" className="w-full h-full object-cover" loading="lazy" />
+                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                            <Camera className="w-4 h-4 text-white" />
+                          </div>
+                        </>
+                      ) : (
+                        <div className="w-full h-full bg-ink-100 flex items-center justify-center text-ink-400 group-hover:bg-ink-200 transition-colors">
+                          <Camera className="w-4 h-4" />
+                        </div>
+                      )}
+                    </button>
+                    {/* Info */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-2 mb-1">
+                        <span className="font-medium text-ink-900 leading-snug">{m.name}</span>
+                        <div className="flex items-center gap-0.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => openEdit(m)}
+                            className="p-1.5 rounded-md text-ink-400 hover:text-ink-900 hover:bg-ink-100"
+                            title="ערוך"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => confirmDelete(m)}
+                            className="p-1.5 rounded-md text-ink-400 hover:text-danger-600 hover:bg-danger-50"
+                            title="מחק"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1 mb-1.5">
+                        {cat && (
+                          <span className="inline-flex items-center gap-1 text-[11px] bg-ink-100 text-ink-700 rounded-md px-1.5 py-0.5">
+                            {cat.color && (
+                              <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: cat.color }} />
+                            )}
+                            {cat.name}
+                          </span>
+                        )}
+                        {(m.meal_times as MealTimeKey[]).map((t) => (
+                          <span key={t} className="text-[10px] bg-primary-50 text-primary-700 rounded-md px-1.5 py-0.5">
+                            {MEAL_TIME_LABELS[t] ?? t}
+                          </span>
+                        ))}
+                      </div>
+                      {/* Nutrition mini row */}
+                      <div className="flex items-center gap-3 text-xs text-ink-600">
+                        <MiniStat label="קל'" value={round1(totals.calories)} />
+                        <MiniStat label="חלבון" value={round1(totals.protein_g)} />
+                        <MiniStat label="שומן" value={round1(totals.fat_g)} />
+                        <span className="flex items-center gap-0.5">
+                          <MiniStat label="פחמ'" value={round1(totals.carbs_g)} />
+                          {totals.hasMissing && <AlertCircle className="w-3 h-3 text-amber-500 ms-0.5" />}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* ── Desktop: table ── */}
+        <div className="hidden sm:block card overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-ink-50/60 text-xs text-ink-500">
               <tr>
@@ -169,9 +304,7 @@ export function MealsTab({
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={9} className="p-6 text-center text-ink-400">
-                    טוען...
-                  </td>
+                  <td colSpan={9} className="p-6 text-center text-ink-400">טוען...</td>
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
@@ -197,10 +330,7 @@ export function MealsTab({
                     }
                   );
                   return (
-                    <tr
-                      key={m.id}
-                      className="border-t border-ink-100 hover:bg-ink-50/40"
-                    >
+                    <tr key={m.id} className="border-t border-ink-100 hover:bg-ink-50/40">
                       <td className="p-2 font-medium text-ink-900">
                         <div className="flex items-center gap-2">
                           <button
@@ -233,10 +363,7 @@ export function MealsTab({
                         {cat ? (
                           <span className="inline-flex items-center gap-1.5 text-xs">
                             {cat.color && (
-                              <span
-                                className="w-2 h-2 rounded-full"
-                                style={{ backgroundColor: cat.color }}
-                              />
+                              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: cat.color }} />
                             )}
                             {cat.name}
                           </span>
@@ -250,10 +377,7 @@ export function MealsTab({
                             <span className="text-ink-400 text-xs">—</span>
                           )}
                           {(m.meal_times as MealTimeKey[]).map((t) => (
-                            <span
-                              key={t}
-                              className="text-[10px] bg-ink-100 text-ink-700 rounded-md px-1.5 py-0.5"
-                            >
+                            <span key={t} className="text-[10px] bg-ink-100 text-ink-700 rounded-md px-1.5 py-0.5">
                               {MEAL_TIME_LABELS[t] ?? t}
                             </span>
                           ))}
@@ -277,20 +401,13 @@ export function MealsTab({
                       <td className="p-2 tabular-nums">
                         <span className="flex items-center gap-1">
                           {round1(totals.carbs_g)}
-                          {totals.hasMissing && (
-                            <AlertCircle
-                              className="w-3 h-3 text-amber-500"
-                            />
-                          )}
+                          {totals.hasMissing && <AlertCircle className="w-3 h-3 text-amber-500" />}
                         </span>
                       </td>
                       <td className="p-2 whitespace-nowrap">
                         <button
                           type="button"
-                          onClick={() => {
-                            setEditing(m);
-                            setModalOpen(true);
-                          }}
+                          onClick={() => openEdit(m)}
                           className="p-1.5 rounded-md text-ink-400 hover:text-ink-900 hover:bg-ink-100"
                           title="ערוך"
                         >
@@ -298,11 +415,7 @@ export function MealsTab({
                         </button>
                         <button
                           type="button"
-                          onClick={async () => {
-                            if (confirm(`למחוק את "${m.name}"?`)) {
-                              await deleteMeal.mutateAsync(m.id);
-                            }
-                          }}
+                          onClick={() => confirmDelete(m)}
                           className="p-1.5 rounded-md text-ink-400 hover:text-danger-600 hover:bg-danger-50"
                           title="מחק"
                         >
@@ -319,12 +432,7 @@ export function MealsTab({
       </div>
 
       {ingredientsPanelOpen && (
-        <aside
-          className={cn(
-            "shrink-0 w-full max-w-sm",
-            "lg:max-w-md xl:max-w-lg"
-          )}
-        >
+        <aside className="shrink-0 w-full max-w-sm lg:max-w-md xl:max-w-lg hidden sm:block">
           <div className="card p-3 sticky top-2 max-h-[calc(100vh-7rem)] overflow-y-auto">
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-sm font-semibold text-ink-900">פאנל מצרכים</h3>
@@ -352,12 +460,18 @@ export function MealsTab({
 
       <MealEditModal
         open={modalOpen}
-        onClose={() => {
-          setModalOpen(false);
-          setEditing(null);
-        }}
+        onClose={() => { setModalOpen(false); setEditing(null); }}
         meal={editing}
       />
     </div>
+  );
+}
+
+function MiniStat({ label, value }: { label: string; value: number }) {
+  return (
+    <span className="tabular-nums">
+      <span className="font-medium text-ink-900">{value}</span>
+      <span className="text-ink-400 text-[10px] ms-0.5">{label}</span>
+    </span>
   );
 }

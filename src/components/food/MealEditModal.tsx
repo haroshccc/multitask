@@ -393,7 +393,7 @@ export function MealEditModal({ open, onClose, meal }: MealEditModalProps) {
 
             <div>
               <label className="text-xs text-ink-500 mb-1 block">שייך לזמני יום</label>
-              <div className="inline-flex rounded-md border border-ink-200 overflow-hidden bg-white">
+              <div className="flex flex-wrap gap-1.5">
                 {MEAL_TIME_KEYS.map((t) => {
                   const active = mealTimes.includes(t);
                   return (
@@ -402,8 +402,10 @@ export function MealEditModal({ open, onClose, meal }: MealEditModalProps) {
                       type="button"
                       onClick={() => toggleMealTime(t)}
                       className={cn(
-                        "px-3 py-1.5 text-xs font-medium border-e border-ink-200 last:border-e-0",
-                        active ? "bg-ink-900 text-white" : "bg-white text-ink-700 hover:bg-ink-50"
+                        "px-3 py-1.5 text-xs font-medium rounded-md border transition-colors",
+                        active
+                          ? "bg-ink-900 text-white border-ink-900"
+                          : "bg-white text-ink-700 border-ink-200 hover:bg-ink-50"
                       )}
                     >
                       {MEAL_TIME_LABELS[t]}
@@ -431,54 +433,56 @@ export function MealEditModal({ open, onClose, meal }: MealEditModalProps) {
                   return (
                     <div
                       key={idx}
-                      className="flex items-center gap-2 border border-ink-200 rounded-md p-2 bg-white"
+                      className="border border-ink-200 rounded-md p-2 bg-white space-y-2"
                     >
-                      <div className="flex-1 min-w-0">
-                        <IngredientPicker
-                          value={r.ingredientId}
-                          onChange={(id) => setRowIngredient(idx, id)}
-                          ingredients={ingredients}
-                          onCreateNew={(typedName) =>
-                            setInlineNew({ rowIdx: idx, name: typedName })
-                          }
-                        />
-                      </div>
-                      <input
-                        type="number"
-                        step="any"
-                        min={0}
-                        value={r.quantity}
-                        onChange={(e) => setRowField(idx, "quantity", e.target.value)}
-                        className="field text-sm py-1.5 w-20"
-                        placeholder="כמות"
-                      />
-                      <select
-                        value={r.unitId ?? ""}
-                        onChange={(e) =>
-                          setRowField(idx, "unitId", e.target.value || null)
+                      {/* Ingredient picker — full width on all sizes */}
+                      <IngredientPicker
+                        value={r.ingredientId}
+                        onChange={(id) => setRowIngredient(idx, id)}
+                        ingredients={ingredients}
+                        onCreateNew={(typedName) =>
+                          setInlineNew({ rowIdx: idx, name: typedName })
                         }
-                        className="field text-sm py-1.5 w-28"
-                        disabled={!ing || ing.units.length === 0}
-                      >
-                        {(!ing || ing.units.length === 0) && (
-                          <option value="">— יחידה —</option>
-                        )}
-                        {ing?.units.map((u) => (
-                          <option key={u.id} value={u.id}>
-                            {u.unit_name || "—"}
-                          </option>
-                        ))}
-                      </select>
-                      {rows.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => removeRow(idx)}
-                          className="p-1.5 rounded-md text-ink-400 hover:text-danger-600 hover:bg-danger-50"
-                          title="הסר מצרך"
+                      />
+                      {/* Quantity + unit + delete in one row */}
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          step="any"
+                          min={0}
+                          value={r.quantity}
+                          onChange={(e) => setRowField(idx, "quantity", e.target.value)}
+                          className="field text-sm py-1.5 w-20 shrink-0"
+                          placeholder="כמות"
+                        />
+                        <select
+                          value={r.unitId ?? ""}
+                          onChange={(e) =>
+                            setRowField(idx, "unitId", e.target.value || null)
+                          }
+                          className="field text-sm py-1.5 flex-1 min-w-0"
+                          disabled={!ing || ing.units.length === 0}
                         >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      )}
+                          {(!ing || ing.units.length === 0) && (
+                            <option value="">— יחידה —</option>
+                          )}
+                          {ing?.units.map((u) => (
+                            <option key={u.id} value={u.id}>
+                              {u.unit_name || "—"}
+                            </option>
+                          ))}
+                        </select>
+                        {rows.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removeRow(idx)}
+                            className="p-1.5 rounded-md text-ink-400 hover:text-danger-600 hover:bg-danger-50 shrink-0"
+                            title="הסר מצרך"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   );
                 })}

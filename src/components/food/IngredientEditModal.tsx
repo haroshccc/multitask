@@ -233,7 +233,7 @@ export function IngredientEditModal({
 
   return (
     <div
-      className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4"
+      className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm flex items-center justify-center p-4"
       onClick={onClose}
       dir="rtl"
     >
@@ -316,7 +316,8 @@ export function IngredientEditModal({
                         : "border-ink-200 bg-white"
                     )}
                   >
-                    <div className="flex items-center gap-2">
+                    {/* Unit name + amount — wraps on mobile */}
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                       <input
                         type="text"
                         value={u.unit_name}
@@ -324,43 +325,45 @@ export function IngredientEditModal({
                         placeholder="שם יחידה (יחידה / גרם / כוס)"
                         className="field text-sm py-1.5 flex-1"
                       />
-                      <span className="text-xs text-ink-500">לכל</span>
-                      <input
-                        type="number"
-                        step="any"
-                        min={0}
-                        value={u.amount}
-                        onChange={(e) => setUnitField(idx, "amount", e.target.value)}
-                        className="field text-sm py-1.5 w-20"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setDefault(idx)}
-                        className={cn(
-                          "p-1.5 rounded-md transition-colors",
-                          u.is_default
-                            ? "text-amber-500"
-                            : "text-ink-300 hover:text-amber-500"
-                        )}
-                        title="קבע כברירת מחדל"
-                      >
-                        <Star
-                          className="w-4 h-4"
-                          fill={u.is_default ? "currentColor" : "none"}
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-ink-500 whitespace-nowrap">לכל</span>
+                        <input
+                          type="number"
+                          step="any"
+                          min={0}
+                          value={u.amount}
+                          onChange={(e) => setUnitField(idx, "amount", e.target.value)}
+                          className="field text-sm py-1.5 w-20"
                         />
-                      </button>
-                      {liveUnits.length > 1 && (
                         <button
                           type="button"
-                          onClick={() => removeUnit(idx)}
-                          className="p-1.5 rounded-md text-ink-400 hover:text-danger-600 hover:bg-danger-50"
-                          title="הסר יחידה"
+                          onClick={() => setDefault(idx)}
+                          className={cn(
+                            "p-1.5 rounded-md transition-colors shrink-0",
+                            u.is_default
+                              ? "text-amber-500"
+                              : "text-ink-300 hover:text-amber-500"
+                          )}
+                          title="קבע כברירת מחדל"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <Star
+                            className="w-4 h-4"
+                            fill={u.is_default ? "currentColor" : "none"}
+                          />
                         </button>
-                      )}
+                        {liveUnits.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removeUnit(idx)}
+                            className="p-1.5 rounded-md text-ink-400 hover:text-danger-600 hover:bg-danger-50 shrink-0"
+                            title="הסר יחידה"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
                     </div>
-                    <div className="grid grid-cols-4 gap-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                       <NutritionField
                         label="קלוריות"
                         value={u.calories}

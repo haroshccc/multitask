@@ -45,61 +45,171 @@ export function IngredientsTab({ compact = false }: IngredientsTabProps) {
     [ingredients]
   );
 
+  const openEdit = (i: IngredientWithUnits) => {
+    setEditing(i);
+    setModalOpen(true);
+  };
+
+  const confirmDelete = async (i: IngredientWithUnits) => {
+    if (confirm(`למחוק את "${i.name}"?`)) {
+      await deleteIngredient.mutateAsync(i.id);
+    }
+  };
+
   return (
     <div className="space-y-3">
-      <div className={cn("flex items-center gap-2 flex-wrap", !compact && "card p-2")}>
-        <input
-          type="text"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="חיפוש מצרך..."
-          className={cn("field text-sm py-1.5", compact ? "flex-1 min-w-0" : "w-44")}
-        />
-        {!compact && (
-          <select
-            value={filterCategory}
-            onChange={(e) => setFilterCategory(e.target.value)}
-            className="field text-sm py-1.5 w-36"
-          >
-            <option value="all">כל הקטגוריות</option>
-            {categories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        )}
-        <label className="inline-flex items-center gap-1.5 text-xs text-ink-700 select-none cursor-pointer">
+      {/* ── Toolbar ── */}
+      <div className={cn(!compact && "card p-2")}>
+        {/* Row 1: search + add button */}
+        <div className="flex items-center gap-2">
           <input
-            type="checkbox"
-            checked={showIncompleteOnly}
-            onChange={(e) => setShowIncompleteOnly(e.target.checked)}
-            className="w-3.5 h-3.5"
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="חיפוש מצרך..."
+            className={cn("field text-sm py-1.5 flex-1 min-w-0", compact ? "" : "")}
           />
-          רק לא שלם
-          {incompleteCount > 0 && (
-            <span className="bg-amber-100 text-amber-800 text-[10px] rounded-md px-1.5 py-0.5">
-              {incompleteCount}
-            </span>
+          {/* Category filter inline on sm+ (non-compact) */}
+          {!compact && (
+            <select
+              value={filterCategory}
+              onChange={(e) => setFilterCategory(e.target.value)}
+              className="hidden sm:block field text-sm py-1.5 w-36"
+            >
+              <option value="all">כל הקטגוריות</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
           )}
-        </label>
-        <button
-          type="button"
-          onClick={() => {
-            setEditing(null);
-            setModalOpen(true);
-          }}
-          className={cn(
-            "ms-auto text-sm gap-1.5",
-            compact ? "btn-ghost text-xs" : "btn-dark"
-          )}
-        >
-          <Plus className="w-4 h-4" />
-          {compact ? "מצרך" : "מצרך חדש"}
-        </button>
+          <label className="hidden sm:inline-flex items-center gap-1.5 text-xs text-ink-700 select-none cursor-pointer whitespace-nowrap">
+            <input
+              type="checkbox"
+              checked={showIncompleteOnly}
+              onChange={(e) => setShowIncompleteOnly(e.target.checked)}
+              className="w-3.5 h-3.5"
+            />
+            רק לא שלם
+            {incompleteCount > 0 && (
+              <span className="bg-amber-100 text-amber-800 text-[10px] rounded-md px-1.5 py-0.5">
+                {incompleteCount}
+              </span>
+            )}
+          </label>
+          <button
+            type="button"
+            onClick={() => { setEditing(null); setModalOpen(true); }}
+            className={cn(
+              "text-sm gap-1.5 whitespace-nowrap",
+              compact ? "btn-ghost text-xs" : "btn-dark ms-auto sm:ms-0"
+            )}
+          >
+            <Plus className="w-4 h-4" />
+            {compact ? "מצרך" : "מצרך חדש"}
+          </button>
+        </div>
+
+        {/* Row 2 mobile-only (non-compact): category filter + incomplete toggle */}
+        {!compact && (
+          <div className="flex items-center gap-2 mt-1.5 sm:hidden">
+            <select
+              value={filterCategory}
+              onChange={(e) => setFilterCategory(e.target.value)}
+              className="field text-sm py-1.5 flex-1"
+            >
+              <option value="all">כל הקטגוריות</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+            <label className="inline-flex items-center gap-1.5 text-xs text-ink-700 select-none cursor-pointer whitespace-nowrap">
+              <input
+                type="checkbox"
+                checked={showIncompleteOnly}
+                onChange={(e) => setShowIncompleteOnly(e.target.checked)}
+                className="w-3.5 h-3.5"
+              />
+              לא שלם
+              {incompleteCount > 0 && (
+                <span className="bg-amber-100 text-amber-800 text-[10px] rounded-md px-1.5 py-0.5">
+                  {incompleteCount}
+                </span>
+              )}
+            </label>
+          </div>
+        )}
       </div>
 
-      <div className={cn(compact ? "" : "card", "overflow-x-auto")}>
+      {/* ── Mobile card list (non-compact full view) ── */}
+      {!compact && (
+        <div className="sm:hidden space-y-2">
+          {isLoading ? (
+            <div className="card p-6 text-center text-ink-400">טוען...</div>
+          ) : filtered.length === 0 ? (
+            <div className="card p-6 text-center text-ink-400">
+              {ingredients.length === 0
+                ? "עוד אין מצרכים. לחץ + מצרך חדש."
+                : "אין מצרכים שתואמים לסינון."}
+            </div>
+          ) : (
+            filtered.map((i) => {
+              const cat = i.category_id ? categoriesById.get(i.category_id) : null;
+              const defaultUnit = i.units.find((u) => u.is_default) ?? i.units[0];
+              return (
+                <div key={i.id} className="card p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-start gap-1.5 min-w-0">
+                      {!i.is_complete && (
+                        <AlertCircle className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
+                      )}
+                      <div className="min-w-0">
+                        <div className="font-medium text-ink-900 truncate">{i.name}</div>
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5 text-xs text-ink-500">
+                          {cat && (
+                            <span className="inline-flex items-center gap-1">
+                              {cat.color && (
+                                <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: cat.color }} />
+                              )}
+                              {cat.name}
+                            </span>
+                          )}
+                          {i.units.length > 0 && (
+                            <span>{i.units.map((u) => u.unit_name).filter(Boolean).join(" / ")}</span>
+                          )}
+                          {defaultUnit?.calories != null && (
+                            <span>{defaultUnit.calories} קל' / {defaultUnit.amount} {defaultUnit.unit_name ?? ""}</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-0.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => openEdit(i)}
+                        className="p-1.5 rounded-md text-ink-400 hover:text-ink-900 hover:bg-ink-100"
+                        title="ערוך"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => confirmDelete(i)}
+                        className="p-1.5 rounded-md text-ink-400 hover:text-danger-600 hover:bg-danger-50"
+                        title="מחק"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
+
+      {/* ── Table (desktop full, or compact panel at all sizes) ── */}
+      <div className={cn(compact ? "" : "hidden sm:block card", "overflow-x-auto")}>
         <table className="w-full text-sm">
           <thead className="bg-ink-50/60 text-xs text-ink-500">
             <tr>
@@ -113,19 +223,13 @@ export function IngredientsTab({ compact = false }: IngredientsTabProps) {
           <tbody>
             {isLoading ? (
               <tr>
-                <td
-                  colSpan={compact ? 3 : 5}
-                  className="p-6 text-center text-ink-400"
-                >
+                <td colSpan={compact ? 3 : 5} className="p-6 text-center text-ink-400">
                   טוען...
                 </td>
               </tr>
             ) : filtered.length === 0 ? (
               <tr>
-                <td
-                  colSpan={compact ? 3 : 5}
-                  className="p-6 text-center text-ink-400"
-                >
+                <td colSpan={compact ? 3 : 5} className="p-6 text-center text-ink-400">
                   {ingredients.length === 0
                     ? "עוד אין מצרכים. לחץ + מצרך חדש."
                     : "אין מצרכים שתואמים לסינון."}
@@ -136,16 +240,11 @@ export function IngredientsTab({ compact = false }: IngredientsTabProps) {
                 const cat = i.category_id ? categoriesById.get(i.category_id) : null;
                 const defaultUnit = i.units.find((u) => u.is_default) ?? i.units[0];
                 return (
-                  <tr
-                    key={i.id}
-                    className="border-t border-ink-100 hover:bg-ink-50/40"
-                  >
+                  <tr key={i.id} className="border-t border-ink-100 hover:bg-ink-50/40">
                     <td className="p-2">
                       <div className="flex items-center gap-1.5">
                         {!i.is_complete && (
-                          <AlertCircle
-                            className="w-3.5 h-3.5 text-amber-500 shrink-0"
-                          />
+                          <AlertCircle className="w-3.5 h-3.5 text-amber-500 shrink-0" />
                         )}
                         <span className="font-medium text-ink-900">{i.name}</span>
                       </div>
@@ -155,10 +254,7 @@ export function IngredientsTab({ compact = false }: IngredientsTabProps) {
                         {cat ? (
                           <span className="inline-flex items-center gap-1.5 text-xs">
                             {cat.color && (
-                              <span
-                                className="w-2 h-2 rounded-full"
-                                style={{ backgroundColor: cat.color }}
-                              />
+                              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: cat.color }} />
                             )}
                             {cat.name}
                           </span>
@@ -186,10 +282,7 @@ export function IngredientsTab({ compact = false }: IngredientsTabProps) {
                     <td className="p-2 whitespace-nowrap">
                       <button
                         type="button"
-                        onClick={() => {
-                          setEditing(i);
-                          setModalOpen(true);
-                        }}
+                        onClick={() => openEdit(i)}
                         className="p-1.5 rounded-md text-ink-400 hover:text-ink-900 hover:bg-ink-100"
                         title="ערוך"
                       >
@@ -198,11 +291,7 @@ export function IngredientsTab({ compact = false }: IngredientsTabProps) {
                       {!compact && (
                         <button
                           type="button"
-                          onClick={async () => {
-                            if (confirm(`למחוק את "${i.name}"?`)) {
-                              await deleteIngredient.mutateAsync(i.id);
-                            }
-                          }}
+                          onClick={() => confirmDelete(i)}
                           className="p-1.5 rounded-md text-ink-400 hover:text-danger-600 hover:bg-danger-50"
                           title="מחק"
                         >
@@ -220,10 +309,7 @@ export function IngredientsTab({ compact = false }: IngredientsTabProps) {
 
       <IngredientEditModal
         open={modalOpen}
-        onClose={() => {
-          setModalOpen(false);
-          setEditing(null);
-        }}
+        onClose={() => { setModalOpen(false); setEditing(null); }}
         ingredient={editing}
       />
     </div>

@@ -6,6 +6,9 @@ import { useAuth } from "@/lib/auth/AuthContext";
 import { supabase } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils/cn";
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const db = supabase as any;
+
 type Mode = "create" | "join";
 
 interface SuggestedOrg {
@@ -90,7 +93,7 @@ export function Onboarding() {
     }
     setSubmitting(true);
     setError(null);
-    const { data, error: rpcErr } = await supabase.rpc("join_organization_by_name_and_password", {
+    const { data, error: rpcErr } = await db.rpc("join_organization_by_name_and_password", {
       p_name: joinName.trim(),
       p_join_password: joinPassword,
     });

@@ -95,6 +95,12 @@ export function AuthCallback() {
       navigate("/", { replace: true });
       return;
     }
+    // If the user came from an invite link, send them back to it
+    const pendingInvite = sessionStorage.getItem("pending_invite_token");
+    if (pendingInvite) {
+      navigate(`/invite/${pendingInvite}`, { replace: true });
+      return;
+    }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const onboardingDone = (profile as any)?.onboarding_done;
     if (onboardingDone === false) {

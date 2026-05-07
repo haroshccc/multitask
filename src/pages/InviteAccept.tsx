@@ -37,7 +37,12 @@ export function InviteAccept() {
           return;
         }
         setInvite(info);
-        setStep(session ? "preview" : "need-login");
+        if (session) {
+          sessionStorage.removeItem("pending_invite_token");
+          setStep("preview");
+        } else {
+          setStep("need-login");
+        }
       })
       .catch(() => {
         setStep("error");

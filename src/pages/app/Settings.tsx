@@ -174,7 +174,10 @@ function OrgTab() {
       setLastInvite({ token: invite.token, email: inviteEmail.trim() });
       setInviteEmail("");
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg =
+        err instanceof Error
+          ? err.message
+          : (err as { message?: string } | null)?.message ?? String(err);
       setInviteError(msg || "שגיאה ביצירת ההזמנה — נסי שוב");
     }
   };

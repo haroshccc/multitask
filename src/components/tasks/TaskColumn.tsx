@@ -22,7 +22,10 @@ import { useCreateTask, useDeleteTask } from "@/lib/hooks/useTasks";
 import {
   useArchiveTaskList,
   useUpdateTaskList,
+  useTaskListShares,
+  useRemoveTaskListShare,
 } from "@/lib/hooks/useTaskLists";
+import { useAuth } from "@/lib/auth/AuthContext";
 import {
   useEventCalendars,
   useLinkListToCalendar,
@@ -235,7 +238,16 @@ export function TaskColumn({
   const listColor = list?.color ?? DEFAULT_LIST_COLOR;
   const displayEmoji = list?.emoji ?? null;
   const displayName = list?.name ?? "לא משויכות";
-  const canEdit = !!list;
+  const { user } = useAuth();
+  const removeShare = useRemoveTaskListShare();
+  const isOwner = !!user && !!list && list.owner_id === user.id;
+  // For non-owned lists, fetch shares to determine the current user's permission.
+  // RLS "shares: self read" ensures non-owners see only their own row.
+  const { data: shares = [] } = useTaskListShares(isOwner || !list ? null : list.id);
+  const myPermission: "read" | "write" | null = isOwner
+    ? "write"
+    : (shares.find((s) => s.user_id === user?.id)?.permission ?? null);
+  const canEdit = !!list && (isOwner || myPermission === "write");
   const isPinnedByFlag = !!list?.is_pinned;
 
   return (
@@ -472,15 +484,28 @@ export function TaskColumn({
                   >
                     שנה אייקון
                   </MenuItem>
-                  <MenuItem
-                    icon={<Share2 className="w-3.5 h-3.5" />}
-                    onClick={() => {
-                      setShareOpen(true);
-                      setMenuOpen(false);
-                    }}
-                  >
-                    שיתוף וסנכרון
-                  </MenuItem>
+                  {isOwner && (
+                    <MenuItem
+                      icon={<Share2 className="w-3.5 h-3.5" />}
+                      onClick={() => {
+                        setShareOpen(true);
+                        setMenuOpen(false);
+                      }}
+                    >
+                      שיתוף וסנכרון
+                    </MenuItem>
+                  )}
+                  {!isOwner && list && (
+                    <MenuItem
+                      icon={<Share2 className="w-3.5 h-3.5" />}
+                      onClick={() => {
+                        removeShare.mutate({ listId: list.id, userId: user!.id });
+                        setMenuOpen(false);
+                      }}
+                    >
+                      הסר אותי מהשיתוף
+                    </MenuItem>
+                  )}
                   <MenuItem
                     icon={<LinkIcon className="w-3.5 h-3.5" />}
                     onClick={() => {
@@ -535,13 +560,17 @@ export function TaskColumn({
       {/* Body — auto-sizes to content, caps at viewport height for scroll */}
       <div className="p-1 max-h-[calc(100vh-300px)] overflow-y-auto scrollbar-thin">
         {roots.length === 0 ? (
-          <button
-            onClick={handleEmptyCreate}
-            className="w-full text-center text-xs text-ink-400 hover:text-primary-600 hover:bg-primary-50 rounded-xl py-6 transition-colors"
-            type="button"
-          >
-            + הוסף משימה ראשונה
-          </button>
+          canEdit ? (
+            <button
+              onClick={handleEmptyCreate}
+              className="w-full text-center text-xs text-ink-400 hover:text-primary-600 hover:bg-primary-50 rounded-xl py-6 transition-colors"
+              type="button"
+            >
+              + הוסף משימה ראשונה
+            </button>
+          ) : (
+            <div className="w-full text-center text-xs text-ink-400 py-6">אין משימות</div>
+          )
         ) : (
           <>
             {incompleteRoots.map((node, idx) => (
@@ -558,29 +587,32 @@ export function TaskColumn({
                 focusTaskId={focusTaskId}
                 onOpenEdit={onOpenEdit}
                 display={display}
+                readOnly={!canEdit}
               />
             ))}
 
-            {/* Inline new-task row: one line under the last existing task */}
-            <div className="flex items-start gap-1.5 rounded-md px-1.5 py-1">
-              <span className="w-3.5 shrink-0" />
-              <span className="w-3.5 shrink-0" />
-              <Plus className="w-4 h-4 mt-0.5 text-ink-400 shrink-0" />
-              <input
-                value={newTitle}
-                onChange={(e) => setNewTitle(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    handleCreate();
-                  }
-                  if (e.key === "Escape") setNewTitle("");
-                }}
-                onBlur={handleCreate}
-                placeholder="משימה חדשה..."
-                className="flex-1 min-w-0 bg-transparent border-0 outline-none text-sm py-0.5 placeholder:text-ink-400"
-              />
-            </div>
+            {/* Inline new-task row — hidden for read-only viewers */}
+            {canEdit && (
+              <div className="flex items-start gap-1.5 rounded-md px-1.5 py-1">
+                <span className="w-3.5 shrink-0" />
+                <span className="w-3.5 shrink-0" />
+                <Plus className="w-4 h-4 mt-0.5 text-ink-400 shrink-0" />
+                <input
+                  value={newTitle}
+                  onChange={(e) => setNewTitle(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleCreate();
+                    }
+                    if (e.key === "Escape") setNewTitle("");
+                  }}
+                  onBlur={handleCreate}
+                  placeholder="משימה חדשה..."
+                  className="flex-1 min-w-0 bg-transparent border-0 outline-none text-sm py-0.5 placeholder:text-ink-400"
+                />
+              </div>
+            )}
 
             {/* Collapsible root-level "הושלמו" */}
             {completedRoots.length > 0 && (
@@ -615,6 +647,7 @@ export function TaskColumn({
                       focusTaskId={focusTaskId}
                       onOpenEdit={onOpenEdit}
                       display={display}
+                      readOnly={!canEdit}
                     />
                   ))}
               </div>

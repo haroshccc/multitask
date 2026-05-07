@@ -82,6 +82,8 @@ interface TaskRowProps {
   onOpenEdit: (taskId: string) => void;
   /** Per-user pref of which inline badges to render */
   display: RowDisplayPrefs;
+  /** When true the row is view-only: no edits, completions, or mutations */
+  readOnly?: boolean;
 }
 
 export function TaskRow({
@@ -94,6 +96,7 @@ export function TaskRow({
   focusTaskId,
   onOpenEdit,
   display,
+  readOnly = false,
 }: TaskRowProps) {
   const { task, children, depth } = node;
   const { user } = useAuth();
@@ -614,16 +617,19 @@ export function TaskRow({
           )}
         </button>
 
-        {/* Drag handle */}
-        <button
-          {...attributes}
-          {...listeners}
-          className="opacity-0 group-hover:opacity-100 cursor-grab active:cursor-grabbing text-ink-400 hover:text-ink-700 pt-1 shrink-0"
-          aria-label="גרור"
-          type="button"
-        >
-          <GripVertical className="w-3.5 h-3.5" />
-        </button>
+        {/* Drag handle — hidden for read-only viewers */}
+        {!readOnly && (
+          <button
+            {...attributes}
+            {...listeners}
+            className="opacity-0 group-hover:opacity-100 cursor-grab active:cursor-grabbing text-ink-400 hover:text-ink-700 pt-1 shrink-0"
+            aria-label="גרור"
+            type="button"
+          >
+            <GripVertical className="w-3.5 h-3.5" />
+          </button>
+        )}
+        {readOnly && <span className="w-3.5 shrink-0" />}
 
         {/* Expand / collapse chevron */}
         {children.length > 0 ? (
@@ -652,11 +658,14 @@ export function TaskRow({
             Uses showAsDone so the click→500ms grace window shows the green
             check immediately. */}
         <button
-          onClick={toggleComplete}
+          onClick={readOnly ? undefined : toggleComplete}
+          disabled={readOnly}
           className={cn(
             "mt-0.5 w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center transition-all",
             showAsDone
               ? "bg-success-500 border-success-500 text-white"
+              : readOnly
+              ? "border-ink-200 cursor-default"
               : "border-ink-300 hover:border-success-500"
           )}
           aria-label={showAsDone ? "בטל סימון" : "סמן כהושלמה"}
@@ -688,16 +697,15 @@ export function TaskRow({
         <input
           ref={inputRef}
           value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={commitTitle}
-          onKeyDown={handleKeyDown}
-          onDoubleClick={() => onOpenEdit(task.id)}
+          readOnly={readOnly}
+          onChange={readOnly ? undefined : (e) => setDraft(e.target.value)}
+          onBlur={readOnly ? undefined : commitTitle}
+          onKeyDown={readOnly ? undefined : handleKeyDown}
+          onDoubleClick={readOnly ? undefined : () => onOpenEdit(task.id)}
           placeholder="משימה חדשה..."
           className={cn(
             "flex-1 min-w-0 bg-transparent border-0 outline-none text-sm py-0.5",
-            // Strikethrough only when the task itself is closed (master
-            // completed_at). Recurring rows stay readable because the title
-            // describes the series, not a single occurrence.
+            readOnly && "cursor-default select-text",
             !taskIsRecurring && showAsDone && "line-through text-ink-400"
           )}
         />
@@ -947,30 +955,34 @@ export function TaskRow({
           </button>
         )}
 
-        {/* Outside action cluster: + subtask, edit pencil, overflow menu */}
-        <button
-          onClick={handleAddSubtask}
-          className="shrink-0 p-1 rounded-md text-ink-400 hover:text-primary-700 hover:bg-primary-50 opacity-0 group-hover:opacity-100 transition-opacity"
-          aria-label="הוסף תת-משימה"
-          title="הוסף תת-משימה"
-          type="button"
-        >
-          <CornerDownLeft className="w-3.5 h-3.5" />
-        </button>
+        {/* Outside action cluster: + subtask, edit pencil, overflow menu — hidden when read-only */}
+        {!readOnly && (
+          <button
+            onClick={handleAddSubtask}
+            className="shrink-0 p-1 rounded-md text-ink-400 hover:text-primary-700 hover:bg-primary-50 opacity-0 group-hover:opacity-100 transition-opacity"
+            aria-label="הוסף תת-משימה"
+            title="הוסף תת-משימה"
+            type="button"
+          >
+            <CornerDownLeft className="w-3.5 h-3.5" />
+          </button>
+        )}
 
-        <button
-          onClick={() => onOpenEdit(task.id)}
-          className="shrink-0 p-1 rounded-md text-ink-400 hover:text-ink-900 hover:bg-ink-100 opacity-0 group-hover:opacity-100 transition-opacity"
-          aria-label="ערוך פרטים"
-          title="ערוך פרטים"
-          type="button"
-        >
-          <Pencil className="w-3.5 h-3.5" />
-        </button>
+        {!readOnly && (
+          <button
+            onClick={() => onOpenEdit(task.id)}
+            className="shrink-0 p-1 rounded-md text-ink-400 hover:text-ink-900 hover:bg-ink-100 opacity-0 group-hover:opacity-100 transition-opacity"
+            aria-label="ערוך פרטים"
+            title="ערוך פרטים"
+            type="button"
+          >
+            <Pencil className="w-3.5 h-3.5" />
+          </button>
+        )}
         </div>
         {/* end desktop-only badges wrapper */}
 
-        <div className="relative shrink-0">
+        {!readOnly && <div className="relative shrink-0">
           <button
             ref={menuTriggerRef}
             onClick={() => (menuOpen ? closeMenu() : openMenu())}
@@ -1194,7 +1206,7 @@ export function TaskRow({
             </>,
             document.body
           )}
-        </div>
+        </div>}
       </div>
 
       {confirmDelete && (

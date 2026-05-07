@@ -125,6 +125,14 @@ export async function createInvite(
   return inv as OrgInvite;
 }
 
+export async function declineInvite(
+  token: string
+): Promise<{ ok: boolean; error?: string }> {
+  const { data, error } = await db.rpc("decline_org_invite", { p_token: token });
+  if (error) throw error;
+  return data as { ok: boolean; error?: string };
+}
+
 export async function revokeInvite(inviteId: string) {
   const { error } = await db.from("org_invites").delete().eq("id", inviteId);
   if (error) throw error;

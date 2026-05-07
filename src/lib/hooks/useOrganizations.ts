@@ -10,6 +10,7 @@ import {
   listMyPendingInvites,
   createInvite,
   revokeInvite,
+  declineInvite,
   acceptInvite,
   removeMember,
   updateMemberRole,
@@ -123,6 +124,16 @@ export function useRevokeInvite() {
       revokeInvite(inviteId),
     onSuccess: (_data, { orgId }) => {
       qc.invalidateQueries({ queryKey: ["org-invites", orgId] });
+    },
+  });
+}
+
+export function useDeclineInvite() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (token: string) => declineInvite(token),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["my-pending-invites"] });
     },
   });
 }

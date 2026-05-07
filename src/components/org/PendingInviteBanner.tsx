@@ -1,4 +1,4 @@
-import { useMyPendingInvites, useAcceptInvite, useRevokeInvite } from "@/lib/hooks/useOrganizations";
+import { useMyPendingInvites, useAcceptInvite, useDeclineInvite } from "@/lib/hooks/useOrganizations";
 import { useAuth } from "@/lib/auth/AuthContext";
 import { useQueryClient } from "@tanstack/react-query";
 import { Building2, X, Check } from "lucide-react";
@@ -7,7 +7,7 @@ export function PendingInviteBanner() {
   const { user, setActiveOrganizationId } = useAuth();
   const { data: invites = [] } = useMyPendingInvites();
   const acceptInvite = useAcceptInvite();
-  const revokeInvite = useRevokeInvite();
+  const declineInvite = useDeclineInvite();
   const qc = useQueryClient();
 
   if (!user || invites.length === 0) return null;
@@ -38,9 +38,7 @@ export function PendingInviteBanner() {
             הצטרף
           </button>
           <button
-            onClick={() =>
-              revokeInvite.mutate({ inviteId: inv.id, orgId: inv.organization_id })
-            }
+            onClick={() => declineInvite.mutate(inv.token)}
             className="p-1 rounded-lg text-amber-500 hover:text-amber-700 hover:bg-amber-100 transition-colors shrink-0"
             title="דחה הזמנה"
           >

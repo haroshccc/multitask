@@ -31,12 +31,14 @@ function CreateOrgForm({ onDone }: CreateOrgFormProps) {
   const [name, setName] = useState("");
   const [type, setType] = useState<OrgType>("business");
   const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
   const createOrg = useCreateOrganization();
   const { setActiveOrganizationId } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
+    setError("");
     const result = await createOrg.mutateAsync({
       name: name.trim(),
       orgType: type,
@@ -45,6 +47,13 @@ function CreateOrgForm({ onDone }: CreateOrgFormProps) {
     if (result.ok && result.organization_id) {
       setActiveOrganizationId(result.organization_id);
       onDone();
+    } else {
+      const errCode = (result as { error?: string }).error ?? "";
+      if (errCode === "name_taken") {
+        setError("שם הקבוצה כבר תפוס. בחרי שם אחר.");
+      } else {
+        setError("אירעה שגיאה. נסי שוב.");
+      }
     }
   };
 
@@ -55,7 +64,7 @@ function CreateOrgForm({ onDone }: CreateOrgFormProps) {
         type="text"
         placeholder="שם הקבוצה..."
         value={name}
-        onChange={(e) => setName(e.target.value)}
+        onChange={(e) => { setName(e.target.value); setError(""); }}
         className="w-full text-sm px-3 py-1.5 rounded-lg border border-ink-200 focus:outline-none focus:border-primary-400"
         autoFocus
       />
@@ -88,6 +97,11 @@ function CreateOrgForm({ onDone }: CreateOrgFormProps) {
           onChange={(e) => setPassword(e.target.value)}
           className="w-full text-sm px-3 py-1.5 rounded-lg border border-ink-200 focus:outline-none focus:border-primary-400"
         />
+      )}
+      {error && (
+        <p className="text-xs text-danger-600 bg-danger-50 border border-danger-200 rounded-lg px-2.5 py-1.5">
+          {error}
+        </p>
       )}
       <button
         type="submit"

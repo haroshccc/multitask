@@ -53,14 +53,19 @@ export function OrgOnboarding() {
     setCreateError("");
     setCreateSubmitting(true);
     try {
-      const { error } = await supabase.rpc("create_organization_with_password", {
+      const { data, error } = await supabase.rpc("create_organization_with_password", {
         p_name: createName,
         p_join_password: createPassword,
         p_suggested_email_domain: undefined,
         p_org_type: orgType,
       });
-      if (error) {
-        setCreateError(error.message || "אירעה שגיאה. נסי שוב.");
+      const errMsg: string = error?.message || (data as { error?: string })?.error || "";
+      if (errMsg) {
+        if (errMsg.includes("name_taken")) {
+          setCreateError("שם הארגון כבר תפוס. בחרי שם אחר.");
+        } else {
+          setCreateError(errMsg || "אירעה שגיאה. נסי שוב.");
+        }
         setCreateSubmitting(false);
         return;
       }

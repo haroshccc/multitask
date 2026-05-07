@@ -137,7 +137,6 @@ export function TomorrowMenuBanner() {
         return (
           <DayBanner
             key={date}
-            date={date}
             label={labelFor(date, todayIso, tomorrowIso)}
             isTomorrow={date === tomorrowIso}
             dow={dowOf(date)}
@@ -161,7 +160,6 @@ export function TomorrowMenuBanner() {
 // ---------------------------------------------------------------------------
 
 interface DayBannerProps {
-  date: string;
   label: string;
   isTomorrow: boolean;
   dow: DayOfWeek;
@@ -176,7 +174,6 @@ interface DayBannerProps {
 }
 
 function DayBanner({
-  date,
   label,
   isTomorrow,
   dow,

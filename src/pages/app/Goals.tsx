@@ -236,100 +236,84 @@ function GoalCard({ task, entries, listColor, onEdit }: GoalCardProps) {
         </div>
       </div>
 
-      <div className={cn("grid gap-2 text-center", showTime ? "grid-cols-4" : "grid-cols-3")}>
-        <Stat
-          icon={<Flame className="w-3.5 h-3.5" />}
+      <div className="mt-3 flex rounded-lg border border-ink-100 overflow-hidden divide-x divide-x-reverse divide-ink-100">
+        <StatCell
+          icon={<Flame className="w-3 h-3" />}
           label="סטריק"
           value={stats.currentStreak}
-          tone={stats.currentStreak > 0 ? "warm" : "neutral"}
+          valueColor={stats.currentStreak > 0 ? "text-primary-600" : "text-ink-800"}
         />
-        <Stat
-          icon={<Award className="w-3.5 h-3.5" />}
+        <StatCell
+          icon={<Award className="w-3 h-3" />}
           label="שיא"
           value={stats.bestStreak}
-          tone="gold"
+          valueColor={stats.bestStreak > 0 ? "text-amber-500" : "text-ink-800"}
         />
-        <Stat
-          icon={<TrendingUp className="w-3.5 h-3.5" />}
+        <StatCell
+          icon={<TrendingUp className="w-3 h-3" />}
           label="אחרונים"
           value={`${stats.lookbackHits}/${stats.lookbackTotal}`}
-          tone={
-            stats.lookbackHits === stats.lookbackTotal
-              ? "good"
-              : stats.lookbackHits >= stats.lookbackTotal / 2
-                ? "neutral"
-                : "warn"
+          valueColor={
+            stats.lookbackTotal === 0
+              ? "text-ink-800"
+              : stats.lookbackHits === stats.lookbackTotal
+                ? "text-success-600"
+                : "text-ink-800"
           }
         />
         {showTime && (
-          <Stat
-            icon={<Clock className="w-3.5 h-3.5" />}
-            label="זמן (דק׳)"
+          <StatCell
+            icon={<Clock className="w-3 h-3" />}
+            label="זמן"
             value={`${timeActual}/${timePlanned}`}
-            tone={
-              timeActual >= timePlanned
-                ? "good"
-                : timeActual >= timePlanned * 0.6
-                  ? "neutral"
-                  : "warn"
-            }
+            valueColor={timeActual >= timePlanned ? "text-success-600" : "text-ink-800"}
           />
         )}
       </div>
 
-      <div className="mt-3 flex items-center gap-2 flex-wrap text-[11px]">
-        {stats.totalPeriodsCounted > 0 && (
-          <span className="inline-flex items-center gap-1 text-ink-500">
-            לאורך זמן:{" "}
-            <strong className="text-ink-800 tabular-nums">
-              {stats.totalPeriodsHit}/{stats.totalPeriodsCounted}
-            </strong>{" "}
-            {periodUnitHe(period, stats.totalPeriodsCounted)} עמדו ביעד
-          </span>
-        )}
-        {stats.reachedMilestone === true && minStreak != null && (
-          <span className="inline-flex items-center gap-1 text-success-700 bg-success-50 border border-success-200 px-2 py-0.5 rounded-full">
-            <span aria-hidden="true">🎉</span>
-            <span>אבן דרך הושגה</span>
-          </span>
-        )}
-        {stats.beatsWithoutTime.length > 0 && (
-          <span className="inline-flex items-center gap-1 text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
-            <Clock className="w-3 h-3" />
-            {stats.beatsWithoutTime.length} פעימות בלי זמן
-          </span>
-        )}
-      </div>
+      {(stats.totalPeriodsCounted > 0 || stats.reachedMilestone || stats.beatsWithoutTime.length > 0) && (
+        <div className="mt-2.5 flex items-center gap-2 flex-wrap text-[11px]">
+          {stats.totalPeriodsCounted > 0 && (
+            <span className="text-ink-400">
+              {stats.totalPeriodsHit}/{stats.totalPeriodsCounted} {periodUnitHe(period, stats.totalPeriodsCounted)} עמדו ביעד
+            </span>
+          )}
+          {stats.reachedMilestone === true && minStreak != null && (
+            <span className="inline-flex items-center gap-1 text-success-700 bg-success-50 border border-success-200 px-2 py-0.5 rounded-full font-medium">
+              🎉 אבן דרך הושגה
+            </span>
+          )}
+          {stats.beatsWithoutTime.length > 0 && (
+            <span className="inline-flex items-center gap-1 text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+              <Clock className="w-3 h-3" />
+              {stats.beatsWithoutTime.length} ללא זמן
+            </span>
+          )}
+        </div>
+      )}
     </article>
   );
 }
 
-function Stat({
+function StatCell({
   icon,
   label,
   value,
-  tone,
+  valueColor,
 }: {
   icon: React.ReactNode;
   label: string;
   value: number | string;
-  tone: "neutral" | "warm" | "gold" | "good" | "warn";
+  valueColor: string;
 }) {
-  const toneClass = {
-    neutral: "bg-ink-50 text-ink-600",
-    warm: "bg-primary-50 text-primary-700",
-    gold: "bg-ink-50 text-ink-700",
-    good: "bg-success-50 text-success-700",
-    warn: "bg-rose-50/60 text-rose-600",
-  }[tone];
   return (
-    <div className={cn("rounded-md p-2 text-center", toneClass)}>
-      <div className="inline-flex items-center justify-center gap-1 text-[10px] text-ink-500">
+    <div className="flex-1 flex flex-col items-center justify-center py-2.5 gap-0.5 bg-white">
+      <div className={cn("text-base font-bold tabular-nums leading-none", valueColor)}>
+        {value}
+      </div>
+      <div className="flex items-center gap-0.5 text-[10px] text-ink-400 mt-0.5">
         {icon}
         <span>{label}</span>
-      </div>
-      <div className="text-lg font-bold tabular-nums leading-tight">
-        {value}
       </div>
     </div>
   );

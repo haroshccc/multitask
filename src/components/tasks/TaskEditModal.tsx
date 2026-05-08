@@ -50,7 +50,7 @@ import {
   useUpdateUserTaskStatus,
 } from "@/lib/hooks/useUserTaskStatuses";
 import { slugifyStatusKey } from "@/lib/services/user-task-statuses";
-import { useOrgMembers, useOrgMembersForOrg } from "@/lib/hooks/useOrgMembers";
+import { useOrgMembersForOrg } from "@/lib/hooks/useOrgMembers";
 import { useUserOrganizations } from "@/lib/hooks/useOrganizations";
 import { useAuth } from "@/lib/auth/AuthContext";
 import type { TimeEntry, UserTaskStatus } from "@/lib/types/domain";
@@ -116,8 +116,8 @@ export function TaskEditModal({
   const { data: task } = useTask(taskId);
   const { data: lists = [] } = useTaskLists();
   const { data: myStatuses = [] } = useMyTaskStatuses();
-  const { data: orgMembers = [] } = useOrgMembers();
   const { data: allOrgs = [] } = useUserOrganizations();
+  const [delegateOrgId, setDelegateOrgId] = useState<string | null>(null);
   // For delegation: use the explicitly chosen org, falling back to the active org.
   const effectiveDelegateOrgId = delegateOrgId ?? (allOrgs[0]?.id ?? null);
   const { data: delegateOrgMembers = [] } = useOrgMembersForOrg(effectiveDelegateOrgId);
@@ -171,7 +171,6 @@ export function TaskEditModal({
   const [durationMinutes, setDurationMinutes] = useState<number | null>(null);
   const [estimatedMinutes, setEstimatedMinutes] = useState<number | null>(null);
   const [assigneeId, setAssigneeId] = useState<string | null>(null);
-  const [delegateOrgId, setDelegateOrgId] = useState<string | null>(null);
   const [requiresApproval, setRequiresApproval] = useState<boolean>(false);
   const [isPhase, setIsPhase] = useState<boolean>(false);
 
@@ -418,7 +417,7 @@ export function TaskEditModal({
       task_list_id: listId,
       assignee_user_id: assigneeId,
       requires_approval: requiresApproval,
-      approver_user_id: requiresApproval ? approverId : null,
+      approver_user_id: requiresApproval ? (user?.id ?? null) : null,
       tags,
       location: location || null,
       external_url: externalUrl || null,
@@ -1309,44 +1308,6 @@ function DelegationPicker({
         )}
       </select>
     </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-
-function AssigneePicker({
-  value,
-  members,
-  onChange,
-  placeholder = "ללא הקצאה",
-}: {
-  value: string | null;
-  members: { membership: { user_id: string }; profile: { full_name: string | null; avatar_url: string | null } | null }[];
-  onChange: (userId: string | null) => void;
-  placeholder?: string;
-}) {
-  const current = members.find((m) => m.membership.user_id === value);
-  return (
-    <select
-      value={value ?? ""}
-      onChange={(e) => onChange(e.target.value || null)}
-      className="field"
-    >
-      <option value="">{placeholder}</option>
-      {members.map((m) => {
-        const name = m.profile?.full_name ?? m.membership.user_id;
-        return (
-          <option key={m.membership.user_id} value={m.membership.user_id}>
-            {name}
-          </option>
-        );
-      })}
-      {/* If the current assignee isn't in the members list (edge case), keep
-          them in the select so we don't silently drop the value. */}
-      {value && !current && (
-        <option value={value}>{value}</option>
-      )}
-    </select>
   );
 }
 

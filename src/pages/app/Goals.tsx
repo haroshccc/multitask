@@ -101,7 +101,7 @@ export function Goals() {
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {goalTasks.map((task) => (
             <GoalCard
               key={task.id}
@@ -236,10 +236,10 @@ function GoalCard({ task, entries, listColor, onEdit }: GoalCardProps) {
         </div>
       </div>
 
-      <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 text-center">
+      <div className={cn("grid gap-2 text-center", showTime ? "grid-cols-4" : "grid-cols-3")}>
         <Stat
           icon={<Flame className="w-3.5 h-3.5" />}
-          label={`סטריק (${periodUnitHe(period, stats.currentStreak)})`}
+          label="סטריק"
           value={stats.currentStreak}
           tone={stats.currentStreak > 0 ? "warm" : "neutral"}
         />
@@ -251,7 +251,7 @@ function GoalCard({ task, entries, listColor, onEdit }: GoalCardProps) {
         />
         <Stat
           icon={<TrendingUp className="w-3.5 h-3.5" />}
-          label={`${periodUnitHe(period, stats.lookbackTotal)} אחרונים`}
+          label="אחרונים"
           value={`${stats.lookbackHits}/${stats.lookbackTotal}`}
           tone={
             stats.lookbackHits === stats.lookbackTotal

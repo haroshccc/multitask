@@ -293,12 +293,6 @@ export function Tasks() {
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } })
   );
 
-  const allTagSuggestions = useMemo(() => {
-    const s = new Set<string>();
-    tasks.forEach((t) => (t.tags ?? []).forEach((tag) => s.add(tag)));
-    return Array.from(s);
-  }, [tasks]);
-
   const fields: FilterField[] = [
     {
       key: "statuses",

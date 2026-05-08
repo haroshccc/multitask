@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   Award,
   Clock,
@@ -68,7 +69,7 @@ export function Goals() {
       subtitle="הרגלים שאת מנסה לבסס — סטריק נוכחי, התקדמות התקופה הנוכחית והשוואת זמן."
       narrow
     >
-      {isLoading && goalTasks.length === 0 ? (
+      {isLoading ? (
         <div className="card p-6 text-center text-ink-500 text-sm">
           טוען…
         </div>
@@ -77,7 +78,11 @@ export function Goals() {
           <Target className="w-7 h-7 mx-auto text-ink-300" />
           <div className="font-medium text-ink-700">עוד לא הגדרת יעדים</div>
           <div>
-            פתחי משימה חוזרת, לכי לטאב "תזמון", סמני "הגדר כיעד" — והיא תופיע כאן.
+            פתח{" "}
+            <Link to="/app/tasks" className="underline text-primary-600 hover:text-primary-700">
+              משימה חוזרת
+            </Link>
+            , עבור לטאב "תזמון", סמן "הגדר כיעד" — והיא תופיע כאן.
           </div>
         </div>
       ) : (
@@ -118,6 +123,7 @@ function GoalCard({ task, entries, onEdit }: GoalCardProps) {
     [task, entries]
   );
   if (!stats) return null;
+  if (!task.goal_period) return null;
 
   const period = task.goal_period as GoalPeriod;
   const target = task.goal_target ?? 1;
@@ -271,7 +277,8 @@ function GoalCard({ task, entries, onEdit }: GoalCardProps) {
         )}
         {stats.reachedMilestone === true && minStreak != null && (
           <span className="inline-flex items-center gap-1 text-success-700 bg-success-50 border border-success-200 px-2 py-0.5 rounded-full">
-            🎉 אבן דרך הושגה
+            <span aria-hidden="true">🎉</span>
+            <span>אבן דרך הושגה</span>
           </span>
         )}
         {stats.beatsWithoutTime.length > 0 && (

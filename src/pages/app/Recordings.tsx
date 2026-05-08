@@ -236,7 +236,7 @@ export function Recordings() {
               <QuickRecordTallWidget />
               <UploadTallWidget />
             </div>
-            <div className="min-h-[600px]">
+            <div className="min-h-0 flex-1">
               <PlayerWidget />
             </div>
           </div>

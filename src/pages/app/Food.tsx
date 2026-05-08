@@ -58,6 +58,7 @@ export function Food() {
             onClick={() => setImportOpen(true)}
             className="btn-ghost text-sm gap-1.5"
             title="ייבוא מצרכים / מאכלים מ-CSV"
+            aria-label="ייבוא מצרכים / מאכלים מ-CSV"
           >
             <Upload className="w-4 h-4" />
             <span className="hidden sm:inline">ייבוא</span>
@@ -67,6 +68,7 @@ export function Food() {
             onClick={() => setShareOpen(true)}
             className="btn-ghost text-sm gap-1.5"
             title="שיתוף תפריט"
+            aria-label="שיתוף תפריט"
           >
             <UserPlus className="w-4 h-4" />
             <span className="hidden sm:inline">שיתוף</span>
@@ -76,6 +78,7 @@ export function Food() {
             onClick={() => setExportOpen(true)}
             className="btn-ghost text-sm gap-1.5"
             title="ייצוא רשימת קניות לוואטסאפ"
+            aria-label="ייצוא רשימת קניות לוואטסאפ"
           >
             <ShoppingCart className="w-4 h-4" />
             <span className="hidden sm:inline">לוואטסאפ</span>
@@ -85,6 +88,7 @@ export function Food() {
             onClick={() => setTaskExportOpen(true)}
             className="btn-dark text-sm gap-1.5"
             title="ייצוא למשימות (בישול / קניות)"
+            aria-label="ייצוא למשימות (בישול / קניות)"
           >
             <ListChecks className="w-4 h-4" />
             <span className="hidden sm:inline">למשימות</span>

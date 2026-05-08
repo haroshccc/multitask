@@ -220,7 +220,7 @@ export function RrulePicker({ value, onChange, anchorDate }: RrulePickerProps) {
             <div>
               <div className="text-[11px] text-ink-500 mb-1">בימים</div>
               <div className="inline-flex rounded-md border border-ink-200 overflow-hidden bg-white">
-                {WEEKDAY_KEYS.map((d) => {
+                {[...WEEKDAY_KEYS].reverse().map((d) => {
                   const active = byday.includes(d);
                   return (
                     <button
@@ -316,6 +316,7 @@ export function RrulePicker({ value, onChange, anchorDate }: RrulePickerProps) {
             <input
               type="date"
               value={until.slice(0, 10)}
+              min={anchorDate ? anchorDate.toISOString().slice(0, 10) : undefined}
               onChange={(e) =>
                 setUntil(e.target.value ? e.target.value + "T00:00:00Z" : "")
               }

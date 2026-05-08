@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   DndContext,
@@ -65,6 +65,8 @@ export function Tasks() {
   const reorderLists = useReorderTaskLists();
 
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [newListDialogOpen, setNewListDialogOpen] = useState(false);
+  const [newListName, setNewListName] = useState("");
   const [pageMenuOpen, setPageMenuOpen] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [rowDisplayOpen, setRowDisplayOpen] = useState(false);
@@ -95,10 +97,17 @@ export function Tasks() {
     setListVisibility.mutate({ screenKey: "tasks", hiddenListIds: next });
   };
 
-  const handleCreateList = async () => {
-    const name = window.prompt("שם הרשימה החדשה:");
-    if (!name?.trim()) return;
-    await createTaskList.mutateAsync({ name: name.trim(), kind: "custom" });
+  const handleCreateList = () => {
+    setNewListName("");
+    setNewListDialogOpen(true);
+  };
+
+  const handleCreateListSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    const name = newListName.trim();
+    if (!name) return;
+    setNewListDialogOpen(false);
+    await createTaskList.mutateAsync({ name, kind: "custom" });
   };
 
   /** Move a list one slot in the visible order. The on-screen order is
@@ -324,7 +333,6 @@ export function Tasks() {
       key: "tags",
       type: "multi-text",
       label: "תגים",
-      resolveLabel: (v) => (allTagSuggestions.includes(v) ? v : v),
     },
     {
       key: "dueAfter",
@@ -836,6 +844,30 @@ export function Tasks() {
       {statusesOpen && <StatusesModal onClose={() => setStatusesOpen(false)} />}
 
       <BulkActionsToolbar allTasks={tasks} />
+
+      {newListDialogOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40" onClick={() => setNewListDialogOpen(false)}>
+          <form
+            className="bg-white rounded-2xl shadow-lift p-6 w-80 flex flex-col gap-4"
+            onClick={(e) => e.stopPropagation()}
+            onSubmit={handleCreateListSubmit}
+          >
+            <h2 className="text-sm font-semibold text-ink-900">רשימה חדשה</h2>
+            <input
+              autoFocus
+              type="text"
+              className="input text-sm"
+              placeholder="שם הרשימה"
+              value={newListName}
+              onChange={(e) => setNewListName(e.target.value)}
+            />
+            <div className="flex justify-end gap-2">
+              <button type="button" className="btn-ghost text-sm" onClick={() => setNewListDialogOpen(false)}>ביטול</button>
+              <button type="submit" className="btn-dark text-sm" disabled={!newListName.trim()}>יצירה</button>
+            </div>
+          </form>
+        </div>
+      )}
     </ScreenScaffold>
   );
 }
@@ -845,7 +877,7 @@ function EmptyListsHint({ lists }: { lists: TaskList[] }) {
     return (
       <div className="card p-6 flex-1 min-w-[280px] text-center">
         <p className="text-sm text-ink-600">
-          עוד אין רשימות. צרי רשימה ראשונה בבאנר שלמעלה, או גררי משימות לתוך "לא משויכות".
+          עוד אין רשימות. צור רשימה ראשונה בבאנר שלמעלה, או גרור משימות לתוך "לא משויכות".
         </p>
       </div>
     );
@@ -913,12 +945,14 @@ function buildTrees(tasks: Task[]): BuildResult {
       });
     }
 
-    const build = (pid: string | null, depth: number): TaskTreeNode[] =>
-      (childrenOf.get(pid) ?? []).map((t) => ({
-        task: t,
-        children: build(t.id, depth + 1),
-        depth,
-      }));
+    const build = (pid: string | null, depth: number, visitedIds = new Set<string>()): TaskTreeNode[] =>
+      (childrenOf.get(pid) ?? [])
+        .filter((t) => !visitedIds.has(t.id))
+        .map((t) => ({
+          task: t,
+          children: build(t.id, depth + 1, new Set([...visitedIds, t.id])),
+          depth,
+        }));
 
     listTrees.set(listKey, build(null, 0));
   }

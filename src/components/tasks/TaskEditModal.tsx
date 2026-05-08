@@ -319,8 +319,14 @@ export function TaskEditModal({
   ]);
 
   const [guardOpen, setGuardOpen] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const saveAll = async (): Promise<boolean> => {
+    setSaveError(null);
+    if (requiresApproval && !approverId) {
+      setSaveError("יש לבחור מאשר כאשר 'דורש אישור' מופעל");
+      return false;
+    }
     // Create mode — the entity does not exist yet. Build it now, surface
     // its id via `onCreated`, then close. If the user discards instead,
     // nothing is created.
@@ -369,7 +375,9 @@ export function TaskEditModal({
         });
         onCreated?.(created.id);
         return true;
-      } catch {
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        setSaveError(msg || "שמירה נכשלה");
         return false;
       }
     }
@@ -443,7 +451,9 @@ export function TaskEditModal({
         redo: () => updateTask.mutate({ taskId: task.id, patch: newPatch }),
       });
       return true;
-    } catch {
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setSaveError(msg || "שמירה נכשלה");
       return false;
     }
   };
@@ -869,8 +879,13 @@ export function TaskEditModal({
                 "commit unblurred edits" affordance + the visible save
                 indicator the user wants. */}
             <div className="px-5 py-3 border-t border-ink-200 flex items-center justify-end gap-2">
-              {dirty && (
-                <span className="text-[11px] text-warning-600 me-auto">
+              {saveError && (
+                <span className="text-xs font-medium text-danger-600 me-auto">
+                  {saveError}
+                </span>
+              )}
+              {!saveError && dirty && (
+                <span className="text-xs font-medium text-warning-600 me-auto">
                   יש שינויים לא שמורים
                 </span>
               )}

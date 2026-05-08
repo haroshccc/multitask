@@ -1,5 +1,5 @@
 import { Outlet, NavLink, useLocation, useNavigate } from "react-router-dom";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import {
   Home,
   CheckSquare,
@@ -60,6 +60,13 @@ export function AppShell() {
   const [captureOpen, setCaptureOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
 
+  // Refs so the keyboard effect ([] deps) can see the latest modal state
+  // without being re-registered on every render.
+  const captureOpenRef = useRef(captureOpen);
+  const searchOpenRef = useRef(searchOpen);
+  captureOpenRef.current = captureOpen;
+  searchOpenRef.current = searchOpen;
+
   // Subscribe the whole session to Realtime invalidations for the active org.
   // Must stay mounted at AppShell level — DO NOT move into individual screens.
   useRealtimeSync();
@@ -84,6 +91,8 @@ export function AppShell() {
     const onKey = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey;
       if (!mod) return;
+      // Don't fire app shortcuts when a modal dialog is already open.
+      if (captureOpenRef.current || searchOpenRef.current) return;
       const key = e.key.toLowerCase();
       if (key === "k") {
         e.preventDefault();
@@ -177,7 +186,7 @@ export function AppShell() {
           >
             <Search className="w-5 h-5 text-ink-600" />
           </button>
-          <button className="p-2 rounded-xl hover:bg-ink-100" aria-label="התראות">
+          <button className="p-2 rounded-xl hover:bg-ink-100 opacity-40 cursor-not-allowed" aria-label="התראות (בקרוב)" title="התראות — בקרוב" disabled>
             <Bell className="w-5 h-5 text-ink-600" />
           </button>
           <button

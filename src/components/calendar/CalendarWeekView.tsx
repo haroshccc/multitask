@@ -386,7 +386,7 @@ export function CalendarWeekView({
                   <button
                     key={item.id}
                     onClick={() => onItemClick(item)}
-                    title={itemTooltip(item, now)}
+                    title={itemTooltip(item)}
                     className={cn(
                       "w-full text-start text-[11px] leading-tight truncate rounded px-1 py-0.5 font-medium",
                       item.kind === "task"

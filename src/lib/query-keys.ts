@@ -75,6 +75,9 @@ export const queryKeys = {
     ["time-entries-range", orgId, from, to] as const,
   activeTimer: () => ["timer", "active"] as const,
 
+  // Task edit history
+  taskEdits: (taskId: string) => ["task", taskId, "edits"] as const,
+
   // Notifications
   notifications: (userId: string) => ["notifications", userId] as const,
   unreadNotificationsCount: (userId: string) =>

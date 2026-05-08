@@ -25,7 +25,7 @@ import {
   useFiltersFromUrl,
   type FilterField,
 } from "@/components/filters/FilterBar";
-import { TaskEditModal } from "@/components/tasks/TaskEditModal";
+import { TaskEditModal, type TaskCreateDraft } from "@/components/tasks/TaskEditModal";
 import { TaskColumn } from "@/components/tasks/TaskColumn";
 import { BulkActionsToolbar } from "@/components/tasks/BulkActionsToolbar";
 import { ArchiveModal } from "@/components/tasks/ArchiveModal";
@@ -50,10 +50,12 @@ import {
 } from "@/lib/hooks";
 import { pushUndo } from "@/lib/undo/store";
 import { useTaskSelectionStore } from "@/lib/selection/store";
+import { useOrgScope } from "@/lib/hooks/useOrgScope";
 import type { Task, TaskList } from "@/lib/types/domain";
 
 export function Tasks() {
   const [filters, setFilters] = useFiltersFromUrl();
+  const { userId } = useOrgScope();
   const { data: tasks = [] } = useTasks(filters);
   const { data: lists = [] } = useTaskLists();
   const { data: visibility } = useListVisibility("tasks");
@@ -65,6 +67,7 @@ export function Tasks() {
   const reorderLists = useReorderTaskLists();
 
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [createDraft, setCreateDraft] = useState<TaskCreateDraft | null>(null);
   const [newListDialogOpen, setNewListDialogOpen] = useState(false);
   const [newListName, setNewListName] = useState("");
   const [pageMenuOpen, setPageMenuOpen] = useState(false);
@@ -178,9 +181,11 @@ export function Tasks() {
   );
 
   // Build per-list trees + a count map for header badges.
+  // Pass knownListIds so tasks delegated to me from foreign lists fall into unassigned.
+  const knownListIds = useMemo(() => new Set(lists.map((l) => l.id)), [lists]);
   const { listTrees, counts } = useMemo(
-    () => buildTrees(tasks),
-    [tasks]
+    () => buildTrees(tasks, knownListIds),
+    [tasks, knownListIds]
   );
 
   // Columns to render: "unassigned" always visible and pinned, then the rest.
@@ -289,15 +294,16 @@ export function Tasks() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // Ctrl+N from AppShell opens create-task modal when on this screen.
+  useEffect(() => {
+    const handler = () => setCreateDraft({});
+    window.addEventListener("app:new-task", handler);
+    return () => window.removeEventListener("app:new-task", handler);
+  }, []);
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } })
   );
-
-  const allTagSuggestions = useMemo(() => {
-    const s = new Set<string>();
-    tasks.forEach((t) => (t.tags ?? []).forEach((tag) => s.add(tag)));
-    return Array.from(s);
-  }, [tasks]);
 
   const fields: FilterField[] = [
     {
@@ -827,7 +833,13 @@ export function Tasks() {
 
       <TaskEditModal
         taskId={editingTaskId}
-        onClose={() => setEditingTaskId(null)}
+        createDraft={createDraft}
+        onClose={() => { setEditingTaskId(null); setCreateDraft(null); }}
+        assigneeView={(() => {
+          if (!editingTaskId || !userId) return false;
+          const t = tasks.find((x) => x.id === editingTaskId);
+          return !!t && t.assignee_user_id === userId && t.owner_id !== userId;
+        })()}
       />
 
       {archiveOpen && <ArchiveModal onClose={() => setArchiveOpen(false)} />}
@@ -901,11 +913,15 @@ interface BuildResult {
 
 const UNASSIGNED_KEY = "__unassigned__";
 
-function buildTrees(tasks: Task[]): BuildResult {
-  // Group by list
+function buildTrees(tasks: Task[], knownListIds?: Set<string>): BuildResult {
+  // Group by list. Tasks delegated to me from an unknown list → unassigned.
   const byList = new Map<string, Task[]>();
   for (const t of tasks) {
-    const key = t.task_list_id ?? UNASSIGNED_KEY;
+    const listId = t.task_list_id;
+    const key =
+      listId && knownListIds && !knownListIds.has(listId)
+        ? UNASSIGNED_KEY
+        : (listId ?? UNASSIGNED_KEY);
     if (!byList.has(key)) byList.set(key, []);
     byList.get(key)!.push(t);
   }

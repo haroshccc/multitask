@@ -214,9 +214,10 @@ export function ThoughtCard({
             onClick={() => setAssignMenuOpen((v) => !v)}
             className="inline-flex items-center gap-1 text-xs font-medium text-ink-700 hover:bg-ink-100 rounded px-2 py-1"
             type="button"
+            title="לרשימה"
           >
             <Tag className="w-3.5 h-3.5" />
-            לרשימה
+            <span className="hidden md:inline">לרשימה</span>
           </button>
           {assignMenuOpen && (
             <div className="absolute start-0 top-full mt-1 z-30 bg-white border border-ink-200 rounded-lg shadow-lift w-56 max-h-56 overflow-y-auto py-1">
@@ -296,9 +297,10 @@ export function ThoughtCard({
               : "text-ink-700 hover:bg-ink-100"
           )}
           type="button"
+          title="עבד"
         >
           <Zap className="w-3.5 h-3.5" />
-          עבד
+          <span className="hidden md:inline">עבד</span>
         </button>
 
         <button
@@ -315,9 +317,10 @@ export function ThoughtCard({
               : "text-ink-700 hover:bg-ink-100"
           )}
           type="button"
+          title={processed ? "מעובד" : "סמן כמעובד"}
         >
           <Check className="w-3.5 h-3.5" />
-          {processed ? "מעובד" : "סמן"}
+          <span className="hidden md:inline">{processed ? "מעובד" : "סמן"}</span>
         </button>
       </div>
 

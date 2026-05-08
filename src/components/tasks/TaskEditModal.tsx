@@ -60,6 +60,7 @@ import {
   minutesToHours,
 } from "@/components/ui/DurationInput";
 import { TaskDependenciesSection } from "@/components/tasks/TaskDependenciesSection";
+import { RichTextArea } from "@/components/ui/RichTextArea";
 import { PlanVsActualBar } from "@/components/tasks/PlanVsActualBar";
 import { UnsavedChangesGuard } from "@/components/ui/UnsavedChangesGuard";
 
@@ -456,6 +457,20 @@ export function TaskEditModal({
     onClose();
   };
 
+  // Ctrl+S saves while the modal is open.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.code === "KeyS") {
+        e.preventDefault();
+        saveAll();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
   if (!task && !open) return null;
 
   return (
@@ -693,10 +708,9 @@ export function TaskEditModal({
                   </div>
 
                   <Field label="תיאור">
-                    <textarea
+                    <RichTextArea
                       value={description}
-                      onChange={(e) => setDescription(e.target.value)}
-                      className="field min-h-[80px] resize-y"
+                      onChange={setDescription}
                       placeholder="פרטים על המשימה..."
                     />
                   </Field>

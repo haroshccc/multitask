@@ -25,7 +25,7 @@ import {
   useFiltersFromUrl,
   type FilterField,
 } from "@/components/filters/FilterBar";
-import { TaskEditModal } from "@/components/tasks/TaskEditModal";
+import { TaskEditModal, type TaskCreateDraft } from "@/components/tasks/TaskEditModal";
 import { TaskColumn } from "@/components/tasks/TaskColumn";
 import { BulkActionsToolbar } from "@/components/tasks/BulkActionsToolbar";
 import { ArchiveModal } from "@/components/tasks/ArchiveModal";
@@ -65,6 +65,7 @@ export function Tasks() {
   const reorderLists = useReorderTaskLists();
 
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [createDraft, setCreateDraft] = useState<TaskCreateDraft | null>(null);
   const [pageMenuOpen, setPageMenuOpen] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [rowDisplayOpen, setRowDisplayOpen] = useState(false);
@@ -278,6 +279,13 @@ export function Tasks() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  // Ctrl+N from AppShell opens create-task modal when on this screen.
+  useEffect(() => {
+    const handler = () => setCreateDraft({});
+    window.addEventListener("app:new-task", handler);
+    return () => window.removeEventListener("app:new-task", handler);
   }, []);
 
   const sensors = useSensors(
@@ -819,7 +827,8 @@ export function Tasks() {
 
       <TaskEditModal
         taskId={editingTaskId}
-        onClose={() => setEditingTaskId(null)}
+        createDraft={createDraft}
+        onClose={() => { setEditingTaskId(null); setCreateDraft(null); }}
       />
 
       {archiveOpen && <ArchiveModal onClose={() => setArchiveOpen(false)} />}

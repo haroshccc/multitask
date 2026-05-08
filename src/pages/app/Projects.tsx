@@ -41,6 +41,12 @@ export function Projects() {
     localStorage.setItem(VIEW_STORAGE_KEY, view);
   }, [view]);
 
+  useEffect(() => {
+    const handler = () => setCreateOpen(true);
+    window.addEventListener("app:new-project", handler);
+    return () => window.removeEventListener("app:new-project", handler);
+  }, []);
+
   const { data: projects = [], isLoading } = useProjects({}, true);
 
   const filtered = useMemo(() => {

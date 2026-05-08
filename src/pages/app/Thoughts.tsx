@@ -275,6 +275,16 @@ export function Thoughts() {
     }
   }, [searchParams, setSearchParams]);
 
+  // Ctrl+N from AppShell focuses the composer textarea.
+  useEffect(() => {
+    const handler = () => {
+      const ta = document.querySelector<HTMLTextAreaElement>("[data-thought-composer]");
+      ta?.focus();
+    };
+    window.addEventListener("app:new-thought", handler);
+    return () => window.removeEventListener("app:new-thought", handler);
+  }, []);
+
   const stats = useMemo(() => {
     const total = thoughts.length;
     const processed = thoughts.filter((t) => t.processed_at).length;

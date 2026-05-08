@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { toast } from "@/components/ui/Toast";
 
 /**
  * One reversible action. `do` and `undo` are run by the global Ctrl+Z / Ctrl+Y
@@ -38,29 +39,39 @@ export const useUndoStore = create<UndoState>((set, get) => ({
 
   async undo() {
     const action = get().past.at(-1);
-    if (!action) return;
+    if (!action) {
+      toast("אין מה לבטל", "info", 1800);
+      return;
+    }
     set((s) => ({
       past: s.past.slice(0, -1),
       future: [...s.future, action],
     }));
     try {
       await action.undo();
+      toast(`בוטל: ${action.description}`, "undo");
     } catch (err) {
       console.error("undo failed:", err);
+      toast("ביטול נכשל", "error");
     }
   },
 
   async redo() {
     const action = get().future.at(-1);
-    if (!action) return;
+    if (!action) {
+      toast("אין מה לבצע מחדש", "info", 1800);
+      return;
+    }
     set((s) => ({
       future: s.future.slice(0, -1),
       past: [...s.past, action],
     }));
     try {
       await action.redo();
+      toast(`בוצע מחדש: ${action.description}`, "redo");
     } catch (err) {
       console.error("redo failed:", err);
+      toast("ביצוע מחדש נכשל", "error");
     }
   },
 

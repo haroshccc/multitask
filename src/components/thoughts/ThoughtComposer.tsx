@@ -57,6 +57,7 @@ export function ThoughtComposer({
       <textarea
         ref={ref}
         autoFocus
+        data-thought-composer
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={handleKeyDown}

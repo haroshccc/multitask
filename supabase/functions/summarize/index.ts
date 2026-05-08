@@ -59,7 +59,8 @@ const DEFAULT_PROMPTS: Record<string, string> = {
 };
 
 function buildSystemPrompt(
-  overrides: Record<string, string | null | undefined> | null
+  overrides: Record<string, string | null | undefined> | null,
+  customPrompt?: string
 ): string {
   const get = (k: string) => {
     const v = overrides?.[k]?.trim();
@@ -81,7 +82,7 @@ function buildSystemPrompt(
 [tasks] ${get("tasks")}
 [events] ${get("events")}
 
-החזר/י JSON תקני בלבד התואם בדיוק לסכימה הבאה — בלי מלל לפני או אחרי, בלי בלוקי \`\`\`:
+${customPrompt ? `\nהוראה נוספת מהמשתמש: ${customPrompt}\n` : ""}החזר/י JSON תקני בלבד התואם בדיוק לסכימה הבאה — בלי מלל לפני או אחרי, בלי בלוקי \`\`\`:
 
 {
   "short_summary": string,
@@ -120,6 +121,7 @@ async function callClaude(args: {
   transcript_text: string;
   speakerLabels: Record<number, string>;
   promptOverrides: Record<string, string | null | undefined> | null;
+  customPrompt?: string;
 }): Promise<AiOutput> {
   if (!ANTHROPIC_API_KEY) {
     throw new Error(
@@ -127,10 +129,11 @@ async function callClaude(args: {
         "Supabase Dashboard → Edge Functions → Secrets."
     );
   }
-  const systemPrompt = buildSystemPrompt(args.promptOverrides);
+  const systemPrompt = buildSystemPrompt(args.promptOverrides, args.customPrompt);
   const hasOverrides =
-    args.promptOverrides &&
-    Object.values(args.promptOverrides).some((v) => v && v.trim().length > 0);
+    args.customPrompt ||
+    (args.promptOverrides &&
+      Object.values(args.promptOverrides).some((v) => v && v.trim().length > 0));
   // Tool-use forces a structured object output. Without this the model
   // sometimes returned slightly-malformed JSON (unescaped newlines mid-
   // string, smart quotes, etc.) and our `JSON.parse(text)` blew up. With
@@ -254,7 +257,7 @@ async function summarizeHandler(
 ): Promise<Response> {
   const origin = req.headers.get("origin");
   const body = (await req.json().catch(() => null)) as
-    | { recording_id?: string }
+    | { recording_id?: string; custom_prompt?: string }
     | null;
   if (!body?.recording_id) {
     return jsonResponse(
@@ -309,6 +312,8 @@ async function summarizeHandler(
     .update({ ai_status: "pending", status: "processing", error_message: null })
     .eq("id", recording.id);
 
+  const customPromptText = (body.custom_prompt ?? "").trim();
+
   let aiOutput: AiOutput;
   try {
     aiOutput = await callClaude({
@@ -316,6 +321,7 @@ async function summarizeHandler(
       transcript_text: recording.transcript_text,
       speakerLabels,
       promptOverrides,
+      customPrompt: customPromptText || undefined,
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

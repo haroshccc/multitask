@@ -13,10 +13,11 @@ import {
 import { cn } from "@/lib/utils/cn";
 import { useNavigate } from "react-router-dom";
 import { useCreateThought } from "@/lib/hooks/useThoughts";
-import { useCreateRecording } from "@/lib/hooks/useRecordings";
+import { useCreateRecording, useTriggerAiProcessing } from "@/lib/hooks/useRecordings";
 import { useCreateTask } from "@/lib/hooks/useTasks";
 import { useFileUpload } from "@/lib/hooks/useFileUpload";
 import { useOrgScope } from "@/lib/hooks/useOrgScope";
+import { useUserThoughtPreferences } from "@/lib/hooks/useUserThoughtPreferences";
 import {
   RecorderPanel,
   type RecorderPanelHandle,
@@ -35,8 +36,11 @@ export function QuickCapture({ open, onClose }: QuickCaptureProps) {
   const scope = useOrgScope();
   const createThought = useCreateThought();
   const createRecording = useCreateRecording();
+  const triggerAi = useTriggerAiProcessing();
   const createTask = useCreateTask();
   const upload = useFileUpload();
+  const { data: thoughtPrefs } = useUserThoughtPreferences();
+  const autoTranscribe = thoughtPrefs?.auto_transcribe_recorded_thoughts ?? false;
   const recorderRef = useRef<RecorderPanelHandle>(null);
 
   const [mode, setMode] = useState<Mode>("menu");
@@ -138,6 +142,11 @@ export function QuickCapture({ open, onClose }: QuickCaptureProps) {
         recording_id: recording.id,
         text_content: null,
       });
+
+      // Auto-transcribe if the user opted in.
+      if (autoTranscribe) {
+        triggerAi.mutate({ recordingId: recording.id });
+      }
 
       recorderRef.current?.discard();
       onClose();

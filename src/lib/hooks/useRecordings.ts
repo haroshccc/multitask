@@ -198,7 +198,8 @@ export function useTriggerAiProcessing() {
   const qc = useQueryClient();
   const scope = useOrgScope();
   return useMutation({
-    mutationFn: (recordingId: string) => service.triggerAiProcessing(recordingId),
+    mutationFn: ({ recordingId, customPrompt }: { recordingId: string; customPrompt?: string }) =>
+      service.triggerAiProcessing(recordingId, customPrompt),
     onSuccess: (data) => {
       qc.setQueryData(queryKeys.recording(data.id), data);
       if (scope.organizationId) {

@@ -15,6 +15,7 @@ import {
   Save,
   FileText,
   AlignLeft,
+  ChevronDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import {
@@ -100,8 +101,11 @@ export function AiInsights({ recording }: Props) {
     | "tasks"
     | "events";
   const [activeTab, setActiveTab] = useState<AiTab>("short_summary");
+  const [customPrompt, setCustomPrompt] = useState("");
+  const [showCustomPrompt, setShowCustomPrompt] = useState(false);
 
-  const onTrigger = () => trigger.mutate(recording.id);
+  const onTrigger = () =>
+    trigger.mutate({ recordingId: recording.id, customPrompt: customPrompt || undefined });
   const onSave = () => {
     updateRecording.mutate({
       recordingId: recording.id,
@@ -148,32 +152,53 @@ export function AiInsights({ recording }: Props) {
               שמירה
             </button>
           )}
-          <button
-            type="button"
-            onClick={onTrigger}
-            disabled={
-              trigger.isPending ||
-              aiStatus === "pending" ||
-              !recording.transcript_text
-            }
-            className="btn-outline !py-1 !px-2 !text-[11px] inline-flex items-center gap-1"
-            title={
-              !recording.transcript_text
-                ? "צריכה תמלול לפני שClaude יכולה לעבד"
-                : recording.ai_output
-                ? "הפעלת AI מחדש (יחליף את הניתוח הנוכחי)"
-                : "Claude מסכם וממלא את הסקציות אוטומטית"
-            }
-          >
-            {trigger.isPending || aiStatus === "pending" ? (
-              <Loader2 className="w-3 h-3 animate-spin" />
-            ) : (
-              <Sparkles className="w-3 h-3" />
-            )}
-            {recording.ai_output ? "עיבוד AI מחדש" : "הפעלת AI"}
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={onTrigger}
+              disabled={
+                trigger.isPending ||
+                aiStatus === "pending" ||
+                !recording.transcript_text
+              }
+              className="btn-outline !py-1 !px-2 !text-[11px] inline-flex items-center gap-1"
+              title={
+                !recording.transcript_text
+                  ? "צריכה תמלול לפני שClaude יכולה לעבד"
+                  : recording.ai_output
+                  ? "הפעלת AI מחדש (יחליף את הניתוח הנוכחי)"
+                  : "Claude מסכם וממלא את הסקציות אוטומטית"
+              }
+            >
+              {trigger.isPending || aiStatus === "pending" ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : (
+                <Sparkles className="w-3 h-3" />
+              )}
+              {recording.ai_output ? "עיבוד AI מחדש" : "הפעלת AI"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowCustomPrompt((v) => !v)}
+              className="btn-outline !py-1 !px-1.5 !text-[11px] inline-flex items-center gap-0.5"
+              title="הוראה מותאמת ל-AI"
+            >
+              <ChevronDown className={cn("w-3 h-3 transition-transform", showCustomPrompt && "rotate-180")} />
+            </button>
+          </div>
         </div>
       </div>
+      {showCustomPrompt && (
+        <div className="px-3 pb-2">
+          <textarea
+            value={customPrompt}
+            onChange={(e) => setCustomPrompt(e.target.value)}
+            placeholder="הוראה מותאמת אישית ל-AI (אופציונלי) — למשל: 'התמקד במשימות טכניות בלבד'"
+            className="field w-full text-xs min-h-[52px] resize-y"
+            dir="rtl"
+          />
+        </div>
+      )}
 
       {!recording.ai_output && aiStatus !== "pending" && (
         <p className="text-[11px] text-ink-500 leading-relaxed">

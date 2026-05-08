@@ -129,28 +129,43 @@ export function TomorrowMenuBanner() {
 
   if (datesWithPlan.length === 0) return null;
 
+  // Show today+tomorrow side-by-side; remaining days stacked below
+  const todayAndTomorrow = datesWithPlan.filter(
+    (d) => d === todayIso || d === tomorrowIso
+  );
+  const restDates = datesWithPlan.filter(
+    (d) => d !== todayIso && d !== tomorrowIso
+  );
+
+  const renderBanner = (date: string) => {
+    const hiddenSet = new Set(hiddenAll[date] ?? []);
+    const dayRows = allDayRows.filter((r) => r.date === date);
+    return (
+      <DayBanner
+        key={date}
+        label={labelFor(date, todayIso, tomorrowIso)}
+        isTomorrow={date === tomorrowIso}
+        dow={dowOf(date)}
+        template={template}
+        dayRows={dayRows}
+        people={people}
+        me={me}
+        hiddenUsers={hiddenSet}
+        onToggleHidden={(uid) => toggleHidden(date, uid)}
+        onSlotChange={(uid, mt, ids) => handleSlotChange(date, uid, mt, ids)}
+        onResetSlot={(uid, mt) => handleResetToTemplate(date, uid, mt)}
+      />
+    );
+  };
+
   return (
     <div className="space-y-2 mb-3">
-      {datesWithPlan.map((date) => {
-        const hiddenSet = new Set(hiddenAll[date] ?? []);
-        const dayRows = allDayRows.filter((r) => r.date === date);
-        return (
-          <DayBanner
-            key={date}
-            label={labelFor(date, todayIso, tomorrowIso)}
-            isTomorrow={date === tomorrowIso}
-            dow={dowOf(date)}
-            template={template}
-            dayRows={dayRows}
-            people={people}
-            me={me}
-            hiddenUsers={hiddenSet}
-            onToggleHidden={(uid) => toggleHidden(date, uid)}
-            onSlotChange={(uid, mt, ids) => handleSlotChange(date, uid, mt, ids)}
-            onResetSlot={(uid, mt) => handleResetToTemplate(date, uid, mt)}
-          />
-        );
-      })}
+      {todayAndTomorrow.length > 0 && (
+        <div className={todayAndTomorrow.length === 2 ? "grid grid-cols-2 gap-2" : ""}>
+          {todayAndTomorrow.map(renderBanner)}
+        </div>
+      )}
+      {restDates.map(renderBanner)}
     </div>
   );
 }

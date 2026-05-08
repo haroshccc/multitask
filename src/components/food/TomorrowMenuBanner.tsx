@@ -78,6 +78,7 @@ function saveHiddenUsers(val: Record<string, string[]>) {
 // Root: one banner with N day-headers in a row, shared expansion below.
 // Up to 7 days are shown side-by-side so width adapts to the number of days
 // the user has actually planned.
+// On mobile: falls back to individual stacked DayBanner per day.
 // ---------------------------------------------------------------------------
 
 const MAX_DAYS = 7;
@@ -136,84 +137,188 @@ export function TomorrowMenuBanner() {
   const days = datesWithPlan.slice(0, MAX_DAYS);
 
   return (
-    <div className="card border border-primary-200 bg-gradient-to-l from-amber-50/80 via-white to-white mb-3 overflow-hidden">
-      {/* Header row: one tab per day */}
-      <div className="flex flex-nowrap">
-        {days.map((date, idx) => {
-          const dayRows = allDayRows.filter((r) => r.date === date);
-          const totalMeals = dayRows.length;
-          const isLast = idx === days.length - 1;
-          return (
-            <button
-              key={date}
-              type="button"
-              onClick={() => setCollapsed((v) => !v)}
-              className={cn(
-                "flex-1 min-w-0 flex items-center justify-between gap-2 px-3 py-2 text-start hover:bg-ink-50/50",
-                idx > 0 && "border-r border-ink-100"
-              )}
-            >
-              <span className="flex items-center gap-1.5 min-w-0">
-                <Sunrise className="w-4 h-4 text-amber-500 shrink-0" />
-                <span className="font-medium text-ink-900 text-sm whitespace-nowrap">
-                  {date === tomorrowIso ? "תפריט מחר" : "תפריט"}
-                </span>
-                <span className="text-xs text-ink-500 truncate">
-                  {labelFor(date, todayIso, tomorrowIso)}
-                </span>
-                {totalMeals > 0 && collapsed && (
-                  <span className="text-[10px] bg-amber-100 text-amber-700 rounded-full px-1.5 py-0.5 whitespace-nowrap shrink-0">
-                    {totalMeals} מנות
-                  </span>
-                )}
-              </span>
-              {isLast && (
-                collapsed ? (
-                  <ChevronDown className="w-4 h-4 text-ink-400 shrink-0" />
-                ) : (
-                  <ChevronUp className="w-4 h-4 text-ink-400 shrink-0" />
-                )
-              )}
-            </button>
-          );
-        })}
+    <>
+      {/* Mobile: stacked individual day banners */}
+      <div className="sm:hidden space-y-2 mb-3">
+        {days.map((date) => (
+          <DayBanner
+            key={date}
+            date={date}
+            todayIso={todayIso}
+            tomorrowIso={tomorrowIso}
+            allDayRows={allDayRows}
+            template={template}
+            people={people}
+            me={me}
+            hiddenUsers={new Set(hiddenAll[date] ?? [])}
+            onToggleHidden={(uid) => toggleHidden(date, uid)}
+            onSlotChange={(uid, mt, ids) => handleSlotChange(date, uid, mt, ids)}
+            onResetSlot={(uid, mt) => handleResetToTemplate(date, uid, mt)}
+          />
+        ))}
       </div>
 
-      {/* Expanded content: one column per day, side-by-side */}
-      {!collapsed && (
-        <div
-          className="grid border-t border-ink-100"
-          style={{ gridTemplateColumns: `repeat(${days.length}, minmax(0, 1fr))` }}
-        >
+      {/* Desktop: unified banner with N day tabs side-by-side */}
+      <div className="hidden sm:block card border border-primary-200 bg-gradient-to-l from-amber-50/80 via-white to-white mb-3 overflow-hidden">
+        {/* Header row: one tab per day */}
+        <div className="flex flex-nowrap">
           {days.map((date, idx) => {
-            const hiddenSet = new Set(hiddenAll[date] ?? []);
             const dayRows = allDayRows.filter((r) => r.date === date);
+            const totalMeals = dayRows.length;
+            const isLast = idx === days.length - 1;
             return (
-              <div
+              <button
                 key={date}
+                type="button"
+                onClick={() => setCollapsed((v) => !v)}
                 className={cn(
-                  "px-3 pb-3 pt-2 min-w-0",
+                  "flex-1 min-w-0 flex items-center justify-between gap-2 px-3 py-2 text-start hover:bg-ink-50/50",
                   idx > 0 && "border-r border-ink-100"
                 )}
               >
-                <DayContent
-                  dow={dowOf(date)}
-                  template={template}
-                  dayRows={dayRows}
-                  people={people}
-                  me={me}
-                  hiddenUsers={hiddenSet}
-                  onToggleHidden={(uid) => toggleHidden(date, uid)}
-                  onSlotChange={(uid, mt, ids) =>
-                    handleSlotChange(date, uid, mt, ids)
-                  }
-                  onResetSlot={(uid, mt) =>
-                    handleResetToTemplate(date, uid, mt)
-                  }
-                />
-              </div>
+                <span className="flex items-center gap-1.5 min-w-0">
+                  <Sunrise className="w-4 h-4 text-amber-500 shrink-0" />
+                  <span className="font-medium text-ink-900 text-sm whitespace-nowrap">
+                    {date === tomorrowIso ? "תפריט מחר" : "תפריט"}
+                  </span>
+                  <span className="text-xs text-ink-500 truncate">
+                    {labelFor(date, todayIso, tomorrowIso)}
+                  </span>
+                  {totalMeals > 0 && collapsed && (
+                    <span className="text-[10px] bg-amber-100 text-amber-700 rounded-full px-1.5 py-0.5 whitespace-nowrap shrink-0">
+                      {totalMeals} מנות
+                    </span>
+                  )}
+                </span>
+                {isLast && (
+                  collapsed ? (
+                    <ChevronDown className="w-4 h-4 text-ink-400 shrink-0" />
+                  ) : (
+                    <ChevronUp className="w-4 h-4 text-ink-400 shrink-0" />
+                  )
+                )}
+              </button>
             );
           })}
+        </div>
+
+        {/* Expanded content: one column per day, side-by-side */}
+        {!collapsed && (
+          <div
+            className="grid border-t border-ink-100"
+            style={{ gridTemplateColumns: `repeat(${days.length}, minmax(0, 1fr))` }}
+          >
+            {days.map((date, idx) => {
+              const hiddenSet = new Set(hiddenAll[date] ?? []);
+              const dayRows = allDayRows.filter((r) => r.date === date);
+              return (
+                <div
+                  key={date}
+                  className={cn(
+                    "px-3 pb-3 pt-2 min-w-0",
+                    idx > 0 && "border-r border-ink-100"
+                  )}
+                >
+                  <DayContent
+                    dow={dowOf(date)}
+                    template={template}
+                    dayRows={dayRows}
+                    people={people}
+                    me={me}
+                    hiddenUsers={hiddenSet}
+                    onToggleHidden={(uid) => toggleHidden(date, uid)}
+                    onSlotChange={(uid, mt, ids) =>
+                      handleSlotChange(date, uid, mt, ids)
+                    }
+                    onResetSlot={(uid, mt) =>
+                      handleResetToTemplate(date, uid, mt)
+                    }
+                  />
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Mobile: one collapsible banner per day (own collapse state)
+// ---------------------------------------------------------------------------
+
+interface DayBannerProps {
+  date: string;
+  todayIso: string;
+  tomorrowIso: string;
+  allDayRows: MealPlanDay[];
+  template: MealPlanTemplate[];
+  people: FoodPerson[];
+  me: FoodPerson | null;
+  hiddenUsers: Set<string>;
+  onToggleHidden: (uid: string) => void;
+  onSlotChange: (uid: string, mt: MealTimeKey, ids: string[]) => void;
+  onResetSlot: (uid: string, mt: MealTimeKey) => void;
+}
+
+function DayBanner({
+  date,
+  todayIso,
+  tomorrowIso,
+  allDayRows,
+  template,
+  people,
+  me,
+  hiddenUsers,
+  onToggleHidden,
+  onSlotChange,
+  onResetSlot,
+}: DayBannerProps) {
+  const [collapsed, setCollapsed] = useState(true);
+  const dayRows = allDayRows.filter((r) => r.date === date);
+  const totalMeals = dayRows.length;
+
+  return (
+    <div className="card border border-primary-200 bg-gradient-to-l from-amber-50/80 via-white to-white overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setCollapsed((v) => !v)}
+        className="w-full flex items-center justify-between gap-2 px-3 py-2 text-start hover:bg-ink-50/50"
+      >
+        <span className="flex items-center gap-1.5 min-w-0">
+          <Sunrise className="w-4 h-4 text-amber-500 shrink-0" />
+          <span className="font-medium text-ink-900 text-sm whitespace-nowrap">
+            {date === tomorrowIso ? "תפריט מחר" : "תפריט"}
+          </span>
+          <span className="text-xs text-ink-500 truncate">
+            {labelFor(date, todayIso, tomorrowIso)}
+          </span>
+          {totalMeals > 0 && collapsed && (
+            <span className="text-[10px] bg-amber-100 text-amber-700 rounded-full px-1.5 py-0.5 whitespace-nowrap shrink-0">
+              {totalMeals} מנות
+            </span>
+          )}
+        </span>
+        {collapsed ? (
+          <ChevronDown className="w-4 h-4 text-ink-400 shrink-0" />
+        ) : (
+          <ChevronUp className="w-4 h-4 text-ink-400 shrink-0" />
+        )}
+      </button>
+      {!collapsed && (
+        <div className="border-t border-ink-100 px-3 pb-3 pt-2">
+          <DayContent
+            dow={dowOf(date)}
+            template={template}
+            dayRows={dayRows}
+            people={people}
+            me={me}
+            hiddenUsers={hiddenUsers}
+            onToggleHidden={onToggleHidden}
+            onSlotChange={(uid, mt, ids) => onSlotChange(uid, mt, ids)}
+            onResetSlot={(uid, mt) => onResetSlot(uid, mt)}
+          />
         </div>
       )}
     </div>

@@ -9,6 +9,7 @@ export interface OrgDetails {
   id: string;
   name: string;
   org_type: OrgType;
+  food_shared: boolean;
   slug: string | null;
   created_by: string | null;
   created_at: string;
@@ -40,7 +41,7 @@ export interface InviteInfo {
 export async function getOrganization(orgId: string): Promise<OrgDetails> {
   const { data, error } = await db
     .from("organizations")
-    .select("id, name, org_type, slug, created_by, created_at")
+    .select("id, name, org_type, food_shared, slug, created_by, created_at")
     .eq("id", orgId)
     .single();
   if (error) throw error;
@@ -57,7 +58,7 @@ export async function listUserOrganizations(userId: string): Promise<OrgDetails[
   if (ids.length === 0) return [];
   const { data, error } = await db
     .from("organizations")
-    .select("id, name, org_type, slug, created_by, created_at")
+    .select("id, name, org_type, food_shared, slug, created_by, created_at")
     .in("id", ids)
     .order("created_at");
   if (error) throw error;
@@ -66,7 +67,7 @@ export async function listUserOrganizations(userId: string): Promise<OrgDetails[
 
 export async function updateOrganization(
   orgId: string,
-  updates: { name?: string; org_type?: OrgType }
+  updates: { name?: string; org_type?: OrgType; food_shared?: boolean }
 ) {
   const { error } = await db
     .from("organizations")

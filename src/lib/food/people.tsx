@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useOrgScope } from "@/lib/hooks/useOrgScope";
 import { useOrgMembers } from "@/lib/hooks/useOrgMembers";
 import { useMealPlanShares } from "@/lib/hooks/useFood";
+import { useOrganization } from "@/lib/hooks/useOrganizations";
 import type { Profile } from "@/lib/types/domain";
 
 /**
@@ -77,6 +78,10 @@ export function useFoodPeople(): {
   const scope = useOrgScope();
   const { data: members = [], isLoading: membersLoading } = useOrgMembers();
   const { data: shares = [], isLoading: sharesLoading } = useMealPlanShares();
+  const { data: org, isLoading: orgLoading } = useOrganization(scope.organizationId ?? null);
+
+  // Food is "org-shared" when the org has food_shared=true or is family type.
+  const isFoodOrgShared = (org?.food_shared ?? false) || org?.org_type === "family";
 
   const result = useMemo(() => {
     if (!scope.userId) {
@@ -102,11 +107,22 @@ export function useFoodPeople(): {
       isShared: false,
     };
 
-    // Anyone who has shared their plan WITH me becomes visible.
-    const sharerIds = shares
-      .filter((s) => s.shared_with_user_id === scope.userId)
-      .map((s) => s.sharer_user_id);
-    const sharedPeople: FoodPerson[] = [...new Set(sharerIds)]
+    let visibleIds: string[];
+    if (isFoodOrgShared) {
+      // All org members are visible when food is shared at org level.
+      visibleIds = members
+        .map((m) => m.profile?.id)
+        .filter((id): id is string => !!id && id !== scope.userId);
+    } else {
+      // Only people who explicitly shared their plan with me.
+      visibleIds = [...new Set(
+        shares
+          .filter((s) => s.shared_with_user_id === scope.userId)
+          .map((s) => s.sharer_user_id)
+      )];
+    }
+
+    const sharedPeople: FoodPerson[] = visibleIds
       .map((uid) => ({
         userId: uid,
         displayName: nameFromProfile(profileByUserId.get(uid) ?? null, "?"),
@@ -122,11 +138,11 @@ export function useFoodPeople(): {
     const people = [me, ...sharedPeople];
     const byId = new Map(people.map((p) => [p.userId, p]));
     return { people, me, byId };
-  }, [scope.userId, members, shares]);
+  }, [scope.userId, members, shares, isFoodOrgShared]);
 
   return {
     ...result,
-    isLoading: membersLoading || sharesLoading,
+    isLoading: membersLoading || sharesLoading || orgLoading,
   };
 }
 

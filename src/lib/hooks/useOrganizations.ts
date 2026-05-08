@@ -38,7 +38,7 @@ export function useUserOrganizations() {
 export function useUpdateOrganization() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ orgId, updates }: { orgId: string; updates: { name?: string; org_type?: OrgType } }) =>
+    mutationFn: ({ orgId, updates }: { orgId: string; updates: { name?: string; org_type?: OrgType; food_shared?: boolean } }) =>
       updateOrganization(orgId, updates),
     onSuccess: (_data, { orgId }) => {
       qc.invalidateQueries({ queryKey: ["organization", orgId] });

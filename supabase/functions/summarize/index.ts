@@ -251,13 +251,52 @@ async function callClaude(args: {
   return toolBlock.input as AiOutput;
 }
 
+async function callClaudeFreeText(args: {
+  title: string | null;
+  transcript_text: string;
+  question: string;
+}): Promise<string> {
+  if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not set");
+  const t =
+    args.transcript_text.length > MAX_TRANSCRIPT_CHARS
+      ? args.transcript_text.slice(0, MAX_TRANSCRIPT_CHARS) + "\n\n[התמלול קוצר]"
+      : args.transcript_text;
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "x-api-key": ANTHROPIC_API_KEY,
+      "anthropic-version": "2023-06-01",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      model: ANTHROPIC_MODEL,
+      max_tokens: 2048,
+      system: "אתה עוזר אישי שמנתח שיחות מתומללות. ענה בעברית בלבד על בסיס התמלול שסופק.",
+      messages: [
+        {
+          role: "user",
+          content: `כותרת ההקלטה: ${args.title ?? "ללא כותרת"}\n\nתמלול:\n${t}\n\nשאלה / בקשה: ${args.question}`,
+        },
+      ],
+    }),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`anthropic_${res.status}: ${text.slice(0, 500)}`);
+  }
+  const json = (await res.json()) as {
+    content?: Array<{ type: string; text?: string }>;
+  };
+  return json.content?.find((b) => b.type === "text")?.text ?? "";
+}
+
 async function summarizeHandler(
   req: Request,
   ctx: MembershipContext
 ): Promise<Response> {
   const origin = req.headers.get("origin");
   const body = (await req.json().catch(() => null)) as
-    | { recording_id?: string; custom_prompt?: string }
+    | { recording_id?: string; custom_prompt?: string; free_text?: string }
     | null;
   if (!body?.recording_id) {
     return jsonResponse(
@@ -284,6 +323,22 @@ async function summarizeHandler(
       { error: "no_transcript_yet", hint: "trigger transcription first" },
       { status: 409, origin }
     );
+  }
+
+  // Free-text Q&A mode: answer a single question without running the full
+  // structured analysis or writing anything to the DB.
+  if (body.free_text?.trim()) {
+    try {
+      const response = await callClaudeFreeText({
+        title: recording.title,
+        transcript_text: recording.transcript_text,
+        question: body.free_text.trim(),
+      });
+      return jsonResponse({ response }, { origin });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return jsonResponse({ error: "free_text_failed", message: msg }, { status: 502, origin });
+    }
   }
 
   // Pull speaker labels — passing them to Claude tightens task attribution.

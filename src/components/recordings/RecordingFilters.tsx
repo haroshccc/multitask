@@ -15,11 +15,13 @@ import type { RecordingStatus } from "@/lib/types/domain";
 export type RecordingsFilterState = {
   search: string;
   includeArchived: boolean;
+  thoughtOnly: boolean;
 };
 
 export const DEFAULT_RECORDING_FILTERS: RecordingsFilterState = {
   search: "",
   includeArchived: false,
+  thoughtOnly: false,
 };
 
 interface Props {
@@ -86,6 +88,7 @@ export function RecordingFilters({
   const hasAny =
     filters.search.trim() !== "" ||
     filters.includeArchived ||
+    filters.thoughtOnly ||
     grouping.mode !== DEFAULT_GROUPING.mode ||
     grouping.status !== DEFAULT_GROUPING.status ||
     grouping.dateOrder !== DEFAULT_GROUPING.dateOrder ||
@@ -242,18 +245,33 @@ export function RecordingFilters({
         )}
       </div>
 
-      {/* Archived toggle */}
+      {/* Thought recordings toggle */}
       <label className="flex items-center justify-between gap-2 cursor-pointer text-xs text-ink-700">
-        <span>כלולות בארכיון</span>
+        <span>הקלטות ממחשבות</span>
         <input
           type="checkbox"
-          checked={filters.includeArchived}
+          checked={filters.thoughtOnly}
           onChange={(e) =>
-            onFiltersChange({ ...filters, includeArchived: e.target.checked })
+            onFiltersChange({ ...filters, thoughtOnly: e.target.checked })
           }
           className="accent-primary-500"
         />
       </label>
+
+      {/* Archived toggle — hidden in thought-only mode */}
+      {!filters.thoughtOnly && (
+        <label className="flex items-center justify-between gap-2 cursor-pointer text-xs text-ink-700">
+          <span>כלולות בארכיון</span>
+          <input
+            type="checkbox"
+            checked={filters.includeArchived}
+            onChange={(e) =>
+              onFiltersChange({ ...filters, includeArchived: e.target.checked })
+            }
+            className="accent-primary-500"
+          />
+        </label>
+      )}
     </div>
   );
 }
@@ -293,10 +311,17 @@ function ModeTab({
 export function filterRecordings<T extends {
   title: string | null;
   audio_archived: boolean;
+  source?: string | null;
 }>(rows: T[], filters: RecordingsFilterState): T[] {
   const q = filters.search.trim().toLowerCase();
   return rows.filter((r) => {
-    if (!filters.includeArchived && r.audio_archived) return false;
+    const isThought = r.source === "thought";
+    if (filters.thoughtOnly) {
+      if (!isThought) return false;
+    } else {
+      if (isThought) return false;
+      if (!filters.includeArchived && r.audio_archived) return false;
+    }
     if (q && !(r.title ?? "").toLowerCase().includes(q)) return false;
     return true;
   });

@@ -211,6 +211,13 @@ export function useTriggerAiProcessing() {
   });
 }
 
+export function useAskRecordingFreeText() {
+  return useMutation({
+    mutationFn: ({ recordingId, question }: { recordingId: string; question: string }) =>
+      service.askRecordingFreeText(recordingId, question),
+  });
+}
+
 export function useDeleteRecording() {
   const qc = useQueryClient();
   const scope = useOrgScope();

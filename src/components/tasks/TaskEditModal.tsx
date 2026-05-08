@@ -167,7 +167,6 @@ export function TaskEditModal({
   const [estimatedMinutes, setEstimatedMinutes] = useState<number | null>(null);
   const [assigneeId, setAssigneeId] = useState<string | null>(null);
   const [requiresApproval, setRequiresApproval] = useState<boolean>(false);
-  const [approverId, setApproverId] = useState<string | null>(null);
   const [isPhase, setIsPhase] = useState<boolean>(false);
 
   // Goal / habit configuration. A task is a goal iff goalEnabled === true.
@@ -200,7 +199,6 @@ export function TaskEditModal({
       setRecurrenceRule(task.recurrence_rule ?? null);
       setAssigneeId(task.assignee_user_id ?? null);
       setRequiresApproval(task.requires_approval ?? false);
-      setApproverId(task.approver_user_id ?? null);
       setDurationMinutes(task.duration_minutes ?? null);
       setEstimatedMinutes(hoursToMinutes(task.estimated_hours ?? null));
       setIsPhase(!!task.is_phase);
@@ -268,7 +266,6 @@ export function TaskEditModal({
       listId !== task.task_list_id ||
       assigneeId !== (task.assignee_user_id ?? null) ||
       requiresApproval !== (task.requires_approval ?? false) ||
-      approverId !== (task.approver_user_id ?? null) ||
       location !== (task.location ?? "") ||
       externalUrl !== (task.external_url ?? "") ||
       scheduledAt !== (task.scheduled_at ?? null) ||
@@ -299,7 +296,6 @@ export function TaskEditModal({
     listId,
     assigneeId,
     requiresApproval,
-    approverId,
     location,
     externalUrl,
     scheduledAt,
@@ -323,10 +319,6 @@ export function TaskEditModal({
 
   const saveAll = async (): Promise<boolean> => {
     setSaveError(null);
-    if (requiresApproval && !approverId) {
-      setSaveError("יש לבחור מאשר כאשר 'דורש אישור' מופעל");
-      return false;
-    }
     // Create mode — the entity does not exist yet. Build it now, surface
     // its id via `onCreated`, then close. If the user discards instead,
     // nothing is created.
@@ -343,7 +335,7 @@ export function TaskEditModal({
           parent_task_id: null,
           assignee_user_id: assigneeId,
           requires_approval: requiresApproval,
-          approver_user_id: requiresApproval ? approverId : null,
+          approver_user_id: requiresApproval ? (user?.id ?? null) : null,
           tags,
           location: location || null,
           external_url: externalUrl || null,
@@ -599,12 +591,17 @@ export function TaskEditModal({
                       <AssigneePicker
                         value={assigneeId}
                         members={orgMembers}
-                        onChange={setAssigneeId}
+                        onChange={(v) => {
+                          setAssigneeId(v);
+                          // If unassigned or assigned back to self, clear approval
+                          if (!v || v === user?.id) setRequiresApproval(false);
+                        }}
                       />
                     </Field>
                   </div>
 
-                  {/* Approval workflow */}
+                  {/* Approval workflow — only relevant when assigned to someone else */}
+                  {assigneeId && assigneeId !== user?.id && (
                   <div className="rounded-xl border border-ink-200 p-3 space-y-2.5">
                     <label className="flex items-center gap-2.5 cursor-pointer select-none">
                       <input
@@ -613,19 +610,8 @@ export function TaskEditModal({
                         onChange={(e) => setRequiresApproval(e.target.checked)}
                         className="w-4 h-4 rounded accent-primary-500"
                       />
-                      <span className="text-sm font-medium text-ink-700">דורש אישור לסיום</span>
+                      <span className="text-sm font-medium text-ink-700">דורש אישור שלי לסיום</span>
                     </label>
-
-                    {requiresApproval && (
-                      <Field label="מי מאשר?">
-                        <AssigneePicker
-                          value={approverId}
-                          members={orgMembers}
-                          onChange={setApproverId}
-                          placeholder="בחר מאשר..."
-                        />
-                      </Field>
-                    )}
 
                     {/* Assignee action: submit for approval */}
                     {task && task.requires_approval &&
@@ -701,6 +687,7 @@ export function TaskEditModal({
                       </div>
                     )}
                   </div>
+                  )}
 
                   <Field label="תיאור">
                     <textarea

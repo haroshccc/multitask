@@ -101,7 +101,7 @@ export function Goals() {
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
           {goalTasks.map((task) => (
             <GoalCard
               key={task.id}
@@ -236,29 +236,34 @@ function GoalCard({ task, entries, listColor, onEdit }: GoalCardProps) {
         </div>
       </div>
 
-      <div className="mt-3 flex rounded-lg border border-ink-100 overflow-hidden divide-x divide-x-reverse divide-ink-100">
+      <div
+        className="mt-3 flex rounded-lg overflow-hidden divide-x divide-x-reverse divide-white/50 border border-primary-100"
+        style={{ background: "linear-gradient(135deg, rgba(250,204,21,0.07) 0%, rgba(236,72,153,0.07) 100%)" }}
+      >
         <StatCell
           icon={<Flame className="w-3 h-3" />}
           label="סטריק"
           value={stats.currentStreak}
-          valueColor={stats.currentStreak > 0 ? "text-primary-600" : "text-ink-800"}
+          color={stats.currentStreak > 0 ? "#d97706" : "#6b6b80"}
         />
         <StatCell
           icon={<Award className="w-3 h-3" />}
           label="שיא"
           value={stats.bestStreak}
-          valueColor={stats.bestStreak > 0 ? "text-amber-500" : "text-ink-800"}
+          color={stats.bestStreak > 0 ? "#ec4899" : "#6b6b80"}
         />
         <StatCell
           icon={<TrendingUp className="w-3 h-3" />}
           label="אחרונים"
           value={`${stats.lookbackHits}/${stats.lookbackTotal}`}
-          valueColor={
+          color={
             stats.lookbackTotal === 0
-              ? "text-ink-800"
+              ? "#6b6b80"
               : stats.lookbackHits === stats.lookbackTotal
-                ? "text-success-600"
-                : "text-ink-800"
+                ? "#059669"
+                : stats.lookbackHits >= stats.lookbackTotal / 2
+                  ? "#d97706"
+                  : "#ec4899"
           }
         />
         {showTime && (
@@ -266,7 +271,13 @@ function GoalCard({ task, entries, listColor, onEdit }: GoalCardProps) {
             icon={<Clock className="w-3 h-3" />}
             label="זמן"
             value={`${timeActual}/${timePlanned}`}
-            valueColor={timeActual >= timePlanned ? "text-success-600" : "text-ink-800"}
+            color={
+              timeActual >= timePlanned
+                ? "#059669"
+                : timeActual >= timePlanned * 0.6
+                  ? "#d97706"
+                  : "#ec4899"
+            }
           />
         )}
       </div>
@@ -299,19 +310,19 @@ function StatCell({
   icon,
   label,
   value,
-  valueColor,
+  color,
 }: {
   icon: React.ReactNode;
   label: string;
   value: number | string;
-  valueColor: string;
+  color: string;
 }) {
   return (
-    <div className="flex-1 flex flex-col items-center justify-center py-2.5 gap-0.5 bg-white">
-      <div className={cn("text-base font-bold tabular-nums leading-none", valueColor)}>
+    <div className="flex-1 flex flex-col items-center justify-center py-2.5 gap-0.5">
+      <div className="text-base font-bold tabular-nums leading-none" style={{ color }}>
         {value}
       </div>
-      <div className="flex items-center gap-0.5 text-[10px] text-ink-400 mt-0.5">
+      <div className="flex items-center gap-0.5 text-[10px] text-ink-400 mt-0.5" style={{ color }}>
         {icon}
         <span>{label}</span>
       </div>

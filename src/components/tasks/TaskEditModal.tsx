@@ -148,19 +148,19 @@ export function TaskEditModal({
   const [recurrenceRule, setRecurrenceRule] = useState<string | null>(null);
 
   // Recurring tasks need a scheduled_at to anchor expansion. When the user
-  // enables recurrence on a task with no scheduled_at, auto-seed it with
-  // today at the rule's first BYHOUR time (or 09:00 default). The user can
-  // adjust the date afterward — we just guarantee the data is consistent so
-  // the row's ↻ + dim treatment shows up immediately.
+  // enables recurrence on a task with no scheduled_at, anchor to today.
+  // If the rule has a specific time (BYHOUR) use it; otherwise use start-of-day.
   useEffect(() => {
     if (!recurrenceRule) return;
     if (scheduledAt) return;
     const hourMatch = recurrenceRule.match(/BYHOUR=(\d+)/);
     const minuteMatch = recurrenceRule.match(/BYMINUTE=(\d+)/);
-    const h = hourMatch ? Number(hourMatch[1]) : 9;
-    const min = minuteMatch ? Number(minuteMatch[1]) : 0;
     const today = new Date();
-    today.setHours(h, min, 0, 0);
+    if (hourMatch) {
+      today.setHours(Number(hourMatch[1]), minuteMatch ? Number(minuteMatch[1]) : 0, 0, 0);
+    } else {
+      today.setHours(0, 0, 0, 0);
+    }
     setScheduledAt(today.toISOString());
   }, [recurrenceRule, scheduledAt]);
   const [durationMinutes, setDurationMinutes] = useState<number | null>(null);
@@ -812,7 +812,16 @@ export function TaskEditModal({
                   <div className="pt-2 border-t border-ink-200">
                     <GoalConfigSection
                       enabled={goalEnabled}
-                      setEnabled={setGoalEnabled}
+                      setEnabled={(v) => {
+                        setGoalEnabled(v);
+                        // A goal needs recurrence to be tracked. Auto-enable
+                        // a sensible default (daily) when the user turns on a
+                        // goal without having set one yet.
+                        if (v && !recurrenceRule) {
+                          setRecurrenceRule("FREQ=DAILY");
+                        }
+                      }}
+                      hasRecurrence={!!recurrenceRule}
                       period={goalPeriod}
                       setPeriod={setGoalPeriod}
                       target={goalTarget}
@@ -1014,6 +1023,7 @@ const GOAL_PERIOD_OPTIONS: Array<{
 function GoalConfigSection(props: {
   enabled: boolean;
   setEnabled: (v: boolean) => void;
+  hasRecurrence: boolean;
   period: "day" | "week" | "month";
   setPeriod: (v: "day" | "week" | "month") => void;
   target: number;
@@ -1030,6 +1040,7 @@ function GoalConfigSection(props: {
   const {
     enabled,
     setEnabled,
+    hasRecurrence,
     period,
     setPeriod,
     target,
@@ -1062,6 +1073,12 @@ function GoalConfigSection(props: {
           />
           <span>הגדר כיעד</span>
         </label>
+
+        {enabled && !hasRecurrence && (
+          <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2.5 py-1.5">
+            יעד ללא חזרה לא יתחקב — הגדר חזרה בטאב "תזמון".
+          </div>
+        )}
 
         {enabled && (
           <div className="space-y-2.5 ps-6 border-s-2 border-primary-100">

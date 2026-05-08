@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { X, Check, UserPlus } from "lucide-react";
+import { X, Check, UserPlus, Users } from "lucide-react";
 import {
   useMealPlanShares,
   useCreateMealPlanShare,
@@ -7,6 +7,7 @@ import {
 } from "@/lib/hooks/useFood";
 import { useOrgScope } from "@/lib/hooks/useOrgScope";
 import { useOrgMembers } from "@/lib/hooks/useOrgMembers";
+import { useOrganization } from "@/lib/hooks/useOrganizations";
 
 interface ShareMenuModalProps {
   open: boolean;
@@ -24,10 +25,13 @@ interface ShareMenuModalProps {
  */
 export function ShareMenuModal({ open, onClose }: ShareMenuModalProps) {
   const scope = useOrgScope();
+  const { data: org } = useOrganization(scope.organizationId ?? null);
   const { data: members = [] } = useOrgMembers();
   const { data: shares = [] } = useMealPlanShares();
   const createShare = useCreateMealPlanShare();
   const deleteShare = useDeleteMealPlanShare();
+
+  const isFoodOrgShared = (org?.food_shared ?? false) || org?.org_type === "family";
 
   const otherMembers = useMemo(
     () => members.filter((m) => m.profile && m.profile.id !== scope.userId),
@@ -97,6 +101,21 @@ export function ShareMenuModal({ open, onClose }: ShareMenuModalProps) {
         </header>
 
         <div className="p-4 space-y-5">
+          {/* Org-level food sharing banner */}
+          {isFoodOrgShared && (
+            <div className="flex items-start gap-2.5 rounded-lg bg-primary-50 border border-primary-200 p-3">
+              <Users className="w-4 h-4 text-primary-600 shrink-0 mt-0.5" />
+              <div className="text-xs text-primary-800 space-y-0.5">
+                <div className="font-semibold">שיתוף קבוצתי פעיל</div>
+                <div>
+                  {org?.org_type === "family"
+                    ? "קבוצות משפחה משתפות מזון אוטומטית — כל חברי הקבוצה רואים ויכולים לערוך את אותן המנות, המצרכים והתפריטים."
+                    : "שיתוף מזון פעיל עבור קבוצה זו — כל חברי הקבוצה רואים ויכולים לערוך את אותן המנות, המצרכים והתפריטים. ניתן לבטל זאת בהגדרות הקבוצה."}
+                </div>
+              </div>
+            </div>
+          )}
+
           <section>
             <h3 className="text-sm font-medium text-ink-900 mb-2">
               אני משתפת את התפריט שלי עם:

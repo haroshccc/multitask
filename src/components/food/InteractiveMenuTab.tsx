@@ -6,6 +6,7 @@ import {
   Flame,
   Save,
   Sparkles,
+  TrendingUp,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import {
@@ -456,6 +457,11 @@ export function InteractiveMenuTab() {
         </div>
       </div>
 
+      {/* Most-ordered meals banner */}
+      {meals.length > 0 && (
+        <TopMealsBanner meals={meals} ingredients={ingredients} />
+      )}
+
       {/* Meal-time sections */}
       {meals.length === 0 ? (
         <div className="card p-6 text-center text-ink-500 text-sm">
@@ -513,6 +519,152 @@ export function InteractiveMenuTab() {
 }
 
 // =============================================================================
+// Top-meals banner — shows the 2 most-ordered meals per meal time based on
+// the last 90 days of meal_plan_days history.
+// =============================================================================
+
+interface TopMealsBannerProps {
+  meals: MealWithIngredients[];
+  ingredients: MealTimeSectionProps["ingredients"];
+}
+
+function TopMealsBanner({ meals, ingredients }: TopMealsBannerProps) {
+  const today = useMemo(() => isoOf(new Date()), []);
+  const start = useMemo(() => plusDaysIso(today, -90), [today]);
+  const { data: historyRows = [] } = useMealPlanDays(start, today);
+
+  const unitsById = useMemo(() => {
+    const m = new Map();
+    for (const ing of ingredients) {
+      for (const u of ing.units) m.set(u.id, u);
+    }
+    return m;
+  }, [ingredients]);
+
+  const topByMealTime = useMemo(() => {
+    // Count (meal_id, meal_time) pairs across all users
+    const counts = new Map<string, number>();
+    for (const row of historyRows) {
+      const key = `${row.meal_id}:${row.meal_time}`;
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+
+    const mealsById = new Map(meals.map((m) => [m.id, m]));
+    const result = new Map<MealTimeKey, Array<{ meal: MealWithIngredients; count: number; mealTime: MealTimeKey }>>();
+
+    for (const mt of MEAL_TIME_KEYS) {
+      const pairs: Array<{ meal: MealWithIngredients; count: number; mealTime: MealTimeKey }> = [];
+      for (const [key, count] of counts) {
+        const colonIdx = key.lastIndexOf(":");
+        const mealId = key.slice(0, colonIdx);
+        const mealTime = key.slice(colonIdx + 1) as MealTimeKey;
+        if (mealTime !== mt) continue;
+        const meal = mealsById.get(mealId);
+        if (!meal) continue;
+        pairs.push({ meal, count, mealTime: mt });
+      }
+      pairs.sort((a, b) => b.count - a.count);
+      if (pairs.length > 0) result.set(mt, pairs.slice(0, 2));
+    }
+    return result;
+  }, [historyRows, meals]);
+
+  const allItems = useMemo(
+    () => MEAL_TIME_KEYS.flatMap((mt) => topByMealTime.get(mt) ?? []),
+    [topByMealTime]
+  );
+
+  if (allItems.length === 0) return null;
+
+  return (
+    <div className="card p-3 space-y-2">
+      <div className="flex items-center gap-1.5 text-sm font-semibold text-ink-900">
+        <TrendingUp className="w-4 h-4 text-primary-600" />
+        המנות המוזמנות ביותר
+      </div>
+      <div className="-mx-3 px-3 overflow-x-auto no-scrollbar">
+        <div className="flex gap-2.5 pb-0.5">
+          {MEAL_TIME_KEYS.map((mt) => {
+            const items = topByMealTime.get(mt);
+            if (!items || items.length === 0) return null;
+            return (
+              <div key={mt} className="shrink-0 space-y-1.5">
+                <div className="text-[10px] font-medium text-ink-500 uppercase tracking-wide px-0.5">
+                  {MEAL_TIME_LABELS[mt]}
+                </div>
+                <div className="flex gap-2">
+                  {items.map(({ meal, count }) => (
+                    <TopMealCard
+                      key={`${mt}:${meal.id}`}
+                      meal={meal}
+                      mealTime={mt}
+                      count={count}
+                      unitsById={unitsById}
+                    />
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface TopMealCardProps {
+  meal: MealWithIngredients;
+  mealTime: MealTimeKey;
+  count: number;
+  unitsById: Map<string, { amount: number; calories: number | null; protein_g: number | null; fat_g: number | null; carbs_g: number | null }>;
+}
+
+function TopMealCard({ meal, count, unitsById }: TopMealCardProps) {
+  const totals = useMemo(() => {
+    return computeMealNutrition(
+      meal.ingredients.map((mi) => ({
+        ingredient_id: mi.ingredient_id,
+        unit_id: mi.unit_id,
+        quantity: Number(mi.quantity) || 0,
+      })),
+      unitsById as Parameters<typeof computeMealNutrition>[1]
+    );
+  }, [meal.ingredients, unitsById]);
+
+  return (
+    <div className="w-32 shrink-0 rounded-lg overflow-hidden border border-ink-200 bg-white">
+      <div className="aspect-[4/3] bg-ink-100 relative">
+        {meal.image_url ? (
+          // eslint-disable-next-line jsx-a11y/img-redundant-alt
+          <img
+            src={meal.image_url}
+            alt={meal.name}
+            className="w-full h-full object-cover"
+            loading="lazy"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center text-ink-300">
+            <Flame className="w-6 h-6" />
+          </div>
+        )}
+        <div className="absolute top-1 end-1 bg-primary-600/90 text-white text-[10px] font-semibold rounded-full px-1.5 py-0.5">
+          ×{count}
+        </div>
+      </div>
+      <div className="p-1.5 space-y-0.5">
+        <div className="text-xs font-medium text-ink-900 truncate">{meal.name}</div>
+        <div className="flex items-center gap-1 text-[10px] text-ink-600 flex-wrap">
+          <span className="tabular-nums font-semibold text-ink-800">{round1(totals.calories)}</span>
+          <span>קל'</span>
+          <span className="text-ink-400">·</span>
+          <span className="tabular-nums">{round1(totals.protein_g)}ח'</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// =============================================================================
 // Meal-time section — one block per meal time (breakfast/lunch/etc), with
 // horizontal-scroll cards on mobile and a wrap grid on wider screens.
 // =============================================================================
@@ -541,13 +693,31 @@ function MealTimeSection({
     return m;
   }, [ingredients]);
 
-  // Selected to the front so the user sees their picks without scrolling.
+  // Stable per-mount shuffle order for non-selected meals.
+  // Rebuilt only when the set of meal IDs changes (e.g. meals loaded).
+  const shuffleOrderRef = useRef<Map<string, number>>(new Map());
+  const mealIdsKeyRef = useRef<string>("");
+  const currentKey = meals.map((m) => m.id).join(",");
+  if (mealIdsKeyRef.current !== currentKey) {
+    mealIdsKeyRef.current = currentKey;
+    const indices = meals.map((_, i) => i);
+    for (let i = indices.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [indices[i], indices[j]] = [indices[j]!, indices[i]!];
+    }
+    const order = new Map<string, number>();
+    indices.forEach((origIdx, pos) => order.set(meals[origIdx]!.id, pos));
+    shuffleOrderRef.current = order;
+  }
+
+  // Selected first, then shuffled non-selected (stable per mount).
   const sorted = useMemo(() => {
+    const order = shuffleOrderRef.current;
     return [...meals].sort((a, b) => {
       const aSel = isSelected(a.id) ? 0 : 1;
       const bSel = isSelected(b.id) ? 0 : 1;
       if (aSel !== bSel) return aSel - bSel;
-      return a.name.localeCompare(b.name, "he");
+      return (order.get(a.id) ?? 999) - (order.get(b.id) ?? 999);
     });
   }, [meals, isSelected]);
 

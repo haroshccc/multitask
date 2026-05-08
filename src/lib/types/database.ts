@@ -866,10 +866,12 @@ export type Database = {
           created_at: string
           created_by: string | null
           current_period_end: string | null
+          food_shared: boolean
           id: string
           is_archived: boolean
           join_password_hash: string | null
           name: string
+          org_type: Database["public"]["Enums"]["organization_type"]
           plan: Database["public"]["Enums"]["billing_plan"]
           slug: string | null
           storage_bytes_limit: number
@@ -886,10 +888,12 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           current_period_end?: string | null
+          food_shared?: boolean
           id?: string
           is_archived?: boolean
           join_password_hash?: string | null
           name: string
+          org_type?: Database["public"]["Enums"]["organization_type"]
           plan?: Database["public"]["Enums"]["billing_plan"]
           slug?: string | null
           storage_bytes_limit?: number
@@ -906,10 +910,12 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           current_period_end?: string | null
+          food_shared?: boolean
           id?: string
           is_archived?: boolean
           join_password_hash?: string | null
           name?: string
+          org_type?: Database["public"]["Enums"]["organization_type"]
           plan?: Database["public"]["Enums"]["billing_plan"]
           slug?: string | null
           storage_bytes_limit?: number
@@ -2860,6 +2866,7 @@ export type Database = {
         | "project_over_budget"
         | "org_member_joined"
       organization_member_role: "owner" | "admin" | "member"
+      organization_type: "business" | "family" | "personal"
       project_pricing_mode: "fixed_price" | "hourly" | "quote"
       project_spare_mode: "percent" | "hours"
       push_platform: "web" | "ios" | "android"
@@ -3105,6 +3112,7 @@ export const Constants = {
         "org_member_joined",
       ],
       organization_member_role: ["owner", "admin", "member"],
+      organization_type: ["business", "family", "personal"],
       project_pricing_mode: ["fixed_price", "hourly", "quote"],
       project_spare_mode: ["percent", "hours"],
       push_platform: ["web", "ios", "android"],

@@ -343,6 +343,50 @@ function OrgTab() {
             )}
           </section>
 
+          {/* ── Food sharing toggle ──────────────────────────────────── */}
+          {canManage && members.length > 1 && (
+            <section className="card p-4 space-y-2">
+              <h2 className="font-semibold text-ink-900 text-sm">שיתוף מזון</h2>
+              <p className="text-xs text-ink-500">
+                כאשר מופעל, כל חברי הקבוצה רואים ויכולים לערוך את אותן המנות, המצרכים והתפריטים.
+                {org?.org_type === "family" && (
+                  <span className="ms-1 text-primary-600 font-medium">
+                    קבוצות משפחה — פעיל תמיד.
+                  </span>
+                )}
+              </p>
+              {org?.org_type !== "family" && (
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <div className="relative">
+                    <input
+                      type="checkbox"
+                      className="sr-only"
+                      checked={org?.food_shared ?? false}
+                      onChange={async (e) => {
+                        if (!activeOrganizationId) return;
+                        await updateOrg.mutateAsync({
+                          orgId: activeOrganizationId,
+                          updates: { food_shared: e.target.checked },
+                        });
+                      }}
+                    />
+                    <div className={cn(
+                      "w-10 h-6 rounded-full transition-colors",
+                      (org?.food_shared ?? false) ? "bg-primary-600" : "bg-ink-300"
+                    )} />
+                    <div className={cn(
+                      "absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform",
+                      (org?.food_shared ?? false) ? "translate-x-5" : "translate-x-1"
+                    )} />
+                  </div>
+                  <span className="text-sm text-ink-800">
+                    {(org?.food_shared ?? false) ? "שיתוף פעיל" : "שיתוף לא פעיל"}
+                  </span>
+                </label>
+              )}
+            </section>
+          )}
+
           {/* ── 3. חברים ───────────────────────────────────────────────── */}
           <section className="card overflow-hidden">
             <div className="p-4 pb-2 flex items-center justify-between">

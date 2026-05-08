@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Settings as SettingsIcon } from "lucide-react";
+import { ChevronDown, ChevronUp, Mic, Settings as SettingsIcon } from "lucide-react";
+import { cn } from "@/lib/utils/cn";
+import type { Recording } from "@/lib/types/domain";
 import { ScreenScaffold } from "@/components/layout/ScreenScaffold";
 import {
   DashboardGrid,
@@ -229,6 +231,11 @@ export function Recordings() {
           source="other"
         />
 
+        <ThoughtRecordingsBanner
+          recordings={allRecordings}
+          onSelect={(id) => setSelectedId(id)}
+        />
+
         {isMobile ? (
           <div className="mt-5 flex flex-col gap-2">
             <FiltersAndListWidget />
@@ -260,4 +267,63 @@ function formatTotal(seconds: number) {
   const h = Math.floor(m / 60);
   const mm = m % 60;
   return mm === 0 ? `${h} שע׳` : `${h}:${String(mm).padStart(2, "0")} שע׳`;
+}
+
+function ThoughtRecordingsBanner({
+  recordings,
+  onSelect,
+}: {
+  recordings: Recording[];
+  onSelect: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const thoughtRecordings = useMemo(
+    () => recordings.filter((r) => r.source === "thought"),
+    [recordings],
+  );
+  if (thoughtRecordings.length === 0) return null;
+
+  return (
+    <div className="mb-4 rounded-xl border border-ink-200 bg-ink-50 overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-ink-700 hover:bg-ink-100 transition-colors"
+      >
+        <span className="flex items-center gap-2">
+          <Mic className="w-4 h-4 text-primary-600" />
+          הקלטות מתוך מחשבות ({thoughtRecordings.length})
+        </span>
+        {open ? (
+          <ChevronUp className="w-4 h-4 text-ink-500" />
+        ) : (
+          <ChevronDown className="w-4 h-4 text-ink-500" />
+        )}
+      </button>
+      {open && (
+        <div className="border-t border-ink-200 divide-y divide-ink-100">
+          {thoughtRecordings.map((r) => (
+            <button
+              key={r.id}
+              type="button"
+              onClick={() => onSelect(r.id)}
+              className={cn(
+                "w-full flex items-center gap-3 px-4 py-2.5 text-sm text-start hover:bg-ink-100 transition-colors",
+              )}
+            >
+              <Mic className="w-3.5 h-3.5 text-ink-400 shrink-0" />
+              <span className="flex-1 min-w-0 truncate text-ink-800">
+                {r.title}
+              </span>
+              {r.duration_seconds != null && (
+                <span className="text-xs text-ink-500 shrink-0">
+                  {formatTotal(r.duration_seconds)}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }

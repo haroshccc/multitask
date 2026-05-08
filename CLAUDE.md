@@ -1,5 +1,16 @@
 # Multitask – Project Notes for Claude
 
+## ⚠️ חשוב לכל סשן חדש
+
+**הקוד המלא והעדכני תמיד נמצא ב-`main`.** לפני כל עבודה:
+1. בדוק ש-`git status` נקי
+2. הרץ `git fetch origin main && git merge origin/main` אם ה-branch מפגר
+3. קרא קבצים מה-filesystem המקומי — **לא** עם `git show origin/main:...`
+
+הסתכל תמיד על הפריסה האמיתית: `multitask-one.vercel.app` (branch: `main`)
+
+---
+
 ## Stack
 
 - **Frontend**: React + TypeScript + Vite + Tailwind CSS

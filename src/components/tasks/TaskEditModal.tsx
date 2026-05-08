@@ -79,6 +79,9 @@ export interface TaskCreateDraft {
   status?: string;
   source_thought_id?: string | null;
   tags?: string[];
+  /** Pre-enable the goal toggle and select a period when creating from the Goals screen. */
+  goalEnabled?: boolean;
+  goalPeriod?: "day" | "week" | "month";
 }
 
 interface TaskEditModalProps {
@@ -247,8 +250,8 @@ export function TaskEditModal({
           : null
       );
       setIsPhase(false);
-      setGoalEnabled(false);
-      setGoalPeriod("week");
+      setGoalEnabled(createDraft.goalEnabled ?? false);
+      setGoalPeriod(createDraft.goalPeriod ?? "week");
       setGoalTarget(3);
       setGoalForever(true);
       setGoalMinStreak(4);

@@ -128,6 +128,42 @@ Stored on the `tasks` table:
 - Time: optional checkbox "שעה ספציפית ביום" — unchecked by default for new rules
 - Multi-time: nested checkbox "מספר פעמים ביום" — shows multiple time inputs
 
+## Recordings module
+
+### Thought recordings filter
+`RecordingsFilterState` (in `RecordingFilters.tsx`) includes `thoughtOnly: boolean`.
+- When `thoughtOnly = true`: show **only** recordings with `source === "thought"`, hide archived toggle.
+- When `thoughtOnly = false` (default): hide thought recordings from the regular list entirely.
+- `filterRecordings<T extends { title, audio_archived, source? }>` generic handles both modes.
+
+### AI Insights tabs
+`AiInsights.tsx` has four tabs: `"summary" | "action_items" | "topics" | "free_text"`.
+- "שאלה חופשית" tab (last in DOM = leftmost in RTL) renders `<FreeTextSection>`.
+- `FreeTextSection`: textarea + "עבד בקשה" button → calls `useAskRecordingFreeText()` → returns ephemeral plain-text response below.
+- The "עיבוד AI מחדש" button triggers standard processing (no custom prompt).
+
+### Free-text Q&A service flow
+`askRecordingFreeText(recordingId, question)` in `recordings.ts` calls the `summarize` Edge Function with `{ recording_id, free_text: question }`.
+Edge Function (`supabase/functions/summarize/index.ts`) detects `body.free_text` and calls `callClaudeFreeText()` — plain Claude call, no tool_use schema, **no DB writes** — returns `{ response: string }`.
+Hook: `useAskRecordingFreeText()` in `useRecordings.ts`.
+
+## Food module — TomorrowMenuBanner
+
+### Responsive layout
+- **Mobile (`< sm`)**: individual `DayBanner` per day, stacked vertically, each with its own `collapsed` state.
+- **Desktop (`sm:` and above)**: one unified banner — N day-tab headers in a `flex flex-nowrap` row, single shared `collapsed` state, content in a CSS grid (`repeat(N, minmax(0, 1fr))`).
+- Switch via Tailwind: `sm:hidden` wrapper for mobile, `hidden sm:block` wrapper for desktop.
+- Max 7 days shown (`MAX_DAYS = 7`), `datesWithPlan` derived from `useMealPlanDays(today, today+13)`.
+
+## Push mechanism
+
+`git push` is proxied locally and may be blocked. Use the MCP GitHub `push_files` tool for all pushes to `main`:
+```
+mcp__github__push_files({ owner: "haroshccc", repo: "multitask", branch: "main", files: [...], message: "..." })
+```
+After a successful MCP push, sync local: `git fetch origin main && git reset --hard origin/main`.
+**Always push to `main`** — production runs from `main` (Vercel auto-deploys on push).
+
 ## Migrations applied
 
 | File | Description |

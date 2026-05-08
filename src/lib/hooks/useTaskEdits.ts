@@ -13,15 +13,7 @@ export interface TaskEditEntry {
 }
 
 async function fetchTaskEdits(taskId: string): Promise<TaskEditEntry[]> {
-  const db = supabase as unknown as {
-    from: (t: string) => {
-      select: (q: string) => {
-        eq: (col: string, val: string) => {
-          order: (col: string, opts: object) => Promise<{ data: unknown[] | null; error: { message: string } | null }>;
-        };
-      };
-    };
-  };
+  const db = supabase as any;
 
   const { data, error } = await db
     .from("task_edits")
@@ -31,7 +23,7 @@ async function fetchTaskEdits(taskId: string): Promise<TaskEditEntry[]> {
       edited_by,
       edited_at,
       changes,
-      profiles:edited_by ( full_name, avatar_url )
+      profiles!task_edits_edited_by_fkey ( full_name, avatar_url )
     `)
     .eq("task_id", taskId)
     .order("edited_at", { ascending: false });

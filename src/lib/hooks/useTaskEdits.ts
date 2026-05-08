@@ -23,7 +23,7 @@ async function fetchTaskEdits(taskId: string): Promise<TaskEditEntry[]> {
       edited_by,
       edited_at,
       changes,
-      profiles!task_edits_edited_by_fkey ( full_name, avatar_url )
+      profiles!task_edits_edited_by_profiles_fkey ( full_name, avatar_url )
     `)
     .eq("task_id", taskId)
     .order("edited_at", { ascending: false });

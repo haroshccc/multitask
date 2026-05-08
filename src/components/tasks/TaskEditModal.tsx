@@ -1082,39 +1082,39 @@ function GoalConfigSection(props: {
 
         {enabled && (
           <div className="space-y-2.5 ps-6 border-s-2 border-primary-100">
-            {/* Period chips */}
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="text-xs text-ink-500 me-1">תקופה:</span>
-              {GOAL_PERIOD_OPTIONS.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => setPeriod(p.id)}
-                  className={cn(
-                    "px-2.5 py-1 text-xs rounded-md border",
-                    period === p.id
-                      ? "bg-primary-600 text-white border-primary-600"
-                      : "bg-white text-ink-700 border-ink-200 hover:bg-ink-50"
-                  )}
-                >
-                  {p.label}
-                </button>
-              ))}
-            </div>
-
-            {/* Target per period */}
+            {/* Target + period on one row */}
             <div className="flex items-center gap-2 flex-wrap text-sm">
               <span className="text-ink-700">לבצע</span>
-              <input
-                type="number"
-                min={1}
-                value={target}
-                onChange={(e) =>
-                  setTarget(Math.max(1, Number(e.target.value) || 1))
-                }
-                className="field text-sm py-1.5 w-20"
-              />
-              <span className="text-ink-700">פעמים {periodMeta.perLabel}</span>
+              <div className="inline-flex items-center border border-ink-200 rounded-md overflow-hidden bg-white">
+                <button
+                  type="button"
+                  onClick={() => setTarget((n) => Math.max(1, n - 1))}
+                  className="px-2.5 py-1.5 text-ink-500 hover:bg-ink-100 active:bg-ink-200 text-sm leading-none select-none"
+                  aria-label="הפחת"
+                >
+                  −
+                </button>
+                <span className="w-8 text-center text-sm font-medium text-ink-900 tabular-nums select-none">
+                  {target}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setTarget((n) => n + 1)}
+                  className="px-2.5 py-1.5 text-ink-500 hover:bg-ink-100 active:bg-ink-200 text-sm leading-none select-none"
+                  aria-label="הוסף"
+                >
+                  +
+                </button>
+              </div>
+              <select
+                value={period}
+                onChange={(e) => setPeriod(e.target.value as "day" | "week" | "month")}
+                className="field text-sm py-1"
+              >
+                {GOAL_PERIOD_OPTIONS.map((p) => (
+                  <option key={p.id} value={p.id}>{p.perLabel}</option>
+                ))}
+              </select>
             </div>
 
             {/* Forever toggle + min streak */}
@@ -1131,15 +1131,27 @@ function GoalConfigSection(props: {
               {!forever && (
                 <div className="flex items-center gap-2 flex-wrap text-sm ps-6">
                   <span className="text-ink-700">אבן דרך ראשונה:</span>
-                  <input
-                    type="number"
-                    min={1}
-                    value={minStreak}
-                    onChange={(e) =>
-                      setMinStreak(Math.max(1, Number(e.target.value) || 1))
-                    }
-                    className="field text-sm py-1.5 w-20"
-                  />
+                  <div className="inline-flex items-center border border-ink-200 rounded-md overflow-hidden bg-white">
+                    <button
+                      type="button"
+                      onClick={() => setMinStreak((n) => Math.max(1, n - 1))}
+                      className="px-2.5 py-1.5 text-ink-500 hover:bg-ink-100 active:bg-ink-200 text-sm leading-none select-none"
+                      aria-label="הפחת"
+                    >
+                      −
+                    </button>
+                    <span className="w-8 text-center text-sm font-medium text-ink-900 tabular-nums select-none">
+                      {minStreak}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setMinStreak((n) => n + 1)}
+                      className="px-2.5 py-1.5 text-ink-500 hover:bg-ink-100 active:bg-ink-200 text-sm leading-none select-none"
+                      aria-label="הוסף"
+                    >
+                      +
+                    </button>
+                  </div>
                   <span className="text-ink-700">{periodMeta.unitLabel} ברצף</span>
                 </div>
               )}

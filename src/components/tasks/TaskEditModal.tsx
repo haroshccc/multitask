@@ -1307,6 +1307,11 @@ function DelegationPicker({
           <option value={assigneeId}>{assigneeId}</option>
         )}
       </select>
+      {assigneeId && assigneeId !== currentUserId && (
+        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 leading-snug">
+          ⚠️ האצלה זו תשתף את המשימה עם המשתמש הנבחר — הם יוכלו לראות ולערוך אותה.
+        </p>
+      )}
     </div>
   );
 }

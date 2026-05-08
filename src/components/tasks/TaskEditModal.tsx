@@ -20,6 +20,7 @@ import {
   ExternalLink,
   Save,
   Target,
+  ClipboardList,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import {
@@ -53,6 +54,7 @@ import { slugifyStatusKey } from "@/lib/services/user-task-statuses";
 import { useOrgMembersForOrg } from "@/lib/hooks/useOrgMembers";
 import { useUserOrganizations } from "@/lib/hooks/useOrganizations";
 import { useAuth } from "@/lib/auth/AuthContext";
+import { useTaskEdits, type TaskEditEntry } from "@/lib/hooks/useTaskEdits";
 import type { TimeEntry, UserTaskStatus } from "@/lib/types/domain";
 import { DateTimePicker } from "@/components/ui/DateTimePicker";
 import {
@@ -104,7 +106,7 @@ interface TaskEditModalProps {
   assigneeView?: boolean;
 }
 
-type Tab = "overview" | "schedule" | "history" | "attachments";
+type Tab = "overview" | "schedule" | "history" | "edits" | "attachments";
 
 export function TaskEditModal({
   taskId,
@@ -577,6 +579,10 @@ export function TaskEditModal({
                 <History className="w-4 h-4" />
                 זמן
               </TabBtn>
+              <TabBtn active={tab === "edits"} onClick={() => setTab("edits")}>
+                <ClipboardList className="w-4 h-4" />
+                היסטוריה
+              </TabBtn>
               <TabBtn active={tab === "attachments"} onClick={() => setTab("attachments")}>
                 <Paperclip className="w-4 h-4" />
                 צירופים
@@ -890,6 +896,10 @@ export function TaskEditModal({
                   </Field>
                   <TimeEntriesTab task={task} />
                 </div>
+              )}
+
+              {tab === "edits" && task && (
+                <TaskEditHistoryTab taskId={task.id} ownerId={task.owner_id} assigneeId={task.assignee_user_id} />
               )}
 
               {tab === "attachments" && <AttachmentsTab />}
@@ -1996,5 +2006,116 @@ function AttachmentSlot({
       <span className="font-medium">{label}</span>
       <Plus className="w-3.5 h-3.5 ms-auto text-ink-400" />
     </button>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// TaskEditHistoryTab — audit feed of field changes
+// ---------------------------------------------------------------------------
+
+const FIELD_LABELS: Record<string, string> = {
+  title: "כותרת",
+  status: "סטטוס",
+  urgency: "דחיפות",
+  assignee_user_id: "מוצא",
+  scheduled_at: "תאריך",
+  deadline_at: "דד-ליין",
+  description: "תיאור",
+  recurrence_rule: "חזרה",
+  tags: "תגים",
+};
+
+const URGENCY_LABELS: Record<number, string> = { 0: "ללא", 1: "נמוכה", 2: "בינונית", 3: "גבוהה" };
+
+function formatChangeValue(field: string, val: unknown): string {
+  if (val === null || val === undefined || val === "") return "—";
+  if (field === "urgency") return URGENCY_LABELS[val as number] ?? String(val);
+  if (field === "scheduled_at" || field === "deadline_at") {
+    const d = new Date(val as string);
+    return isNaN(d.getTime()) ? String(val) : d.toLocaleString("he-IL", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  }
+  if (Array.isArray(val)) return val.length === 0 ? "—" : (val as string[]).join(", ");
+  if (typeof val === "string" && val.length > 60) return val.slice(0, 60) + "…";
+  return String(val);
+}
+
+function groupEditsByDay(edits: TaskEditEntry[]): Array<{ date: string; entries: TaskEditEntry[] }> {
+  const map = new Map<string, TaskEditEntry[]>();
+  for (const e of edits) {
+    const day = new Date(e.edited_at).toLocaleDateString("he-IL", { day: "numeric", month: "long", year: "numeric" });
+    if (!map.has(day)) map.set(day, []);
+    map.get(day)!.push(e);
+  }
+  return Array.from(map.entries()).map(([date, entries]) => ({ date, entries }));
+}
+
+function TaskEditHistoryTab({
+  taskId,
+  ownerId,
+  assigneeId,
+}: {
+  taskId: string;
+  ownerId: string;
+  assigneeId: string | null;
+}) {
+  const { data: edits = [], isLoading } = useTaskEdits(taskId);
+  const isShared = !!assigneeId && assigneeId !== ownerId;
+  const groups = groupEditsByDay(edits);
+
+  if (isLoading) {
+    return <p className="text-sm text-ink-400 py-4 text-center">טוען…</p>;
+  }
+
+  if (edits.length === 0) {
+    return (
+      <div className="py-8 text-center">
+        <ClipboardList className="w-8 h-8 text-ink-200 mx-auto mb-2" />
+        <p className="text-sm text-ink-400">אין היסטוריית עריכות עדיין</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {groups.map(({ date, entries }) => (
+        <div key={date}>
+          <p className="text-[11px] font-semibold text-ink-400 uppercase tracking-wide mb-2">{date}</p>
+          <div className="space-y-3">
+            {entries.map((entry) => (
+              <div key={entry.id} className="flex gap-3">
+                <div className="shrink-0 mt-0.5">
+                  {isShared && entry.editor_name ? (
+                    <span className="w-6 h-6 rounded-full bg-primary-100 text-primary-700 text-[10px] font-bold flex items-center justify-center">
+                      {entry.editor_name[0].toUpperCase()}
+                    </span>
+                  ) : (
+                    <span className="w-2 h-2 mt-2 rounded-full bg-ink-300 block" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  {isShared && entry.editor_name && (
+                    <p className="text-xs font-semibold text-ink-700 mb-0.5">{entry.editor_name}</p>
+                  )}
+                  <p className="text-[10px] text-ink-400 mb-1">
+                    {new Date(entry.edited_at).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}
+                  </p>
+                  <div className="space-y-1">
+                    {Object.entries(entry.changes).map(([field, { from, to }]) => (
+                      <div key={field} className="text-xs text-ink-600">
+                        <span className="font-medium text-ink-800">{FIELD_LABELS[field] ?? field}</span>
+                        {": "}
+                        <span className="line-through text-ink-400">{formatChangeValue(field, from)}</span>
+                        {" → "}
+                        <span className="text-ink-900">{formatChangeValue(field, to)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }

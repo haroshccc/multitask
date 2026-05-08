@@ -1088,7 +1088,7 @@ function GoalConfigSection(props: {
               <div className="inline-flex items-center border border-ink-200 rounded-md overflow-hidden bg-white">
                 <button
                   type="button"
-                  onClick={() => setTarget((n) => Math.max(1, n - 1))}
+                  onClick={() => setTarget(Math.max(1, target - 1))}
                   className="px-2.5 py-1.5 text-ink-500 hover:bg-ink-100 active:bg-ink-200 text-sm leading-none select-none"
                   aria-label="הפחת"
                 >
@@ -1099,7 +1099,7 @@ function GoalConfigSection(props: {
                 </span>
                 <button
                   type="button"
-                  onClick={() => setTarget((n) => n + 1)}
+                  onClick={() => setTarget(target + 1)}
                   className="px-2.5 py-1.5 text-ink-500 hover:bg-ink-100 active:bg-ink-200 text-sm leading-none select-none"
                   aria-label="הוסף"
                 >
@@ -1134,7 +1134,7 @@ function GoalConfigSection(props: {
                   <div className="inline-flex items-center border border-ink-200 rounded-md overflow-hidden bg-white">
                     <button
                       type="button"
-                      onClick={() => setMinStreak((n) => Math.max(1, n - 1))}
+                      onClick={() => setMinStreak(Math.max(1, minStreak - 1))}
                       className="px-2.5 py-1.5 text-ink-500 hover:bg-ink-100 active:bg-ink-200 text-sm leading-none select-none"
                       aria-label="הפחת"
                     >
@@ -1145,7 +1145,7 @@ function GoalConfigSection(props: {
                     </span>
                     <button
                       type="button"
-                      onClick={() => setMinStreak((n) => n + 1)}
+                      onClick={() => setMinStreak(minStreak + 1)}
                       className="px-2.5 py-1.5 text-ink-500 hover:bg-ink-100 active:bg-ink-200 text-sm leading-none select-none"
                       aria-label="הוסף"
                     >

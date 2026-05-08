@@ -37,6 +37,9 @@ supabase/
 - **`field`** Tailwind component class used on all `<input>` and `<select>` elements.
 - **Supabase client**: `import { supabase } from "@/lib/supabase/client"`. Cast to `any` as `db` when typegen lags behind schema.
 - **Query keys**: centralized in `src/lib/query-keys.ts`.
+- **Stepper buttons**: use `w-8 py-1.5 flex items-center justify-center` (not `px-2.5`) — prevents clipping in RTL.
+- **Stepper+select pairing**: wrap in a shared `inline-flex items-center gap-2` div (no `flex-wrap`) so they stay on the same line.
+- **Props vs state setters**: component props typed as `(v: T) => void` cannot receive a function updater — pass the computed value directly.
 
 ## RRULE format
 
@@ -49,6 +52,9 @@ Rules are stored in `tasks.recurrence_rule` as RFC 5545 strings (no `RRULE:` pre
 - **No BYHOUR/BYMINUTE** = "no specific time" → occurrences land at **00:00** (midnight)
 
 `expandRrule` in `calendar-utils.ts` expands a rule into `Date[]` given an anchor and a window.
+- When no BYHOUR/BYMINUTE/BYSLOT: `slotsPerDay = [{ h: 0, m: 0 }]` (midnight, not anchor time)
+- `useDateOnlyCompare = freq === "DAILY" || freq === "WEEKLY"` (always compare by date, not time)
+
 `getActiveOccurrence` / `getNextFutureOccurrence` in `recurrence.ts` are the task-list helpers.
 
 `formatRelativeOccurrence` skips the time portion when the occurrence is at midnight (= no specific time).
@@ -102,14 +108,16 @@ Stored on the `tasks` table:
 
 **Warning**: `GoalConfigSection` shows an amber warning when `enabled && !hasRecurrence`.
 
+**Period+target UX**: single row — `[לבצע] [− N +] [ביום/בשבוע/בחודש select]`, no `flex-wrap`.
+
 ## RrulePicker UX
 
-- Interval: `−` / count / `+` stepper (no text input)
-- Freq: `<select>` (יום/שבוע/חודש/שנה with singular/plural) on the **same row** as the stepper
+- Interval: `−` / count / `+` stepper (fixed-width `w-8` buttons, `flex justify-center`)
+- Freq: `<select>` (יום/שבוע/חודש/שנה with singular/plural) on the **same row** as the stepper, inside a shared `inline-flex` wrapper
 - Time: optional checkbox "שעה ספציפית ביום" — unchecked by default for new rules
 - Multi-time: nested checkbox "מספר פעמים ביום" — shows multiple time inputs
 
-## Migrations applied this session
+## Migrations applied
 
 | File | Description |
 |---|---|
@@ -118,5 +126,5 @@ Stored on the `tasks` table:
 ## Common build errors to watch for
 
 1. **Unused variable** (`noUnusedLocals`) — prefix with `_` or remove
-2. **Prop is `(v: T) => void`**, not a React state setter — cannot pass a function, must pass a value
+2. **Prop is `(v: T) => void`**, not a React state setter — cannot pass a function, must pass a value directly
 3. **`supabase` type lag** — cast to `any` as `const db = supabase as any` at top of service files

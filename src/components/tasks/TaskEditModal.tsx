@@ -1090,7 +1090,7 @@ function GoalConfigSection(props: {
                   <button
                     type="button"
                     onClick={() => setTarget(Math.max(1, target - 1))}
-                    className="px-2.5 py-1.5 text-ink-500 hover:bg-ink-100 active:bg-ink-200 text-sm leading-none select-none"
+                    className="w-8 py-1.5 flex items-center justify-center text-ink-500 hover:bg-ink-100 active:bg-ink-200 text-sm leading-none select-none"
                     aria-label="הפחת"
                   >
                     −
@@ -1101,7 +1101,7 @@ function GoalConfigSection(props: {
                   <button
                     type="button"
                     onClick={() => setTarget(target + 1)}
-                    className="px-2.5 py-1.5 text-ink-500 hover:bg-ink-100 active:bg-ink-200 text-sm leading-none select-none"
+                    className="w-8 py-1.5 flex items-center justify-center text-ink-500 hover:bg-ink-100 active:bg-ink-200 text-sm leading-none select-none"
                     aria-label="הוסף"
                   >
                     +
@@ -1137,7 +1137,7 @@ function GoalConfigSection(props: {
                     <button
                       type="button"
                       onClick={() => setMinStreak(Math.max(1, minStreak - 1))}
-                      className="px-2.5 py-1.5 text-ink-500 hover:bg-ink-100 active:bg-ink-200 text-sm leading-none select-none"
+                      className="w-8 py-1.5 flex items-center justify-center text-ink-500 hover:bg-ink-100 active:bg-ink-200 text-sm leading-none select-none"
                       aria-label="הפחת"
                     >
                       −
@@ -1148,7 +1148,7 @@ function GoalConfigSection(props: {
                     <button
                       type="button"
                       onClick={() => setMinStreak(minStreak + 1)}
-                      className="px-2.5 py-1.5 text-ink-500 hover:bg-ink-100 active:bg-ink-200 text-sm leading-none select-none"
+                      className="w-8 py-1.5 flex items-center justify-center text-ink-500 hover:bg-ink-100 active:bg-ink-200 text-sm leading-none select-none"
                       aria-label="הוסף"
                     >
                       +

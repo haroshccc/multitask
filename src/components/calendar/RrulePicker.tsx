@@ -186,7 +186,7 @@ export function RrulePicker({ value, onChange, anchorDate }: RrulePickerProps) {
                 <button
                   type="button"
                   onClick={() => setInterval((n) => Math.max(1, n - 1))}
-                  className="px-2.5 py-1.5 text-ink-500 hover:bg-ink-100 active:bg-ink-200 text-sm leading-none select-none"
+                  className="w-8 py-1.5 flex items-center justify-center text-ink-500 hover:bg-ink-100 active:bg-ink-200 text-sm leading-none select-none"
                   aria-label="הפחת"
                 >
                   −
@@ -197,7 +197,7 @@ export function RrulePicker({ value, onChange, anchorDate }: RrulePickerProps) {
                 <button
                   type="button"
                   onClick={() => setInterval((n) => n + 1)}
-                  className="px-2.5 py-1.5 text-ink-500 hover:bg-ink-100 active:bg-ink-200 text-sm leading-none select-none"
+                  className="w-8 py-1.5 flex items-center justify-center text-ink-500 hover:bg-ink-100 active:bg-ink-200 text-sm leading-none select-none"
                   aria-label="הוסף"
                 >
                   +

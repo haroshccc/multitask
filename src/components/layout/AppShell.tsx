@@ -1,5 +1,5 @@
 import { Outlet, NavLink, useLocation, useNavigate } from "react-router-dom";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   Home,
   CheckSquare,
@@ -20,9 +20,9 @@ import {
   X,
   Undo2,
   Redo2,
+  Keyboard,
 } from "lucide-react";
 import { useUndoStore, useCanUndo, useCanRedo } from "@/lib/undo/store";
-import { useEffect } from "react";
 import { useAuth } from "@/lib/auth/AuthContext";
 import { useRealtimeSync } from "@/lib/hooks/useRealtimeSync";
 import { useUnreadNotificationsCount } from "@/lib/hooks/useNotifications";
@@ -33,6 +33,8 @@ import { GlobalSearchPalette } from "@/components/search/GlobalSearchPalette";
 import { Logo } from "@/components/brand/Logo";
 import { FloatingTimerBanner } from "@/components/timer/FloatingTimerBanner";
 import { PendingInviteBanner } from "@/components/org/PendingInviteBanner";
+import { KeyboardShortcutsPanel } from "@/components/ui/KeyboardShortcutsPanel";
+import { ToastRegion } from "@/components/ui/Toast";
 
 interface NavItem {
   to: string;
@@ -53,6 +55,18 @@ const NAV: NavItem[] = [
   { to: "/app/food", label: "אוכל", icon: UtensilsCrossed },
 ];
 
+// Route codes for vim-style G→X navigation (physical key codes, layout-independent)
+const G_NAV: Record<string, string> = {
+  KeyT: "/app/tasks",
+  KeyG: "/app/goals",
+  KeyC: "/app/calendar",
+  KeyR: "/app/recordings",
+  KeyH: "/app/thoughts",
+  KeyP: "/app/projects",
+  KeyF: "/app/food",
+  KeyD: "/app",
+};
+
 export function AppShell() {
   const { profile, signOut } = useAuth();
   const navigate = useNavigate();
@@ -60,6 +74,11 @@ export function AppShell() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [captureOpen, setCaptureOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+
+  // Ref so keyboard handler always sees the latest pathname without re-registering.
+  const pathnameRef = useRef(location.pathname);
+  useEffect(() => { pathnameRef.current = location.pathname; }, [location.pathname]);
 
   // Refs so the keyboard effect ([] deps) can see the latest modal state
   // without being re-registered on every render.
@@ -76,13 +95,9 @@ export function AppShell() {
   const canRedo = useCanRedo();
   const { data: unreadCount = 0 } = useUnreadNotificationsCount();
 
-  // Global keyboard shortcuts:
-  //   Cmd/Ctrl+K       → search
-  //   Cmd/Ctrl+N       → quick capture
-  //   Cmd/Ctrl+Z       → undo
-  //   Cmd/Ctrl+Y       → redo
-  //   Cmd/Ctrl+Shift+Z → redo (Mac convention)
   useEffect(() => {
+    // Whether the event target is a text-editing element where browser-native
+    // shortcuts (Ctrl+Z inside an <input>) should be left alone.
     const isEditableTarget = (target: EventTarget | null): boolean => {
       if (!(target instanceof HTMLElement)) return false;
       const tag = target.tagName;
@@ -90,32 +105,108 @@ export function AppShell() {
       if (target.isContentEditable) return true;
       return false;
     };
+
+    // Pending first key of a two-key sequence (e.g. G → T for vim-style nav).
+    let gPending = false;
+    let gTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const clearG = () => {
+      gPending = false;
+      if (gTimer) { clearTimeout(gTimer); gTimer = null; }
+    };
+
     const onKey = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey;
-      if (!mod) return;
-      // Don't fire app shortcuts when a modal dialog is already open.
-      if (captureOpenRef.current || searchOpenRef.current) return;
-      const key = e.key.toLowerCase();
-      if (key === "k") {
+      // Use e.code (physical key) instead of e.key so shortcuts work on all
+      // keyboard layouts including Hebrew where e.key gives Hebrew characters.
+      const code = e.code;
+
+      // ── Modifier combos ────────────────────────────────────────────────────
+      if (mod) {
+        if (code === "KeyK") {
+          e.preventDefault();
+          setSearchOpen(true);
+          clearG();
+          return;
+        }
+        if (code === "KeyN") {
+          e.preventDefault();
+          clearG();
+          // Context-aware: open the relevant creation dialog for the active screen.
+          const path = pathnameRef.current;
+          if (path.startsWith("/app/tasks"))      { window.dispatchEvent(new CustomEvent("app:new-task")); }
+          else if (path.startsWith("/app/goals")) { window.dispatchEvent(new CustomEvent("app:new-goal")); }
+          else if (path.startsWith("/app/calendar")) { window.dispatchEvent(new CustomEvent("app:new-event")); }
+          else if (path.startsWith("/app/projects")) { window.dispatchEvent(new CustomEvent("app:new-project")); }
+          else if (path.startsWith("/app/thoughts")) { window.dispatchEvent(new CustomEvent("app:new-thought")); }
+          else { setCaptureOpen(true); }
+          return;
+        }
+        // Undo — skip when typing in a text field (browser handles it there).
+        if (code === "KeyZ" && !e.shiftKey) {
+          if (isEditableTarget(e.target)) return;
+          e.preventDefault();
+          useUndoStore.getState().undo();
+          clearG();
+          return;
+        }
+        // Redo (Ctrl+Y or Ctrl+Shift+Z / Cmd+Shift+Z on Mac).
+        if (code === "KeyY" || (code === "KeyZ" && e.shiftKey)) {
+          if (isEditableTarget(e.target)) return;
+          e.preventDefault();
+          useUndoStore.getState().redo();
+          clearG();
+          return;
+        }
+        // Ctrl+. — toggle mobile sidebar.
+        if (code === "Period") {
+          e.preventDefault();
+          setSidebarOpen((v) => !v);
+          clearG();
+          return;
+        }
+        return; // other Ctrl/Cmd combos — don't process further
+      }
+
+      // ── No-modifier shortcuts ──────────────────────────────────────────────
+      // Skip when typing anywhere.
+      if (isEditableTarget(e.target)) { clearG(); return; }
+
+      // ? → shortcuts panel
+      if (e.key === "?" && !e.shiftKey) {
         e.preventDefault();
-        setSearchOpen(true);
-      } else if (key === "n") {
+        setShortcutsOpen((v) => !v);
+        clearG();
+        return;
+      }
+      // Shift+? also triggers (? is Shift+/ on many keyboards, but key is "?").
+      if (e.key === "?" && e.shiftKey) {
         e.preventDefault();
-        setCaptureOpen(true);
-      } else if (key === "z" && !e.shiftKey) {
-        // Don't hijack the browser's native undo while typing.
-        if (isEditableTarget(e.target)) return;
-        e.preventDefault();
-        useUndoStore.getState().undo();
-      } else if (key === "y" || (key === "z" && e.shiftKey)) {
-        if (isEditableTarget(e.target)) return;
-        e.preventDefault();
-        useUndoStore.getState().redo();
+        setShortcutsOpen((v) => !v);
+        clearG();
+        return;
+      }
+
+      // G → [key] vim-style navigation
+      if (code === "KeyG" && !gPending) {
+        gPending = true;
+        gTimer = setTimeout(clearG, 1200);
+        return;
+      }
+      if (gPending) {
+        clearG();
+        const target = G_NAV[code];
+        if (target) {
+          e.preventDefault();
+          navigate(target, { replace: false });
+        }
+        return;
       }
     };
+
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
+    return () => { window.removeEventListener("keydown", onKey); clearG(); };
+  }, [navigate]); // navigate is stable
 
   const handleSignOut = async () => {
     await signOut();
@@ -207,6 +298,14 @@ export function AppShell() {
               </>
             )}
           </NavLink>
+          <button
+            onClick={() => setShortcutsOpen(true)}
+            className="hidden md:inline-flex p-2 rounded-xl hover:bg-ink-100"
+            aria-label="קיצורי מקלדת"
+            title="קיצורי מקלדת (?)"
+          >
+            <Keyboard className="w-5 h-5 text-ink-600" />
+          </button>
           <button
             onClick={() => setCaptureOpen(true)}
             className="p-2 rounded-xl bg-primary-500 text-white hover:bg-primary-600"
@@ -384,6 +483,10 @@ export function AppShell() {
       />
 
       <GlobalSearchPalette open={searchOpen} onClose={() => setSearchOpen(false)} />
+
+      <KeyboardShortcutsPanel open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
+
+      <ToastRegion />
 
       <FloatingTimerBanner />
     </div>

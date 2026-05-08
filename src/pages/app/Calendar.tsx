@@ -344,6 +344,14 @@ export function Calendar() {
     setCreating({ start, end, kind: "event" });
   };
 
+  // Ctrl+N from AppShell opens create-event modal when on this screen.
+  useEffect(() => {
+    const handler = () => handleCreateEvent();
+    window.addEventListener("app:new-event", handler);
+    return () => window.removeEventListener("app:new-event", handler);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleItemClick = (item: CalendarItem) => {
     if (item.kind === "task" || item.kind === "deadline")
       setEditingTaskId((item.source as { id: string }).id);

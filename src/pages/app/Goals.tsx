@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   Award,
@@ -19,7 +19,7 @@ import {
   type GoalPeriod,
 } from "@/lib/goals/computation";
 import type { Task, TimeEntry } from "@/lib/types/domain";
-import { TaskEditModal } from "@/components/tasks/TaskEditModal";
+import { TaskEditModal, type TaskCreateDraft } from "@/components/tasks/TaskEditModal";
 
 // =============================================================================
 // Goals screen — one card per goal-tagged task. Each card shows the period
@@ -62,6 +62,13 @@ export function Goals() {
   }, [timeEntries]);
 
   const [editTaskId, setEditTaskId] = useState<string | null>(null);
+  const [createDraft, setCreateDraft] = useState<TaskCreateDraft | null>(null);
+
+  useEffect(() => {
+    const handler = () => setCreateDraft({});
+    window.addEventListener("app:new-goal", handler);
+    return () => window.removeEventListener("app:new-goal", handler);
+  }, []);
 
   return (
     <ScreenScaffold
@@ -100,7 +107,8 @@ export function Goals() {
 
       <TaskEditModal
         taskId={editTaskId}
-        onClose={() => setEditTaskId(null)}
+        createDraft={createDraft}
+        onClose={() => { setEditTaskId(null); setCreateDraft(null); }}
         defaultTab="schedule"
       />
     </ScreenScaffold>

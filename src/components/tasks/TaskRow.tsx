@@ -215,7 +215,31 @@ export function TaskRow({
   };
 
   const handleKeyDown = async (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+    const mod = e.metaKey || e.ctrlKey;
+
+    // Ctrl+Enter — create subtask under this task
+    if (mod && e.code === "Enter") {
+      e.preventDefault();
+      commitTitle();
+      await handleAddSubtask();
+      return;
+    }
+
+    // Ctrl+E — open full edit modal
+    if (mod && e.code === "KeyE") {
+      e.preventDefault();
+      onOpenEdit(task.id);
+      return;
+    }
+
+    // Ctrl+D — duplicate this task
+    if (mod && e.code === "KeyD") {
+      e.preventDefault();
+      handleDuplicateSingle();
+      return;
+    }
+
+    if (e.key === "Enter" && !e.shiftKey && !mod) {
       e.preventDefault();
       commitTitle();
       // Create new sibling right after this one.

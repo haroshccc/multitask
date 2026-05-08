@@ -13,7 +13,7 @@ import {
 import { cn } from "@/lib/utils/cn";
 import { useNavigate } from "react-router-dom";
 import { useCreateThought } from "@/lib/hooks/useThoughts";
-import { useCreateRecording, useTriggerAiProcessing } from "@/lib/hooks/useRecordings";
+import { useCreateRecording, useTriggerRecordingProcessing } from "@/lib/hooks/useRecordings";
 import { useCreateTask } from "@/lib/hooks/useTasks";
 import { useFileUpload } from "@/lib/hooks/useFileUpload";
 import { useOrgScope } from "@/lib/hooks/useOrgScope";
@@ -36,7 +36,7 @@ export function QuickCapture({ open, onClose }: QuickCaptureProps) {
   const scope = useOrgScope();
   const createThought = useCreateThought();
   const createRecording = useCreateRecording();
-  const triggerAi = useTriggerAiProcessing();
+  const triggerRecording = useTriggerRecordingProcessing();
   const createTask = useCreateTask();
   const upload = useFileUpload();
   const { data: thoughtPrefs } = useUserThoughtPreferences();
@@ -145,7 +145,7 @@ export function QuickCapture({ open, onClose }: QuickCaptureProps) {
 
       // Auto-transcribe if the user opted in.
       if (autoTranscribe) {
-        triggerAi.mutate({ recordingId: recording.id });
+        triggerRecording.mutate(recording.id);
       }
 
       recorderRef.current?.discard();

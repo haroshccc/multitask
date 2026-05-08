@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+
 import {
   Award,
   Clock,
   Flame,
   Pencil,
+  Plus,
   Target,
   TrendingUp,
 } from "lucide-react";
@@ -21,18 +22,8 @@ import {
 import type { Task, TimeEntry } from "@/lib/types/domain";
 import { TaskEditModal, type TaskCreateDraft } from "@/components/tasks/TaskEditModal";
 
-// =============================================================================
-// Goals screen — one card per goal-tagged task. Each card shows the period
-// progress, the streak (current + best), the lookback "X out of Y" sliding
-// window, time-actual vs time-planned for the current period, and a
-// "missing time" chip that links to the dashboard nudge.
-// =============================================================================
-
 export function Goals() {
   const { data: tasks = [], isLoading } = useTasks();
-  // 90-day window covers the widest default lookback (3 months) and gives
-  // monthly goals enough history for "best streak" to be reasonably accurate
-  // when the goal_started_on date is recent.
   const range = useMemo(() => {
     const end = new Date();
     const start = new Date(end);
@@ -65,7 +56,7 @@ export function Goals() {
   const [createDraft, setCreateDraft] = useState<TaskCreateDraft | null>(null);
 
   useEffect(() => {
-    const handler = () => setCreateDraft({});
+    const handler = () => setCreateDraft({ goalEnabled: true });
     window.addEventListener("app:new-goal", handler);
     return () => window.removeEventListener("app:new-goal", handler);
   }, []);
@@ -75,22 +66,31 @@ export function Goals() {
       title="יעדים"
       subtitle="הרגלים שאת מנסה לבסס — סטריק נוכחי, התקדמות התקופה הנוכחית והשוואת זמן."
       narrow
+      actions={
+        <button
+          onClick={() => setCreateDraft({ goalEnabled: true })}
+          className="btn-primary flex items-center gap-1.5"
+        >
+          <Plus className="w-4 h-4" />
+          יעד חדש
+        </button>
+      }
     >
       {isLoading ? (
         <div className="card p-6 text-center text-ink-500 text-sm">
           טוען…
         </div>
       ) : goalTasks.length === 0 ? (
-        <div className="card p-6 text-center text-ink-500 text-sm space-y-1">
+        <div className="card p-6 text-center text-ink-500 text-sm space-y-3">
           <Target className="w-7 h-7 mx-auto text-ink-300" />
           <div className="font-medium text-ink-700">עוד לא הגדרת יעדים</div>
-          <div>
-            פתח{" "}
-            <Link to="/app/tasks" className="underline text-primary-600 hover:text-primary-700">
-              משימה חוזרת
-            </Link>
-            , עבור לטאב "תזמון", סמן "הגדר כיעד" — והיא תופיע כאן.
-          </div>
+          <button
+            onClick={() => setCreateDraft({ goalEnabled: true })}
+            className="btn-primary mx-auto flex items-center gap-1.5"
+          >
+            <Plus className="w-4 h-4" />
+            צור יעד ראשון
+          </button>
         </div>
       ) : (
         <div className="space-y-3">
@@ -114,10 +114,6 @@ export function Goals() {
     </ScreenScaffold>
   );
 }
-
-// =============================================================================
-// Single goal card
-// =============================================================================
 
 interface GoalCardProps {
   task: Task;
@@ -158,7 +154,6 @@ function GoalCard({ task, entries, onEdit }: GoalCardProps) {
 
   return (
     <article className="card p-4">
-      {/* Header */}
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
@@ -202,7 +197,6 @@ function GoalCard({ task, entries, onEdit }: GoalCardProps) {
         </button>
       </div>
 
-      {/* Current period progress bar */}
       <div className="mb-3">
         <div className="flex items-center justify-between gap-2 mb-1">
           <span className="text-xs text-ink-600">
@@ -230,7 +224,6 @@ function GoalCard({ task, entries, onEdit }: GoalCardProps) {
         </div>
       </div>
 
-      {/* Stats strip */}
       <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 text-center">
         <Stat
           icon={<Flame className="w-3.5 h-3.5" />}
@@ -272,7 +265,6 @@ function GoalCard({ task, entries, onEdit }: GoalCardProps) {
         )}
       </div>
 
-      {/* Footer chips: lifetime hit-rate + missing-time */}
       <div className="mt-3 flex items-center gap-2 flex-wrap text-[11px]">
         {stats.totalPeriodsCounted > 0 && (
           <span className="inline-flex items-center gap-1 text-ink-500">
@@ -299,10 +291,6 @@ function GoalCard({ task, entries, onEdit }: GoalCardProps) {
     </article>
   );
 }
-
-// =============================================================================
-// Tiny stat tile
-// =============================================================================
 
 function Stat({
   icon,

@@ -202,12 +202,14 @@ export function Calendar() {
                   : []
               );
               for (const occStart of occurrences) {
+                const isNoTime = occStart.getHours() === 0 && occStart.getMinutes() === 0;
                 out.push({
                   ...base,
                   id: `${base.id}:${occStart.getTime()}`,
                   start: occStart,
                   end: new Date(occStart.getTime() + duration),
                   completed: completedSet.has(occStart.toISOString()),
+                  allDay: isNoTime,
                 });
               }
               if (

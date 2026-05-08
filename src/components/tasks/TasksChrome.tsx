@@ -91,9 +91,8 @@ export function TasksChrome({
       {/* Lists popover */}
       <PopoverButton
         icon={<ListIcon2 className="w-3.5 h-3.5" />}
-        label={`רשימות (${visibleListCount}/${lists.length})`}
+        label={<>רשימות <span className="text-amber-500 font-medium">({visibleListCount}/{lists.length})</span></>}
         title="בחירת רשימות בתצוגה"
-        badge={hiddenListIds.size > 0 ? `−${hiddenListIds.size}` : undefined}
         wide
       >
         {() => {

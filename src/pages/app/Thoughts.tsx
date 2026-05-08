@@ -287,6 +287,16 @@ export function Thoughts() {
     return () => window.removeEventListener("app:new-thought", handler);
   }, []);
 
+  // Ctrl+N from AppShell focuses the composer textarea.
+  useEffect(() => {
+    const handler = () => {
+      const ta = document.querySelector<HTMLTextAreaElement>("[data-thought-composer]");
+      ta?.focus();
+    };
+    window.addEventListener("app:new-thought", handler);
+    return () => window.removeEventListener("app:new-thought", handler);
+  }, []);
+
   const stats = useMemo(() => {
     const total = displayed.length;
     const processed = displayed.filter((t) => t.processed_at).length;
@@ -391,7 +401,7 @@ export function Thoughts() {
                 : "אין עדיין מחשבות. כתוב משהו למעלה ולחץ Enter."}
             </div>
           ) : (
-            <div className="space-y-2">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
               {displayed.map((t) => (
                 <ThoughtCard
                   key={t.id}

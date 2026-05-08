@@ -12,6 +12,7 @@ import {
 import { ScreenScaffold } from "@/components/layout/ScreenScaffold";
 import { cn } from "@/lib/utils/cn";
 import { useTasks } from "@/lib/hooks/useTasks";
+import { useTaskLists } from "@/lib/hooks/useTaskLists";
 import { useTimeEntriesByRange } from "@/lib/hooks/useTimer";
 import {
   computeGoalStats,
@@ -24,6 +25,7 @@ import { TaskEditModal, type TaskCreateDraft } from "@/components/tasks/TaskEdit
 
 export function Goals() {
   const { data: tasks = [], isLoading } = useTasks();
+  const { data: lists = [] } = useTaskLists();
   const range = useMemo(() => {
     const end = new Date();
     const start = new Date(end);
@@ -34,6 +36,12 @@ export function Goals() {
     };
   }, []);
   const { data: timeEntries = [] } = useTimeEntriesByRange(range);
+
+  const listColorById = useMemo(() => {
+    const m = new Map<string, string | null>();
+    for (const l of lists) m.set(l.id, l.color);
+    return m;
+  }, [lists]);
 
   const goalTasks = useMemo(
     () => tasks.filter((t) => t.goal_period),
@@ -93,12 +101,13 @@ export function Goals() {
           </button>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
           {goalTasks.map((task) => (
             <GoalCard
               key={task.id}
               task={task}
               entries={entriesByTask.get(task.id) ?? []}
+              listColor={task.task_list_id ? (listColorById.get(task.task_list_id) ?? null) : null}
               onEdit={() => setEditTaskId(task.id)}
             />
           ))}
@@ -118,10 +127,11 @@ export function Goals() {
 interface GoalCardProps {
   task: Task;
   entries: TimeEntry[];
+  listColor: string | null;
   onEdit: () => void;
 }
 
-function GoalCard({ task, entries, onEdit }: GoalCardProps) {
+function GoalCard({ task, entries, listColor, onEdit }: GoalCardProps) {
   const stats = useMemo(
     () => computeGoalStats(task, entries),
     [task, entries]
@@ -153,12 +163,15 @@ function GoalCard({ task, entries, onEdit }: GoalCardProps) {
   const showTime = task.goal_track_time && timePlanned > 0;
 
   return (
-    <article className="card p-4">
+    <article
+      className="card p-4 border-2"
+      style={{ borderColor: listColor ?? "#e5e7eb" }}
+    >
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <Target className="w-4 h-4 text-primary-600 shrink-0" />
-            <h3 className="text-base font-semibold text-ink-900 truncate">
+            <h3 className="text-sm font-semibold text-ink-900 truncate">
               {task.title}
             </h3>
           </div>
@@ -189,11 +202,10 @@ function GoalCard({ task, entries, onEdit }: GoalCardProps) {
         <button
           type="button"
           onClick={onEdit}
-          className="btn-ghost text-xs gap-1 shrink-0"
+          className="p-1.5 rounded-md hover:bg-ink-100 text-ink-400 hover:text-ink-700 shrink-0"
           title="ערכי יעד"
         >
-          <Pencil className="w-3 h-3" />
-          ערכי
+          <Pencil className="w-3.5 h-3.5" />
         </button>
       </div>
 
@@ -304,11 +316,11 @@ function Stat({
   tone: "neutral" | "warm" | "gold" | "good" | "warn";
 }) {
   const toneClass = {
-    neutral: "bg-ink-50 text-ink-700",
-    warm: "bg-amber-50 text-amber-800",
-    gold: "bg-yellow-50 text-yellow-800",
+    neutral: "bg-ink-50 text-ink-600",
+    warm: "bg-primary-50 text-primary-700",
+    gold: "bg-ink-50 text-ink-700",
     good: "bg-success-50 text-success-700",
-    warn: "bg-rose-50 text-rose-700",
+    warn: "bg-rose-50/60 text-rose-600",
   }[tone];
   return (
     <div className={cn("rounded-md p-2 text-center", toneClass)}>

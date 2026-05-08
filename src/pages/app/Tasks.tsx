@@ -833,17 +833,13 @@ export function Tasks() {
 
       <TaskEditModal
         taskId={editingTaskId}
-<<<<<<< HEAD
-        onClose={() => setEditingTaskId(null)}
+        createDraft={createDraft}
+        onClose={() => { setEditingTaskId(null); setCreateDraft(null); }}
         assigneeView={(() => {
           if (!editingTaskId || !userId) return false;
           const t = tasks.find((x) => x.id === editingTaskId);
           return !!t && t.assignee_user_id === userId && t.owner_id !== userId;
         })()}
-=======
-        createDraft={createDraft}
-        onClose={() => { setEditingTaskId(null); setCreateDraft(null); }}
->>>>>>> 4ca8c39 (feat: keyboard shortcuts system + rich text description editor)
       />
 
       {archiveOpen && <ArchiveModal onClose={() => setArchiveOpen(false)} />}

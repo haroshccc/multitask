@@ -59,7 +59,7 @@ export function ToggleButton({
 
 interface PopoverButtonProps {
   icon: ReactNode;
-  label: string;
+  label: ReactNode;
   title?: string;
   badge?: string;
   /** Wider popover (260px min) for richer content like list pickers. */

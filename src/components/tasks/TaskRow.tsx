@@ -105,7 +105,7 @@ export function TaskRow({
   // 'delegated'  — I own but someone else executes (owner==me, assignee!=me)
   // 'assigned'   — Someone else owns, I execute (assignee==me, owner!=me)
   const taskOwnershipMode: "mine" | "delegated" | "assigned" =
-    user && task.owner_id !== user.id && task.assignee_user_id === user.id
+    user && task.owner_id && task.owner_id !== user.id && task.assignee_user_id === user.id
       ? "assigned"
       : user && task.owner_id === user.id && task.assignee_user_id && task.assignee_user_id !== user.id
       ? "delegated"

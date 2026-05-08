@@ -388,7 +388,7 @@ export function Thoughts() {
                 : "אין עדיין מחשבות. כתוב משהו למעלה ולחץ Enter."}
             </div>
           ) : (
-            <div className="space-y-2">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
               {displayed.map((t) => (
                 <ThoughtCard
                   key={t.id}

@@ -115,12 +115,14 @@ export function AppShell() {
       // ── Modifier combos ────────────────────────────────────────────────────
       if (mod) {
         if (code === "KeyK") {
+          if (isEditableTarget(e.target)) return;
           e.preventDefault();
           setSearchOpen(true);
           clearG();
           return;
         }
         if (code === "KeyN") {
+          if (isEditableTarget(e.target)) return;
           e.preventDefault();
           clearG();
           // Context-aware: open the relevant creation dialog for the active screen.

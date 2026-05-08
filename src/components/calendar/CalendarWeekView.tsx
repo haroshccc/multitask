@@ -39,7 +39,8 @@ function dayNoteKey(d: Date): string {
   return `${y}-${m}-${dd}`;
 }
 
-const DAY_NAMES = ["א", "ב", "ג", "ד", "ה", "ו", "ש"];
+const DAY_NAMES = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"];
+const DAY_NAMES_SHORT = ["ראש׳", "שני", "שלי׳", "רבי׳", "חמי׳", "שישי", "שבת"];
 
 interface CalendarWeekViewProps {
   anchor: Date;
@@ -286,7 +287,10 @@ export function CalendarWeekView({
                   title="לחצי לעריכת הערה ליום"
                   type="button"
                 >
-                  <div className="text-[10px] text-ink-500">{DAY_NAMES[day.getDay()]}</div>
+                  <div className="text-[10px] text-ink-500">
+                    <span className="sm:hidden">{DAY_NAMES_SHORT[day.getDay()]}</span>
+                    <span className="hidden sm:inline">{DAY_NAMES[day.getDay()]}</span>
+                  </div>
                   <div className="text-sm font-semibold">{day.getDate()}</div>
                 </button>
                 <DayNoteSlot body={noteBody} className="flex-1 text-end" />

@@ -7,7 +7,7 @@ import {
   Plus,
   CheckSquare,
   Calendar,
-  FolderKanban,
+  Target,
   AlertTriangle,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
@@ -214,13 +214,13 @@ export function QuickCapture({ open, onClose }: QuickCaptureProps) {
                 <div className="grid grid-cols-2 gap-3">
                   <MenuAction
                     icon={Mic}
-                    label="הקלטה מהירה"
+                    label="הקלט מחשבה"
                     accent
                     onClick={() => setMode("recording")}
                   />
                   <MenuAction
                     icon={Plus}
-                    label="מחשבה מוקלדת"
+                    label="הקלד מחשבה"
                     onClick={() => setMode("thought")}
                   />
                   <MenuAction
@@ -252,11 +252,17 @@ export function QuickCapture({ open, onClose }: QuickCaptureProps) {
                     }}
                   />
                   <MenuAction
-                    icon={FolderKanban}
-                    label="פרויקט חדש"
+                    icon={Mic}
+                    label="הקלט שיחה לתמלול"
+                    onClick={() => setMode("recording")}
+                  />
+                  <MenuAction
+                    icon={Target}
+                    label="הוסף יעד חדש"
                     onClick={() => {
                       onClose();
-                      navigate("/app/projects");
+                      window.dispatchEvent(new CustomEvent("app:new-goal"));
+                      navigate("/app/goals");
                     }}
                   />
                 </div>

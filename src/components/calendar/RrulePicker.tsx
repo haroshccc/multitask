@@ -178,40 +178,42 @@ export function RrulePicker({ value, onChange, anchorDate }: RrulePickerProps) {
 
       {enabled && (
         <div className="space-y-3 p-3 border border-ink-200 rounded-md bg-ink-50/40">
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2">
             <span className="text-xs text-ink-500">חוזר כל</span>
-            {/* +/- stepper */}
-            <div className="inline-flex items-center border border-ink-200 rounded-md overflow-hidden bg-white">
-              <button
-                type="button"
-                onClick={() => setInterval((n) => Math.max(1, n - 1))}
-                className="px-2.5 py-1.5 text-ink-500 hover:bg-ink-100 active:bg-ink-200 text-sm leading-none select-none"
-                aria-label="הפחת"
+            <div className="inline-flex items-center gap-2">
+              {/* +/- stepper */}
+              <div className="inline-flex items-center border border-ink-200 rounded-md overflow-hidden bg-white">
+                <button
+                  type="button"
+                  onClick={() => setInterval((n) => Math.max(1, n - 1))}
+                  className="px-2.5 py-1.5 text-ink-500 hover:bg-ink-100 active:bg-ink-200 text-sm leading-none select-none"
+                  aria-label="הפחת"
+                >
+                  −
+                </button>
+                <span className="w-8 text-center text-sm font-medium text-ink-900 tabular-nums select-none">
+                  {interval}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setInterval((n) => n + 1)}
+                  className="px-2.5 py-1.5 text-ink-500 hover:bg-ink-100 active:bg-ink-200 text-sm leading-none select-none"
+                  aria-label="הוסף"
+                >
+                  +
+                </button>
+              </div>
+              <select
+                value={freq}
+                onChange={(e) => setFreq(e.target.value as Freq)}
+                className="field text-sm py-1"
               >
-                −
-              </button>
-              <span className="w-8 text-center text-sm font-medium text-ink-900 tabular-nums select-none">
-                {interval}
-              </span>
-              <button
-                type="button"
-                onClick={() => setInterval((n) => n + 1)}
-                className="px-2.5 py-1.5 text-ink-500 hover:bg-ink-100 active:bg-ink-200 text-sm leading-none select-none"
-                aria-label="הוסף"
-              >
-                +
-              </button>
+                <option value="DAILY">{interval === 1 ? "יום" : "ימים"}</option>
+                <option value="WEEKLY">{interval === 1 ? "שבוע" : "שבועות"}</option>
+                <option value="MONTHLY">{interval === 1 ? "חודש" : "חודשים"}</option>
+                <option value="YEARLY">{interval === 1 ? "שנה" : "שנים"}</option>
+              </select>
             </div>
-            <select
-              value={freq}
-              onChange={(e) => setFreq(e.target.value as Freq)}
-              className="field text-sm py-1"
-            >
-              <option value="DAILY">{interval === 1 ? "יום" : "ימים"}</option>
-              <option value="WEEKLY">{interval === 1 ? "שבוע" : "שבועות"}</option>
-              <option value="MONTHLY">{interval === 1 ? "חודש" : "חודשים"}</option>
-              <option value="YEARLY">{interval === 1 ? "שנה" : "שנים"}</option>
-            </select>
           </div>
 
           {freq === "WEEKLY" && (

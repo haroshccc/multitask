@@ -1083,38 +1083,40 @@ function GoalConfigSection(props: {
         {enabled && (
           <div className="space-y-2.5 ps-6 border-s-2 border-primary-100">
             {/* Target + period on one row */}
-            <div className="flex items-center gap-2 flex-wrap text-sm">
+            <div className="flex items-center gap-2 text-sm">
               <span className="text-ink-700">לבצע</span>
-              <div className="inline-flex items-center border border-ink-200 rounded-md overflow-hidden bg-white">
-                <button
-                  type="button"
-                  onClick={() => setTarget(Math.max(1, target - 1))}
-                  className="px-2.5 py-1.5 text-ink-500 hover:bg-ink-100 active:bg-ink-200 text-sm leading-none select-none"
-                  aria-label="הפחת"
+              <div className="inline-flex items-center gap-2">
+                <div className="inline-flex items-center border border-ink-200 rounded-md overflow-hidden bg-white">
+                  <button
+                    type="button"
+                    onClick={() => setTarget(Math.max(1, target - 1))}
+                    className="px-2.5 py-1.5 text-ink-500 hover:bg-ink-100 active:bg-ink-200 text-sm leading-none select-none"
+                    aria-label="הפחת"
+                  >
+                    −
+                  </button>
+                  <span className="w-8 text-center text-sm font-medium text-ink-900 tabular-nums select-none">
+                    {target}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setTarget(target + 1)}
+                    className="px-2.5 py-1.5 text-ink-500 hover:bg-ink-100 active:bg-ink-200 text-sm leading-none select-none"
+                    aria-label="הוסף"
+                  >
+                    +
+                  </button>
+                </div>
+                <select
+                  value={period}
+                  onChange={(e) => setPeriod(e.target.value as "day" | "week" | "month")}
+                  className="field text-sm py-1"
                 >
-                  −
-                </button>
-                <span className="w-8 text-center text-sm font-medium text-ink-900 tabular-nums select-none">
-                  {target}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setTarget(target + 1)}
-                  className="px-2.5 py-1.5 text-ink-500 hover:bg-ink-100 active:bg-ink-200 text-sm leading-none select-none"
-                  aria-label="הוסף"
-                >
-                  +
-                </button>
+                  {GOAL_PERIOD_OPTIONS.map((p) => (
+                    <option key={p.id} value={p.id}>{p.perLabel}</option>
+                  ))}
+                </select>
               </div>
-              <select
-                value={period}
-                onChange={(e) => setPeriod(e.target.value as "day" | "week" | "month")}
-                className="field text-sm py-1"
-              >
-                {GOAL_PERIOD_OPTIONS.map((p) => (
-                  <option key={p.id} value={p.id}>{p.perLabel}</option>
-                ))}
-              </select>
             </div>
 
             {/* Forever toggle + min streak */}

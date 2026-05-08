@@ -55,8 +55,14 @@ export function RrulePicker({ value, onChange, anchorDate }: RrulePickerProps) {
     parsed?.byday ?? weekdayFromDate(anchorDate)
   );
   const [until, setUntil] = useState<string>(parsed?.until ?? "");
+  // hasTime: whether the user wants a specific time attached to the rule.
+  // Defaults to false (no specific time) so new recurring tasks don't
+  // force a time on the user. Set to true only when existing data has one.
+  const [hasTime, setHasTime] = useState<boolean>(
+    !!(parsed?.times && parsed.times.length > 0)
+  );
   const [times, setTimes] = useState<TimeSlot[]>(
-    parsed?.times ?? [defaultTime(anchorDate)]
+    parsed?.times?.length ? parsed.times : [defaultTime(anchorDate)]
   );
   const [multiTimes, setMultiTimes] = useState<boolean>(
     (parsed?.times?.length ?? 1) > 1
@@ -85,8 +91,11 @@ export function RrulePicker({ value, onChange, anchorDate }: RrulePickerProps) {
     if (p.byday) setByday(p.byday);
     if (p.until) setUntil(p.until);
     if (p.times && p.times.length > 0) {
+      setHasTime(true);
       setTimes(p.times);
       setMultiTimes(p.times.length > 1);
+    } else {
+      setHasTime(false);
     }
   }, [value]);
 
@@ -95,7 +104,9 @@ export function RrulePicker({ value, onChange, anchorDate }: RrulePickerProps) {
   // first slot so toggling multi off doesn't lose the user's most recent
   // time-of-day.
   const supportsTimes = freq === "DAILY" || freq === "WEEKLY";
-  const effectiveTimes: TimeSlot[] = !supportsTimes
+  // effectiveTimes is empty when the user hasn't opted into a specific time,
+  // which causes build() to omit BYHOUR/BYMINUTE from the RRULE entirely.
+  const effectiveTimes: TimeSlot[] = !supportsTimes || !hasTime
     ? []
     : multiTimes
     ? times
@@ -118,7 +129,7 @@ export function RrulePicker({ value, onChange, anchorDate }: RrulePickerProps) {
     lastEmittedRef.current = next;
     onChange(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, freq, interval, byday.join(","), effectiveTimes.join(","), until]);
+  }, [enabled, freq, interval, byday.join(","), hasTime, effectiveTimes.join(","), until]);
 
   const toggleDay = (d: WeekdayKey) => {
     setByday((arr) =>
@@ -215,57 +226,70 @@ export function RrulePicker({ value, onChange, anchorDate }: RrulePickerProps) {
           )}
 
           {supportsTimes && (
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <div className="text-[11px] text-ink-500">שעה ביום</div>
-                <label className="flex items-center gap-1.5 text-[11px] text-ink-600 select-none cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={multiTimes}
-                    onChange={(e) => setMultiTimes(e.target.checked)}
-                    className="w-3.5 h-3.5"
-                  />
-                  מספר פעמים ביום
-                </label>
-              </div>
-              {multiTimes ? (
-                <div className="space-y-1.5">
-                  {times.map((t, i) => (
-                    <div key={i} className="flex items-center gap-2">
+            <div className="space-y-1.5">
+              <label className="flex items-center gap-1.5 text-[11px] text-ink-600 select-none cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={hasTime}
+                  onChange={(e) => setHasTime(e.target.checked)}
+                  className="w-3.5 h-3.5"
+                />
+                שעה ספציפית ביום
+              </label>
+              {hasTime && (
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="text-[11px] text-ink-500">שעה</div>
+                    <label className="flex items-center gap-1.5 text-[11px] text-ink-600 select-none cursor-pointer">
                       <input
-                        type="time"
-                        value={t}
-                        onChange={(e) => setTime(i, e.target.value)}
-                        className="field text-sm w-28 py-1"
+                        type="checkbox"
+                        checked={multiTimes}
+                        onChange={(e) => setMultiTimes(e.target.checked)}
+                        className="w-3.5 h-3.5"
                       />
+                      מספר פעמים ביום
+                    </label>
+                  </div>
+                  {multiTimes ? (
+                    <div className="space-y-1.5">
+                      {times.map((t, i) => (
+                        <div key={i} className="flex items-center gap-2">
+                          <input
+                            type="time"
+                            value={t}
+                            onChange={(e) => setTime(i, e.target.value)}
+                            className="field text-sm w-28 py-1"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => removeTime(i)}
+                            disabled={times.length === 1}
+                            className="p-1 rounded-md text-ink-400 hover:text-danger-600 hover:bg-danger-50 disabled:opacity-30 disabled:cursor-not-allowed"
+                            aria-label="הסר שעה"
+                            title="הסר שעה"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))}
                       <button
                         type="button"
-                        onClick={() => removeTime(i)}
-                        disabled={times.length === 1}
-                        className="p-1 rounded-md text-ink-400 hover:text-danger-600 hover:bg-danger-50 disabled:opacity-30 disabled:cursor-not-allowed"
-                        aria-label="הסר שעה"
-                        title="הסר שעה"
+                        onClick={addTime}
+                        className="inline-flex items-center gap-1 text-xs text-primary-700 hover:text-primary-900"
                       >
-                        <X className="w-3.5 h-3.5" />
+                        <Plus className="w-3.5 h-3.5" />
+                        הוסף שעה
                       </button>
                     </div>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={addTime}
-                    className="inline-flex items-center gap-1 text-xs text-primary-700 hover:text-primary-900"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    הוסף שעה
-                  </button>
+                  ) : (
+                    <input
+                      type="time"
+                      value={times[0] ?? defaultTime(anchorDate)}
+                      onChange={(e) => setTime(0, e.target.value)}
+                      className="field text-sm w-28 py-1"
+                    />
+                  )}
                 </div>
-              ) : (
-                <input
-                  type="time"
-                  value={times[0] ?? defaultTime(anchorDate)}
-                  onChange={(e) => setTime(0, e.target.value)}
-                  className="field text-sm w-28 py-1"
-                />
               )}
             </div>
           )}

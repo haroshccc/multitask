@@ -55,6 +55,8 @@ const ROLE_LABELS: Record<string, string> = {
 
 // ---------------------------------------------------------------------------
 
+const COMING_SOON_TABS: Tab[] = ["profile", "notifications"];
+
 export function Settings() {
   const [tab, setTab] = useState<Tab>("organization");
 
@@ -66,18 +68,26 @@ export function Settings() {
             {TABS.map((t) => {
               const Icon = t.icon;
               const active = t.key === tab;
+              const comingSoon = COMING_SOON_TABS.includes(t.key);
               return (
                 <li key={t.key}>
                   <button
                     type="button"
-                    onClick={() => setTab(t.key)}
+                    onClick={() => !comingSoon && setTab(t.key)}
+                    disabled={comingSoon}
+                    title={comingSoon ? "בפיתוח — בקרוב" : undefined}
                     className={cn(
                       "w-full flex items-center gap-2 rounded-xl px-3 py-2 text-sm transition-colors",
-                      active ? "bg-primary-50 text-primary-800 font-medium" : "text-ink-700 hover:bg-ink-100"
+                      comingSoon
+                        ? "text-ink-300 cursor-not-allowed"
+                        : active
+                          ? "bg-primary-50 text-primary-800 font-medium"
+                          : "text-ink-700 hover:bg-ink-100"
                     )}
                   >
                     <Icon className="w-4 h-4" />
                     {t.label}
+                    {comingSoon && <span className="ms-auto text-[10px] text-ink-300">בקרוב</span>}
                   </button>
                 </li>
               );
@@ -137,6 +147,9 @@ function OrgTab() {
 
   // Invite error
   const [inviteError, setInviteError]   = useState<string | null>(null);
+
+  // Remove-member confirmation
+  const [confirmRemove, setConfirmRemove] = useState<{ userId: string; name: string } | null>(null);
 
   const myRole   = memberships.find(m => m.organization_id === activeOrganizationId)?.role;
   const canManage = myRole === "owner" || myRole === "admin";
@@ -415,15 +428,16 @@ function OrgTab() {
                       <div className="flex items-center gap-1 shrink-0">
                         <select
                           value={m.membership.role}
+                          disabled={updateRole.isPending}
                           onChange={e => updateRole.mutate({ orgId: activeOrganizationId!, userId: m.membership.user_id, role: e.target.value as "owner"|"admin"|"member" })}
-                          className="text-xs border border-ink-200 rounded-lg px-2 py-1 bg-white text-ink-700"
+                          className="text-xs border border-ink-200 rounded-lg px-2 py-1 bg-white text-ink-700 disabled:opacity-50"
                         >
                           {["owner","admin","member"].map(r => (
                             <option key={r} value={r}>{ROLE_LABELS[r]}</option>
                           ))}
                         </select>
                         <button
-                          onClick={() => { if (confirm(`להסיר את ${name} מהקבוצה?`)) removeMember.mutate({ orgId: activeOrganizationId!, userId: m.membership.user_id }); }}
+                          onClick={() => setConfirmRemove({ userId: m.membership.user_id, name })}
                           className="p-1.5 rounded-lg text-ink-300 hover:text-danger-600 hover:bg-danger-50 transition-colors"
                           title="הסר חבר"
                         >
@@ -680,6 +694,27 @@ function OrgTab() {
             </section>
           )}
         </>
+      )}
+
+      {confirmRemove && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40" onClick={() => setConfirmRemove(null)}>
+          <div className="bg-white rounded-2xl shadow-lift p-6 w-80 flex flex-col gap-4" onClick={e => e.stopPropagation()}>
+            <p className="text-sm text-ink-800">להסיר את <strong>{confirmRemove.name}</strong> מהקבוצה?</p>
+            <div className="flex justify-end gap-2">
+              <button type="button" className="btn-ghost text-sm" onClick={() => setConfirmRemove(null)}>ביטול</button>
+              <button
+                type="button"
+                className="px-3 py-1.5 rounded-xl bg-danger-600 text-white text-sm hover:bg-danger-700"
+                onClick={() => {
+                  removeMember.mutate({ orgId: activeOrganizationId!, userId: confirmRemove.userId });
+                  setConfirmRemove(null);
+                }}
+              >
+                הסרה
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

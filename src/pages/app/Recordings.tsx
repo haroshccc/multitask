@@ -236,7 +236,7 @@ export function Recordings() {
               <QuickRecordTallWidget />
               <UploadTallWidget />
             </div>
-            <div className="min-h-[600px]">
+            <div className="min-h-0 flex-1">
               <PlayerWidget />
             </div>
           </div>
@@ -261,3 +261,4 @@ function formatTotal(seconds: number) {
   const mm = m % 60;
   return mm === 0 ? `${h} שע׳` : `${h}:${String(mm).padStart(2, "0")} שע׳`;
 }
+

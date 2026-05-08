@@ -55,17 +55,12 @@ export function RrulePicker({ value, onChange, anchorDate }: RrulePickerProps) {
     parsed?.byday ?? weekdayFromDate(anchorDate)
   );
   const [until, setUntil] = useState<string>(parsed?.until ?? "");
-  // hasTime: whether the user wants a specific time attached to the rule.
-  // Defaults to false (no specific time) so new recurring tasks don't
-  // force a time on the user. Set to true only when existing data has one.
-  const [hasTime, setHasTime] = useState<boolean>(
-    !!(parsed?.times && parsed.times.length > 0)
-  );
-  const [times, setTimes] = useState<TimeSlot[]>(
-    parsed?.times?.length ? parsed.times : [defaultTime(anchorDate)]
-  );
-  const [multiTimes, setMultiTimes] = useState<boolean>(
-    (parsed?.times?.length ?? 1) > 1
+  // slots: each occurrence can optionally carry a specific time.
+  // hasTime=false means "no specific time" (occurrence lands at midnight).
+  const [slots, setSlots] = useState<Array<{ hasTime: boolean; time: string }>>(
+    parsed?.times && parsed.times.length > 0
+      ? parsed.times.map((t) => ({ hasTime: true, time: t }))
+      : [{ hasTime: false, time: defaultTime(anchorDate) }]
   );
 
   // Tracks the last RRULE string we emitted so the sync effect can skip
@@ -91,26 +86,18 @@ export function RrulePicker({ value, onChange, anchorDate }: RrulePickerProps) {
     if (p.byday) setByday(p.byday);
     if (p.until) setUntil(p.until);
     if (p.times && p.times.length > 0) {
-      setHasTime(true);
-      setTimes(p.times);
-      setMultiTimes(p.times.length > 1);
+      setSlots(p.times.map((t) => ({ hasTime: true, time: t })));
     } else {
-      setHasTime(false);
+      setSlots([{ hasTime: false, time: defaultTime(anchorDate) }]);
     }
   }, [value]);
 
-  // Time inputs only matter for DAILY/WEEKLY; for MONTHLY/YEARLY we keep the
-  // anchor's time at expansion. Single-time view collapses the array to its
-  // first slot so toggling multi off doesn't lose the user's most recent
-  // time-of-day.
+  // Time inputs only matter for DAILY/WEEKLY.
   const supportsTimes = freq === "DAILY" || freq === "WEEKLY";
-  // effectiveTimes is empty when the user hasn't opted into a specific time,
-  // which causes build() to omit BYHOUR/BYMINUTE from the RRULE entirely.
-  const effectiveTimes: TimeSlot[] = !supportsTimes || !hasTime
-    ? []
-    : multiTimes
-    ? times
-    : [times[0] ?? defaultTime(anchorDate)];
+  // Only timed slots are included in the RRULE.
+  const effectiveTimes: TimeSlot[] = supportsTimes
+    ? slots.filter((s) => s.hasTime).map((s) => s.time)
+    : [];
 
   // Emit RRULE whenever any control changes.
   useEffect(() => {
@@ -129,7 +116,7 @@ export function RrulePicker({ value, onChange, anchorDate }: RrulePickerProps) {
     lastEmittedRef.current = next;
     onChange(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, freq, interval, byday.join(","), hasTime, effectiveTimes.join(","), until]);
+  }, [enabled, freq, interval, byday.join(","), effectiveTimes.join(","), until]);
 
   const toggleDay = (d: WeekdayKey) => {
     setByday((arr) =>
@@ -137,31 +124,26 @@ export function RrulePicker({ value, onChange, anchorDate }: RrulePickerProps) {
     );
   };
 
-  const addTime = () => {
-    setTimes((arr) => {
-      // Insert "+1 hour" relative to the last entry as a sensible default;
-      // wraps at midnight so 23:00 → 00:00.
-      const last = arr[arr.length - 1] ?? "09:00";
-      const [h, m] = last.split(":").map(Number);
-      const next = `${String((h + 1) % 24).padStart(2, "0")}:${String(m ?? 0).padStart(2, "0")}`;
-      if (arr.includes(next)) return arr;
-      return [...arr, next];
+  const addSlot = () => {
+    setSlots((arr) => {
+      const lastTimed = [...arr].reverse().find((s) => s.hasTime);
+      const baseTime = lastTimed?.time ?? "09:00";
+      const [h, m] = baseTime.split(":").map(Number);
+      const nextTime = `${String((h + 1) % 24).padStart(2, "0")}:${String(m ?? 0).padStart(2, "0")}`;
+      return [...arr, { hasTime: false, time: nextTime }];
     });
   };
 
-  const removeTime = (idx: number) => {
-    setTimes((arr) => {
-      if (arr.length === 1) return arr; // never empty
-      return arr.filter((_, i) => i !== idx);
-    });
+  const removeSlot = (idx: number) => {
+    setSlots((arr) => (arr.length === 1 ? arr : arr.filter((_, i) => i !== idx)));
   };
 
-  const setTime = (idx: number, v: string) => {
-    setTimes((arr) => {
-      const next = [...arr];
-      next[idx] = v;
-      return next;
-    });
+  const setSlotTime = (idx: number, time: string) => {
+    setSlots((arr) => arr.map((s, i) => (i === idx ? { ...s, time } : s)));
+  };
+
+  const setSlotHasTime = (idx: number, hasTime: boolean) => {
+    setSlots((arr) => arr.map((s, i) => (i === idx ? { ...s, hasTime } : s)));
   };
 
   return (
@@ -220,7 +202,7 @@ export function RrulePicker({ value, onChange, anchorDate }: RrulePickerProps) {
             <div>
               <div className="text-[11px] text-ink-500 mb-1">בימים</div>
               <div className="inline-flex rounded-md border border-ink-200 overflow-hidden bg-white">
-                {WEEKDAY_KEYS.map((d) => {
+                {[...WEEKDAY_KEYS].reverse().map((d) => {
                   const active = byday.includes(d);
                   return (
                     <button
@@ -244,70 +226,48 @@ export function RrulePicker({ value, onChange, anchorDate }: RrulePickerProps) {
 
           {supportsTimes && (
             <div className="space-y-1.5">
-              <label className="flex items-center gap-1.5 text-[11px] text-ink-600 select-none cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={hasTime}
-                  onChange={(e) => setHasTime(e.target.checked)}
-                  className="w-3.5 h-3.5"
-                />
-                שעה ספציפית ביום
-              </label>
-              {hasTime && (
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <div className="text-[11px] text-ink-500">שעה</div>
-                    <label className="flex items-center gap-1.5 text-[11px] text-ink-600 select-none cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={multiTimes}
-                        onChange={(e) => setMultiTimes(e.target.checked)}
-                        className="w-3.5 h-3.5"
-                      />
-                      מספר פעמים ביום
-                    </label>
-                  </div>
-                  {multiTimes ? (
-                    <div className="space-y-1.5">
-                      {times.map((t, i) => (
-                        <div key={i} className="flex items-center gap-2">
-                          <input
-                            type="time"
-                            value={t}
-                            onChange={(e) => setTime(i, e.target.value)}
-                            className="field text-sm w-28 py-1"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => removeTime(i)}
-                            disabled={times.length === 1}
-                            className="p-1 rounded-md text-ink-400 hover:text-danger-600 hover:bg-danger-50 disabled:opacity-30 disabled:cursor-not-allowed"
-                            aria-label="הסר שעה"
-                            title="הסר שעה"
-                          >
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      ))}
-                      <button
-                        type="button"
-                        onClick={addTime}
-                        className="inline-flex items-center gap-1 text-xs text-primary-700 hover:text-primary-900"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                        הוסף שעה
-                      </button>
-                    </div>
-                  ) : (
+              <div className="text-[11px] text-ink-500">חזרות</div>
+              {slots.map((slot, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <label className="flex items-center gap-1.5 text-[11px] text-ink-600 select-none cursor-pointer min-w-0">
+                    <input
+                      type="checkbox"
+                      checked={slot.hasTime}
+                      onChange={(e) => setSlotHasTime(i, e.target.checked)}
+                      className="w-3.5 h-3.5 shrink-0"
+                    />
+                    שעה
+                  </label>
+                  {slot.hasTime ? (
                     <input
                       type="time"
-                      value={times[0] ?? defaultTime(anchorDate)}
-                      onChange={(e) => setTime(0, e.target.value)}
+                      value={slot.time}
+                      onChange={(e) => setSlotTime(i, e.target.value)}
                       className="field text-sm w-28 py-1"
                     />
+                  ) : (
+                    <span className="text-[11px] text-ink-400">ללא שעה ספציפית</span>
                   )}
+                  <button
+                    type="button"
+                    onClick={() => removeSlot(i)}
+                    disabled={slots.length === 1}
+                    className="p-1 rounded-md text-ink-400 hover:text-danger-600 hover:bg-danger-50 disabled:opacity-30 disabled:cursor-not-allowed ms-auto"
+                    aria-label="הסר חזרה"
+                    title="הסר חזרה"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
                 </div>
-              )}
+              ))}
+              <button
+                type="button"
+                onClick={addSlot}
+                className="inline-flex items-center gap-1 text-xs text-primary-700 hover:text-primary-900"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                הוסף חזרה
+              </button>
             </div>
           )}
 
@@ -316,6 +276,7 @@ export function RrulePicker({ value, onChange, anchorDate }: RrulePickerProps) {
             <input
               type="date"
               value={until.slice(0, 10)}
+              min={anchorDate ? anchorDate.toISOString().slice(0, 10) : undefined}
               onChange={(e) =>
                 setUntil(e.target.value ? e.target.value + "T00:00:00Z" : "")
               }
@@ -369,8 +330,6 @@ function parse(s: string | null | undefined): Parsed | null {
         (WEEKDAY_KEYS as readonly string[]).includes(d)
       )
     : undefined;
-  // BYSLOT (custom) — explicit "hh:mm,hh:mm,..." list. Wins over BYHOUR/
-  // BYMINUTE because it preserves arbitrary tuples without cartesian noise.
   const slotList = map.BYSLOT
     ? map.BYSLOT.split(",")
         .map((s) => {
@@ -417,9 +376,7 @@ function parse(s: string | null | undefined): Parsed | null {
     }
   }
   const until = map.UNTIL
-    ? // UNTIL is YYYYMMDDTHHMMSSZ; convert back to an ISO-ish form the
-      // date input can round-trip.
-      map.UNTIL.replace(
+    ? map.UNTIL.replace(
         /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z?$/,
         "$1-$2-$3T$4:$5:$6Z"
       )
@@ -432,10 +389,6 @@ function build(p: Parsed): string {
   if (p.interval && p.interval > 1) parts.push(`INTERVAL=${p.interval}`);
   if (p.byday && p.byday.length > 0) parts.push(`BYDAY=${p.byday.join(",")}`);
   if (p.times && p.times.length > 0) {
-    // Dedupe + sort the slot list. Single slot uses standard BYHOUR/BYMINUTE
-    // for RFC 5545 compatibility; multi-slot uses the custom BYSLOT extension
-    // so arbitrary times like (08:00, 13:30, 21:15) round-trip without the
-    // cartesian expansion BYHOUR×BYMINUTE would force.
     const seen = new Set<string>();
     const slots: Array<{ h: number; m: number }> = [];
     for (const t of p.times) {

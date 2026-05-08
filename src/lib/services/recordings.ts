@@ -323,7 +323,8 @@ export interface RecordingAiOutput {
  * fresh `ai_output`.
  */
 export async function triggerAiProcessing(
-  recordingId: string
+  recordingId: string,
+  customPrompt?: string
 ): Promise<Recording> {
   const { data: session } = await supabase.auth.getSession();
   const jwt = session.session?.access_token;
@@ -335,7 +336,10 @@ export async function triggerAiProcessing(
       "content-type": "application/json",
       authorization: `Bearer ${jwt}`,
     },
-    body: JSON.stringify({ recording_id: recordingId }),
+    body: JSON.stringify({
+      recording_id: recordingId,
+      ...(customPrompt?.trim() ? { custom_prompt: customPrompt.trim() } : {}),
+    }),
   });
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
@@ -343,6 +347,30 @@ export async function triggerAiProcessing(
   }
   const json = (await res.json()) as { ok: true; recording: Recording };
   return json.recording;
+}
+
+export async function askRecordingFreeText(
+  recordingId: string,
+  question: string
+): Promise<string> {
+  const { data: session } = await supabase.auth.getSession();
+  const jwt = session.session?.access_token;
+  if (!jwt) throw new Error("not_authenticated");
+  const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/summarize`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${jwt}`,
+    },
+    body: JSON.stringify({ recording_id: recordingId, free_text: question }),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`ask_${res.status}: ${detail.slice(0, 500)}`);
+  }
+  const json = (await res.json()) as { response?: string };
+  return json.response ?? "";
 }
 
 // Speakers -----------------------------------------------------------------

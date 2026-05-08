@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils/cn";
 import {
   useTriggerAiProcessing,
   useUpdateRecording,
+  useAskRecordingFreeText,
 } from "@/lib/hooks/useRecordings";
 import {
   TaskEditModal,
@@ -98,10 +99,12 @@ export function AiInsights({ recording }: Props) {
     | "whatsapp"
     | "email"
     | "tasks"
-    | "events";
+    | "events"
+    | "free_text";
   const [activeTab, setActiveTab] = useState<AiTab>("short_summary");
 
-  const onTrigger = () => trigger.mutate(recording.id);
+  const onTrigger = () =>
+    trigger.mutate({ recordingId: recording.id });
   const onSave = () => {
     updateRecording.mutate({
       recordingId: recording.id,
@@ -149,29 +152,29 @@ export function AiInsights({ recording }: Props) {
             </button>
           )}
           <button
-            type="button"
-            onClick={onTrigger}
-            disabled={
-              trigger.isPending ||
-              aiStatus === "pending" ||
-              !recording.transcript_text
-            }
-            className="btn-outline !py-1 !px-2 !text-[11px] inline-flex items-center gap-1"
-            title={
-              !recording.transcript_text
-                ? "צריכה תמלול לפני שClaude יכולה לעבד"
-                : recording.ai_output
-                ? "הפעלת AI מחדש (יחליף את הניתוח הנוכחי)"
-                : "Claude מסכם וממלא את הסקציות אוטומטית"
-            }
-          >
-            {trigger.isPending || aiStatus === "pending" ? (
-              <Loader2 className="w-3 h-3 animate-spin" />
-            ) : (
-              <Sparkles className="w-3 h-3" />
-            )}
-            {recording.ai_output ? "עיבוד AI מחדש" : "הפעלת AI"}
-          </button>
+              type="button"
+              onClick={onTrigger}
+              disabled={
+                trigger.isPending ||
+                aiStatus === "pending" ||
+                !recording.transcript_text
+              }
+              className="btn-outline !py-1 !px-2 !text-[11px] inline-flex items-center gap-1"
+              title={
+                !recording.transcript_text
+                  ? "צריכה תמלול לפני שClaude יכולה לעבד"
+                  : recording.ai_output
+                  ? "הפעלת AI מחדש (יחליף את הניתוח הנוכחי)"
+                  : "Claude מסכם וממלא את הסקציות אוטומטית"
+              }
+            >
+              {trigger.isPending || aiStatus === "pending" ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : (
+                <Sparkles className="w-3 h-3" />
+              )}
+              {recording.ai_output ? "עיבוד AI מחדש" : "הפעלת AI"}
+            </button>
         </div>
       </div>
 
@@ -231,6 +234,13 @@ export function AiInsights({ recording }: Props) {
           filled={draft.events.length > 0}
           onClick={() => setActiveTab("events")}
         />
+        <AiTabButton
+          icon={<Sparkles className="w-3.5 h-3.5" />}
+          label="שאלה חופשית"
+          active={activeTab === "free_text"}
+          filled={false}
+          onClick={() => setActiveTab("free_text")}
+        />
       </div>
 
       {activeTab === "short_summary" && (
@@ -279,6 +289,9 @@ export function AiInsights({ recording }: Props) {
           items={draft.events}
           onChange={(items) => setDraft((d) => ({ ...d, events: items }))}
         />
+      )}
+      {activeTab === "free_text" && (
+        <FreeTextSection recording={recording} />
       )}
     </section>
   );
@@ -862,6 +875,84 @@ function EventsSection({
               </div>
             </div>
           ))}
+        </div>
+      )}
+    </Pane>
+  );
+}
+
+function FreeTextSection({ recording }: { recording: Recording }) {
+  const ask = useAskRecordingFreeText();
+  const [text, setText] = useState("");
+  const [response, setResponse] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const onAsk = async () => {
+    if (!text.trim()) return;
+    setError(null);
+    setResponse(null);
+    try {
+      const res = await ask.mutateAsync({
+        recordingId: recording.id,
+        question: text.trim(),
+      });
+      setResponse(res);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "שגיאה בעיבוד הבקשה");
+    }
+  };
+
+  return (
+    <Pane
+      icon={<Sparkles className="w-3.5 h-3.5 text-primary-600" />}
+      label="שאלה חופשית"
+    >
+      <p className="text-[11px] text-ink-500 leading-relaxed">
+        שאלי כל שאלה על ההקלטה — לדוגמה: &quot;מה הוחלט לגבי X?&quot; או
+        &quot;תסכם רק את נושא Y&quot;.
+      </p>
+      <div className="flex items-start gap-2">
+        <textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="הקלידי בקשה חופשית…"
+          className="field flex-1 min-h-[64px] resize-y text-sm"
+          dir="rtl"
+          disabled={ask.isPending}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              onAsk();
+            }
+          }}
+        />
+        <button
+          type="button"
+          onClick={onAsk}
+          disabled={!text.trim() || ask.isPending || !recording.transcript_text}
+          className="btn-primary !py-1.5 !px-2 !text-xs shrink-0 inline-flex items-center gap-1"
+          title={!recording.transcript_text ? "צריכה תמלול לפני עיבוד" : ""}
+        >
+          {ask.isPending ? (
+            <Loader2 className="w-3 h-3 animate-spin" />
+          ) : (
+            <Sparkles className="w-3 h-3" />
+          )}
+          עבד בקשה
+        </button>
+      </div>
+      {error && (
+        <div className="rounded-md border border-danger-200 bg-danger-50 px-3 py-2 text-xs text-danger-700 inline-flex items-start gap-1.5">
+          <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+          {error}
+        </div>
+      )}
+      {response && (
+        <div
+          className="rounded-md border border-ink-200 bg-white px-3 py-2.5 text-sm text-ink-800 whitespace-pre-wrap leading-relaxed"
+          dir="auto"
+        >
+          {response}
         </div>
       )}
     </Pane>

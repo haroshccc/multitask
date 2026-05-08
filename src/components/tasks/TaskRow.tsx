@@ -110,6 +110,7 @@ export function TaskRow({
       : user && task.owner_id === user.id && task.assignee_user_id && task.assignee_user_id !== user.id
       ? "delegated"
       : "mine";
+  const isAssigned = taskOwnershipMode === "assigned";
 
   const updateTask = useUpdateTask();
   const completeTask = useCompleteTask();
@@ -559,9 +560,9 @@ export function TaskRow({
         ref={setDragRef}
         className={cn(
           "group relative flex items-start gap-1.5 rounded-md transition-colors px-1.5 py-1 hover:bg-ink-50",
-          // Ownership visual modes — border style only (no bg tint, avoids conflict with list colors)
-          taskOwnershipMode === "assigned" && !isSelected && "border border-dotted border-ink-400",
-          taskOwnershipMode === "delegated" && !isSelected && "border border-dashed border-ink-400",
+          // Ownership visual modes
+          taskOwnershipMode === "assigned" && !isSelected && "border border-dotted border-rose-300 bg-rose-50/60",
+          taskOwnershipMode === "delegated" && !isSelected && "border border-dashed border-rose-300 bg-rose-50/40",
           isDragging && "opacity-40",
           isOverNest && "bg-primary-50 ring-1 ring-primary-300",
           isSelected && "bg-primary-50/60 ring-1 ring-primary-300",
@@ -721,15 +722,15 @@ export function TaskRow({
         <input
           ref={inputRef}
           value={draft}
-          readOnly={readOnly}
-          onChange={readOnly ? undefined : (e) => setDraft(e.target.value)}
-          onBlur={readOnly ? undefined : commitTitle}
-          onKeyDown={readOnly ? undefined : handleKeyDown}
-          onDoubleClick={readOnly ? undefined : () => onOpenEdit(task.id)}
+          readOnly={readOnly || isAssigned}
+          onChange={readOnly || isAssigned ? undefined : (e) => setDraft(e.target.value)}
+          onBlur={readOnly || isAssigned ? undefined : commitTitle}
+          onKeyDown={readOnly || isAssigned ? undefined : handleKeyDown}
+          onDoubleClick={readOnly || isAssigned ? undefined : () => onOpenEdit(task.id)}
           placeholder="משימה חדשה..."
           className={cn(
             "flex-1 min-w-0 bg-transparent border-0 outline-none text-sm py-0.5",
-            readOnly && "cursor-default select-text",
+            (readOnly || isAssigned) && "cursor-default select-text",
             !taskIsRecurring && showAsDone && "line-through text-ink-400"
           )}
         />
@@ -979,8 +980,8 @@ export function TaskRow({
           </button>
         )}
 
-        {/* Outside action cluster: + subtask, edit pencil, overflow menu — hidden when read-only */}
-        {!readOnly && (
+        {/* Outside action cluster: + subtask, edit pencil — hidden when read-only or assigned */}
+        {!readOnly && !isAssigned && (
           <button
             onClick={handleAddSubtask}
             className="shrink-0 p-1 rounded-md text-ink-400 hover:text-primary-700 hover:bg-primary-50 opacity-0 group-hover:opacity-100 transition-opacity"
@@ -992,7 +993,7 @@ export function TaskRow({
           </button>
         )}
 
-        {!readOnly && (
+        {!readOnly && !isAssigned && (
           <button
             onClick={() => onOpenEdit(task.id)}
             className="shrink-0 p-1 rounded-md text-ink-400 hover:text-ink-900 hover:bg-ink-100 opacity-0 group-hover:opacity-100 transition-opacity"
@@ -1023,8 +1024,32 @@ export function TaskRow({
                 className="fixed w-64 md:w-56 bg-white border border-ink-200 rounded-xl shadow-lift z-[61] py-1 text-sm max-h-[80vh] overflow-y-auto"
                 style={{ top: menuPos.top, right: menuPos.right, left: menuPos.left }}
               >
-                {/* Mobile-only: the inline badges collapsed into the menu as
-                    interactive rows so the task row itself stays minimal. */}
+                {/* Mobile-only section — assigned tasks get a stripped-down menu */}
+                {isAssigned ? (
+                  <div className="md:hidden">
+                    <MenuBtn
+                      icon={<Pencil className="w-3.5 h-3.5" />}
+                      onClick={() => { onOpenEdit(task.id); closeMenu(); }}
+                    >
+                      צפה בפרטים
+                    </MenuBtn>
+                    {display.timer && (
+                      <button
+                        type="button"
+                        onClick={() => { toggleTimer(); closeMenu(); }}
+                        className="w-full flex items-center gap-2 px-3 py-1.5 text-ink-700 hover:bg-ink-100 text-start"
+                      >
+                        <span className="text-xs text-ink-500 w-20">סטופר</span>
+                        {isActive ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+                        {task.actual_seconds > 0 && (
+                          <span className="text-xs font-mono tabular-nums text-ink-500">
+                            {formatSeconds(task.actual_seconds, timeUnit)}
+                          </span>
+                        )}
+                      </button>
+                    )}
+                  </div>
+                ) : (
                 <div className="md:hidden">
                   <MenuBtn
                     icon={<CornerDownLeft className="w-3.5 h-3.5" />}
@@ -1169,8 +1194,9 @@ export function TaskRow({
 
                   <div className="h-px bg-ink-100 my-1" />
                 </div>
+                )} {/* end isAssigned ternary */}
 
-                <MenuBtn
+                {!isAssigned && <><MenuBtn
                   icon={<Copy className="w-3.5 h-3.5" />}
                   onClick={handleDuplicateSingle}
                 >
@@ -1226,6 +1252,7 @@ export function TaskRow({
                   <Trash2 className="w-3.5 h-3.5" />
                   מחק משימה
                 </button>
+                </>} {/* end !isAssigned */}
               </div>
             </>,
             document.body

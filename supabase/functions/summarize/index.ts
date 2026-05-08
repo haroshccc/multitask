@@ -59,7 +59,8 @@ const DEFAULT_PROMPTS: Record<string, string> = {
 };
 
 function buildSystemPrompt(
-  overrides: Record<string, string | null | undefined> | null
+  overrides: Record<string, string | null | undefined> | null,
+  customPrompt?: string
 ): string {
   const get = (k: string) => {
     const v = overrides?.[k]?.trim();
@@ -81,7 +82,7 @@ function buildSystemPrompt(
 [tasks] ${get("tasks")}
 [events] ${get("events")}
 
-החזר/י JSON תקני בלבד התואם בדיוק לסכימה הבאה — בלי מלל לפני או אחרי, בלי בלוקי \`\`\`:
+${customPrompt ? `\nהוראה נוספת מהמשתמש: ${customPrompt}\n` : ""}החזר/י JSON תקני בלבד התואם בדיוק לסכימה הבאה — בלי מלל לפני או אחרי, בלי בלוקי \`\`\`:
 
 {
   "short_summary": string,
@@ -120,6 +121,7 @@ async function callClaude(args: {
   transcript_text: string;
   speakerLabels: Record<number, string>;
   promptOverrides: Record<string, string | null | undefined> | null;
+  customPrompt?: string;
 }): Promise<AiOutput> {
   if (!ANTHROPIC_API_KEY) {
     throw new Error(
@@ -127,10 +129,11 @@ async function callClaude(args: {
         "Supabase Dashboard → Edge Functions → Secrets."
     );
   }
-  const systemPrompt = buildSystemPrompt(args.promptOverrides);
+  const systemPrompt = buildSystemPrompt(args.promptOverrides, args.customPrompt);
   const hasOverrides =
-    args.promptOverrides &&
-    Object.values(args.promptOverrides).some((v) => v && v.trim().length > 0);
+    args.customPrompt ||
+    (args.promptOverrides &&
+      Object.values(args.promptOverrides).some((v) => v && v.trim().length > 0));
   // Tool-use forces a structured object output. Without this the model
   // sometimes returned slightly-malformed JSON (unescaped newlines mid-
   // string, smart quotes, etc.) and our `JSON.parse(text)` blew up. With
@@ -248,13 +251,52 @@ async function callClaude(args: {
   return toolBlock.input as AiOutput;
 }
 
+async function callClaudeFreeText(args: {
+  title: string | null;
+  transcript_text: string;
+  question: string;
+}): Promise<string> {
+  if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not set");
+  const t =
+    args.transcript_text.length > MAX_TRANSCRIPT_CHARS
+      ? args.transcript_text.slice(0, MAX_TRANSCRIPT_CHARS) + "\n\n[התמלול קוצר]"
+      : args.transcript_text;
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "x-api-key": ANTHROPIC_API_KEY,
+      "anthropic-version": "2023-06-01",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      model: ANTHROPIC_MODEL,
+      max_tokens: 2048,
+      system: "אתה עוזר אישי שמנתח שיחות מתומללות. ענה בעברית בלבד על בסיס התמלול שסופק.",
+      messages: [
+        {
+          role: "user",
+          content: `כותרת ההקלטה: ${args.title ?? "ללא כותרת"}\n\nתמלול:\n${t}\n\nשאלה / בקשה: ${args.question}`,
+        },
+      ],
+    }),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`anthropic_${res.status}: ${text.slice(0, 500)}`);
+  }
+  const json = (await res.json()) as {
+    content?: Array<{ type: string; text?: string }>;
+  };
+  return json.content?.find((b) => b.type === "text")?.text ?? "";
+}
+
 async function summarizeHandler(
   req: Request,
   ctx: MembershipContext
 ): Promise<Response> {
   const origin = req.headers.get("origin");
   const body = (await req.json().catch(() => null)) as
-    | { recording_id?: string }
+    | { recording_id?: string; custom_prompt?: string; free_text?: string }
     | null;
   if (!body?.recording_id) {
     return jsonResponse(
@@ -283,6 +325,22 @@ async function summarizeHandler(
     );
   }
 
+  // Free-text Q&A mode: answer a single question without running the full
+  // structured analysis or writing anything to the DB.
+  if (body.free_text?.trim()) {
+    try {
+      const response = await callClaudeFreeText({
+        title: recording.title,
+        transcript_text: recording.transcript_text,
+        question: body.free_text.trim(),
+      });
+      return jsonResponse({ response }, { origin });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return jsonResponse({ error: "free_text_failed", message: msg }, { status: 502, origin });
+    }
+  }
+
   // Pull speaker labels — passing them to Claude tightens task attribution.
   const { data: speakers } = await ctx.serviceClient
     .from("recording_speakers")
@@ -309,6 +367,8 @@ async function summarizeHandler(
     .update({ ai_status: "pending", status: "processing", error_message: null })
     .eq("id", recording.id);
 
+  const customPromptText = (body.custom_prompt ?? "").trim();
+
   let aiOutput: AiOutput;
   try {
     aiOutput = await callClaude({
@@ -316,6 +376,7 @@ async function summarizeHandler(
       transcript_text: recording.transcript_text,
       speakerLabels,
       promptOverrides,
+      customPrompt: customPromptText || undefined,
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

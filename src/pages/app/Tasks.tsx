@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   DndContext,
@@ -50,10 +50,12 @@ import {
 } from "@/lib/hooks";
 import { pushUndo } from "@/lib/undo/store";
 import { useTaskSelectionStore } from "@/lib/selection/store";
+import { useOrgScope } from "@/lib/hooks/useOrgScope";
 import type { Task, TaskList } from "@/lib/types/domain";
 
 export function Tasks() {
   const [filters, setFilters] = useFiltersFromUrl();
+  const { userId } = useOrgScope();
   const { data: tasks = [] } = useTasks(filters);
   const { data: lists = [] } = useTaskLists();
   const { data: visibility } = useListVisibility("tasks");
@@ -66,6 +68,8 @@ export function Tasks() {
 
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [createDraft, setCreateDraft] = useState<TaskCreateDraft | null>(null);
+  const [newListDialogOpen, setNewListDialogOpen] = useState(false);
+  const [newListName, setNewListName] = useState("");
   const [pageMenuOpen, setPageMenuOpen] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [rowDisplayOpen, setRowDisplayOpen] = useState(false);
@@ -96,10 +100,17 @@ export function Tasks() {
     setListVisibility.mutate({ screenKey: "tasks", hiddenListIds: next });
   };
 
-  const handleCreateList = async () => {
-    const name = window.prompt("שם הרשימה החדשה:");
-    if (!name?.trim()) return;
-    await createTaskList.mutateAsync({ name: name.trim(), kind: "custom" });
+  const handleCreateList = () => {
+    setNewListName("");
+    setNewListDialogOpen(true);
+  };
+
+  const handleCreateListSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    const name = newListName.trim();
+    if (!name) return;
+    setNewListDialogOpen(false);
+    await createTaskList.mutateAsync({ name, kind: "custom" });
   };
 
   /** Move a list one slot in the visible order. The on-screen order is
@@ -170,9 +181,11 @@ export function Tasks() {
   );
 
   // Build per-list trees + a count map for header badges.
+  // Pass knownListIds so tasks delegated to me from foreign lists fall into unassigned.
+  const knownListIds = useMemo(() => new Set(lists.map((l) => l.id)), [lists]);
   const { listTrees, counts } = useMemo(
-    () => buildTrees(tasks),
-    [tasks]
+    () => buildTrees(tasks, knownListIds),
+    [tasks, knownListIds]
   );
 
   // Columns to render: "unassigned" always visible and pinned, then the rest.
@@ -292,12 +305,6 @@ export function Tasks() {
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } })
   );
 
-  const allTagSuggestions = useMemo(() => {
-    const s = new Set<string>();
-    tasks.forEach((t) => (t.tags ?? []).forEach((tag) => s.add(tag)));
-    return Array.from(s);
-  }, [tasks]);
-
   const fields: FilterField[] = [
     {
       key: "statuses",
@@ -332,7 +339,6 @@ export function Tasks() {
       key: "tags",
       type: "multi-text",
       label: "תגים",
-      resolveLabel: (v) => (allTagSuggestions.includes(v) ? v : v),
     },
     {
       key: "dueAfter",
@@ -829,6 +835,11 @@ export function Tasks() {
         taskId={editingTaskId}
         createDraft={createDraft}
         onClose={() => { setEditingTaskId(null); setCreateDraft(null); }}
+        assigneeView={(() => {
+          if (!editingTaskId || !userId) return false;
+          const t = tasks.find((x) => x.id === editingTaskId);
+          return !!t && t.assignee_user_id === userId && t.owner_id !== userId;
+        })()}
       />
 
       {archiveOpen && <ArchiveModal onClose={() => setArchiveOpen(false)} />}
@@ -845,6 +856,30 @@ export function Tasks() {
       {statusesOpen && <StatusesModal onClose={() => setStatusesOpen(false)} />}
 
       <BulkActionsToolbar allTasks={tasks} />
+
+      {newListDialogOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40" onClick={() => setNewListDialogOpen(false)}>
+          <form
+            className="bg-white rounded-2xl shadow-lift p-6 w-80 flex flex-col gap-4"
+            onClick={(e) => e.stopPropagation()}
+            onSubmit={handleCreateListSubmit}
+          >
+            <h2 className="text-sm font-semibold text-ink-900">רשימה חדשה</h2>
+            <input
+              autoFocus
+              type="text"
+              className="input text-sm"
+              placeholder="שם הרשימה"
+              value={newListName}
+              onChange={(e) => setNewListName(e.target.value)}
+            />
+            <div className="flex justify-end gap-2">
+              <button type="button" className="btn-ghost text-sm" onClick={() => setNewListDialogOpen(false)}>ביטול</button>
+              <button type="submit" className="btn-dark text-sm" disabled={!newListName.trim()}>יצירה</button>
+            </div>
+          </form>
+        </div>
+      )}
     </ScreenScaffold>
   );
 }
@@ -854,7 +889,7 @@ function EmptyListsHint({ lists }: { lists: TaskList[] }) {
     return (
       <div className="card p-6 flex-1 min-w-[280px] text-center">
         <p className="text-sm text-ink-600">
-          עוד אין רשימות. צרי רשימה ראשונה בבאנר שלמעלה, או גררי משימות לתוך "לא משויכות".
+          עוד אין רשימות. צור רשימה ראשונה בבאנר שלמעלה, או גרור משימות לתוך "לא משויכות".
         </p>
       </div>
     );
@@ -878,11 +913,15 @@ interface BuildResult {
 
 const UNASSIGNED_KEY = "__unassigned__";
 
-function buildTrees(tasks: Task[]): BuildResult {
-  // Group by list
+function buildTrees(tasks: Task[], knownListIds?: Set<string>): BuildResult {
+  // Group by list. Tasks delegated to me from an unknown list → unassigned.
   const byList = new Map<string, Task[]>();
   for (const t of tasks) {
-    const key = t.task_list_id ?? UNASSIGNED_KEY;
+    const listId = t.task_list_id;
+    const key =
+      listId && knownListIds && !knownListIds.has(listId)
+        ? UNASSIGNED_KEY
+        : (listId ?? UNASSIGNED_KEY);
     if (!byList.has(key)) byList.set(key, []);
     byList.get(key)!.push(t);
   }
@@ -922,12 +961,14 @@ function buildTrees(tasks: Task[]): BuildResult {
       });
     }
 
-    const build = (pid: string | null, depth: number): TaskTreeNode[] =>
-      (childrenOf.get(pid) ?? []).map((t) => ({
-        task: t,
-        children: build(t.id, depth + 1),
-        depth,
-      }));
+    const build = (pid: string | null, depth: number, visitedIds = new Set<string>()): TaskTreeNode[] =>
+      (childrenOf.get(pid) ?? [])
+        .filter((t) => !visitedIds.has(t.id))
+        .map((t) => ({
+          task: t,
+          children: build(t.id, depth + 1, new Set([...visitedIds, t.id])),
+          depth,
+        }));
 
     listTrees.set(listKey, build(null, 0));
   }

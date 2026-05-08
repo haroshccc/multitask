@@ -48,6 +48,9 @@ const Settings = lazy(() =>
 const Admin = lazy(() =>
   import("@/pages/app/Admin").then((m) => ({ default: m.Admin }))
 );
+const Notifications = lazy(() =>
+  import("@/pages/app/Notifications").then((m) => ({ default: m.Notifications }))
+);
 
 function RequireAuth({ children }: { children: JSX.Element }) {
   const { session, loading } = useAuth();
@@ -200,6 +203,14 @@ export default function App() {
           element={
             <Suspense fallback={<LoadingShell />}>
               <Admin />
+            </Suspense>
+          }
+        />
+        <Route
+          path="notifications"
+          element={
+            <Suspense fallback={<LoadingShell />}>
+              <Notifications />
             </Suspense>
           }
         />

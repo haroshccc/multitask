@@ -20,6 +20,7 @@ import {
   ExternalLink,
   Save,
   Target,
+  ClipboardList,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import {
@@ -50,8 +51,10 @@ import {
   useUpdateUserTaskStatus,
 } from "@/lib/hooks/useUserTaskStatuses";
 import { slugifyStatusKey } from "@/lib/services/user-task-statuses";
-import { useOrgMembers } from "@/lib/hooks/useOrgMembers";
+import { useOrgMembersForOrg } from "@/lib/hooks/useOrgMembers";
+import { useUserOrganizations } from "@/lib/hooks/useOrganizations";
 import { useAuth } from "@/lib/auth/AuthContext";
+import { useTaskEdits, type TaskEditEntry } from "@/lib/hooks/useTaskEdits";
 import type { TimeEntry, UserTaskStatus } from "@/lib/types/domain";
 import { DateTimePicker } from "@/components/ui/DateTimePicker";
 import {
@@ -76,6 +79,9 @@ export interface TaskCreateDraft {
   status?: string;
   source_thought_id?: string | null;
   tags?: string[];
+  /** Pre-enable the goal toggle and select a period when creating from the Goals screen. */
+  goalEnabled?: boolean;
+  goalPeriod?: "day" | "week" | "month";
 }
 
 interface TaskEditModalProps {
@@ -99,9 +105,11 @@ interface TaskEditModalProps {
    * can flip between event and task without losing the time/date context.
    */
   topSlot?: React.ReactNode;
+  /** When true, the modal is read-only (task delegated to the current user). */
+  assigneeView?: boolean;
 }
 
-type Tab = "overview" | "schedule" | "history" | "attachments";
+type Tab = "overview" | "schedule" | "history" | "edits" | "attachments";
 
 export function TaskEditModal({
   taskId,
@@ -110,14 +118,19 @@ export function TaskEditModal({
   createDraft = null,
   onCreated,
   topSlot,
+  assigneeView = false,
 }: TaskEditModalProps) {
   const isCreate = !taskId && !!createDraft;
   const open = !!taskId || isCreate;
   const { data: task } = useTask(taskId);
   const { data: lists = [] } = useTaskLists();
   const { data: myStatuses = [] } = useMyTaskStatuses();
-  const { data: orgMembers = [] } = useOrgMembers();
-  const { user } = useAuth();
+  const { data: allOrgs = [] } = useUserOrganizations();
+  const { user, activeOrganizationId } = useAuth();
+  const [delegateOrgId, setDelegateOrgId] = useState<string | null>(null);
+  // For delegation: use the explicitly chosen org, falling back to the active org.
+  const effectiveDelegateOrgId = delegateOrgId ?? activeOrganizationId ?? (allOrgs[0]?.id ?? null);
+  const { data: delegateOrgMembers = [] } = useOrgMembersForOrg(effectiveDelegateOrgId);
   const updateTask = useUpdateTask();
   const completeTask = useCompleteTask();
   const createTask = useCreateTask();
@@ -168,7 +181,6 @@ export function TaskEditModal({
   const [estimatedMinutes, setEstimatedMinutes] = useState<number | null>(null);
   const [assigneeId, setAssigneeId] = useState<string | null>(null);
   const [requiresApproval, setRequiresApproval] = useState<boolean>(false);
-  const [approverId, setApproverId] = useState<string | null>(null);
   const [isPhase, setIsPhase] = useState<boolean>(false);
 
   // Goal / habit configuration. A task is a goal iff goalEnabled === true.
@@ -201,7 +213,6 @@ export function TaskEditModal({
       setRecurrenceRule(task.recurrence_rule ?? null);
       setAssigneeId(task.assignee_user_id ?? null);
       setRequiresApproval(task.requires_approval ?? false);
-      setApproverId(task.approver_user_id ?? null);
       setDurationMinutes(task.duration_minutes ?? null);
       setEstimatedMinutes(hoursToMinutes(task.estimated_hours ?? null));
       setIsPhase(!!task.is_phase);
@@ -239,8 +250,8 @@ export function TaskEditModal({
           : null
       );
       setIsPhase(false);
-      setGoalEnabled(false);
-      setGoalPeriod("week");
+      setGoalEnabled(createDraft.goalEnabled ?? false);
+      setGoalPeriod(createDraft.goalPeriod ?? "week");
       setGoalTarget(3);
       setGoalForever(true);
       setGoalMinStreak(4);
@@ -269,7 +280,6 @@ export function TaskEditModal({
       listId !== task.task_list_id ||
       assigneeId !== (task.assignee_user_id ?? null) ||
       requiresApproval !== (task.requires_approval ?? false) ||
-      approverId !== (task.approver_user_id ?? null) ||
       location !== (task.location ?? "") ||
       externalUrl !== (task.external_url ?? "") ||
       scheduledAt !== (task.scheduled_at ?? null) ||
@@ -300,7 +310,6 @@ export function TaskEditModal({
     listId,
     assigneeId,
     requiresApproval,
-    approverId,
     location,
     externalUrl,
     scheduledAt,
@@ -320,8 +329,10 @@ export function TaskEditModal({
   ]);
 
   const [guardOpen, setGuardOpen] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const saveAll = async (): Promise<boolean> => {
+    setSaveError(null);
     // Create mode — the entity does not exist yet. Build it now, surface
     // its id via `onCreated`, then close. If the user discards instead,
     // nothing is created.
@@ -338,7 +349,7 @@ export function TaskEditModal({
           parent_task_id: null,
           assignee_user_id: assigneeId,
           requires_approval: requiresApproval,
-          approver_user_id: requiresApproval ? approverId : null,
+          approver_user_id: requiresApproval ? (user?.id ?? null) : null,
           tags,
           location: location || null,
           external_url: externalUrl || null,
@@ -370,7 +381,9 @@ export function TaskEditModal({
         });
         onCreated?.(created.id);
         return true;
-      } catch {
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        setSaveError(msg || "שמירה נכשלה");
         return false;
       }
     }
@@ -413,7 +426,7 @@ export function TaskEditModal({
       task_list_id: listId,
       assignee_user_id: assigneeId,
       requires_approval: requiresApproval,
-      approver_user_id: requiresApproval ? approverId : null,
+      approver_user_id: requiresApproval ? (user?.id ?? null) : null,
       tags,
       location: location || null,
       external_url: externalUrl || null,
@@ -444,7 +457,9 @@ export function TaskEditModal({
         redo: () => updateTask.mutate({ taskId: task.id, patch: newPatch }),
       });
       return true;
-    } catch {
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setSaveError(msg || "שמירה נכשלה");
       return false;
     }
   };
@@ -526,7 +541,8 @@ export function TaskEditModal({
                 </button>
                 <input
                   value={title}
-                  onChange={(e) => setTitle(e.target.value)}
+                  readOnly={assigneeView}
+                  onChange={assigneeView ? undefined : (e) => setTitle(e.target.value)}
                   placeholder="שם המשימה"
                   className="text-lg font-semibold text-ink-900 bg-transparent border-0 outline-none flex-1 min-w-0"
                 />
@@ -545,6 +561,13 @@ export function TaskEditModal({
               </div>
             )}
 
+            {assigneeView && (
+              <div className="px-5 py-2.5 bg-amber-50 border-b border-amber-200 text-sm text-amber-800 flex items-center gap-2">
+                <span aria-hidden="true">🔒</span>
+                <span>משימה הוצאלה לך — ניתן לסמן כסיום ✓ בלבד. יתר הפרטים לעיון.</span>
+              </div>
+            )}
+
             {/* Tabs */}
             <div className="border-b border-ink-200 px-3 flex items-center gap-1 text-sm">
               <TabBtn active={tab === "overview"} onClick={() => setTab("overview")}>
@@ -559,6 +582,10 @@ export function TaskEditModal({
                 <History className="w-4 h-4" />
                 זמן
               </TabBtn>
+              <TabBtn active={tab === "edits"} onClick={() => setTab("edits")}>
+                <ClipboardList className="w-4 h-4" />
+                היסטוריה
+              </TabBtn>
               <TabBtn active={tab === "attachments"} onClick={() => setTab("attachments")}>
                 <Paperclip className="w-4 h-4" />
                 צירופים
@@ -566,6 +593,7 @@ export function TaskEditModal({
             </div>
 
             {/* Body */}
+            <fieldset disabled={assigneeView} style={{ border: "none", padding: 0, margin: 0 }}>
             <div className="p-5 max-h-[calc(100vh-16rem)] overflow-y-auto">
               {tab === "overview" && (
                 <div className="space-y-4">
@@ -600,16 +628,24 @@ export function TaskEditModal({
                     <Field label="דחיפות">
                       <UrgencyBars value={urgency} onChange={setUrgency} />
                     </Field>
-                    <Field label="אחראי">
-                      <AssigneePicker
-                        value={assigneeId}
-                        members={orgMembers}
-                        onChange={setAssigneeId}
+                    <Field label="האצל למשתמש אחר">
+                      <DelegationPicker
+                        assigneeId={assigneeId}
+                        orgs={allOrgs}
+                        delegateOrgId={effectiveDelegateOrgId}
+                        onOrgChange={setDelegateOrgId}
+                        members={delegateOrgMembers}
+                        currentUserId={user?.id ?? null}
+                        onChange={(v) => {
+                          setAssigneeId(v);
+                          if (!v) setRequiresApproval(false);
+                        }}
                       />
                     </Field>
                   </div>
 
-                  {/* Approval workflow */}
+                  {/* Approval workflow — only relevant when assigned to someone else */}
+                  {assigneeId && assigneeId !== user?.id && (
                   <div className="rounded-xl border border-ink-200 p-3 space-y-2.5">
                     <label className="flex items-center gap-2.5 cursor-pointer select-none">
                       <input
@@ -618,19 +654,8 @@ export function TaskEditModal({
                         onChange={(e) => setRequiresApproval(e.target.checked)}
                         className="w-4 h-4 rounded accent-primary-500"
                       />
-                      <span className="text-sm font-medium text-ink-700">דורש אישור לסיום</span>
+                      <span className="text-sm font-medium text-ink-700">דורש אישור שלי לסיום</span>
                     </label>
-
-                    {requiresApproval && (
-                      <Field label="מי מאשר?">
-                        <AssigneePicker
-                          value={approverId}
-                          members={orgMembers}
-                          onChange={setApproverId}
-                          placeholder="בחר מאשר..."
-                        />
-                      </Field>
-                    )}
 
                     {/* Assignee action: submit for approval */}
                     {task && task.requires_approval &&
@@ -706,6 +731,7 @@ export function TaskEditModal({
                       </div>
                     )}
                   </div>
+                  )}
 
                   <Field label="תיאור">
                     <RichTextArea
@@ -875,16 +901,23 @@ export function TaskEditModal({
                 </div>
               )}
 
+              {tab === "edits" && task && (
+                <TaskEditHistoryTab taskId={task.id} ownerId={task.owner_id} assigneeId={task.assignee_user_id} />
+              )}
+
               {tab === "attachments" && <AttachmentsTab />}
             </div>
+            </fieldset>
 
-            {/* Footer: explicit save. The autosave-on-blur in each field
-                still works (typing → blur → mutate), so this button is the
-                "commit unblurred edits" affordance + the visible save
-                indicator the user wants. */}
+            {/* Footer */}
             <div className="px-5 py-3 border-t border-ink-200 flex items-center justify-end gap-2">
-              {dirty && (
-                <span className="text-[11px] text-warning-600 me-auto">
+              {!assigneeView && saveError && (
+                <span className="text-xs font-medium text-danger-600 me-auto">
+                  {saveError}
+                </span>
+              )}
+              {!assigneeView && !saveError && dirty && (
+                <span className="text-xs font-medium text-warning-600 me-auto">
                   יש שינויים לא שמורים
                 </span>
               )}
@@ -895,22 +928,24 @@ export function TaskEditModal({
               >
                 סגור
               </button>
-              <button
-                onClick={async () => {
-                  const ok = await saveAll();
-                  if (ok) onClose();
-                }}
-                disabled={!dirty || updateTask.isPending}
-                className={cn(
-                  "btn-primary text-sm",
-                  (!dirty || updateTask.isPending) &&
-                    "opacity-40 cursor-not-allowed"
-                )}
-                type="button"
-              >
-                <Save className="w-3.5 h-3.5" />
-                {updateTask.isPending ? "שומר..." : "שמור"}
-              </button>
+              {!assigneeView && (
+                <button
+                  onClick={async () => {
+                    const ok = await saveAll();
+                    if (ok) onClose();
+                  }}
+                  disabled={!dirty || updateTask.isPending}
+                  className={cn(
+                    "btn-primary text-sm",
+                    (!dirty || updateTask.isPending) &&
+                      "opacity-40 cursor-not-allowed"
+                  )}
+                  type="button"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  {updateTask.isPending ? "שומר..." : "שמור"}
+                </button>
+              )}
             </div>
           </motion.div>
 
@@ -1260,39 +1295,63 @@ function UrgencyBars({
   );
 }
 
-function AssigneePicker({
-  value,
+// ---------------------------------------------------------------------------
+// DelegationPicker — two-step org → user picker (excludes current user)
+// ---------------------------------------------------------------------------
+
+function DelegationPicker({
+  assigneeId,
+  orgs,
+  delegateOrgId,
+  onOrgChange,
   members,
+  currentUserId,
   onChange,
-  placeholder = "ללא הקצאה",
 }: {
-  value: string | null;
-  members: { membership: { user_id: string }; profile: { full_name: string | null; avatar_url: string | null } | null }[];
+  assigneeId: string | null;
+  orgs: { id: string; name: string }[];
+  delegateOrgId: string | null;
+  onOrgChange: (orgId: string) => void;
+  members: { membership: { user_id: string }; profile: { full_name: string | null } | null }[];
+  currentUserId: string | null;
   onChange: (userId: string | null) => void;
-  placeholder?: string;
 }) {
-  const current = members.find((m) => m.membership.user_id === value);
+  const others = members.filter((m) => m.membership.user_id !== currentUserId);
   return (
-    <select
-      value={value ?? ""}
-      onChange={(e) => onChange(e.target.value || null)}
-      className="field"
-    >
-      <option value="">{placeholder}</option>
-      {members.map((m) => {
-        const name = m.profile?.full_name ?? m.membership.user_id;
-        return (
-          <option key={m.membership.user_id} value={m.membership.user_id}>
-            {name}
-          </option>
-        );
-      })}
-      {/* If the current assignee isn't in the members list (edge case), keep
-          them in the select so we don't silently drop the value. */}
-      {value && !current && (
-        <option value={value}>{value}</option>
+    <div className="flex flex-col gap-1.5">
+      {orgs.length > 1 && (
+        <select
+          value={delegateOrgId ?? ""}
+          onChange={(e) => onOrgChange(e.target.value)}
+          className="field text-sm"
+        >
+          {orgs.map((o) => (
+            <option key={o.id} value={o.id}>{o.name}</option>
+          ))}
+        </select>
       )}
-    </select>
+      <select
+        value={assigneeId ?? ""}
+        onChange={(e) => onChange(e.target.value || null)}
+        className="field text-sm"
+      >
+        <option value="">ללא האצלה</option>
+        {others.map((m) => (
+          <option key={m.membership.user_id} value={m.membership.user_id}>
+            {m.profile?.full_name ?? m.membership.user_id}
+          </option>
+        ))}
+        {/* Keep current value if not in list (edge case) */}
+        {assigneeId && assigneeId !== currentUserId && !others.find((m) => m.membership.user_id === assigneeId) && (
+          <option value={assigneeId}>{assigneeId}</option>
+        )}
+      </select>
+      {assigneeId && assigneeId !== currentUserId && (
+        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 leading-snug">
+          ⚠️ האצלה זו תשתף את המשימה עם המשתמש הנבחר — הם יוכלו לראות ולערוך אותה.
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -1950,5 +2009,116 @@ function AttachmentSlot({
       <span className="font-medium">{label}</span>
       <Plus className="w-3.5 h-3.5 ms-auto text-ink-400" />
     </button>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// TaskEditHistoryTab — audit feed of field changes
+// ---------------------------------------------------------------------------
+
+const FIELD_LABELS: Record<string, string> = {
+  title: "כותרת",
+  status: "סטטוס",
+  urgency: "דחיפות",
+  assignee_user_id: "מוצא",
+  scheduled_at: "תאריך",
+  deadline_at: "דד-ליין",
+  description: "תיאור",
+  recurrence_rule: "חזרה",
+  tags: "תגים",
+};
+
+const URGENCY_LABELS: Record<number, string> = { 0: "ללא", 1: "נמוכה", 2: "בינונית", 3: "גבוהה" };
+
+function formatChangeValue(field: string, val: unknown): string {
+  if (val === null || val === undefined || val === "") return "—";
+  if (field === "urgency") return URGENCY_LABELS[val as number] ?? String(val);
+  if (field === "scheduled_at" || field === "deadline_at") {
+    const d = new Date(val as string);
+    return isNaN(d.getTime()) ? String(val) : d.toLocaleString("he-IL", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  }
+  if (Array.isArray(val)) return val.length === 0 ? "—" : (val as string[]).join(", ");
+  if (typeof val === "string" && val.length > 60) return val.slice(0, 60) + "…";
+  return String(val);
+}
+
+function groupEditsByDay(edits: TaskEditEntry[]): Array<{ date: string; entries: TaskEditEntry[] }> {
+  const map = new Map<string, TaskEditEntry[]>();
+  for (const e of edits) {
+    const day = new Date(e.edited_at).toLocaleDateString("he-IL", { day: "numeric", month: "long", year: "numeric" });
+    if (!map.has(day)) map.set(day, []);
+    map.get(day)!.push(e);
+  }
+  return Array.from(map.entries()).map(([date, entries]) => ({ date, entries }));
+}
+
+function TaskEditHistoryTab({
+  taskId,
+  ownerId,
+  assigneeId,
+}: {
+  taskId: string;
+  ownerId: string;
+  assigneeId: string | null;
+}) {
+  const { data: edits = [], isLoading } = useTaskEdits(taskId);
+  const isShared = !!assigneeId && assigneeId !== ownerId;
+  const groups = groupEditsByDay(edits);
+
+  if (isLoading) {
+    return <p className="text-sm text-ink-400 py-4 text-center">טוען…</p>;
+  }
+
+  if (edits.length === 0) {
+    return (
+      <div className="py-8 text-center">
+        <ClipboardList className="w-8 h-8 text-ink-200 mx-auto mb-2" />
+        <p className="text-sm text-ink-400">אין היסטוריית עריכות עדיין</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {groups.map(({ date, entries }) => (
+        <div key={date}>
+          <p className="text-[11px] font-semibold text-ink-400 uppercase tracking-wide mb-2">{date}</p>
+          <div className="space-y-3">
+            {entries.map((entry) => (
+              <div key={entry.id} className="flex gap-3">
+                <div className="shrink-0 mt-0.5">
+                  {isShared && entry.editor_name ? (
+                    <span className="w-6 h-6 rounded-full bg-primary-100 text-primary-700 text-[10px] font-bold flex items-center justify-center">
+                      {entry.editor_name[0].toUpperCase()}
+                    </span>
+                  ) : (
+                    <span className="w-2 h-2 mt-2 rounded-full bg-ink-300 block" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  {isShared && entry.editor_name && (
+                    <p className="text-xs font-semibold text-ink-700 mb-0.5">{entry.editor_name}</p>
+                  )}
+                  <p className="text-[10px] text-ink-400 mb-1">
+                    {new Date(entry.edited_at).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}
+                  </p>
+                  <div className="space-y-1">
+                    {Object.entries(entry.changes).map(([field, { from, to }]) => (
+                      <div key={field} className="text-xs text-ink-600">
+                        <span className="font-medium text-ink-800">{FIELD_LABELS[field] ?? field}</span>
+                        {": "}
+                        <span className="line-through text-ink-400">{formatChangeValue(field, from)}</span>
+                        {" → "}
+                        <span className="text-ink-900">{formatChangeValue(field, to)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }

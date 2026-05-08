@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth/AuthContext";
 import { ScreenScaffold } from "@/components/layout/ScreenScaffold";
 import {
@@ -74,6 +74,8 @@ export function Calendar() {
   const [layer, setLayer] = useState<LayerMode>("both");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [statsOpen, setStatsOpen] = useState(false);
+  const [newListDialogOpen, setNewListDialogOpen] = useState(false);
+  const [newListName, setNewListName] = useState("");
 
   const { effectiveRange } = useCalendarPrefs();
 
@@ -181,12 +183,17 @@ export function Calendar() {
             if (t.recurrence_rule) {
               const anchorStart = base.start;
               const duration = base.end.getTime() - anchorStart.getTime();
-              const occurrences = expandRrule(
-                t.recurrence_rule,
-                anchorStart,
-                range.from,
-                range.to
-              );
+              let occurrences: Date[] = [];
+              try {
+                occurrences = expandRrule(
+                  t.recurrence_rule,
+                  anchorStart,
+                  range.from,
+                  range.to
+                );
+              } catch {
+                // malformed RRULE — treat as non-recurring
+              }
               const completedSet = new Set(
                 Array.isArray(t.completed_occurrences)
                   ? (t.completed_occurrences as unknown[]).filter(
@@ -236,12 +243,17 @@ export function Calendar() {
         if (e.recurrence_rule) {
           const anchorStart = base.start;
           const duration = base.end.getTime() - anchorStart.getTime();
-          const occurrences = expandRrule(
-            e.recurrence_rule,
-            anchorStart,
-            range.from,
-            range.to
-          );
+          let occurrences: Date[] = [];
+          try {
+            occurrences = expandRrule(
+              e.recurrence_rule,
+              anchorStart,
+              range.from,
+              range.to
+            );
+          } catch {
+            // malformed RRULE — treat as non-recurring
+          }
           for (const occStart of occurrences) {
             out.push({
               ...base,
@@ -437,10 +449,17 @@ export function Calendar() {
     setListVisibility.mutate({ screenKey: "calendar", hiddenListIds: next });
   };
 
-  const handleCreateList = async () => {
-    const name = window.prompt("שם הרשימה החדשה:");
-    if (!name?.trim()) return;
-    await createTaskList.mutateAsync({ name: name.trim(), kind: "custom" });
+  const handleCreateList = () => {
+    setNewListName("");
+    setNewListDialogOpen(true);
+  };
+
+  const handleCreateListSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    const name = newListName.trim();
+    if (!name) return;
+    setNewListDialogOpen(false);
+    await createTaskList.mutateAsync({ name, kind: "custom" });
   };
 
   const unifiedLists = useMemo(
@@ -662,6 +681,30 @@ export function Calendar() {
         }
         onClose={() => setEditingNoteDate(null)}
       />
+
+      {newListDialogOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40" onClick={() => setNewListDialogOpen(false)}>
+          <form
+            className="bg-white rounded-2xl shadow-lift p-6 w-80 flex flex-col gap-4"
+            onClick={(e) => e.stopPropagation()}
+            onSubmit={handleCreateListSubmit}
+          >
+            <h2 className="text-sm font-semibold text-ink-900">רשימה חדשה</h2>
+            <input
+              autoFocus
+              type="text"
+              className="input text-sm"
+              placeholder="שם הרשימה"
+              value={newListName}
+              onChange={(e) => setNewListName(e.target.value)}
+            />
+            <div className="flex justify-end gap-2">
+              <button type="button" className="btn-ghost text-sm" onClick={() => setNewListDialogOpen(false)}>ביטול</button>
+              <button type="submit" className="btn-dark text-sm" disabled={!newListName.trim()}>יצירה</button>
+            </div>
+          </form>
+        </div>
+      )}
     </ScreenScaffold>
   );
 }

@@ -246,14 +246,16 @@ export function Thoughts() {
     [lists]
   );
 
+  const [composerKey, setComposerKey] = useState(0);
+
   const handleCompose = async (text: string) => {
-    // Create first (fast path for Enter-to-save), then kick off the AI
-    // title in the background so the card refreshes once it returns.
     await createThought.mutateAsync({
       source: "app_text",
       text_content: text,
       tags: [],
     });
+    // Clear the composer after successful save.
+    setComposerKey((k) => k + 1);
     // Reserved for the real provider hookup (see `src/lib/ai/thought-suggestions.ts`).
     void mockProvider;
   };
@@ -266,14 +268,24 @@ export function Thoughts() {
   const [searchParams, setSearchParams] = useSearchParams();
   useEffect(() => {
     const id = searchParams.get("thought");
-    if (id) {
+    if (id && thoughts.some((t) => t.id === id)) {
       setEditingThoughtId(id);
       // Remove the param so closing the modal doesn't re-open it.
       const next = new URLSearchParams(searchParams);
       next.delete("thought");
       setSearchParams(next, { replace: true });
     }
-  }, [searchParams, setSearchParams]);
+  }, [searchParams, setSearchParams, thoughts]);
+
+  // Ctrl+N from AppShell focuses the composer textarea.
+  useEffect(() => {
+    const handler = () => {
+      const ta = document.querySelector<HTMLTextAreaElement>("[data-thought-composer]");
+      ta?.focus();
+    };
+    window.addEventListener("app:new-thought", handler);
+    return () => window.removeEventListener("app:new-thought", handler);
+  }, []);
 
   // Ctrl+N from AppShell focuses the composer textarea.
   useEffect(() => {
@@ -286,14 +298,14 @@ export function Thoughts() {
   }, []);
 
   const stats = useMemo(() => {
-    const total = thoughts.length;
-    const processed = thoughts.filter((t) => t.processed_at).length;
-    const fromWhatsapp = thoughts.filter((t) =>
+    const total = displayed.length;
+    const processed = displayed.filter((t) => t.processed_at).length;
+    const fromWhatsapp = displayed.filter((t) =>
       t.source.startsWith("whatsapp")
     ).length;
-    const audio = thoughts.filter((t) => t.source.endsWith("audio")).length;
+    const audio = displayed.filter((t) => t.source.endsWith("audio")).length;
     return { total, processed, fromWhatsapp, audio };
-  }, [thoughts]);
+  }, [displayed]);
 
   return (
     <ScreenScaffold title="מחשבות" subtitle="">
@@ -353,6 +365,7 @@ export function Thoughts() {
         )}
 
         <ThoughtComposer
+          key={composerKey}
           onSubmit={handleCompose}
           onRecordRequest={() => setRecorderOpen(true)}
         />

@@ -14,3 +14,12 @@ export function useOrgMembers() {
     enabled: scope.enabled,
   });
 }
+
+/** Fetch members of any org by explicit id (for delegation org→user picker). */
+export function useOrgMembersForOrg(orgId: string | null) {
+  return useQuery<OrgMemberWithProfile[]>({
+    queryKey: queryKeys.organizationMembers(orgId ?? ""),
+    queryFn: () => service.listOrgMembers(orgId!),
+    enabled: !!orgId,
+  });
+}

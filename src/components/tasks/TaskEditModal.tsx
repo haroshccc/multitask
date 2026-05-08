@@ -902,7 +902,7 @@ export function TaskEditModal({
               )}
 
               {tab === "edits" && task && (
-                <TaskEditHistoryTab taskId={task.id} ownerId={task.owner_id} assigneeId={task.assignee_user_id} />
+                <TaskEditHistoryTab taskId={task.id} />
               )}
 
               {tab === "attachments" && <AttachmentsTab />}
@@ -2052,17 +2052,8 @@ function groupEditsByDay(edits: TaskEditEntry[]): Array<{ date: string; entries:
   return Array.from(map.entries()).map(([date, entries]) => ({ date, entries }));
 }
 
-function TaskEditHistoryTab({
-  taskId,
-  ownerId,
-  assigneeId,
-}: {
-  taskId: string;
-  ownerId: string;
-  assigneeId: string | null;
-}) {
+function TaskEditHistoryTab({ taskId }: { taskId: string }) {
   const { data: edits = [], isLoading } = useTaskEdits(taskId);
-  const isShared = !!assigneeId && assigneeId !== ownerId;
   const groups = groupEditsByDay(edits);
 
   if (isLoading) {
@@ -2087,7 +2078,7 @@ function TaskEditHistoryTab({
             {entries.map((entry) => (
               <div key={entry.id} className="flex gap-3">
                 <div className="shrink-0 mt-0.5">
-                  {isShared && entry.editor_name ? (
+                  {entry.editor_name ? (
                     <span className="w-6 h-6 rounded-full bg-primary-100 text-primary-700 text-[10px] font-bold flex items-center justify-center">
                       {entry.editor_name[0].toUpperCase()}
                     </span>
@@ -2096,7 +2087,7 @@ function TaskEditHistoryTab({
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  {isShared && entry.editor_name && (
+                  {entry.editor_name && (
                     <p className="text-xs font-semibold text-ink-700 mb-0.5">{entry.editor_name}</p>
                   )}
                   <p className="text-[10px] text-ink-400 mb-1">

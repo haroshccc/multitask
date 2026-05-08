@@ -50,7 +50,8 @@ import {
   useUpdateUserTaskStatus,
 } from "@/lib/hooks/useUserTaskStatuses";
 import { slugifyStatusKey } from "@/lib/services/user-task-statuses";
-import { useOrgMembers } from "@/lib/hooks/useOrgMembers";
+import { useOrgMembers, useOrgMembersForOrg } from "@/lib/hooks/useOrgMembers";
+import { useUserOrganizations } from "@/lib/hooks/useOrganizations";
 import { useAuth } from "@/lib/auth/AuthContext";
 import type { TimeEntry, UserTaskStatus } from "@/lib/types/domain";
 import { DateTimePicker } from "@/components/ui/DateTimePicker";
@@ -116,6 +117,10 @@ export function TaskEditModal({
   const { data: lists = [] } = useTaskLists();
   const { data: myStatuses = [] } = useMyTaskStatuses();
   const { data: orgMembers = [] } = useOrgMembers();
+  const { data: allOrgs = [] } = useUserOrganizations();
+  // For delegation: use the explicitly chosen org, falling back to the active org.
+  const effectiveDelegateOrgId = delegateOrgId ?? (allOrgs[0]?.id ?? null);
+  const { data: delegateOrgMembers = [] } = useOrgMembersForOrg(effectiveDelegateOrgId);
   const { user } = useAuth();
   const updateTask = useUpdateTask();
   const completeTask = useCompleteTask();
@@ -166,6 +171,7 @@ export function TaskEditModal({
   const [durationMinutes, setDurationMinutes] = useState<number | null>(null);
   const [estimatedMinutes, setEstimatedMinutes] = useState<number | null>(null);
   const [assigneeId, setAssigneeId] = useState<string | null>(null);
+  const [delegateOrgId, setDelegateOrgId] = useState<string | null>(null);
   const [requiresApproval, setRequiresApproval] = useState<boolean>(false);
   const [isPhase, setIsPhase] = useState<boolean>(false);
 
@@ -587,14 +593,17 @@ export function TaskEditModal({
                     <Field label="דחיפות">
                       <UrgencyBars value={urgency} onChange={setUrgency} />
                     </Field>
-                    <Field label="אחראי">
-                      <AssigneePicker
-                        value={assigneeId}
-                        members={orgMembers}
+                    <Field label="האצל למשתמש אחר">
+                      <DelegationPicker
+                        assigneeId={assigneeId}
+                        orgs={allOrgs}
+                        delegateOrgId={effectiveDelegateOrgId}
+                        onOrgChange={setDelegateOrgId}
+                        members={delegateOrgMembers}
+                        currentUserId={user?.id ?? null}
                         onChange={(v) => {
                           setAssigneeId(v);
-                          // If unassigned or assigned back to self, clear approval
-                          if (!v || v === user?.id) setRequiresApproval(false);
+                          if (!v) setRequiresApproval(false);
                         }}
                       />
                     </Field>
@@ -1247,6 +1256,63 @@ function UrgencyBars({
     </div>
   );
 }
+
+// ---------------------------------------------------------------------------
+// DelegationPicker — two-step org → user picker (excludes current user)
+// ---------------------------------------------------------------------------
+
+function DelegationPicker({
+  assigneeId,
+  orgs,
+  delegateOrgId,
+  onOrgChange,
+  members,
+  currentUserId,
+  onChange,
+}: {
+  assigneeId: string | null;
+  orgs: { id: string; name: string }[];
+  delegateOrgId: string | null;
+  onOrgChange: (orgId: string) => void;
+  members: { membership: { user_id: string }; profile: { full_name: string | null } | null }[];
+  currentUserId: string | null;
+  onChange: (userId: string | null) => void;
+}) {
+  const others = members.filter((m) => m.membership.user_id !== currentUserId);
+  return (
+    <div className="flex flex-col gap-1.5">
+      {orgs.length > 1 && (
+        <select
+          value={delegateOrgId ?? ""}
+          onChange={(e) => onOrgChange(e.target.value)}
+          className="field text-sm"
+        >
+          {orgs.map((o) => (
+            <option key={o.id} value={o.id}>{o.name}</option>
+          ))}
+        </select>
+      )}
+      <select
+        value={assigneeId ?? ""}
+        onChange={(e) => onChange(e.target.value || null)}
+        className="field text-sm"
+      >
+        <option value="">ללא האצלה</option>
+        {others.map((m) => (
+          <option key={m.membership.user_id} value={m.membership.user_id}>
+            {m.profile?.full_name ?? m.membership.user_id}
+          </option>
+        ))}
+        {/* Keep current value if not in list (edge case) */}
+        {assigneeId && assigneeId !== currentUserId && !others.find((m) => m.membership.user_id === assigneeId) && (
+          <option value={assigneeId}>{assigneeId}</option>
+        )}
+      </select>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 
 function AssigneePicker({
   value,

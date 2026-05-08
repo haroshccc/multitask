@@ -535,9 +535,9 @@ export function TaskRow({
         ref={setDragRef}
         className={cn(
           "group relative flex items-start gap-1.5 rounded-md transition-colors px-1.5 py-1 hover:bg-ink-50",
-          // Ownership visual modes — border style only (no bg tint, avoids conflict with list colors)
-          taskOwnershipMode === "assigned" && !isSelected && "border border-dotted border-ink-400",
-          taskOwnershipMode === "delegated" && !isSelected && "border border-dashed border-ink-400",
+          // Ownership visual modes
+          taskOwnershipMode === "assigned" && !isSelected && "border border-dotted border-rose-300 bg-rose-50/60",
+          taskOwnershipMode === "delegated" && !isSelected && "border border-dashed border-rose-300 bg-rose-50/40",
           isDragging && "opacity-40",
           isOverNest && "bg-primary-50 ring-1 ring-primary-300",
           isSelected && "bg-primary-50/60 ring-1 ring-primary-300",

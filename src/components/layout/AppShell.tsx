@@ -25,6 +25,7 @@ import { useUndoStore, useCanUndo, useCanRedo } from "@/lib/undo/store";
 import { useEffect } from "react";
 import { useAuth } from "@/lib/auth/AuthContext";
 import { useRealtimeSync } from "@/lib/hooks/useRealtimeSync";
+import { useUnreadNotificationsCount } from "@/lib/hooks/useNotifications";
 import { cn } from "@/lib/utils/cn";
 import { QuickCapture } from "@/components/capture/QuickCapture";
 import { AnimatedFab } from "@/components/capture/AnimatedFab";
@@ -73,6 +74,7 @@ export function AppShell() {
 
   const canUndo = useCanUndo();
   const canRedo = useCanRedo();
+  const { data: unreadCount = 0 } = useUnreadNotificationsCount();
 
   // Global keyboard shortcuts:
   //   Cmd/Ctrl+K       → search
@@ -186,9 +188,25 @@ export function AppShell() {
           >
             <Search className="w-5 h-5 text-ink-600" />
           </button>
-          <button className="p-2 rounded-xl hover:bg-ink-100 opacity-40 cursor-not-allowed" aria-label="התראות (בקרוב)" title="התראות — בקרוב" disabled>
-            <Bell className="w-5 h-5 text-ink-600" />
-          </button>
+          <NavLink
+            to="/app/notifications"
+            className={({ isActive }) =>
+              cn("relative p-2 rounded-xl transition-colors", isActive ? "bg-ink-900 text-white" : "hover:bg-ink-100")
+            }
+            aria-label="התראות"
+            title="התראות"
+          >
+            {({ isActive }) => (
+              <>
+                <Bell className={cn("w-5 h-5", isActive ? "text-white" : "text-ink-600")} />
+                {unreadCount > 0 && (
+                  <span className="absolute top-0.5 end-0.5 min-w-[16px] h-4 px-0.5 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center">
+                    {unreadCount > 9 ? "9+" : unreadCount}
+                  </span>
+                )}
+              </>
+            )}
+          </NavLink>
           <button
             onClick={() => setCaptureOpen(true)}
             className="p-2 rounded-xl bg-primary-500 text-white hover:bg-primary-600"

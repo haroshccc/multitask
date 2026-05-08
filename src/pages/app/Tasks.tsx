@@ -178,9 +178,11 @@ export function Tasks() {
   );
 
   // Build per-list trees + a count map for header badges.
+  // Pass knownListIds so tasks delegated to me from foreign lists fall into unassigned.
+  const knownListIds = useMemo(() => new Set(lists.map((l) => l.id)), [lists]);
   const { listTrees, counts } = useMemo(
-    () => buildTrees(tasks),
-    [tasks]
+    () => buildTrees(tasks, knownListIds),
+    [tasks, knownListIds]
   );
 
   // Columns to render: "unassigned" always visible and pinned, then the rest.
@@ -895,11 +897,15 @@ interface BuildResult {
 
 const UNASSIGNED_KEY = "__unassigned__";
 
-function buildTrees(tasks: Task[]): BuildResult {
-  // Group by list
+function buildTrees(tasks: Task[], knownListIds?: Set<string>): BuildResult {
+  // Group by list. Tasks delegated to me from an unknown list → unassigned.
   const byList = new Map<string, Task[]>();
   for (const t of tasks) {
-    const key = t.task_list_id ?? UNASSIGNED_KEY;
+    const listId = t.task_list_id;
+    const key =
+      listId && knownListIds && !knownListIds.has(listId)
+        ? UNASSIGNED_KEY
+        : (listId ?? UNASSIGNED_KEY);
     if (!byList.has(key)) byList.set(key, []);
     byList.get(key)!.push(t);
   }

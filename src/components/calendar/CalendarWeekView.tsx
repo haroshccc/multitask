@@ -7,6 +7,7 @@ import {
   MIN,
   addDays,
   clipItem,
+  isHourless,
   isMultiDay,
   isOverdueTask,
   isPast,
@@ -89,6 +90,26 @@ export function CalendarWeekView({
     [multiDayBands]
   );
 
+  // Hourless tasks per day-column — tasks at midnight (no specific time).
+  // These render in the all-day band, not in the timed grid.
+  const hourlessByDay = useMemo(
+    () =>
+      days.map((day) => {
+        const dayStart = startOfDay(day);
+        const dayEnd = new Date(dayStart.getTime() + 24 * HOUR);
+        return items.filter(
+          (raw) =>
+            !multiDayItemIds.has(raw.id) &&
+            !raw.allDay &&
+            isHourless(raw) &&
+            raw.start >= dayStart &&
+            raw.start < dayEnd
+        );
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [items, weekStart.getTime(), multiDayItemIds]
+  );
+
   const perDay = useMemo(
     () =>
       days.map((day) => {
@@ -98,6 +119,7 @@ export function CalendarWeekView({
         for (const raw of items) {
           if (multiDayItemIds.has(raw.id)) continue; // handled by the band row
           if (raw.allDay) continue; // handled by the band row
+          if (isHourless(raw)) continue; // handled by the hourless row above the grid
           if (raw.start >= dayEnd || raw.end <= dayStart) continue;
           const clipped = clipItem(raw, dayStart, dayEnd);
           if (!clipped) continue;
@@ -343,6 +365,43 @@ export function CalendarWeekView({
           ))}
         </div>
       </div>
+
+      {/* Hourless tasks row — daily tasks with no specific time appear here,
+          above the timed grid, one chip per task per day-column. */}
+      {hourlessByDay.some((col) => col.length > 0) && (
+        <div
+          className="grid border-b border-ink-200 bg-white"
+          style={headerGrid()}
+        >
+          <div className="text-[10px] text-ink-500 px-2 py-1 self-start">
+            ללא שעה
+          </div>
+          <div className="col-span-7 grid grid-cols-7">
+            {hourlessByDay.map((dayItems, i) => (
+              <div
+                key={i}
+                className="border-s border-ink-100/60 px-0.5 py-1 flex flex-col gap-0.5 min-h-[28px]"
+              >
+                {dayItems.map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => onItemClick(item)}
+                    title={itemTooltip(item)}
+                    className={cn(
+                      "w-full text-start text-[11px] leading-tight truncate rounded px-1 py-0.5 font-medium",
+                      item.kind === "task"
+                        ? "bg-primary-100 text-primary-800 hover:bg-primary-200"
+                        : "bg-violet-100 text-violet-800 hover:bg-violet-200"
+                    )}
+                  >
+                    {item.title}
+                  </button>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Body */}
       <div className="grid" style={{ ...headerGrid(), height: gridHeight }}>

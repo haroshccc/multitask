@@ -117,11 +117,11 @@ export function TaskEditModal({
   const { data: lists = [] } = useTaskLists();
   const { data: myStatuses = [] } = useMyTaskStatuses();
   const { data: allOrgs = [] } = useUserOrganizations();
+  const { user, activeOrganizationId } = useAuth();
   const [delegateOrgId, setDelegateOrgId] = useState<string | null>(null);
   // For delegation: use the explicitly chosen org, falling back to the active org.
-  const effectiveDelegateOrgId = delegateOrgId ?? (allOrgs[0]?.id ?? null);
+  const effectiveDelegateOrgId = delegateOrgId ?? activeOrganizationId ?? (allOrgs[0]?.id ?? null);
   const { data: delegateOrgMembers = [] } = useOrgMembersForOrg(effectiveDelegateOrgId);
-  const { user } = useAuth();
   const updateTask = useUpdateTask();
   const completeTask = useCompleteTask();
   const createTask = useCreateTask();

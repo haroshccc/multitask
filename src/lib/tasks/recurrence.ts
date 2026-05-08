@@ -109,22 +109,23 @@ export function getActiveOccurrence(
  * "15 במאי 9:00" for anything beyond the ±1 day window.
  */
 export function formatRelativeOccurrence(occ: Date, now: Date = new Date()): string {
-  const time = occ.toLocaleTimeString("he-IL", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  // Midnight = "no specific time" rule; show day label only.
+  const hasSpecificTime = occ.getHours() !== 0 || occ.getMinutes() !== 0;
+  const time = hasSpecificTime
+    ? " " + occ.toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })
+    : "";
   const dayDiff = Math.round(
     (startOfDay(occ).getTime() - startOfDay(now).getTime()) / DAY_MS
   );
-  if (dayDiff === 0) return `היום ${time}`;
-  if (dayDiff === 1) return `מחר ${time}`;
-  if (dayDiff === -1) return `אתמול ${time}`;
+  if (dayDiff === 0) return `היום${time}`;
+  if (dayDiff === 1) return `מחר${time}`;
+  if (dayDiff === -1) return `אתמול${time}`;
   if (dayDiff > 1 && dayDiff < 7) {
     const weekday = occ.toLocaleDateString("he-IL", { weekday: "long" });
-    return `${weekday} ${time}`;
+    return `${weekday}${time}`;
   }
   const date = occ.toLocaleDateString("he-IL", { day: "numeric", month: "long" });
-  return `${date} ${time}`;
+  return `${date}${time}`;
 }
 
 function startOfDay(d: Date): Date {

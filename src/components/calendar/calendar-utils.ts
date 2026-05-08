@@ -551,10 +551,11 @@ export function expandRrule(
   if (anchor >= effectiveEnd) return [];
 
   const out: Date[] = [];
-  // When BYHOUR/BYMINUTE/BYSLOT explicitly drive time slots, compare against
-  // the anchor's DATE only — otherwise an anchor at 14:00 with a "9:00 daily"
-  // rule would lose today's 9:00 slot for being "before the anchor".
-  const useDateOnlyCompare = !!(byhour || byminute || byslot);
+  // Always compare against the anchor's DATE only for DAILY/WEEKLY rules,
+  // since time-of-day comes from BYHOUR (or defaults to midnight) — not the
+  // anchor's clock. An anchor at 14:00 would otherwise drop the same day's
+  // midnight or 9:00 slot as "before the anchor".
+  const useDateOnlyCompare = freq === "DAILY" || freq === "WEEKLY";
   const anchorDateOnly = (() => {
     const x = new Date(anchor);
     x.setHours(0, 0, 0, 0);
@@ -577,11 +578,15 @@ export function expandRrule(
   let slotsPerDay: Array<{ h: number; m: number }>;
   if (byslot && byslot.length > 0) {
     slotsPerDay = [...byslot].sort((a, b) => (a.h - b.h) || (a.m - b.m));
-  } else {
-    const hours = byhour && byhour.length > 0 ? [...byhour].sort((a, b) => a - b) : [anchor.getHours()];
-    const minutes = byminute && byminute.length > 0 ? [...byminute].sort((a, b) => a - b) : byhour && byhour.length > 0 ? [0] : [anchor.getMinutes()];
+  } else if (byhour && byhour.length > 0) {
+    const hours = [...byhour].sort((a, b) => a - b);
+    const minutes = byminute && byminute.length > 0 ? [...byminute].sort((a, b) => a - b) : [0];
     slotsPerDay = [];
     for (const h of hours) for (const m of minutes) slotsPerDay.push({ h, m });
+  } else {
+    // No explicit time in the rule → midnight (start of day). This means
+    // "no specific time" tasks always reset at 00:00, not at the anchor's hour.
+    slotsPerDay = [{ h: 0, m: 0 }];
   }
 
   // Helper: emit every slot for a given y/m/d, in order.

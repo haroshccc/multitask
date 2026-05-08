@@ -50,10 +50,12 @@ import {
 } from "@/lib/hooks";
 import { pushUndo } from "@/lib/undo/store";
 import { useTaskSelectionStore } from "@/lib/selection/store";
+import { useOrgScope } from "@/lib/hooks/useOrgScope";
 import type { Task, TaskList } from "@/lib/types/domain";
 
 export function Tasks() {
   const [filters, setFilters] = useFiltersFromUrl();
+  const { userId } = useOrgScope();
   const { data: tasks = [] } = useTasks(filters);
   const { data: lists = [] } = useTaskLists();
   const { data: visibility } = useListVisibility("tasks");
@@ -824,6 +826,11 @@ export function Tasks() {
       <TaskEditModal
         taskId={editingTaskId}
         onClose={() => setEditingTaskId(null)}
+        assigneeView={(() => {
+          if (!editingTaskId || !userId) return false;
+          const t = tasks.find((x) => x.id === editingTaskId);
+          return !!t && t.assignee_user_id === userId && t.owner_id !== userId;
+        })()}
       />
 
       {archiveOpen && <ArchiveModal onClose={() => setArchiveOpen(false)} />}

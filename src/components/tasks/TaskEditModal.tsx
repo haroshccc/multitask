@@ -99,6 +99,8 @@ interface TaskEditModalProps {
    * can flip between event and task without losing the time/date context.
    */
   topSlot?: React.ReactNode;
+  /** When true, the modal is read-only (task delegated to the current user). */
+  assigneeView?: boolean;
 }
 
 type Tab = "overview" | "schedule" | "history" | "attachments";
@@ -110,6 +112,7 @@ export function TaskEditModal({
   createDraft = null,
   onCreated,
   topSlot,
+  assigneeView = false,
 }: TaskEditModalProps) {
   const isCreate = !taskId && !!createDraft;
   const open = !!taskId || isCreate;
@@ -518,7 +521,8 @@ export function TaskEditModal({
                 </button>
                 <input
                   value={title}
-                  onChange={(e) => setTitle(e.target.value)}
+                  readOnly={assigneeView}
+                  onChange={assigneeView ? undefined : (e) => setTitle(e.target.value)}
                   placeholder="שם המשימה"
                   className="text-lg font-semibold text-ink-900 bg-transparent border-0 outline-none flex-1 min-w-0"
                 />
@@ -534,6 +538,13 @@ export function TaskEditModal({
             {isCreate && topSlot && (
               <div className="px-5 py-2 border-b border-ink-200 bg-ink-50/40">
                 {topSlot}
+              </div>
+            )}
+
+            {assigneeView && (
+              <div className="px-5 py-2.5 bg-amber-50 border-b border-amber-200 text-sm text-amber-800 flex items-center gap-2">
+                <span aria-hidden="true">🔒</span>
+                <span>משימה הוצאלה לך — ניתן לסמן כסיום ✓ בלבד. יתר הפרטים לעיון.</span>
               </div>
             )}
 
@@ -558,6 +569,7 @@ export function TaskEditModal({
             </div>
 
             {/* Body */}
+            <fieldset disabled={assigneeView} style={{ border: "none", padding: 0, margin: 0 }}>
             <div className="p-5 max-h-[calc(100vh-16rem)] overflow-y-auto">
               {tab === "overview" && (
                 <div className="space-y-4">
@@ -868,18 +880,16 @@ export function TaskEditModal({
 
               {tab === "attachments" && <AttachmentsTab />}
             </div>
+            </fieldset>
 
-            {/* Footer: explicit save. The autosave-on-blur in each field
-                still works (typing → blur → mutate), so this button is the
-                "commit unblurred edits" affordance + the visible save
-                indicator the user wants. */}
+            {/* Footer */}
             <div className="px-5 py-3 border-t border-ink-200 flex items-center justify-end gap-2">
-              {saveError && (
+              {!assigneeView && saveError && (
                 <span className="text-xs font-medium text-danger-600 me-auto">
                   {saveError}
                 </span>
               )}
-              {!saveError && dirty && (
+              {!assigneeView && !saveError && dirty && (
                 <span className="text-xs font-medium text-warning-600 me-auto">
                   יש שינויים לא שמורים
                 </span>
@@ -891,22 +901,24 @@ export function TaskEditModal({
               >
                 סגור
               </button>
-              <button
-                onClick={async () => {
-                  const ok = await saveAll();
-                  if (ok) onClose();
-                }}
-                disabled={!dirty || updateTask.isPending}
-                className={cn(
-                  "btn-primary text-sm",
-                  (!dirty || updateTask.isPending) &&
-                    "opacity-40 cursor-not-allowed"
-                )}
-                type="button"
-              >
-                <Save className="w-3.5 h-3.5" />
-                {updateTask.isPending ? "שומר..." : "שמור"}
-              </button>
+              {!assigneeView && (
+                <button
+                  onClick={async () => {
+                    const ok = await saveAll();
+                    if (ok) onClose();
+                  }}
+                  disabled={!dirty || updateTask.isPending}
+                  className={cn(
+                    "btn-primary text-sm",
+                    (!dirty || updateTask.isPending) &&
+                      "opacity-40 cursor-not-allowed"
+                  )}
+                  type="button"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  {updateTask.isPending ? "שומר..." : "שמור"}
+                </button>
+              )}
             </div>
           </motion.div>
 

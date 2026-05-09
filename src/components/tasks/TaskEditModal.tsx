@@ -92,20 +92,9 @@ interface TaskEditModalProps {
   onClose: () => void;
   /** Which tab should be active when the modal opens. Default "overview". */
   defaultTab?: "overview" | "schedule" | "history" | "attachments";
-  /**
-   * When provided AND `taskId` is null, the modal opens in **create mode**:
-   * the form is pre-filled from the draft, "save" creates the task, and
-   * the new id is reported via `onCreated` ONLY on a successful save.
-   * Closing without saving does NOT create anything.
-   */
   createDraft?: TaskCreateDraft | null;
   /** Fires once after the create-mode save completes. */
   onCreated?: (taskId: string) => void;
-  /**
-   * Optional UI strip rendered at the top of the modal in CREATE mode
-   * only — used by Calendar's "create event/task picker" so the user
-   * can flip between event and task without losing the time/date context.
-   */
   topSlot?: React.ReactNode;
   /** When true, the modal is read-only (task delegated to the current user). */
   assigneeView?: boolean;
@@ -130,7 +119,6 @@ export function TaskEditModal({
   const { data: allOrgs = [] } = useUserOrganizations();
   const { user, activeOrganizationId } = useAuth();
   const [delegateOrgId, setDelegateOrgId] = useState<string | null>(null);
-  // For delegation: use the explicitly chosen org, falling back to the active org.
   const effectiveDelegateOrgId = delegateOrgId ?? activeOrganizationId ?? (allOrgs[0]?.id ?? null);
   const { data: delegateOrgMembers = [] } = useOrgMembersForOrg(effectiveDelegateOrgId);
   const updateTask = useUpdateTask();
@@ -140,16 +128,11 @@ export function TaskEditModal({
 
   const [tab, setTab] = useState<Tab>(defaultTab);
 
-  // If the caller changes `defaultTab`, honour it on re-open.
   useEffect(() => {
     if (open) setTab(defaultTab);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [taskId, isCreate]);
 
-  // Local draft state — committed to DB only via the explicit save button
-  // (or via the unsaved-changes guard on close). Autosave-on-blur was
-  // removed in favor of full draft mode so the user has a single, clear
-  // mental model: edit → save (or close → guard).
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [notes, setNotes] = useState("");
@@ -159,13 +142,10 @@ export function TaskEditModal({
   const [tags, setTags] = useState<string[]>([]);
   const [location, setLocation] = useState("");
   const [externalUrl, setExternalUrl] = useState("");
-  const [scheduledAt, setScheduledAt] = useState<string | null>(null); // ISO
-  const [deadlineAt, setDeadlineAt] = useState<string | null>(null); // ISO — hard deadline, distinct from scheduledAt
+  const [scheduledAt, setScheduledAt] = useState<string | null>(null);
+  const [deadlineAt, setDeadlineAt] = useState<string | null>(null);
   const [recurrenceRule, setRecurrenceRule] = useState<string | null>(null);
 
-  // Recurring tasks need a scheduled_at to anchor expansion. When the user
-  // enables recurrence on a task with no scheduled_at, anchor to today.
-  // If the rule has a specific time (BYHOUR) use it; otherwise use start-of-day.
   useEffect(() => {
     if (!recurrenceRule) return;
     if (scheduledAt) return;
@@ -185,23 +165,17 @@ export function TaskEditModal({
   const [requiresApproval, setRequiresApproval] = useState<boolean>(false);
   const [isPhase, setIsPhase] = useState<boolean>(false);
 
-  // Goal / habit configuration. A task is a goal iff goalEnabled === true.
-  // When disabled, all goal_* columns are written as null (or default true
-  // for goal_track_time, which has a NOT NULL default).
   const [goalEnabled, setGoalEnabled] = useState<boolean>(false);
   const [goalPeriod, setGoalPeriod] = useState<"day" | "week" | "month">("week");
   const [goalTarget, setGoalTarget] = useState<number>(3);
-  /** "Ongoing" — true means no end milestone, just track forever. */
   const [goalForever, setGoalForever] = useState<boolean>(true);
   const [goalMinStreak, setGoalMinStreak] = useState<number>(4);
-  /** YYYY-MM-DD; null means "use today" at save time. */
   const [goalStartedOn, setGoalStartedOn] = useState<string | null>(null);
   const [goalTrackTime, setGoalTrackTime] = useState<boolean>(true);
   const [goalType, setGoalType] = useState<"achievement" | "habit">("habit");
   const [goalDeadline, setGoalDeadline] = useState<string | null>(null);
 
   useEffect(() => {
-    // Edit mode: hydrate from the persisted task.
     if (task) {
       setTitle(task.title);
       setDescription(task.description ?? "");
@@ -235,8 +209,6 @@ export function TaskEditModal({
       setGoalTrackTime(task.goal_track_time ?? true);
       return;
     }
-    // Create mode: seed from the draft (if any). Closing without saving
-    // never creates anything.
     if (isCreate && createDraft) {
       setTitle(createDraft.title ?? "");
       setDescription(createDraft.description ?? "");
@@ -270,11 +242,6 @@ export function TaskEditModal({
     }
   }, [task?.id, isCreate]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /** Dirty:
-   *  - edit mode: any draft field differs from the persisted task row.
-   *  - create mode: the user typed at least a title (the form is otherwise
-   *    pre-filled by the draft, which we don't count as "their changes").
-   */
   const dirty = useMemo(() => {
     if (isCreate) return title.trim().length > 0;
     if (!task) return false;
@@ -346,9 +313,6 @@ export function TaskEditModal({
 
   const saveAll = async (): Promise<boolean> => {
     setSaveError(null);
-    // Create mode — the entity does not exist yet. Build it now, surface
-    // its id via `onCreated`, then close. If the user discards instead,
-    // nothing is created.
     if (isCreate) {
       if (!title.trim()) return false;
       try {
@@ -404,9 +368,6 @@ export function TaskEditModal({
     }
 
     if (!task) return true;
-    // Snapshot the previous state of every editable field so the undo entry
-    // can put the task back exactly where it was — title, schedule, list,
-    // tags, the lot. One Ctrl+Z reverses the whole save.
     const prevPatch = {
       title: task.title,
       description: task.description,
@@ -487,7 +448,6 @@ export function TaskEditModal({
     onClose();
   };
 
-  // Ctrl+S saves while the modal is open.
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -659,7 +619,6 @@ export function TaskEditModal({
                     </Field>
                   </div>
 
-                  {/* Approval workflow — only relevant when assigned to someone else */}
                   {assigneeId && assigneeId !== user?.id && (
                   <div className="rounded-xl border border-ink-200 p-3 space-y-2.5">
                     <label className="flex items-center gap-2.5 cursor-pointer select-none">
@@ -672,7 +631,6 @@ export function TaskEditModal({
                       <span className="text-sm font-medium text-ink-700">דורש אישור שלי לסיום</span>
                     </label>
 
-                    {/* Assignee action: submit for approval */}
                     {task && task.requires_approval &&
                       task.assignee_user_id === user?.id &&
                       task.status === "in_progress" &&
@@ -694,7 +652,6 @@ export function TaskEditModal({
                       </button>
                     )}
 
-                    {/* Pending badge for assignee */}
                     {task && task.status === "pending_approval" &&
                       task.assignee_user_id === user?.id &&
                       task.approver_user_id !== user?.id && (
@@ -704,7 +661,6 @@ export function TaskEditModal({
                       </div>
                     )}
 
-                    {/* Approver actions: approve / reject */}
                     {task && task.status === "pending_approval" &&
                       task.approver_user_id === user?.id && (
                       <div className="space-y-2">
@@ -787,10 +743,6 @@ export function TaskEditModal({
                     </Field>
                   </div>
 
-                  {/* Phase toggle — only allowed for top-level tasks. A phase
-                      groups children under a single lifecycle band; planned
-                      vs. actual is shown as an overage stripe in Gantt /
-                      Calendar (SPEC §15.11 / §16 / §17). */}
                   {task && task.parent_task_id === null && (
                     <label className="flex items-start gap-2 cursor-pointer select-none p-2 rounded-md border border-ink-200 hover:bg-ink-50">
                       <input
@@ -992,11 +944,6 @@ export function TaskEditModal({
   );
 }
 
-/**
- * "מקור" row shown in the overview tab when the task was created from a
- * thought. Clicking the link opens the thought's own edit modal in place
- * so the user can see the original context without leaving the task.
- */
 function TaskSourceThoughtRow({ thoughtId }: { thoughtId: string }) {
   const { data: thought } = useThought(thoughtId);
   const [open, setOpen] = useState(false);
@@ -1071,18 +1018,10 @@ function Field({
   );
 }
 
-// =============================================================================
-// Goal / habit configuration section, rendered inside the schedule tab right
-// after recurrence. Toggling "הגדר כיעד" off writes nulls to all goal_*
-// columns at save time; the section just hides the inputs locally.
-// =============================================================================
-
 const GOAL_PERIOD_OPTIONS: Array<{
   id: "day" | "week" | "month";
   label: string;
-  /** Word used in "X פעמים ב…". */
   perLabel: string;
-  /** Word used for the streak unit ("ימים" / "שבועות" / "חודשים"). */
   unitLabel: string;
 }> = [
   { id: "day", label: "יומי", perLabel: "ביום", unitLabel: "ימים" },
@@ -1112,28 +1051,13 @@ function GoalConfigSection(props: {
   setTrackTime: (v: boolean) => void;
 }) {
   const {
-    enabled,
-    setEnabled,
-    hasRecurrence,
-    goalType,
-    setGoalType,
-    goalDeadline,
-    setGoalDeadline,
-    period,
-    setPeriod,
-    target,
-    setTarget,
-    forever,
-    setForever,
-    minStreak,
-    setMinStreak,
-    startedOn,
-    setStartedOn,
-    trackTime,
-    setTrackTime,
+    enabled, setEnabled, hasRecurrence,
+    goalType, setGoalType, goalDeadline, setGoalDeadline,
+    period, setPeriod, target, setTarget,
+    forever, setForever, minStreak, setMinStreak,
+    startedOn, setStartedOn, trackTime, setTrackTime,
   } = props;
-  const periodMeta =
-    GOAL_PERIOD_OPTIONS.find((p) => p.id === period) ?? GOAL_PERIOD_OPTIONS[1];
+  const periodMeta = GOAL_PERIOD_OPTIONS.find((p) => p.id === period) ?? GOAL_PERIOD_OPTIONS[1];
 
   return (
     <div>
@@ -1154,7 +1078,6 @@ function GoalConfigSection(props: {
 
         {enabled && (
           <>
-            {/* Goal type toggle */}
             <div className="inline-flex rounded-md border border-ink-200 overflow-hidden text-sm">
               <button
                 type="button"
@@ -1187,7 +1110,7 @@ function GoalConfigSection(props: {
             {goalType === "achievement" && (
               <div className="space-y-2 ps-6 border-s-2 border-amber-200">
                 <p className="text-xs text-ink-500">
-                  יעד חד-פעמי — יסומן כהושג כשהמשימה תסומן כ"הושלמה".
+                  יעד חד-פעמי — יסומן כהושג כשהמשימה תסומן כה"הושלמה".
                 </p>
                 <div className="flex items-center gap-2 text-sm flex-wrap">
                   <span className="text-ink-700">דד-ליין (אופציונלי):</span>
@@ -1217,112 +1140,46 @@ function GoalConfigSection(props: {
                     הרגל ללא חזרה לא יימדד — הגדר חזרה בטאב "תזמון".
                   </div>
                 )}
-
-                {/* Target + period on one row */}
                 <div className="flex items-center gap-2 text-sm">
                   <span className="text-ink-700">לבצע</span>
                   <div className="inline-flex items-center gap-2">
                     <div className="inline-flex items-center border border-ink-200 rounded-md overflow-hidden bg-white">
-                      <button
-                        type="button"
-                        onClick={() => setTarget(Math.max(1, target - 1))}
-                        className="w-8 py-1.5 flex items-center justify-center text-ink-500 hover:bg-ink-100 active:bg-ink-200 text-sm leading-none select-none"
-                        aria-label="הפחת"
-                      >
-                        −
-                      </button>
-                      <span className="w-8 text-center text-sm font-medium text-ink-900 tabular-nums select-none">
-                        {target}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setTarget(target + 1)}
-                        className="w-8 py-1.5 flex items-center justify-center text-ink-500 hover:bg-ink-100 active:bg-ink-200 text-sm leading-none select-none"
-                        aria-label="הוסף"
-                      >
-                        +
-                      </button>
+                      <button type="button" onClick={() => setTarget(Math.max(1, target - 1))} className="w-8 py-1.5 flex items-center justify-center text-ink-500 hover:bg-ink-100 active:bg-ink-200 text-sm leading-none select-none" aria-label="הפחת">−</button>
+                      <span className="w-8 text-center text-sm font-medium text-ink-900 tabular-nums select-none">{target}</span>
+                      <button type="button" onClick={() => setTarget(target + 1)} className="w-8 py-1.5 flex items-center justify-center text-ink-500 hover:bg-ink-100 active:bg-ink-200 text-sm leading-none select-none" aria-label="הוסף">+</button>
                     </div>
-                    <select
-                      value={period}
-                      onChange={(e) => setPeriod(e.target.value as "day" | "week" | "month")}
-                      className="field text-sm py-1"
-                    >
-                      {GOAL_PERIOD_OPTIONS.map((p) => (
-                        <option key={p.id} value={p.id}>{p.perLabel}</option>
-                      ))}
+                    <select value={period} onChange={(e) => setPeriod(e.target.value as "day" | "week" | "month")} className="field text-sm py-1">
+                      {GOAL_PERIOD_OPTIONS.map((p) => (<option key={p.id} value={p.id}>{p.perLabel}</option>))}
                     </select>
                   </div>
                 </div>
-
-                {/* Forever toggle + min streak */}
                 <div className="space-y-1.5">
                   <label className="inline-flex items-center gap-2 text-sm cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={forever}
-                      onChange={(e) => setForever(e.target.checked)}
-                      className="w-4 h-4 rounded border-ink-300 text-primary-600 focus:ring-primary-500"
-                    />
+                    <input type="checkbox" checked={forever} onChange={(e) => setForever(e.target.checked)} className="w-4 h-4 rounded border-ink-300 text-primary-600 focus:ring-primary-500" />
                     <span>ללא סיום (ההרגל ימשיך לעד)</span>
                   </label>
                   {!forever && (
                     <div className="flex items-center gap-2 flex-wrap text-sm ps-6">
                       <span className="text-ink-700">אבן דרך ראשונה:</span>
                       <div className="inline-flex items-center border border-ink-200 rounded-md overflow-hidden bg-white">
-                        <button
-                          type="button"
-                          onClick={() => setMinStreak(Math.max(1, minStreak - 1))}
-                          className="w-8 py-1.5 flex items-center justify-center text-ink-500 hover:bg-ink-100 active:bg-ink-200 text-sm leading-none select-none"
-                          aria-label="הפחת"
-                        >
-                          −
-                        </button>
-                        <span className="w-8 text-center text-sm font-medium text-ink-900 tabular-nums select-none">
-                          {minStreak}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => setMinStreak(minStreak + 1)}
-                          className="w-8 py-1.5 flex items-center justify-center text-ink-500 hover:bg-ink-100 active:bg-ink-200 text-sm leading-none select-none"
-                          aria-label="הוסף"
-                        >
-                          +
-                        </button>
+                        <button type="button" onClick={() => setMinStreak(Math.max(1, minStreak - 1))} className="w-8 py-1.5 flex items-center justify-center text-ink-500 hover:bg-ink-100 active:bg-ink-200 text-sm leading-none select-none" aria-label="הפחת">−</button>
+                        <span className="w-8 text-center text-sm font-medium text-ink-900 tabular-nums select-none">{minStreak}</span>
+                        <button type="button" onClick={() => setMinStreak(minStreak + 1)} className="w-8 py-1.5 flex items-center justify-center text-ink-500 hover:bg-ink-100 active:bg-ink-200 text-sm leading-none select-none" aria-label="הוסף">+</button>
                       </div>
                       <span className="text-ink-700">{periodMeta.unitLabel} ברצף</span>
                     </div>
                   )}
                 </div>
-
-                {/* Started-on date */}
                 <div className="flex items-center gap-2 flex-wrap text-sm">
                   <span className="text-ink-700">התחלת מעקב:</span>
-                  <input
-                    type="date"
-                    value={startedOn ?? ""}
-                    onChange={(e) => setStartedOn(e.target.value || null)}
-                    className="field text-sm py-1.5 w-auto"
-                    placeholder="היום"
-                  />
-                  <span className="text-[11px] text-ink-400">
-                    ריק = יישמר היום אוטומטית
-                  </span>
+                  <input type="date" value={startedOn ?? ""} onChange={(e) => setStartedOn(e.target.value || null)} className="field text-sm py-1.5 w-auto" placeholder="היום" />
+                  <span className="text-[11px] text-ink-400">ריק = יישמר היום אוטומטית</span>
                 </div>
-
-                {/* Track time? */}
                 <label className="inline-flex items-center gap-2 text-sm cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={trackTime}
-                    onChange={(e) => setTrackTime(e.target.checked)}
-                    className="w-4 h-4 rounded border-ink-300 text-primary-600 focus:ring-primary-500"
-                  />
+                  <input type="checkbox" checked={trackTime} onChange={(e) => setTrackTime(e.target.checked)} className="w-4 h-4 rounded border-ink-300 text-primary-600 focus:ring-primary-500" />
                   <span>עקבי גם אחרי זמן בפועל (סטופר/הזנה ידנית)</span>
                 </label>
-                <p className="text-[11px] text-ink-400 ps-6 -mt-1">
-                  כבוי = לא ניצור תזכורות "פעימה ללא זמן" עבור משימה זו.
-                </p>
+                <p className="text-[11px] text-ink-400 ps-6 -mt-1">כבוי = לא ניצור תזכורות "פעימה ללא זמן" עבור משימה זו.</p>
               </div>
             )}
           </>
@@ -1337,43 +1194,21 @@ function GoalConfigSection(props: {
   );
 }
 
-function UrgencyBars({
-  value,
-  onChange,
-}: {
-  value: number;
-  onChange: (v: number) => void;
-}) {
+function UrgencyBars({ value, onChange }: { value: number; onChange: (v: number) => void }) {
   const filled = Math.min(3, Math.max(0, value));
   return (
     <div className="flex items-center gap-2">
       {[0, 1, 2, 3].map((n) => (
-        <button
-          key={n}
-          type="button"
-          onClick={() => onChange(n)}
-          className={cn(
-            "flex flex-col items-center gap-1 p-2 rounded-lg border transition-colors",
-            n === filled
-              ? "border-primary-500 bg-primary-50"
-              : "border-ink-200 bg-white hover:bg-ink-50"
-          )}
-          title={n === 0 ? "ללא דירוג" : `${n}/3`}
-        >
+        <button key={n} type="button" onClick={() => onChange(n)}
+          className={cn("flex flex-col items-center gap-1 p-2 rounded-lg border transition-colors",
+            n === filled ? "border-primary-500 bg-primary-50" : "border-ink-200 bg-white hover:bg-ink-50")}
+          title={n === 0 ? "ללא דירוג" : `${n}/3`}>
           {n === 0 ? (
-            <span className="h-[16px] flex items-center justify-center text-ink-400 text-sm">
-              ∅
-            </span>
+            <span className="h-[16px] flex items-center justify-center text-ink-400 text-sm">∅</span>
           ) : (
             <div className="flex flex-col items-center gap-[3px]">
               {[3, 2, 1].map((row) => (
-                <span
-                  key={row}
-                  className={cn(
-                    "h-[3px] w-6 rounded-sm",
-                    row <= n ? "bg-ink-900" : "bg-ink-200"
-                  )}
-                />
+                <span key={row} className={cn("h-[3px] w-6 rounded-sm", row <= n ? "bg-ink-900" : "bg-ink-200")} />
               ))}
             </div>
           )}
@@ -1384,18 +1219,8 @@ function UrgencyBars({
   );
 }
 
-// ---------------------------------------------------------------------------
-// DelegationPicker — two-step org → user picker (excludes current user)
-// ---------------------------------------------------------------------------
-
 function DelegationPicker({
-  assigneeId,
-  orgs,
-  delegateOrgId,
-  onOrgChange,
-  members,
-  currentUserId,
-  onChange,
+  assigneeId, orgs, delegateOrgId, onOrgChange, members, currentUserId, onChange,
 }: {
   assigneeId: string | null;
   orgs: { id: string; name: string }[];
@@ -1409,28 +1234,17 @@ function DelegationPicker({
   return (
     <div className="flex flex-col gap-1.5">
       {orgs.length > 1 && (
-        <select
-          value={delegateOrgId ?? ""}
-          onChange={(e) => onOrgChange(e.target.value)}
-          className="field text-sm"
-        >
-          {orgs.map((o) => (
-            <option key={o.id} value={o.id}>{o.name}</option>
-          ))}
+        <select value={delegateOrgId ?? ""} onChange={(e) => onOrgChange(e.target.value)} className="field text-sm">
+          {orgs.map((o) => (<option key={o.id} value={o.id}>{o.name}</option>))}
         </select>
       )}
-      <select
-        value={assigneeId ?? ""}
-        onChange={(e) => onChange(e.target.value || null)}
-        className="field text-sm"
-      >
+      <select value={assigneeId ?? ""} onChange={(e) => onChange(e.target.value || null)} className="field text-sm">
         <option value="">ללא האצלה</option>
         {others.map((m) => (
           <option key={m.membership.user_id} value={m.membership.user_id}>
             {m.profile?.full_name ?? m.membership.user_id}
           </option>
         ))}
-        {/* Keep current value if not in list (edge case) */}
         {assigneeId && assigneeId !== currentUserId && !others.find((m) => m.membership.user_id === assigneeId) && (
           <option value={assigneeId}>{assigneeId}</option>
         )}
@@ -1444,28 +1258,14 @@ function DelegationPicker({
   );
 }
 
-function TagInput({
-  tags,
-  onChange,
-  onBlur,
-}: {
-  tags: string[];
-  onChange: (next: string[]) => void;
-  onBlur: () => void;
-}) {
+function TagInput({ tags, onChange, onBlur }: { tags: string[]; onChange: (next: string[]) => void; onBlur: () => void }) {
   const [draft, setDraft] = useState("");
   return (
     <div className="field flex flex-wrap items-center gap-1 min-h-[40px] px-2 py-1.5">
       {tags.map((t) => (
-        <span
-          key={t}
-          className="inline-flex items-center gap-1 rounded-full bg-ink-100 px-2 py-0.5 text-xs"
-        >
+        <span key={t} className="inline-flex items-center gap-1 rounded-full bg-ink-100 px-2 py-0.5 text-xs">
           {t}
-          <button
-            onClick={() => onChange(tags.filter((x) => x !== t))}
-            className="text-ink-500 hover:text-danger-500"
-          >
+          <button onClick={() => onChange(tags.filter((x) => x !== t))} className="text-ink-500 hover:text-danger-500">
             <X className="w-3 h-3" />
           </button>
         </span>
@@ -1473,24 +1273,10 @@ function TagInput({
       <input
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
-        onBlur={() => {
-          if (draft.trim()) {
-            onChange([...tags, draft.trim()]);
-            setDraft("");
-          }
-          onBlur();
-        }}
+        onBlur={() => { if (draft.trim()) { onChange([...tags, draft.trim()]); setDraft(""); } onBlur(); }}
         onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === ",") {
-            e.preventDefault();
-            if (draft.trim()) {
-              onChange([...tags, draft.trim()]);
-              setDraft("");
-            }
-          }
-          if (e.key === "Backspace" && !draft && tags.length > 0) {
-            onChange(tags.slice(0, -1));
-          }
+          if (e.key === "Enter" || e.key === ",") { e.preventDefault(); if (draft.trim()) { onChange([...tags, draft.trim()]); setDraft(""); } }
+          if (e.key === "Backspace" && !draft && tags.length > 0) { onChange(tags.slice(0, -1)); }
         }}
         placeholder={tags.length === 0 ? "הקלד תג והקש Enter" : ""}
         className="flex-1 min-w-[80px] bg-transparent outline-none text-sm"
@@ -1499,11 +1285,7 @@ function TagInput({
   );
 }
 
-function TimeEntriesTab({
-  task,
-}: {
-  task: { id: string; actual_seconds: number; estimated_hours?: number | null };
-}) {
+function TimeEntriesTab({ task }: { task: { id: string; actual_seconds: number; estimated_hours?: number | null } }) {
   const { data: entries = [] } = useTaskTimeEntries(task.id);
   const { data: active } = useActiveTimer();
   const startTimer = useStartTimer();
@@ -1514,7 +1296,6 @@ function TimeEntriesTab({
   const [showManual, setShowManual] = useState(false);
   const [timeUnit, setTimeUnit] = useTimeUnit();
   const isActive = active?.task_id === task.id;
-
   const [manualStart, setManualStart] = useState("");
   const [manualEnd, setManualEnd] = useState("");
   const [manualNote, setManualNote] = useState("");
@@ -1527,15 +1308,10 @@ function TimeEntriesTab({
       ended_at: new Date(manualEnd).toISOString(),
       note: manualNote || null,
     });
-    setManualStart("");
-    setManualEnd("");
-    setManualNote("");
-    setShowManual(false);
+    setManualStart(""); setManualEnd(""); setManualNote(""); setShowManual(false);
   };
 
-  const estimatedSeconds = task.estimated_hours
-    ? Math.round(Number(task.estimated_hours) * 3600)
-    : null;
+  const estimatedSeconds = task.estimated_hours ? Math.round(Number(task.estimated_hours) * 3600) : null;
 
   return (
     <div className="space-y-4">
@@ -1551,92 +1327,47 @@ function TimeEntriesTab({
               <div className="font-mono text-lg tabular-nums">
                 {formatSeconds(task.actual_seconds, timeUnit)}
                 {estimatedSeconds && (
-                  <span className="text-sm text-ink-500 ms-2">
-                    / {formatSeconds(estimatedSeconds, timeUnit)}
-                  </span>
+                  <span className="text-sm text-ink-500 ms-2">/ {formatSeconds(estimatedSeconds, timeUnit)}</span>
                 )}
               </div>
             </div>
           </div>
           {isActive ? (
-            <button onClick={() => stopTimer.mutate()} className="btn-primary text-sm">
-              <Pause className="w-4 h-4" />
-              עצור
-            </button>
+            <button onClick={() => stopTimer.mutate()} className="btn-primary text-sm"><Pause className="w-4 h-4" />עצור</button>
           ) : (
-            <button
-              onClick={() => startTimer.mutate({ taskId: task.id })}
-              className="btn-accent text-sm"
-            >
-              <Play className="w-4 h-4" />
-              התחל
-            </button>
+            <button onClick={() => startTimer.mutate({ taskId: task.id })} className="btn-accent text-sm"><Play className="w-4 h-4" />התחל</button>
           )}
         </div>
-        {/* Plan-vs-actual progress — visible regardless of estimate so users
-            can eyeball how close they are to their budget in real time. */}
-        <PlanVsActualBar
-          estimatedSeconds={estimatedSeconds}
-          actualSeconds={task.actual_seconds}
-        />
+        <PlanVsActualBar estimatedSeconds={estimatedSeconds} actualSeconds={task.actual_seconds} />
       </div>
 
       <div>
         <div className="flex items-center justify-between mb-2">
           <h4 className="font-medium text-sm text-ink-900">סשנים ({entries.length})</h4>
-          <button
-            onClick={() => setShowManual((v) => !v)}
-            className="btn-ghost text-xs py-1 px-2"
-          >
-            <Plus className="w-3 h-3" />
-            הוסף ידנית
+          <button onClick={() => setShowManual((v) => !v)} className="btn-ghost text-xs py-1 px-2">
+            <Plus className="w-3 h-3" />הוסף ידנית
           </button>
         </div>
-
         {showManual && (
           <div className="card p-3 space-y-2 mb-2">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <input
-                type="datetime-local"
-                value={manualStart}
-                onChange={(e) => setManualStart(e.target.value)}
-                className="field text-sm"
-              />
-              <input
-                type="datetime-local"
-                value={manualEnd}
-                onChange={(e) => setManualEnd(e.target.value)}
-                className="field text-sm"
-              />
+              <input type="datetime-local" value={manualStart} onChange={(e) => setManualStart(e.target.value)} className="field text-sm" />
+              <input type="datetime-local" value={manualEnd} onChange={(e) => setManualEnd(e.target.value)} className="field text-sm" />
             </div>
-            <input
-              value={manualNote}
-              onChange={(e) => setManualNote(e.target.value)}
-              placeholder="הערה (אופציונלי)"
-              className="field text-sm"
-            />
+            <input value={manualNote} onChange={(e) => setManualNote(e.target.value)} placeholder="הערה (אופציונלי)" className="field text-sm" />
             <div className="flex justify-end gap-2">
-              <button onClick={() => setShowManual(false)} className="btn-ghost text-xs">
-                בטל
-              </button>
-              <button onClick={addManual} className="btn-accent text-xs">
-                שמור
-              </button>
+              <button onClick={() => setShowManual(false)} className="btn-ghost text-xs">בטל</button>
+              <button onClick={addManual} className="btn-accent text-xs">שמור</button>
             </div>
           </div>
         )}
-
         {entries.length === 0 ? (
           <p className="text-sm text-ink-500 text-center py-6">אין סשנים עדיין</p>
         ) : (
           <ul className="divide-y divide-ink-200">
             {entries.map((e) => (
-              <EntryRow
-                key={e.id}
-                entry={e}
-                onUpdate={(patch) =>
-                  updateEntry.mutate({ entryId: e.id, taskId: task.id, patch })
-                }
+              <EntryRow key={e.id} entry={e}
+                onUpdate={(patch) => updateEntry.mutate({ entryId: e.id, taskId: task.id, patch })}
                 onDelete={() => deleteEntry.mutate({ entryId: e.id, taskId: task.id })}
               />
             ))}
@@ -1647,15 +1378,7 @@ function TimeEntriesTab({
   );
 }
 
-function EntryRow({
-  entry,
-  onUpdate,
-  onDelete,
-}: {
-  entry: TimeEntry;
-  onUpdate: (patch: Partial<TimeEntry>) => void;
-  onDelete: () => void;
-}) {
+function EntryRow({ entry, onUpdate, onDelete }: { entry: TimeEntry; onUpdate: (patch: Partial<TimeEntry>) => void; onDelete: () => void }) {
   const [editing, setEditing] = useState(false);
   const [start, setStart] = useState(entry.started_at.slice(0, 16));
   const [end, setEnd] = useState(entry.ended_at?.slice(0, 16) ?? "");
@@ -1665,42 +1388,13 @@ function EntryRow({
     return (
       <li className="py-2 space-y-2">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          <input
-            type="datetime-local"
-            value={start}
-            onChange={(e) => setStart(e.target.value)}
-            className="field text-sm"
-          />
-          <input
-            type="datetime-local"
-            value={end}
-            onChange={(e) => setEnd(e.target.value)}
-            className="field text-sm"
-          />
+          <input type="datetime-local" value={start} onChange={(e) => setStart(e.target.value)} className="field text-sm" />
+          <input type="datetime-local" value={end} onChange={(e) => setEnd(e.target.value)} className="field text-sm" />
         </div>
-        <input
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          placeholder="הערה"
-          className="field text-sm"
-        />
+        <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="הערה" className="field text-sm" />
         <div className="flex justify-end gap-2">
-          <button onClick={() => setEditing(false)} className="btn-ghost text-xs">
-            בטל
-          </button>
-          <button
-            onClick={() => {
-              onUpdate({
-                started_at: new Date(start).toISOString(),
-                ended_at: end ? new Date(end).toISOString() : null,
-                note: note || null,
-              });
-              setEditing(false);
-            }}
-            className="btn-accent text-xs"
-          >
-            שמור
-          </button>
+          <button onClick={() => setEditing(false)} className="btn-ghost text-xs">בטל</button>
+          <button onClick={() => { onUpdate({ started_at: new Date(start).toISOString(), ended_at: end ? new Date(end).toISOString() : null, note: note || null }); setEditing(false); }} className="btn-accent text-xs">שמור</button>
         </div>
       </li>
     );
@@ -1711,27 +1405,14 @@ function EntryRow({
       <div className="flex-1 min-w-0">
         <div className="text-ink-900">
           {new Date(entry.started_at).toLocaleString("he-IL")}
-          {entry.ended_at && (
-            <span className="text-ink-500 ms-2">
-              ({formatDuration(entry.duration_seconds ?? 0)})
-            </span>
-          )}
-          {!entry.ended_at && (
-            <span className="chip-accent ms-2">פעיל</span>
-          )}
+          {entry.ended_at && <span className="text-ink-500 ms-2">({formatDuration(entry.duration_seconds ?? 0)})</span>}
+          {!entry.ended_at && <span className="chip-accent ms-2">פעיל</span>}
         </div>
         {entry.note && <div className="text-xs text-ink-500 truncate">{entry.note}</div>}
       </div>
       <div className="flex items-center gap-1">
-        <button
-          onClick={() => setEditing(true)}
-          className="text-xs text-ink-600 hover:text-ink-900 px-2"
-        >
-          ערוך
-        </button>
-        <button onClick={onDelete} className="p-1 text-ink-500 hover:text-danger-500">
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
+        <button onClick={() => setEditing(true)} className="text-xs text-ink-600 hover:text-ink-900 px-2">ערוך</button>
+        <button onClick={onDelete} className="p-1 text-ink-500 hover:text-danger-500"><Trash2 className="w-3.5 h-3.5" /></button>
       </div>
     </li>
   );
@@ -1745,13 +1426,7 @@ function formatDuration(seconds: number): string {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
-function UnitSwitch({
-  value,
-  onChange,
-}: {
-  value: TimeUnit;
-  onChange: (v: TimeUnit) => void;
-}) {
+function UnitSwitch({ value, onChange }: { value: TimeUnit; onChange: (v: TimeUnit) => void }) {
   const options: { v: TimeUnit; label: string }[] = [
     { v: "auto", label: "אוטו" },
     { v: "minutes", label: "דקות" },
@@ -1761,27 +1436,14 @@ function UnitSwitch({
   return (
     <div className="inline-flex items-center rounded-lg bg-ink-100 p-0.5 text-[10px]">
       {options.map((o) => (
-        <button
-          key={o.v}
-          type="button"
-          onClick={() => onChange(o.v)}
-          className={cn(
-            "px-1.5 py-0.5 rounded-md transition-colors",
-            o.v === value
-              ? "bg-white text-ink-900 shadow-soft"
-              : "text-ink-500 hover:text-ink-900"
-          )}
-        >
+        <button key={o.v} type="button" onClick={() => onChange(o.v)}
+          className={cn("px-1.5 py-0.5 rounded-md transition-colors", o.v === value ? "bg-white text-ink-900 shadow-soft" : "text-ink-500 hover:text-ink-900")}>
           {o.label}
         </button>
       ))}
     </div>
   );
 }
-
-// -----------------------------------------------------------------------------
-// Attachments tab — visual scaffolding only. Wiring lands with the recordings /
-// thoughts / files features. The empty state shows what CAN be attached.
 
 function AttachmentsTab() {
   return (
@@ -1794,170 +1456,75 @@ function AttachmentsTab() {
         <AttachmentSlot icon={<MapPin className="w-4 h-4" />} label="מיקום" />
         <AttachmentSlot icon={<CalendarIcon className="w-4 h-4" />} label="אירוע" />
       </div>
-
       <div className="rounded-xl border border-dashed border-ink-300 bg-ink-50/60 p-6 text-center">
         <Paperclip className="w-5 h-5 mx-auto text-ink-400 mb-1.5" />
-        <p className="text-sm text-ink-600">
-          אין צירופים למשימה הזו עדיין.
-        </p>
-        <p className="text-xs text-ink-400 mt-0.5">
-          לחצי על אחד מהטיפוסים למעלה כדי לצרף.
-        </p>
+        <p className="text-sm text-ink-600">אין צירופים למשימה הזו עדיין.</p>
+        <p className="text-xs text-ink-400 mt-0.5">לחצי על אחד מהטיפוסים למעלה כדי לצרף.</p>
       </div>
     </div>
   );
 }
 
-// -----------------------------------------------------------------------------
-// StatusPicker — user-customisable chip dropdown reading from useMyTaskStatuses.
-// Renders the current status as a coloured chip + opens a popover of all
-// statuses in the user's palette.
+const STATUS_COLORS = ["#a8a8bc","#f59e0b","#10b981","#14b8a6","#06b6d4","#0ea5e9","#3b82f6","#6366f1","#8b5cf6","#ec4899","#ef4444"];
 
-const STATUS_COLORS = [
-  "#a8a8bc",
-  "#f59e0b",
-  "#10b981",
-  "#14b8a6",
-  "#06b6d4",
-  "#0ea5e9",
-  "#3b82f6",
-  "#6366f1",
-  "#8b5cf6",
-  "#ec4899",
-  "#ef4444",
-];
-
-function StatusPicker({
-  value,
-  statuses,
-  onChange,
-}: {
-  value: string;
-  statuses: UserTaskStatus[];
-  onChange: (next: string) => void;
-}) {
+function StatusPicker({ value, statuses, onChange }: { value: string; statuses: UserTaskStatus[]; onChange: (next: string) => void }) {
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [draftLabel, setDraftLabel] = useState("");
-
   const updateStatus = useUpdateUserTaskStatus();
   const createStatus = useCreateUserTaskStatus();
-
   const current = statuses.find((s) => s.key === value);
   const label = current?.label ?? value;
   const color = current?.color ?? "#a8a8bc";
 
   const commitNewStatus = async () => {
     const lbl = draftLabel.trim();
-    if (!lbl) {
-      setAdding(false);
-      return;
-    }
+    if (!lbl) { setAdding(false); return; }
     const existing = new Set(statuses.map((s) => s.key));
     let key = slugifyStatusKey(lbl);
     let i = 1;
     while (existing.has(key)) key = `${slugifyStatusKey(lbl)}_${i++}`;
-    const created = await createStatus.mutateAsync({
-      key,
-      label: lbl,
-      kind: "active",
-      color: "#f59e0b",
-      sort_order: (statuses.at(-1)?.sort_order ?? 0) + 100,
-      is_builtin: false,
-    });
-    setDraftLabel("");
-    setAdding(false);
-    onChange(created.key);
+    const created = await createStatus.mutateAsync({ key, label: lbl, kind: "active", color: "#f59e0b", sort_order: (statuses.at(-1)?.sort_order ?? 0) + 100, is_builtin: false });
+    setDraftLabel(""); setAdding(false); onChange(created.key);
   };
 
   return (
     <div className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className={cn(
-          "w-full flex items-center justify-between gap-2 rounded-xl border bg-white px-3 py-2.5 text-sm transition-all",
-          open
-            ? "border-primary-500 ring-2 ring-primary-500/25"
-            : "border-ink-300 hover:border-ink-400"
-        )}
-      >
+      <button type="button" onClick={() => setOpen((v) => !v)}
+        className={cn("w-full flex items-center justify-between gap-2 rounded-xl border bg-white px-3 py-2.5 text-sm transition-all",
+          open ? "border-primary-500 ring-2 ring-primary-500/25" : "border-ink-300 hover:border-ink-400")}>
         <span className="inline-flex items-center gap-2">
-          <span
-            className="w-2.5 h-2.5 rounded-full shrink-0"
-            style={{ backgroundColor: color }}
-          />
+          <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
           <span className="font-medium text-ink-900">{label}</span>
         </span>
-        <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-ink-500">
-          <path d="M5 7l5 6 5-6H5z" />
-        </svg>
+        <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-ink-500"><path d="M5 7l5 6 5-6H5z" /></svg>
       </button>
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
           <div className="absolute start-0 mt-1 w-full bg-white border border-ink-200 rounded-xl shadow-lift z-20 py-1 max-h-80 overflow-y-auto scrollbar-thin">
-            {statuses.length === 0 && (
-              <div className="px-3 py-2 text-xs text-ink-500">
-                עוד לא הוגדרו סטטוסים.
-              </div>
-            )}
+            {statuses.length === 0 && <div className="px-3 py-2 text-xs text-ink-500">עוד לא הוגדרו סטטוסים.</div>}
             {statuses.map((s) => (
-              <StatusPickerRow
-                key={s.id}
-                status={s}
-                selected={s.key === value}
-                editing={editingId === s.id}
-                onSelect={() => {
-                  onChange(s.key);
-                  setOpen(false);
-                }}
+              <StatusPickerRow key={s.id} status={s} selected={s.key === value} editing={editingId === s.id}
+                onSelect={() => { onChange(s.key); setOpen(false); }}
                 onStartEdit={() => setEditingId(s.id)}
                 onStopEdit={() => setEditingId(null)}
-                onRename={(label) =>
-                  updateStatus.mutate({
-                    statusId: s.id,
-                    patch: { label },
-                  })
-                }
-                onRecolor={(color) =>
-                  updateStatus.mutate({
-                    statusId: s.id,
-                    patch: { color },
-                  })
-                }
+                onRename={(label) => updateStatus.mutate({ statusId: s.id, patch: { label } })}
+                onRecolor={(color) => updateStatus.mutate({ statusId: s.id, patch: { color } })}
               />
             ))}
             <div className="border-t border-ink-100 mt-1 pt-1">
               {adding ? (
                 <div className="flex items-center gap-2 px-3 py-1.5">
-                  <span
-                    className="w-2.5 h-2.5 rounded-full shrink-0"
-                    style={{ backgroundColor: "#f59e0b" }}
-                  />
-                  <input
-                    autoFocus
-                    value={draftLabel}
-                    onChange={(e) => setDraftLabel(e.target.value)}
-                    onBlur={commitNewStatus}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") commitNewStatus();
-                      if (e.key === "Escape") {
-                        setDraftLabel("");
-                        setAdding(false);
-                      }
-                    }}
-                    placeholder="שם סטטוס חדש..."
-                    className="flex-1 min-w-0 bg-transparent border-b border-primary-500 outline-none text-sm text-ink-900"
-                  />
+                  <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: "#f59e0b" }} />
+                  <input autoFocus value={draftLabel} onChange={(e) => setDraftLabel(e.target.value)} onBlur={commitNewStatus}
+                    onKeyDown={(e) => { if (e.key === "Enter") commitNewStatus(); if (e.key === "Escape") { setDraftLabel(""); setAdding(false); } }}
+                    placeholder="שם סטטוס חדש..." className="flex-1 min-w-0 bg-transparent border-b border-primary-500 outline-none text-sm text-ink-900" />
                 </div>
               ) : (
-                <button
-                  type="button"
-                  onClick={() => setAdding(true)}
-                  className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-ink-600 hover:bg-ink-100 text-start"
-                >
+                <button type="button" onClick={() => setAdding(true)}
+                  className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-ink-600 hover:bg-ink-100 text-start">
                   <span className="w-2.5 h-2.5 rounded-full shrink-0 border border-dashed border-ink-300" />
                   <span>הוסף סטטוס חדש</span>
                 </button>
@@ -1970,108 +1537,40 @@ function StatusPicker({
   );
 }
 
-function StatusPickerRow({
-  status,
-  selected,
-  editing,
-  onSelect,
-  onStartEdit,
-  onStopEdit,
-  onRename,
-  onRecolor,
-}: {
-  status: UserTaskStatus;
-  selected: boolean;
-  editing: boolean;
-  onSelect: () => void;
-  onStartEdit: () => void;
-  onStopEdit: () => void;
-  onRename: (label: string) => void;
-  onRecolor: (color: string) => void;
+function StatusPickerRow({ status, selected, editing, onSelect, onStartEdit, onStopEdit, onRename, onRecolor }: {
+  status: UserTaskStatus; selected: boolean; editing: boolean;
+  onSelect: () => void; onStartEdit: () => void; onStopEdit: () => void;
+  onRename: (label: string) => void; onRecolor: (color: string) => void;
 }) {
   const [draft, setDraft] = useState(status.label);
   const [paletteOpen, setPaletteOpen] = useState(false);
-
-  useEffect(() => {
-    setDraft(status.label);
-  }, [status.label]);
-
-  const commit = () => {
-    const trimmed = draft.trim();
-    if (trimmed && trimmed !== status.label) onRename(trimmed);
-    onStopEdit();
-  };
+  useEffect(() => { setDraft(status.label); }, [status.label]);
+  const commit = () => { const trimmed = draft.trim(); if (trimmed && trimmed !== status.label) onRename(trimmed); onStopEdit(); };
 
   return (
-    <div
-      className={cn(
-        "group flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-ink-100",
-        selected && "bg-primary-50"
-      )}
-    >
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          setPaletteOpen((v) => !v);
-        }}
+    <div className={cn("group flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-ink-100", selected && "bg-primary-50")}>
+      <button type="button" onClick={(e) => { e.stopPropagation(); setPaletteOpen((v) => !v); }}
         className="w-2.5 h-2.5 rounded-full shrink-0 hover:ring-2 hover:ring-ink-300"
-        style={{ backgroundColor: status.color ?? "#a8a8bc" }}
-        title="שנה צבע"
-      />
+        style={{ backgroundColor: status.color ?? "#a8a8bc" }} title="שנה צבע" />
       {paletteOpen && (
         <>
-          <div
-            className="fixed inset-0 z-10"
-            onClick={() => setPaletteOpen(false)}
-          />
+          <div className="fixed inset-0 z-10" onClick={() => setPaletteOpen(false)} />
           <div className="absolute start-4 mt-8 z-20 bg-white border border-ink-200 rounded-xl shadow-lift p-2 flex gap-1 flex-wrap w-[200px]">
             {STATUS_COLORS.map((c) => (
-              <button
-                key={c}
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onRecolor(c);
-                  setPaletteOpen(false);
-                }}
-                className="w-5 h-5 rounded-full border border-ink-200 hover:scale-110 transition-transform"
-                style={{ backgroundColor: c }}
-              />
+              <button key={c} type="button" onClick={(e) => { e.stopPropagation(); onRecolor(c); setPaletteOpen(false); }}
+                className="w-5 h-5 rounded-full border border-ink-200 hover:scale-110 transition-transform" style={{ backgroundColor: c }} />
             ))}
           </div>
         </>
       )}
       {editing ? (
-        <input
-          autoFocus
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={commit}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") commit();
-            if (e.key === "Escape") {
-              setDraft(status.label);
-              onStopEdit();
-            }
-          }}
-          className="flex-1 min-w-0 bg-transparent border-b border-primary-500 outline-none text-sm text-ink-900"
-        />
+        <input autoFocus value={draft} onChange={(e) => setDraft(e.target.value)} onBlur={commit}
+          onKeyDown={(e) => { if (e.key === "Enter") commit(); if (e.key === "Escape") { setDraft(status.label); onStopEdit(); } }}
+          className="flex-1 min-w-0 bg-transparent border-b border-primary-500 outline-none text-sm text-ink-900" />
       ) : (
         <>
-          <button
-            type="button"
-            onClick={onSelect}
-            className="flex-1 min-w-0 text-start text-ink-900"
-          >
-            {status.label}
-          </button>
-          <button
-            type="button"
-            onClick={onStartEdit}
-            className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-ink-400 hover:text-ink-900"
-            title="ערוך שם"
-          >
+          <button type="button" onClick={onSelect} className="flex-1 min-w-0 text-start text-ink-900">{status.label}</button>
+          <button type="button" onClick={onStartEdit} className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-ink-400 hover:text-ink-900" title="ערוך שם">
             <Pencil className="w-3 h-3" />
           </button>
         </>
@@ -2080,20 +1579,11 @@ function StatusPickerRow({
   );
 }
 
-function AttachmentSlot({
-  icon,
-  label,
-}: {
-  icon: React.ReactNode;
-  label: string;
-}) {
+function AttachmentSlot({ icon, label }: { icon: React.ReactNode; label: string }) {
   return (
-    <button
-      type="button"
-      disabled
+    <button type="button" disabled
       className="group flex items-center gap-2 rounded-xl border border-ink-200 bg-white px-3 py-2.5 text-sm text-ink-700 cursor-not-allowed opacity-70"
-      title="בקרוב"
-    >
+      title="בקרוב">
       <span className="text-ink-700">{icon}</span>
       <span className="font-medium">{label}</span>
       <Plus className="w-3.5 h-3.5 ms-auto text-ink-400" />
@@ -2101,20 +1591,10 @@ function AttachmentSlot({
   );
 }
 
-// ---------------------------------------------------------------------------
-// TaskEditHistoryTab — audit feed of field changes
-// ---------------------------------------------------------------------------
-
 const FIELD_LABELS: Record<string, string> = {
-  title: "כותרת",
-  status: "סטטוס",
-  urgency: "דחיפות",
-  assignee_user_id: "מוצא",
-  scheduled_at: "תאריך",
-  deadline_at: "דד-ליין",
-  description: "תיאור",
-  recurrence_rule: "חזרה",
-  tags: "תגים",
+  title: "כותרת", status: "סטטוס", urgency: "דחיפות",
+  assignee_user_id: "מוצא", scheduled_at: "תאריך", deadline_at: "דד-ליין",
+  description: "תיאור", recurrence_rule: "חזרה", tags: "תגים",
 };
 
 const URGENCY_LABELS: Record<number, string> = { 0: "ללא", 1: "נמוכה", 2: "בינונית", 3: "גבוהה" };
@@ -2145,9 +1625,7 @@ function TaskEditHistoryTab({ taskId }: { taskId: string }) {
   const { data: edits = [], isLoading } = useTaskEdits(taskId);
   const groups = groupEditsByDay(edits);
 
-  if (isLoading) {
-    return <p className="text-sm text-ink-400 py-4 text-center">טוען…</p>;
-  }
+  if (isLoading) return <p className="text-sm text-ink-400 py-4 text-center">טוען…</p>;
 
   if (edits.length === 0) {
     return (
@@ -2176,9 +1654,7 @@ function TaskEditHistoryTab({ taskId }: { taskId: string }) {
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  {entry.editor_name && (
-                    <p className="text-xs font-semibold text-ink-700 mb-0.5">{entry.editor_name}</p>
-                  )}
+                  {entry.editor_name && <p className="text-xs font-semibold text-ink-700 mb-0.5">{entry.editor_name}</p>}
                   <p className="text-[10px] text-ink-400 mb-1">
                     {new Date(entry.edited_at).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}
                   </p>

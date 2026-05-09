@@ -95,11 +95,11 @@ function getBorderClass(kind: ShareKind): string {
     case "mine-read":
       return "border-2 border-dashed border-amber-400";
     case "mine-write":
-      return "border-2 border-dotted border-amber-400";
+      return "border-[3px] border-dotted border-amber-400";
     case "other-read":
       return "border-2 border-dashed border-pink-400";
     case "other-write":
-      return "border-2 border-dotted border-pink-400";
+      return "border-[3px] border-dotted border-pink-400";
   }
 }
 
@@ -515,7 +515,7 @@ export function Goals() {
               שיתפתי לצפייה
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="w-4 h-4 rounded border-2 border-dotted border-amber-400 inline-block shrink-0" />
+              <span className="w-4 h-4 rounded border-[3px] border-dotted border-amber-400 inline-block shrink-0" />
               שיתפתי לעריכה
             </span>
             <span className="flex items-center gap-1.5">
@@ -523,7 +523,7 @@ export function Goals() {
               של אחר — צפייה
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="w-4 h-4 rounded border-2 border-dotted border-pink-400 inline-block shrink-0" />
+              <span className="w-4 h-4 rounded border-[3px] border-dotted border-pink-400 inline-block shrink-0" />
               של אחר — עריכה
             </span>
           </div>

@@ -84,6 +84,8 @@ interface TaskRowProps {
   display: RowDisplayPrefs;
   /** When true the row is view-only: no edits, completions, or mutations */
   readOnly?: boolean;
+  /** Sharing state of the goal, determines icon color. Omit for non-goal tasks. */
+  goalShareKind?: "private" | "read" | "write";
 }
 
 export function TaskRow({
@@ -97,6 +99,7 @@ export function TaskRow({
   onOpenEdit,
   display,
   readOnly = false,
+  goalShareKind,
 }: TaskRowProps) {
   const { task, children, depth } = node;
   const { user } = useAuth();
@@ -795,21 +798,26 @@ export function TaskRow({
           </span>
         )}
 
-        {/* Goal indicator — small 🎯 chip when this task is configured as
-            a goal/habit. The Goals screen shows the streak number; here we
-            just signal at a glance that this row contributes to a goal. */}
-        {task.goal_period && (
+        {/* Goal indicator — colored by share kind: yellow=private, pink=read-shared, green=write-shared */}
+        {(task.goal_period || (task as any).goal_type === "achievement") && (
           <span
             className={cn(
-              "shrink-0 inline-flex items-center gap-1 text-[11px] text-primary-700 bg-primary-50 border border-primary-200 px-1.5 py-0.5 rounded-full",
-              showAsDone && "opacity-60"
+              "shrink-0 inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded-full border",
+              showAsDone && "opacity-60",
+              goalShareKind === "write"
+                ? "text-green-700 bg-green-50 border-green-200"
+                : goalShareKind === "read"
+                  ? "text-pink-700 bg-pink-50 border-pink-200"
+                  : "text-amber-700 bg-amber-50 border-amber-200"
             )}
             title={
-              task.goal_period === "day"
-                ? `יעד: ${task.goal_target ?? 1} פעמים ביום`
-                : task.goal_period === "week"
-                  ? `יעד: ${task.goal_target ?? 1} פעמים בשבוע`
-                  : `יעד: ${task.goal_target ?? 1} פעמים בחודש`
+              (task as any).goal_type === "achievement"
+                ? "יעד הישגי"
+                : task.goal_period === "day"
+                  ? `יעד: ${task.goal_target ?? 1} פעמים ביום`
+                  : task.goal_period === "week"
+                    ? `יעד: ${task.goal_target ?? 1} פעמים בשבוע`
+                    : `יעד: ${task.goal_target ?? 1} פעמים בחודש`
             }
           >
             <Target className="w-3 h-3" />
@@ -1306,6 +1314,7 @@ export function TaskRow({
           focusTaskId={focusTaskId}
           onOpenEdit={onOpenEdit}
           display={display}
+          goalShareKind={goalShareKind}
         />
       )}
     </>
@@ -1340,6 +1349,7 @@ function ChildrenBlock({
   focusTaskId,
   onOpenEdit,
   display,
+  goalShareKind,
 }: {
   children: TaskTreeNode[];
   parentTaskId: string | null;
@@ -1349,6 +1359,7 @@ function ChildrenBlock({
   focusTaskId: string | null;
   onOpenEdit: (taskId: string) => void;
   display: RowDisplayPrefs;
+  goalShareKind?: "private" | "read" | "write";
 }) {
   const [showCompleted, setShowCompleted] = useState(false);
   const incomplete = children.filter((c) => !c.task.completed_at);
@@ -1368,6 +1379,7 @@ function ChildrenBlock({
           focusTaskId={focusTaskId}
           onOpenEdit={onOpenEdit}
           display={display}
+          goalShareKind={goalShareKind}
         />
       ))}
       {completed.length > 0 && (
@@ -1403,6 +1415,7 @@ function ChildrenBlock({
                 focusTaskId={focusTaskId}
                 onOpenEdit={onOpenEdit}
                 display={display}
+                goalShareKind={goalShareKind}
               />
             ))}
         </div>

@@ -3,6 +3,10 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Award,
   Clock,
+  Columns3,
+  CheckCircle2,
+  Circle,
+  Flag,
   Flame,
   LayoutGrid,
   Pencil,
@@ -11,16 +15,18 @@ import {
   Target,
   TrendingUp,
   Trophy,
-  Columns3,
-  Flag,
-  CheckCircle2,
-  Circle,
+  Users,
+  Eye,
+  Edit3,
+  Lock,
 } from "lucide-react";
 import { ScreenScaffold } from "@/components/layout/ScreenScaffold";
 import { cn } from "@/lib/utils/cn";
 import { useTasks } from "@/lib/hooks/useTasks";
-import { useTaskLists } from "@/lib/hooks/useTaskLists";
+import { useTaskLists, useSharesForTaskLists } from "@/lib/hooks/useTaskLists";
 import { useTimeEntriesByRange } from "@/lib/hooks/useTimer";
+import { useOrgScope } from "@/lib/hooks/useOrgScope";
+import { useOrgMembers } from "@/lib/hooks/useOrgMembers";
 import {
   computeGoalStats,
   periodLabelHe,
@@ -30,11 +36,29 @@ import {
 import type { Task, TimeEntry } from "@/lib/types/domain";
 import { TaskEditModal, type TaskCreateDraft } from "@/components/tasks/TaskEditModal";
 
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
 type GoalTypeFilter = "all" | "achievement" | "habit";
 type GoalLayout = "grid" | "columns";
+type ScopeFilter = "all" | "mine" | "shared" | "others";
+
+/** How the current user relates to this goal's sharing state */
+type ShareKind =
+  | "private"      // my goal, not shared with anyone
+  | "mine-read"    // my goal, shared for view-only
+  | "mine-write"   // my goal, shared for editing (collaborative)
+  | "other-read"   // someone else's goal, I can only view
+  | "other-write"; // someone else's goal, I can also mark completion
+
+// ---------------------------------------------------------------------------
+// localStorage helpers
+// ---------------------------------------------------------------------------
 
 const LAYOUT_KEY = "multitask:goals:layout";
 const TYPE_FILTER_KEY = "multitask:goals:typeFilter";
+const SCOPE_FILTER_KEY = "multitask:goals:scopeFilter";
 
 function readLS<T>(key: string, fallback: T): T {
   try {
@@ -44,6 +68,10 @@ function readLS<T>(key: string, fallback: T): T {
     return fallback;
   }
 }
+
+// ---------------------------------------------------------------------------
+// Goal type helpers
+// ---------------------------------------------------------------------------
 
 function isAchievement(task: Task): boolean {
   return (task as any).goal_type === "achievement";
@@ -55,9 +83,64 @@ function isGoal(task: Task): boolean {
   return isHabit(task) || isAchievement(task);
 }
 
+// ---------------------------------------------------------------------------
+// Visual helpers: border and icon classes per share kind
+// ---------------------------------------------------------------------------
+
+function getBorderClass(kind: ShareKind): string {
+  switch (kind) {
+    case "mine-read":
+      return "border-2 border-dashed border-pink-400";
+    case "mine-write":
+      // CSS doesn't have dash-dot natively; we use border-double for visual distinction
+      return "border-4 border-double border-green-400";
+    case "other-read":
+      return "border-2 border-dotted border-slate-400";
+    case "other-write":
+      return "border-2 border-dotted border-green-400";
+    default:
+      return "border border-ink-200";
+  }
+}
+
+function getIconColorClass(kind: ShareKind): string {
+  switch (kind) {
+    case "mine-read":
+    case "other-read":
+      return "text-pink-500";
+    case "mine-write":
+    case "other-write":
+      return "text-green-500";
+    default:
+      return "text-amber-500";
+  }
+}
+
+function getSharingBadge(kind: ShareKind): { label: string; icon: React.ReactNode; className: string } | null {
+  switch (kind) {
+    case "mine-read":
+      return { label: "שיתוף צפייה", icon: <Eye className="w-3 h-3" />, className: "text-pink-700 bg-pink-50 border-pink-200" };
+    case "mine-write":
+      return { label: "שיתוף עריכה", icon: <Edit3 className="w-3 h-3" />, className: "text-green-700 bg-green-50 border-green-200" };
+    case "other-read":
+      return { label: "צפייה בלבד", icon: <Eye className="w-3 h-3" />, className: "text-slate-600 bg-slate-50 border-slate-200" };
+    case "other-write":
+      return { label: "עריכה משותפת", icon: <Edit3 className="w-3 h-3" />, className: "text-green-700 bg-green-50 border-green-200" };
+    default:
+      return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Main component
+// ---------------------------------------------------------------------------
+
 export function Goals() {
   const { data: tasks = [], isLoading } = useTasks();
   const { data: lists = [] } = useTaskLists();
+  const { userId } = useOrgScope();
+  const { data: orgMembers = [] } = useOrgMembers();
+
   const range = useMemo(() => {
     const end = new Date();
     const start = new Date(end);
@@ -77,6 +160,37 @@ export function Goals() {
 
   const goalTasks = useMemo(() => tasks.filter(isGoal), [tasks]);
 
+  // Batch-load shares for all task lists that contain goal tasks.
+  // RLS ensures: owners see all share rows, non-owners see only their own row.
+  const goalListIds = useMemo(() => {
+    const s = new Set(goalTasks.map((t) => t.task_list_id).filter(Boolean) as string[]);
+    return Array.from(s);
+  }, [goalTasks]);
+
+  const { data: listShares = [] } = useSharesForTaskLists(goalListIds);
+
+  // Map: listId → { hasWrite, hasRead } across all visible share rows
+  const listShareMap = useMemo(() => {
+    const m = new Map<string, { hasWrite: boolean; hasRead: boolean }>();
+    for (const s of listShares) {
+      const cur = m.get(s.entity_id) ?? { hasWrite: false, hasRead: false };
+      if (s.permission === "write") cur.hasWrite = true;
+      else cur.hasRead = true;
+      m.set(s.entity_id, cur);
+    }
+    return m;
+  }, [listShares]);
+
+  // Map: userId → display name
+  const memberNameById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const { membership, profile } of orgMembers) {
+      const name = profile?.full_name ?? (profile as any)?.email ?? membership.user_id.slice(0, 8);
+      m.set(membership.user_id, name);
+    }
+    return m;
+  }, [orgMembers]);
+
   const entriesByTask = useMemo(() => {
     const m = new Map<string, TimeEntry[]>();
     for (const e of timeEntries) {
@@ -87,6 +201,25 @@ export function Goals() {
     return m;
   }, [timeEntries]);
 
+  // ---------------------------------------------------------------------------
+  // Compute share kind per task
+  // ---------------------------------------------------------------------------
+  function getShareKind(task: Task): ShareKind {
+    const isMine = task.owner_id === userId;
+    const info = task.task_list_id ? listShareMap.get(task.task_list_id) : undefined;
+    if (isMine) {
+      if (info?.hasWrite) return "mine-write";
+      if (info?.hasRead) return "mine-read";
+      return "private";
+    }
+    // Not mine: my share row is the only one visible (RLS)
+    if (info?.hasWrite) return "other-write";
+    return "other-read";
+  }
+
+  // ---------------------------------------------------------------------------
+  // Filter state
+  // ---------------------------------------------------------------------------
   const [editTaskId, setEditTaskId] = useState<string | null>(null);
   const [createDraft, setCreateDraft] = useState<TaskCreateDraft | null>(null);
   const [typeFilter, setTypeFilter] = useState<GoalTypeFilter>(() =>
@@ -95,6 +228,10 @@ export function Goals() {
   const [layout, setLayout] = useState<GoalLayout>(() =>
     readLS<GoalLayout>(LAYOUT_KEY, "grid")
   );
+  const [scopeFilter, setScopeFilter] = useState<ScopeFilter>(() =>
+    readLS<ScopeFilter>(SCOPE_FILTER_KEY, "all")
+  );
+  const [userFilter, setUserFilter] = useState<string | null>(null);
 
   useEffect(() => {
     const handler = () => setCreateDraft({ goalEnabled: true });
@@ -102,11 +239,40 @@ export function Goals() {
     return () => window.removeEventListener("app:new-goal", handler);
   }, []);
 
+  // ---------------------------------------------------------------------------
+  // Filtered + scoped goals
+  // ---------------------------------------------------------------------------
   const filteredGoals = useMemo(() => {
-    if (typeFilter === "achievement") return goalTasks.filter(isAchievement);
-    if (typeFilter === "habit") return goalTasks.filter(isHabit);
-    return goalTasks;
-  }, [goalTasks, typeFilter]);
+    let result = goalTasks;
+
+    // Scope filter
+    if (scopeFilter === "mine") {
+      result = result.filter((t) => {
+        if (t.owner_id !== userId) return false;
+        const kind = getShareKind(t);
+        return kind === "private";
+      });
+    } else if (scopeFilter === "shared") {
+      result = result.filter((t) => {
+        if (t.owner_id !== userId) return false;
+        const kind = getShareKind(t);
+        return kind === "mine-read" || kind === "mine-write";
+      });
+    } else if (scopeFilter === "others") {
+      result = result.filter((t) => t.owner_id !== userId);
+    }
+
+    // User filter (who owns the goal)
+    if (userFilter) {
+      result = result.filter((t) => t.owner_id === userFilter);
+    }
+
+    // Type filter
+    if (typeFilter === "achievement") result = result.filter(isAchievement);
+    if (typeFilter === "habit") result = result.filter(isHabit);
+
+    return result;
+  }, [goalTasks, scopeFilter, userFilter, typeFilter, userId, listShareMap]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // For columns layout: group by task_list_id
   const columns = useMemo(() => {
@@ -117,13 +283,33 @@ export function Goals() {
       arr.push(t);
       map.set(key, arr);
     }
-    // Sort: lists with names first, then null (no list)
     return Array.from(map.entries()).sort(([a], [b]) => {
       if (a === null) return 1;
       if (b === null) return -1;
       return (listById.get(a)?.name ?? "").localeCompare(listById.get(b)?.name ?? "");
     });
   }, [filteredGoals, listById]);
+
+  // Counts for filter badges
+  const mineCount = goalTasks.filter((t) => {
+    if (t.owner_id !== userId) return false;
+    const k = getShareKind(t);
+    return k === "private";
+  }).length;
+  const sharedCount = goalTasks.filter((t) => {
+    if (t.owner_id !== userId) return false;
+    const k = getShareKind(t);
+    return k === "mine-read" || k === "mine-write";
+  }).length;
+  const othersCount = goalTasks.filter((t) => t.owner_id !== userId).length;
+  const habitCount = goalTasks.filter(isHabit).length;
+  const achievementCount = goalTasks.filter(isAchievement).length;
+
+  // Other members (for user filter)
+  const otherMembers = useMemo(
+    () => orgMembers.filter((m) => m.membership.user_id !== userId),
+    [orgMembers, userId]
+  );
 
   const setTypeFilterPersist = (v: GoalTypeFilter) => {
     setTypeFilter(v);
@@ -133,9 +319,11 @@ export function Goals() {
     setLayout(v);
     localStorage.setItem(LAYOUT_KEY, JSON.stringify(v));
   };
-
-  const habitCount = goalTasks.filter(isHabit).length;
-  const achievementCount = goalTasks.filter(isAchievement).length;
+  const setScopeFilterPersist = (v: ScopeFilter) => {
+    setScopeFilter(v);
+    localStorage.setItem(SCOPE_FILTER_KEY, JSON.stringify(v));
+    if (v === "mine") setUserFilter(null); // user filter irrelevant for "mine"
+  };
 
   return (
     <ScreenScaffold
@@ -151,67 +339,146 @@ export function Goals() {
         </button>
       }
     >
-      {/* Toolbar: type filter + layout toggle */}
       {!isLoading && goalTasks.length > 0 && (
-        <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
-          {/* Type filter tabs */}
-          <div className="inline-flex rounded-lg border border-ink-200 overflow-hidden text-sm">
-            {(
-              [
-                { id: "all", label: "הכל", count: goalTasks.length },
-                { id: "achievement", label: "הישגים", count: achievementCount, icon: <Trophy className="w-3.5 h-3.5" /> },
-                { id: "habit", label: "הרגלים", count: habitCount, icon: <Repeat className="w-3.5 h-3.5" /> },
-              ] as { id: GoalTypeFilter; label: string; count: number; icon?: React.ReactNode }[]
-            ).map((tab) => (
+        <div className="flex flex-col gap-3 mb-4">
+          {/* Row 1: scope filter + layout toggle */}
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            {/* Scope tabs */}
+            <div className="inline-flex rounded-lg border border-ink-200 overflow-hidden text-sm">
+              {(
+                [
+                  { id: "all", label: "הכל", count: goalTasks.length, icon: <Target className="w-3.5 h-3.5" /> },
+                  { id: "mine", label: "שלי", count: mineCount, icon: <Lock className="w-3.5 h-3.5" /> },
+                  { id: "shared", label: "שיתפתי", count: sharedCount, icon: <Users className="w-3.5 h-3.5" /> },
+                  { id: "others", label: "של אחרים", count: othersCount, icon: <Eye className="w-3.5 h-3.5" /> },
+                ] as { id: ScopeFilter; label: string; count: number; icon: React.ReactNode }[]
+              ).map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setScopeFilterPersist(tab.id)}
+                  className={cn(
+                    "flex items-center gap-1.5 px-3 py-1.5 transition-colors border-e border-ink-200 last:border-e-0",
+                    scopeFilter === tab.id
+                      ? "bg-primary-600 text-white"
+                      : "bg-white text-ink-600 hover:bg-ink-50"
+                  )}
+                >
+                  {tab.icon}
+                  <span>{tab.label}</span>
+                  <span className={cn(
+                    "text-[10px] rounded-full px-1.5 py-0.5 leading-none",
+                    scopeFilter === tab.id ? "bg-white/20 text-white" : "bg-ink-100 text-ink-500"
+                  )}>
+                    {tab.count}
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            {/* Layout toggle */}
+            <div className="inline-flex rounded-lg border border-ink-200 overflow-hidden">
               <button
-                key={tab.id}
                 type="button"
-                onClick={() => setTypeFilterPersist(tab.id)}
+                onClick={() => setLayoutPersist("grid")}
                 className={cn(
-                  "flex items-center gap-1.5 px-3 py-1.5 transition-colors border-r border-ink-200 last:border-r-0",
-                  typeFilter === tab.id
-                    ? "bg-primary-600 text-white"
-                    : "bg-white text-ink-600 hover:bg-ink-50"
+                  "p-2 transition-colors border-e border-ink-200",
+                  layout === "grid" ? "bg-primary-600 text-white" : "bg-white text-ink-500 hover:bg-ink-50"
                 )}
+                title="גריד"
+                aria-label="תצוגת גריד"
               >
-                {tab.icon}
-                <span>{tab.label}</span>
-                <span className={cn(
-                  "text-[10px] rounded-full px-1.5 py-0.5 leading-none",
-                  typeFilter === tab.id ? "bg-white/20 text-white" : "bg-ink-100 text-ink-500"
-                )}>
-                  {tab.count}
-                </span>
+                <LayoutGrid className="w-4 h-4" />
               </button>
-            ))}
+              <button
+                type="button"
+                onClick={() => setLayoutPersist("columns")}
+                className={cn(
+                  "p-2 transition-colors",
+                  layout === "columns" ? "bg-primary-600 text-white" : "bg-white text-ink-500 hover:bg-ink-50"
+                )}
+                title="עמודות לפי רשימה"
+                aria-label="תצוגת עמודות לפי רשימה"
+              >
+                <Columns3 className="w-4 h-4" />
+              </button>
+            </div>
           </div>
 
-          {/* Layout toggle */}
-          <div className="inline-flex rounded-lg border border-ink-200 overflow-hidden">
-            <button
-              type="button"
-              onClick={() => setLayoutPersist("grid")}
-              className={cn(
-                "p-2 transition-colors border-r border-ink-200",
-                layout === "grid" ? "bg-primary-600 text-white" : "bg-white text-ink-500 hover:bg-ink-50"
-              )}
-              title="גריד"
-              aria-label="תצוגת גריד"
-            >
-              <LayoutGrid className="w-4 h-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setLayoutPersist("columns")}
-              className={cn(
-                "p-2 transition-colors",
-                layout === "columns" ? "bg-primary-600 text-white" : "bg-white text-ink-500 hover:bg-ink-50"
-              )}
-              title="עמודות לפי רשימה"
-              aria-label="תצוגת עמודות לפי רשימה"
-            >
-              <Columns3 className="w-4 h-4" />
-            </button>
+          {/* Row 2: type filter + optional user filter */}
+          <div className="flex items-center gap-3 flex-wrap">
+            {/* Type filter */}
+            <div className="inline-flex rounded-lg border border-ink-200 overflow-hidden text-sm">
+              {(
+                [
+                  { id: "all", label: "הכל", count: goalTasks.length },
+                  { id: "achievement", label: "הישגים", count: achievementCount, icon: <Trophy className="w-3.5 h-3.5" /> },
+                  { id: "habit", label: "הרגלים", count: habitCount, icon: <Repeat className="w-3.5 h-3.5" /> },
+                ] as { id: GoalTypeFilter; label: string; count: number; icon?: React.ReactNode }[]
+              ).map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setTypeFilterPersist(tab.id)}
+                  className={cn(
+                    "flex items-center gap-1.5 px-3 py-1.5 transition-colors border-e border-ink-200 last:border-e-0",
+                    typeFilter === tab.id
+                      ? "bg-primary-600 text-white"
+                      : "bg-white text-ink-600 hover:bg-ink-50"
+                  )}
+                >
+                  {tab.icon}
+                  <span>{tab.label}</span>
+                  <span className={cn(
+                    "text-[10px] rounded-full px-1.5 py-0.5 leading-none",
+                    typeFilter === tab.id ? "bg-white/20 text-white" : "bg-ink-100 text-ink-500"
+                  )}>
+                    {tab.count}
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            {/* User filter (shown when scope allows multiple owners) */}
+            {(scopeFilter === "all" || scopeFilter === "others") && othersCount > 0 && otherMembers.length > 0 && (
+              <select
+                value={userFilter ?? ""}
+                onChange={(e) => setUserFilter(e.target.value || null)}
+                className="field text-sm py-1.5 pe-8 ps-3 rounded-lg border border-ink-200"
+                aria-label="סינון לפי משתמש"
+              >
+                <option value="">כל המשתמשים</option>
+                {otherMembers.map(({ membership, profile }) => (
+                  <option key={membership.user_id} value={membership.user_id}>
+                    {profile?.full_name ?? (profile as any)?.email ?? membership.user_id.slice(0, 8)}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+
+          {/* Legend */}
+          <div className="flex items-center gap-4 flex-wrap text-[11px] text-ink-500">
+            <span className="flex items-center gap-1.5">
+              <span className="w-4 h-4 rounded border border-amber-400 inline-block shrink-0" />
+              יעד פרטי
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-4 h-4 rounded border-2 border-dashed border-pink-400 inline-block shrink-0" />
+              שיתפתי לצפייה
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-4 h-4 rounded border-4 border-double border-green-400 inline-block shrink-0" />
+              שיתפתי לעריכה
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-4 h-4 rounded border-2 border-dotted border-slate-400 inline-block shrink-0" />
+              של אחר — צפייה
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-4 h-4 rounded border-2 border-dotted border-green-400 inline-block shrink-0" />
+              של אחר — עריכה
+            </span>
           </div>
         </div>
       )}
@@ -242,7 +509,10 @@ export function Goals() {
               task={task}
               entries={entriesByTask.get(task.id) ?? []}
               listColor={task.task_list_id ? (listById.get(task.task_list_id)?.color ?? null) : null}
+              shareKind={getShareKind(task)}
+              ownerName={task.owner_id !== userId ? (memberNameById.get(task.owner_id) ?? null) : null}
               onEdit={() => setEditTaskId(task.id)}
+              canEdit={task.owner_id === userId || getShareKind(task) === "other-write"}
             />
           ))}
         </div>
@@ -271,7 +541,10 @@ export function Goals() {
                       task={task}
                       entries={entriesByTask.get(task.id) ?? []}
                       listColor={list?.color ?? null}
+                      shareKind={getShareKind(task)}
+                      ownerName={task.owner_id !== userId ? (memberNameById.get(task.owner_id) ?? null) : null}
                       onEdit={() => setEditTaskId(task.id)}
+                      canEdit={task.owner_id === userId || getShareKind(task) === "other-write"}
                     />
                   ))}
                 </div>
@@ -292,28 +565,69 @@ export function Goals() {
 }
 
 // ---------------------------------------------------------------------------
-// Unified GoalCard — dispatches to habit or achievement rendering
+// GoalCard — dispatches to habit or achievement rendering
 // ---------------------------------------------------------------------------
 
 interface GoalCardProps {
   task: Task;
   entries: TimeEntry[];
   listColor: string | null;
+  shareKind: ShareKind;
+  ownerName: string | null;
+  canEdit: boolean;
   onEdit: () => void;
 }
 
-function GoalCard({ task, entries, listColor, onEdit }: GoalCardProps) {
+function GoalCard({ task, entries, listColor, shareKind, ownerName, canEdit, onEdit }: GoalCardProps) {
   if (isAchievement(task)) {
-    return <AchievementCard task={task} listColor={listColor} onEdit={onEdit} />;
+    return (
+      <AchievementCard
+        task={task}
+        listColor={listColor}
+        shareKind={shareKind}
+        ownerName={ownerName}
+        canEdit={canEdit}
+        onEdit={onEdit}
+      />
+    );
   }
-  return <HabitCard task={task} entries={entries} listColor={listColor} onEdit={onEdit} />;
+  return (
+    <HabitCard
+      task={task}
+      entries={entries}
+      listColor={listColor}
+      shareKind={shareKind}
+      ownerName={ownerName}
+      canEdit={canEdit}
+      onEdit={onEdit}
+    />
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Owner badge — shown on goals that belong to others
+// ---------------------------------------------------------------------------
+
+function OwnerBadge({ name }: { name: string }) {
+  return (
+    <span className="inline-flex items-center gap-1 text-[11px] text-ink-600 bg-ink-50 border border-ink-200 rounded-full px-2 py-0.5">
+      <Users className="w-3 h-3" />
+      {name}
+    </span>
+  );
 }
 
 // ---------------------------------------------------------------------------
 // Achievement card
 // ---------------------------------------------------------------------------
 
-function AchievementCard({ task, listColor, onEdit }: Omit<GoalCardProps, "entries">) {
+function AchievementCard({
+  task,
+  shareKind,
+  ownerName,
+  canEdit,
+  onEdit,
+}: Omit<GoalCardProps, "entries">) {
   const deadline: string | null = (task as any).goal_deadline ?? null;
   const done = task.status === "done";
 
@@ -331,18 +645,14 @@ function AchievementCard({ task, listColor, onEdit }: Omit<GoalCardProps, "entri
     return { text: `${diff} ימים (${dateStr})`, overdue: false };
   }, [deadline]);
 
+  const sharingBadge = getShareBadge(shareKind);
+
   return (
-    <article
-      className="card p-4 border-2"
-      style={{ borderColor: listColor ?? "#e5e7eb" }}
-    >
+    <article className={cn("card p-4", getBorderClass(shareKind))}>
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-start gap-2 min-w-0">
           <Trophy
-            className={cn(
-              "w-4 h-4 shrink-0 mt-0.5",
-              done ? "text-amber-500" : "text-ink-400"
-            )}
+            className={cn("w-4 h-4 shrink-0 mt-0.5", done ? getIconColorClass(shareKind) : "text-ink-400")}
           />
           <div className="min-w-0">
             <h3 className={cn(
@@ -352,6 +662,16 @@ function AchievementCard({ task, listColor, onEdit }: Omit<GoalCardProps, "entri
               {task.title}
             </h3>
             <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+              {ownerName && <OwnerBadge name={ownerName} />}
+              {sharingBadge && (
+                <span className={cn(
+                  "inline-flex items-center gap-1 text-[11px] rounded-full px-2 py-0.5 border",
+                  sharingBadge.className
+                )}>
+                  {sharingBadge.icon}
+                  {sharingBadge.label}
+                </span>
+              )}
               {done ? (
                 <span className="inline-flex items-center gap-1 text-xs text-success-700 bg-success-50 border border-success-200 rounded-full px-2 py-0.5">
                   <CheckCircle2 className="w-3 h-3" />
@@ -379,15 +699,17 @@ function AchievementCard({ task, listColor, onEdit }: Omit<GoalCardProps, "entri
             </div>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={onEdit}
-          className="p-1.5 rounded-md hover:bg-ink-100 text-ink-400 hover:text-ink-700 shrink-0"
-          title="ערכי יעד"
-          aria-label="ערכי יעד"
-        >
-          <Pencil className="w-3.5 h-3.5" />
-        </button>
+        {canEdit && (
+          <button
+            type="button"
+            onClick={onEdit}
+            className="p-1.5 rounded-md hover:bg-ink-100 text-ink-400 hover:text-ink-700 shrink-0"
+            title="ערכי יעד"
+            aria-label="ערכי יעד"
+          >
+            <Pencil className="w-3.5 h-3.5" />
+          </button>
+        )}
       </div>
     </article>
   );
@@ -397,7 +719,14 @@ function AchievementCard({ task, listColor, onEdit }: Omit<GoalCardProps, "entri
 // Habit card
 // ---------------------------------------------------------------------------
 
-function HabitCard({ task, entries, listColor, onEdit }: GoalCardProps) {
+function HabitCard({
+  task,
+  entries,
+  shareKind,
+  ownerName,
+  canEdit,
+  onEdit,
+}: GoalCardProps) {
   const stats = useMemo(
     () => computeGoalStats(task, entries),
     [task, entries]
@@ -428,20 +757,30 @@ function HabitCard({ task, entries, listColor, onEdit }: GoalCardProps) {
   const timeActual = stats.thisPeriodMinutesActual;
   const showTime = task.goal_track_time && timePlanned > 0;
 
+  const sharingBadge = getShareBadge(shareKind);
+  const iconColor = getIconColorClass(shareKind);
+
   return (
-    <article
-      className="card p-4 border-2"
-      style={{ borderColor: listColor ?? "#e5e7eb" }}
-    >
+    <article className={cn("card p-4", getBorderClass(shareKind))}>
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <Repeat className="w-4 h-4 text-primary-600 shrink-0" />
+            <Repeat className={cn("w-4 h-4 shrink-0", iconColor === "text-amber-500" ? "text-primary-600" : iconColor)} />
             <h3 className="text-sm font-semibold text-ink-900 truncate">
               {task.title}
             </h3>
           </div>
           <div className="text-xs text-ink-500 mt-0.5 flex items-center gap-1.5 flex-wrap">
+            {ownerName && <OwnerBadge name={ownerName} />}
+            {sharingBadge && (
+              <span className={cn(
+                "inline-flex items-center gap-1 text-[11px] rounded-full px-2 py-0.5 border",
+                sharingBadge.className
+              )}>
+                {sharingBadge.icon}
+                {sharingBadge.label}
+              </span>
+            )}
             <span>{summary}</span>
             {minStreak != null && (
               <>
@@ -465,15 +804,17 @@ function HabitCard({ task, entries, listColor, onEdit }: GoalCardProps) {
             )}
           </div>
         </div>
-        <button
-          type="button"
-          onClick={onEdit}
-          className="p-1.5 rounded-md hover:bg-ink-100 text-ink-400 hover:text-ink-700 shrink-0"
-          title="ערכי יעד"
-          aria-label="ערכי יעד"
-        >
-          <Pencil className="w-3.5 h-3.5" />
-        </button>
+        {canEdit && (
+          <button
+            type="button"
+            onClick={onEdit}
+            className="p-1.5 rounded-md hover:bg-ink-100 text-ink-400 hover:text-ink-700 shrink-0"
+            title="ערכי יעד"
+            aria-label="ערכי יעד"
+          >
+            <Pencil className="w-3.5 h-3.5" />
+          </button>
+        )}
       </div>
 
       <div className="mb-3">
@@ -569,6 +910,10 @@ function HabitCard({ task, entries, listColor, onEdit }: GoalCardProps) {
   );
 }
 
+// ---------------------------------------------------------------------------
+// StatCell
+// ---------------------------------------------------------------------------
+
 function StatCell({
   icon,
   label,
@@ -591,4 +936,13 @@ function StatCell({
       </div>
     </div>
   );
+}
+
+// ---------------------------------------------------------------------------
+// Helper — wrapper because getShareBadge and getShareBadgeLabel had to be
+// called from JSX without a hook, so extracted as plain function
+// ---------------------------------------------------------------------------
+
+function getShareBadge(kind: ShareKind) {
+  return getSharingBadge(kind);
 }

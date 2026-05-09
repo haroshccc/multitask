@@ -81,10 +81,7 @@ const COLOR_PRESETS = [
   "#ec4899", "#f43f5e", "#db2777", "#64748b", "#6b7280", "#374151",
 ];
 
-// When a list has no explicit color, we render a soft neutral gray so the
-// header-underline (and every badge that consumes --list-color) still reads
-// as deliberate instead of missing.
-const DEFAULT_LIST_COLOR = "#a8a8bc"; // matches ink-400
+const DEFAULT_LIST_COLOR = "#a8a8bc";
 
 export function TaskColumn({
   list,
@@ -232,22 +229,34 @@ export function TaskColumn({
     setMenuOpen(false);
   };
 
-  // Every list always has a colour — fall back to the neutral default so the
-  // underline and tinted chrome stay consistent even for lists created before
-  // the user picked a swatch.
   const listColor = list?.color ?? DEFAULT_LIST_COLOR;
   const displayEmoji = list?.emoji ?? null;
   const displayName = list?.name ?? "לא משויכות";
   const { user } = useAuth();
   const removeShare = useRemoveTaskListShare();
   const isOwner = !!user && !!list && list.owner_id === user.id;
-  // For non-owned lists, fetch shares to determine the current user's permission.
-  // RLS "shares: self read" ensures non-owners see only their own row.
-  const { data: shares = [] } = useTaskListShares(isOwner || !list ? null : list.id);
+  // Always load shares: owners need to know if they've shared with others (for goal icon coloring);
+  // non-owners get only their own share row via RLS.
+  const { data: shares = [] } = useTaskListShares(!list ? null : list.id);
   const myPermission: "read" | "write" | null = isOwner
     ? "write"
     : (shares.find((s) => s.user_id === user?.id)?.permission ?? null);
   const canEdit = !!list && (isOwner || myPermission === "write");
+
+  // Determine goal icon color for tasks in this column.
+  // Owners: check if anyone else has shares (write → green, read-only → pink, none → yellow).
+  // Non-owners: color based on my own permission level.
+  const goalShareKind: "private" | "read" | "write" = isOwner
+    ? shares.some((s) => s.permission === "write")
+      ? "write"
+      : shares.length > 0
+        ? "read"
+        : "private"
+    : myPermission === "write"
+      ? "write"
+      : myPermission === "read"
+        ? "read"
+        : "private";
   const isPinnedByFlag = !!list?.is_pinned;
 
   return (
@@ -255,28 +264,20 @@ export function TaskColumn({
       ref={setNodeRef}
       className={cn(
         "shrink-0 self-start flex flex-col bg-white border border-ink-200 rounded-xl shadow-soft transition-colors",
-        // Pinned (= "Unassigned") column has its own banner on the trailing
-        // edge of the page; size it independently of the main grid.
         pinned && "bg-ink-50/95",
         isOver && "ring-2 ring-primary-400 border-primary-300"
       )}
-      // Width: each column takes 1/divisor of its parent container width
-      // (in px), minus the shared 12px gap. When the count > maxVisible, the
-      // parent's overflow-x:auto handles horizontal scroll.
       style={{
         flex: "0 0 auto",
         width: `calc((100% - ${(divisor - 1) * 12}px) / ${divisor})`,
         ["--list-color" as string]: listColor,
       } as React.CSSProperties}
     >
-      {/* Header. The 2px bottom border is painted with the list colour and
-          acts as a title underline. */}
       <div
         className="px-3 py-2 flex items-center gap-2 relative border-b-2"
         style={{ borderBottomColor: listColor }}
       >
 
-        {/* Icon slot (click to change) */}
         <button
           type="button"
           onClick={() => canEdit && setEmojiOpen((v) => !v)}
@@ -367,9 +368,6 @@ export function TaskColumn({
           </span>
         )}
 
-        {/* Reorder arrows — vertical in stack, horizontal in columns. In RTL
-            columns, ChevronRight = "earlier in order" (i.e. towards the
-            leading edge), ChevronLeft = "later". */}
         {canEdit && onMoveInOrder && (
           <>
             <button
@@ -403,15 +401,10 @@ export function TaskColumn({
           </>
         )}
 
-        {/* Color circle — opens the same color-picker popover as the menu's
-            "שנה צבע כותרת" entry. Quick affordance for the most-used edit. */}
         {canEdit && (
           <button
             type="button"
             onClick={() => {
-              // Close the kebab menu if it's open so the two popovers
-              // never render at the same time (the user only wanted the
-              // color picker; the menu's a separate path).
               setMenuOpen(false);
               setColorOpen((v) => !v);
             }}
@@ -422,9 +415,6 @@ export function TaskColumn({
           />
         )}
 
-        {/* Hide-from-view eye — instant access to "I don't want this list
-            cluttering my view today". The popover in TasksChrome can put it
-            back. The unassigned pseudo-list opts out (no list_id to hide). */}
         {canEdit && onHide && (
           <button
             type="button"
@@ -557,7 +547,6 @@ export function TaskColumn({
         )}
       </div>
 
-      {/* Body — auto-sizes to content, caps at viewport height for scroll */}
       <div className="p-1 max-h-[calc(100vh-300px)] overflow-y-auto scrollbar-thin">
         {roots.length === 0 ? (
           canEdit ? (
@@ -588,10 +577,10 @@ export function TaskColumn({
                 onOpenEdit={onOpenEdit}
                 display={display}
                 readOnly={!canEdit}
+                goalShareKind={goalShareKind}
               />
             ))}
 
-            {/* Inline new-task row — hidden for read-only viewers */}
             {canEdit && (
               <div className="flex items-start gap-1.5 rounded-md px-1.5 py-1">
                 <span className="w-3.5 shrink-0" />
@@ -614,7 +603,6 @@ export function TaskColumn({
               </div>
             )}
 
-            {/* Collapsible root-level "הושלמו" */}
             {completedRoots.length > 0 && (
               <div className="mt-1">
                 <button
@@ -648,6 +636,7 @@ export function TaskColumn({
                       onOpenEdit={onOpenEdit}
                       display={display}
                       readOnly={!canEdit}
+                      goalShareKind={goalShareKind}
                     />
                   ))}
               </div>
@@ -704,12 +693,6 @@ export function TaskColumn({
   );
 }
 
-/**
- * Small modal popover for linking a task list to an event calendar (the
- * inverse of the picker in `EventCalendarEditDialog`). Picking a calendar
- * sets the bidirectional link and copies the calendar's color onto this
- * list so the two visually twin (per user-spec #6 of the calendar set).
- */
 function LinkCalendarPopover({
   list,
   onClose,
@@ -815,8 +798,6 @@ function LinkCalendarPopover({
         </div>
       </div>
 
-      {/* Inline-create — opens the calendar editor and auto-selects the
-          newly-created calendar in the picker once it saves. */}
       <EventCalendarEditDialog
         open={showCreate}
         calendar={null}

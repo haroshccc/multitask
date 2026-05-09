@@ -21,6 +21,8 @@ import {
   Save,
   Target,
   ClipboardList,
+  Trophy,
+  Repeat,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import {
@@ -195,6 +197,8 @@ export function TaskEditModal({
   /** YYYY-MM-DD; null means "use today" at save time. */
   const [goalStartedOn, setGoalStartedOn] = useState<string | null>(null);
   const [goalTrackTime, setGoalTrackTime] = useState<boolean>(true);
+  const [goalType, setGoalType] = useState<"achievement" | "habit">("habit");
+  const [goalDeadline, setGoalDeadline] = useState<string | null>(null);
 
   useEffect(() => {
     // Edit mode: hydrate from the persisted task.
@@ -216,7 +220,11 @@ export function TaskEditModal({
       setDurationMinutes(task.duration_minutes ?? null);
       setEstimatedMinutes(hoursToMinutes(task.estimated_hours ?? null));
       setIsPhase(!!task.is_phase);
-      setGoalEnabled(!!task.goal_period);
+      const taskAny = task as any;
+      const persistedGoalType: "achievement" | "habit" = taskAny.goal_type ?? "habit";
+      setGoalEnabled(!!task.goal_period || persistedGoalType === "achievement");
+      setGoalType(persistedGoalType);
+      setGoalDeadline(taskAny.goal_deadline ?? null);
       setGoalPeriod(
         (task.goal_period as "day" | "week" | "month" | null) ?? "week"
       );
@@ -251,6 +259,8 @@ export function TaskEditModal({
       );
       setIsPhase(false);
       setGoalEnabled(createDraft.goalEnabled ?? false);
+      setGoalType("habit");
+      setGoalDeadline(null);
       setGoalPeriod(createDraft.goalPeriod ?? "week");
       setGoalTarget(3);
       setGoalForever(true);
@@ -288,8 +298,11 @@ export function TaskEditModal({
       durationMinutes !== (task.duration_minutes ?? null) ||
       estimatedMinutes !== hoursToMinutes(task.estimated_hours ?? null) ||
       isPhase !== !!task.is_phase ||
-      goalEnabled !== !!task.goal_period ||
+      goalEnabled !== (!!task.goal_period || (task as any).goal_type === "achievement") ||
+      goalType !== ((task as any).goal_type ?? "habit") ||
+      goalDeadline !== ((task as any).goal_deadline ?? null) ||
       (goalEnabled &&
+        goalType === "habit" &&
         (goalPeriod !== task.goal_period ||
           goalTarget !== (task.goal_target ?? null) ||
           goalForever !== (task.goal_min_streak_periods == null) ||
@@ -360,20 +373,22 @@ export function TaskEditModal({
           estimated_hours:
             estimatedMinutes != null ? minutesToHours(estimatedMinutes) : null,
           is_phase: isPhase,
-          goal_period: goalEnabled ? goalPeriod : null,
-          goal_target: goalEnabled ? goalTarget : null,
-          goal_min_streak_periods: goalEnabled
-            ? goalForever
-              ? null
-              : goalMinStreak
+          goal_period: goalEnabled && goalType === "habit" ? goalPeriod : null,
+          goal_target: goalEnabled && goalType === "habit" ? goalTarget : null,
+          goal_min_streak_periods: goalEnabled && goalType === "habit"
+            ? goalForever ? null : goalMinStreak
             : null,
-          goal_started_on: goalEnabled
+          goal_started_on: goalEnabled && goalType === "habit"
             ? goalStartedOn ?? new Date().toISOString().slice(0, 10)
             : null,
-          goal_track_time: goalEnabled ? goalTrackTime : true,
+          goal_track_time: goalEnabled && goalType === "habit" ? goalTrackTime : true,
           source_thought_id: createDraft?.source_thought_id ?? null,
         };
-        const created = await createTask.mutateAsync(payload);
+        const created = await createTask.mutateAsync({
+          ...payload,
+          goal_type: goalEnabled ? goalType : null,
+          goal_deadline: goalEnabled && goalType === "achievement" ? goalDeadline : null,
+        } as any);
         pushUndo({
           description: "יצירת משימה",
           undo: () => deleteTaskM.mutate(created.id),
@@ -437,18 +452,18 @@ export function TaskEditModal({
       estimated_hours:
         estimatedMinutes != null ? minutesToHours(estimatedMinutes) : null,
       is_phase: isPhase,
-      goal_period: goalEnabled ? goalPeriod : null,
-      goal_target: goalEnabled ? goalTarget : null,
-      goal_min_streak_periods: goalEnabled
-        ? goalForever
-          ? null
-          : goalMinStreak
+      goal_period: goalEnabled && goalType === "habit" ? goalPeriod : null,
+      goal_target: goalEnabled && goalType === "habit" ? goalTarget : null,
+      goal_min_streak_periods: goalEnabled && goalType === "habit"
+        ? goalForever ? null : goalMinStreak
         : null,
-      goal_started_on: goalEnabled
+      goal_started_on: goalEnabled && goalType === "habit"
         ? goalStartedOn ?? new Date().toISOString().slice(0, 10)
         : null,
-      goal_track_time: goalEnabled ? goalTrackTime : true,
-    };
+      goal_track_time: goalEnabled && goalType === "habit" ? goalTrackTime : true,
+      goal_type: goalEnabled ? goalType : null,
+      goal_deadline: goalEnabled && goalType === "achievement" ? goalDeadline : null,
+    } as any;
     try {
       await updateTask.mutateAsync({ taskId: task.id, patch: newPatch });
       pushUndo({
@@ -854,14 +869,20 @@ export function TaskEditModal({
                       enabled={goalEnabled}
                       setEnabled={(v) => {
                         setGoalEnabled(v);
-                        // A goal needs recurrence to be tracked. Auto-enable
-                        // a sensible default (daily) when the user turns on a
-                        // goal without having set one yet.
-                        if (v && !recurrenceRule) {
+                        if (v && goalType === "habit" && !recurrenceRule) {
                           setRecurrenceRule("FREQ=DAILY");
                         }
                       }}
                       hasRecurrence={!!recurrenceRule}
+                      goalType={goalType}
+                      setGoalType={(t) => {
+                        setGoalType(t);
+                        if (t === "habit" && goalEnabled && !recurrenceRule) {
+                          setRecurrenceRule("FREQ=DAILY");
+                        }
+                      }}
+                      goalDeadline={goalDeadline}
+                      setGoalDeadline={setGoalDeadline}
                       period={goalPeriod}
                       setPeriod={setGoalPeriod}
                       target={goalTarget}
@@ -1073,6 +1094,10 @@ function GoalConfigSection(props: {
   enabled: boolean;
   setEnabled: (v: boolean) => void;
   hasRecurrence: boolean;
+  goalType: "achievement" | "habit";
+  setGoalType: (v: "achievement" | "habit") => void;
+  goalDeadline: string | null;
+  setGoalDeadline: (v: string | null) => void;
   period: "day" | "week" | "month";
   setPeriod: (v: "day" | "week" | "month") => void;
   target: number;
@@ -1090,6 +1115,10 @@ function GoalConfigSection(props: {
     enabled,
     setEnabled,
     hasRecurrence,
+    goalType,
+    setGoalType,
+    goalDeadline,
+    setGoalDeadline,
     period,
     setPeriod,
     target,
@@ -1110,7 +1139,7 @@ function GoalConfigSection(props: {
     <div>
       <div className="eyebrow mb-1 flex items-center gap-1.5">
         <Target className="w-3.5 h-3.5" />
-        יעד / הרגל
+        יעד
       </div>
       <div className="space-y-2.5">
         <label className="inline-flex items-center gap-2 text-sm cursor-pointer select-none">
@@ -1123,124 +1152,184 @@ function GoalConfigSection(props: {
           <span>הגדר כיעד</span>
         </label>
 
-        {enabled && !hasRecurrence && (
-          <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2.5 py-1.5">
-            יעד ללא חזרה לא יימדד — הגדר חזרה בטאב "תזמון".
-          </div>
-        )}
-
         {enabled && (
-          <div className="space-y-2.5 ps-6 border-s-2 border-primary-100">
-            {/* Target + period on one row */}
-            <div className="flex items-center gap-2 text-sm">
-              <span className="text-ink-700">לבצע</span>
-              <div className="inline-flex items-center gap-2">
-                <div className="inline-flex items-center border border-ink-200 rounded-md overflow-hidden bg-white">
-                  <button
-                    type="button"
-                    onClick={() => setTarget(Math.max(1, target - 1))}
-                    className="w-8 py-1.5 flex items-center justify-center text-ink-500 hover:bg-ink-100 active:bg-ink-200 text-sm leading-none select-none"
-                    aria-label="הפחת"
-                  >
-                    −
-                  </button>
-                  <span className="w-8 text-center text-sm font-medium text-ink-900 tabular-nums select-none">
-                    {target}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setTarget(target + 1)}
-                    className="w-8 py-1.5 flex items-center justify-center text-ink-500 hover:bg-ink-100 active:bg-ink-200 text-sm leading-none select-none"
-                    aria-label="הוסף"
-                  >
-                    +
-                  </button>
+          <>
+            {/* Goal type toggle */}
+            <div className="inline-flex rounded-md border border-ink-200 overflow-hidden text-sm">
+              <button
+                type="button"
+                onClick={() => setGoalType("achievement")}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 transition-colors",
+                  goalType === "achievement"
+                    ? "bg-amber-500 text-white"
+                    : "bg-white text-ink-600 hover:bg-ink-50"
+                )}
+              >
+                <Trophy className="w-3.5 h-3.5" />
+                הישגי
+              </button>
+              <button
+                type="button"
+                onClick={() => setGoalType("habit")}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 border-r border-ink-200 transition-colors",
+                  goalType === "habit"
+                    ? "bg-primary-600 text-white"
+                    : "bg-white text-ink-600 hover:bg-ink-50"
+                )}
+              >
+                <Repeat className="w-3.5 h-3.5" />
+                הרגלי
+              </button>
+            </div>
+
+            {goalType === "achievement" && (
+              <div className="space-y-2 ps-6 border-s-2 border-amber-200">
+                <p className="text-xs text-ink-500">
+                  יעד חד-פעמי — יסומן כהושג כשהמשימה תסומן כ"הושלמה".
+                </p>
+                <div className="flex items-center gap-2 text-sm flex-wrap">
+                  <span className="text-ink-700">דד-ליין (אופציונלי):</span>
+                  <input
+                    type="date"
+                    value={goalDeadline ?? ""}
+                    onChange={(e) => setGoalDeadline(e.target.value || null)}
+                    className="field text-sm py-1.5 w-auto"
+                  />
+                  {goalDeadline && (
+                    <button
+                      type="button"
+                      onClick={() => setGoalDeadline(null)}
+                      className="text-xs text-ink-400 hover:text-ink-700"
+                    >
+                      נקה
+                    </button>
+                  )}
                 </div>
-                <select
-                  value={period}
-                  onChange={(e) => setPeriod(e.target.value as "day" | "week" | "month")}
-                  className="field text-sm py-1"
-                >
-                  {GOAL_PERIOD_OPTIONS.map((p) => (
-                    <option key={p.id} value={p.id}>{p.perLabel}</option>
-                  ))}
-                </select>
               </div>
-            </div>
+            )}
 
-            {/* Forever toggle + min streak */}
-            <div className="space-y-1.5">
-              <label className="inline-flex items-center gap-2 text-sm cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={forever}
-                  onChange={(e) => setForever(e.target.checked)}
-                  className="w-4 h-4 rounded border-ink-300 text-primary-600 focus:ring-primary-500"
-                />
-                <span>ללא סיום (ההרגל ימשיך לעד)</span>
-              </label>
-              {!forever && (
-                <div className="flex items-center gap-2 flex-wrap text-sm ps-6">
-                  <span className="text-ink-700">אבן דרך ראשונה:</span>
-                  <div className="inline-flex items-center border border-ink-200 rounded-md overflow-hidden bg-white">
-                    <button
-                      type="button"
-                      onClick={() => setMinStreak(Math.max(1, minStreak - 1))}
-                      className="w-8 py-1.5 flex items-center justify-center text-ink-500 hover:bg-ink-100 active:bg-ink-200 text-sm leading-none select-none"
-                      aria-label="הפחת"
-                    >
-                      −
-                    </button>
-                    <span className="w-8 text-center text-sm font-medium text-ink-900 tabular-nums select-none">
-                      {minStreak}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setMinStreak(minStreak + 1)}
-                      className="w-8 py-1.5 flex items-center justify-center text-ink-500 hover:bg-ink-100 active:bg-ink-200 text-sm leading-none select-none"
-                      aria-label="הוסף"
-                    >
-                      +
-                    </button>
+            {goalType === "habit" && (
+              <div className="space-y-2.5 ps-6 border-s-2 border-primary-100">
+                {!hasRecurrence && (
+                  <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2.5 py-1.5">
+                    הרגל ללא חזרה לא יימדד — הגדר חזרה בטאב "תזמון".
                   </div>
-                  <span className="text-ink-700">{periodMeta.unitLabel} ברצף</span>
+                )}
+
+                {/* Target + period on one row */}
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="text-ink-700">לבצע</span>
+                  <div className="inline-flex items-center gap-2">
+                    <div className="inline-flex items-center border border-ink-200 rounded-md overflow-hidden bg-white">
+                      <button
+                        type="button"
+                        onClick={() => setTarget(Math.max(1, target - 1))}
+                        className="w-8 py-1.5 flex items-center justify-center text-ink-500 hover:bg-ink-100 active:bg-ink-200 text-sm leading-none select-none"
+                        aria-label="הפחת"
+                      >
+                        −
+                      </button>
+                      <span className="w-8 text-center text-sm font-medium text-ink-900 tabular-nums select-none">
+                        {target}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setTarget(target + 1)}
+                        className="w-8 py-1.5 flex items-center justify-center text-ink-500 hover:bg-ink-100 active:bg-ink-200 text-sm leading-none select-none"
+                        aria-label="הוסף"
+                      >
+                        +
+                      </button>
+                    </div>
+                    <select
+                      value={period}
+                      onChange={(e) => setPeriod(e.target.value as "day" | "week" | "month")}
+                      className="field text-sm py-1"
+                    >
+                      {GOAL_PERIOD_OPTIONS.map((p) => (
+                        <option key={p.id} value={p.id}>{p.perLabel}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
-              )}
-            </div>
 
-            {/* Started-on date */}
-            <div className="flex items-center gap-2 flex-wrap text-sm">
-              <span className="text-ink-700">התחלת מעקב:</span>
-              <input
-                type="date"
-                value={startedOn ?? ""}
-                onChange={(e) => setStartedOn(e.target.value || null)}
-                className="field text-sm py-1.5 w-auto"
-                placeholder="היום"
-              />
-              <span className="text-[11px] text-ink-400">
-                ריק = יישמר היום אוטומטית
-              </span>
-            </div>
+                {/* Forever toggle + min streak */}
+                <div className="space-y-1.5">
+                  <label className="inline-flex items-center gap-2 text-sm cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={forever}
+                      onChange={(e) => setForever(e.target.checked)}
+                      className="w-4 h-4 rounded border-ink-300 text-primary-600 focus:ring-primary-500"
+                    />
+                    <span>ללא סיום (ההרגל ימשיך לעד)</span>
+                  </label>
+                  {!forever && (
+                    <div className="flex items-center gap-2 flex-wrap text-sm ps-6">
+                      <span className="text-ink-700">אבן דרך ראשונה:</span>
+                      <div className="inline-flex items-center border border-ink-200 rounded-md overflow-hidden bg-white">
+                        <button
+                          type="button"
+                          onClick={() => setMinStreak(Math.max(1, minStreak - 1))}
+                          className="w-8 py-1.5 flex items-center justify-center text-ink-500 hover:bg-ink-100 active:bg-ink-200 text-sm leading-none select-none"
+                          aria-label="הפחת"
+                        >
+                          −
+                        </button>
+                        <span className="w-8 text-center text-sm font-medium text-ink-900 tabular-nums select-none">
+                          {minStreak}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setMinStreak(minStreak + 1)}
+                          className="w-8 py-1.5 flex items-center justify-center text-ink-500 hover:bg-ink-100 active:bg-ink-200 text-sm leading-none select-none"
+                          aria-label="הוסף"
+                        >
+                          +
+                        </button>
+                      </div>
+                      <span className="text-ink-700">{periodMeta.unitLabel} ברצף</span>
+                    </div>
+                  )}
+                </div>
 
-            {/* Track time? */}
-            <label className="inline-flex items-center gap-2 text-sm cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={trackTime}
-                onChange={(e) => setTrackTime(e.target.checked)}
-                className="w-4 h-4 rounded border-ink-300 text-primary-600 focus:ring-primary-500"
-              />
-              <span>עקבי גם אחרי זמן בפועל (סטופר/הזנה ידנית)</span>
-            </label>
-            <p className="text-[11px] text-ink-400 ps-6 -mt-1">
-              כבוי = לא ניצור תזכורות "פעימה ללא זמן" עבור משימה זו.
-            </p>
-          </div>
+                {/* Started-on date */}
+                <div className="flex items-center gap-2 flex-wrap text-sm">
+                  <span className="text-ink-700">התחלת מעקב:</span>
+                  <input
+                    type="date"
+                    value={startedOn ?? ""}
+                    onChange={(e) => setStartedOn(e.target.value || null)}
+                    className="field text-sm py-1.5 w-auto"
+                    placeholder="היום"
+                  />
+                  <span className="text-[11px] text-ink-400">
+                    ריק = יישמר היום אוטומטית
+                  </span>
+                </div>
+
+                {/* Track time? */}
+                <label className="inline-flex items-center gap-2 text-sm cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={trackTime}
+                    onChange={(e) => setTrackTime(e.target.checked)}
+                    className="w-4 h-4 rounded border-ink-300 text-primary-600 focus:ring-primary-500"
+                  />
+                  <span>עקבי גם אחרי זמן בפועל (סטופר/הזנה ידנית)</span>
+                </label>
+                <p className="text-[11px] text-ink-400 ps-6 -mt-1">
+                  כבוי = לא ניצור תזכורות "פעימה ללא זמן" עבור משימה זו.
+                </p>
+              </div>
+            )}
+          </>
         )}
         {!enabled && (
           <p className="text-[11px] text-ink-400">
-            הפכי את המשימה ליעד עם מעקב סטריק והתקדמות שבועית/חודשית.
+            הגדר יעד הישגי (חד-פעמי) או הרגלי (מחזורי עם סטריק).
           </p>
         )}
       </div>

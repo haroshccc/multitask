@@ -157,3 +157,16 @@ export async function removeTaskListShare(
     .eq("user_id", userId);
   if (error) throw error;
 }
+
+export async function listSharesForMultipleLists(
+  listIds: string[]
+): Promise<{ entity_id: string; user_id: string; permission: "read" | "write" }[]> {
+  if (listIds.length === 0) return [];
+  const { data, error } = await supabase
+    .from("shares")
+    .select("entity_id, user_id, permission")
+    .eq("entity_type", "task_list")
+    .in("entity_id", listIds);
+  if (error) throw error;
+  return (data ?? []) as { entity_id: string; user_id: string; permission: "read" | "write" }[];
+}

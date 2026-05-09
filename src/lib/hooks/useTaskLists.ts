@@ -112,9 +112,6 @@ export function useReorderTaskLists() {
   return useMutation({
     mutationFn: (updates: { id: string; sort_order: number }[]) =>
       service.reorderTaskLists(updates),
-    // Optimistic update — without it, rapid arrow-clicks see stale `lists`
-    // (the second click computes the same sort_order as the first because
-    // the cache hasn't refreshed yet) and the row appears stuck.
     onMutate: async (updates) => {
       if (!scope.organizationId) return;
       const queryKey = queryFamilies.allTaskLists(scope.organizationId);
@@ -161,6 +158,15 @@ export function useTaskListShares(listId: string | null | undefined) {
     queryKey: ["task-list", listId ?? "", "shares"],
     queryFn: () => service.listTaskListShares(listId!),
     enabled: !!listId,
+  });
+}
+
+export function useSharesForTaskLists(listIds: string[]) {
+  const key = listIds.slice().sort().join(",");
+  return useQuery({
+    queryKey: ["task-list-shares-batch", key],
+    queryFn: () => service.listSharesForMultipleLists(listIds),
+    enabled: listIds.length > 0,
   });
 }
 

@@ -95,11 +95,11 @@ function getBorderClass(kind: ShareKind): string {
     case "mine-read":
       return "border-2 border-dashed border-amber-400";
     case "mine-write":
-      return "border-[3px] border-dotted border-amber-400";
+      return "border-4 border-dotted border-amber-400";
     case "other-read":
       return "border-2 border-dashed border-pink-400";
     case "other-write":
-      return "border-[3px] border-dotted border-pink-400";
+      return "border-4 border-dotted border-pink-400";
   }
 }
 
@@ -417,7 +417,7 @@ export function Goals() {
               ))}
             </div>
 
-            {/* Layout toggle — labeled so "לפי רשימה" is discoverable */}
+            {/* Layout toggle */}
             <div className="inline-flex rounded-lg border border-ink-200 overflow-hidden text-sm ms-auto">
               <button
                 type="button"
@@ -480,8 +480,7 @@ export function Goals() {
               ))}
             </div>
 
-            {/* User filter — shown for "shared" (filter by who I shared with)
-                or "all"/"others" (filter by goal owner) */}
+            {/* User filter */}
             {(
               (scopeFilter === "shared" && sharedWithMembers.length > 0) ||
               ((scopeFilter === "all" || scopeFilter === "others") && othersCount > 0 && otherMembers.length > 0)
@@ -489,7 +488,7 @@ export function Goals() {
               <select
                 value={userFilter ?? ""}
                 onChange={(e) => setUserFilter(e.target.value || null)}
-                className="field text-sm py-1.5 pe-8 ps-3 rounded-lg border border-ink-200"
+                className="field w-auto ms-auto text-sm py-1.5 pe-8 ps-3 rounded-lg border border-ink-200"
                 aria-label="סינון לפי משתמש"
               >
                 <option value="">
@@ -515,7 +514,7 @@ export function Goals() {
               שיתפתי לצפייה
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="w-4 h-4 rounded border-[3px] border-dotted border-amber-400 inline-block shrink-0" />
+              <span className="w-4 h-4 rounded border-4 border-dotted border-amber-400 inline-block shrink-0" />
               שיתפתי לעריכה
             </span>
             <span className="flex items-center gap-1.5">
@@ -523,7 +522,7 @@ export function Goals() {
               של אחר — צפייה
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="w-4 h-4 rounded border-[3px] border-dotted border-pink-400 inline-block shrink-0" />
+              <span className="w-4 h-4 rounded border-4 border-dotted border-pink-400 inline-block shrink-0" />
               של אחר — עריכה
             </span>
           </div>
@@ -984,11 +983,6 @@ function StatCell({
     </div>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Helper — wrapper because getShareBadge and getShareBadgeLabel had to be
-// called from JSX without a hook, so extracted as plain function
-// ---------------------------------------------------------------------------
 
 function getShareBadge(kind: ShareKind) {
   return getSharingBadge(kind);

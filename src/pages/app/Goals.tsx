@@ -90,17 +90,16 @@ function isGoal(task: Task): boolean {
 
 function getBorderClass(kind: ShareKind): string {
   switch (kind) {
+    case "private":
+      return "border-2 border-amber-400";
     case "mine-read":
-      return "border-2 border-dashed border-pink-400";
+      return "border-2 border-dashed border-amber-400";
     case "mine-write":
-      // CSS doesn't have dash-dot natively; we use border-double for visual distinction
-      return "border-4 border-double border-green-400";
+      return "border-2 border-dotted border-amber-400";
     case "other-read":
-      return "border-2 border-dashed border-slate-400";
+      return "border-2 border-dashed border-pink-400";
     case "other-write":
-      return "border-2 border-dotted border-green-400";
-    default:
-      return "border border-ink-200";
+      return "border-2 border-dotted border-pink-400";
   }
 }
 
@@ -508,23 +507,23 @@ export function Goals() {
           {/* Legend */}
           <div className="flex items-center gap-4 flex-wrap text-[11px] text-ink-500">
             <span className="flex items-center gap-1.5">
-              <span className="w-4 h-4 rounded border border-amber-400 inline-block shrink-0" />
+              <span className="w-4 h-4 rounded border-2 border-amber-400 inline-block shrink-0" />
               יעד פרטי
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="w-4 h-4 rounded border-2 border-dashed border-pink-400 inline-block shrink-0" />
+              <span className="w-4 h-4 rounded border-2 border-dashed border-amber-400 inline-block shrink-0" />
               שיתפתי לצפייה
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="w-4 h-4 rounded border-4 border-double border-green-400 inline-block shrink-0" />
+              <span className="w-4 h-4 rounded border-2 border-dotted border-amber-400 inline-block shrink-0" />
               שיתפתי לעריכה
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="w-4 h-4 rounded border-2 border-dashed border-slate-400 inline-block shrink-0" />
+              <span className="w-4 h-4 rounded border-2 border-dashed border-pink-400 inline-block shrink-0" />
               של אחר — צפייה
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="w-4 h-4 rounded border-2 border-dotted border-green-400 inline-block shrink-0" />
+              <span className="w-4 h-4 rounded border-2 border-dotted border-pink-400 inline-block shrink-0" />
               של אחר — עריכה
             </span>
           </div>

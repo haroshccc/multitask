@@ -95,7 +95,7 @@ function getBorderClass(kind: ShareKind): string {
       // CSS doesn't have dash-dot natively; we use border-double for visual distinction
       return "border-4 border-double border-green-400";
     case "other-read":
-      return "border-2 border-dotted border-slate-400";
+      return "border-2 border-dashed border-slate-400";
     case "other-write":
       return "border-2 border-dotted border-green-400";
     default:
@@ -262,9 +262,18 @@ export function Goals() {
       result = result.filter((t) => t.owner_id !== userId);
     }
 
-    // User filter (who owns the goal)
+    // User filter — meaning differs by scope:
+    // "shared" scope → filter by which user I shared with (via listShares)
+    // other scopes   → filter by goal owner
     if (userFilter) {
-      result = result.filter((t) => t.owner_id === userFilter);
+      if (scopeFilter === "shared") {
+        result = result.filter((t) => {
+          if (!t.task_list_id) return false;
+          return listShares.some((s) => s.entity_id === t.task_list_id && s.user_id === userFilter);
+        });
+      } else {
+        result = result.filter((t) => t.owner_id === userFilter);
+      }
     }
 
     // Type filter
@@ -272,7 +281,7 @@ export function Goals() {
     if (typeFilter === "habit") result = result.filter(isHabit);
 
     return result;
-  }, [goalTasks, scopeFilter, userFilter, typeFilter, userId, listShareMap]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [goalTasks, scopeFilter, userFilter, typeFilter, userId, listShareMap, listShares]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // For columns layout: group by task_list_id
   const columns = useMemo(() => {
@@ -305,11 +314,20 @@ export function Goals() {
   const habitCount = goalTasks.filter(isHabit).length;
   const achievementCount = goalTasks.filter(isAchievement).length;
 
-  // Other members (for user filter)
+  // Other members (for user filter in "others"/"all" scopes)
   const otherMembers = useMemo(
     () => orgMembers.filter((m) => m.membership.user_id !== userId),
     [orgMembers, userId]
   );
+
+  // Members I've explicitly shared with (for "shared" scope user filter)
+  const sharedWithMembers = useMemo(() => {
+    const myListIds = new Set(lists.filter((l) => l.owner_id === userId).map((l) => l.id));
+    const sharedUserIds = new Set(
+      listShares.filter((s) => myListIds.has(s.entity_id)).map((s) => s.user_id)
+    );
+    return orgMembers.filter((m) => sharedUserIds.has(m.membership.user_id));
+  }, [listShares, lists, userId, orgMembers]);
 
   const setTypeFilterPersist = (v: GoalTypeFilter) => {
     setTypeFilter(v);
@@ -322,7 +340,7 @@ export function Goals() {
   const setScopeFilterPersist = (v: ScopeFilter) => {
     setScopeFilter(v);
     localStorage.setItem(SCOPE_FILTER_KEY, JSON.stringify(v));
-    if (v === "mine") setUserFilter(null); // user filter irrelevant for "mine"
+    setUserFilter(null); // always reset when scope changes — meaning of userFilter differs per scope
   };
 
   return (
@@ -341,9 +359,8 @@ export function Goals() {
     >
       {!isLoading && goalTasks.length > 0 && (
         <div className="flex flex-col gap-3 mb-4">
-          {/* Row 1: scope filter + layout toggle */}
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            {/* Scope tabs */}
+          {/* Row 1: scope filter */}
+          <div className="flex items-center gap-3 flex-wrap">
             <div className="inline-flex rounded-lg border border-ink-200 overflow-hidden text-sm">
               {(
                 [
@@ -376,31 +393,31 @@ export function Goals() {
               ))}
             </div>
 
-            {/* Layout toggle */}
-            <div className="inline-flex rounded-lg border border-ink-200 overflow-hidden">
+            {/* Layout toggle — labeled so "לפי רשימה" is discoverable */}
+            <div className="inline-flex rounded-lg border border-ink-200 overflow-hidden text-sm ms-auto">
               <button
                 type="button"
                 onClick={() => setLayoutPersist("grid")}
                 className={cn(
-                  "p-2 transition-colors border-e border-ink-200",
+                  "flex items-center gap-1.5 px-3 py-1.5 transition-colors border-e border-ink-200",
                   layout === "grid" ? "bg-primary-600 text-white" : "bg-white text-ink-500 hover:bg-ink-50"
                 )}
-                title="גריד"
                 aria-label="תצוגת גריד"
               >
-                <LayoutGrid className="w-4 h-4" />
+                <LayoutGrid className="w-3.5 h-3.5" />
+                <span>גריד</span>
               </button>
               <button
                 type="button"
                 onClick={() => setLayoutPersist("columns")}
                 className={cn(
-                  "p-2 transition-colors",
+                  "flex items-center gap-1.5 px-3 py-1.5 transition-colors",
                   layout === "columns" ? "bg-primary-600 text-white" : "bg-white text-ink-500 hover:bg-ink-50"
                 )}
-                title="עמודות לפי רשימה"
-                aria-label="תצוגת עמודות לפי רשימה"
+                aria-label="תצוגה לפי רשימה"
               >
-                <Columns3 className="w-4 h-4" />
+                <Columns3 className="w-3.5 h-3.5" />
+                <span>לפי רשימה</span>
               </button>
             </div>
           </div>
@@ -439,16 +456,22 @@ export function Goals() {
               ))}
             </div>
 
-            {/* User filter (shown when scope allows multiple owners) */}
-            {(scopeFilter === "all" || scopeFilter === "others") && othersCount > 0 && otherMembers.length > 0 && (
+            {/* User filter — shown for "shared" (filter by who I shared with)
+                or "all"/"others" (filter by goal owner) */}
+            {(
+              (scopeFilter === "shared" && sharedWithMembers.length > 0) ||
+              ((scopeFilter === "all" || scopeFilter === "others") && othersCount > 0 && otherMembers.length > 0)
+            ) && (
               <select
                 value={userFilter ?? ""}
                 onChange={(e) => setUserFilter(e.target.value || null)}
                 className="field text-sm py-1.5 pe-8 ps-3 rounded-lg border border-ink-200"
                 aria-label="סינון לפי משתמש"
               >
-                <option value="">כל המשתמשים</option>
-                {otherMembers.map(({ membership, profile }) => (
+                <option value="">
+                  {scopeFilter === "shared" ? "כל המשותפים" : "כל המשתמשים"}
+                </option>
+                {(scopeFilter === "shared" ? sharedWithMembers : otherMembers).map(({ membership, profile }) => (
                   <option key={membership.user_id} value={membership.user_id}>
                     {profile?.full_name ?? (profile as any)?.email ?? membership.user_id.slice(0, 8)}
                   </option>
@@ -472,7 +495,7 @@ export function Goals() {
               שיתפתי לעריכה
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="w-4 h-4 rounded border-2 border-dotted border-slate-400 inline-block shrink-0" />
+              <span className="w-4 h-4 rounded border-2 border-dashed border-slate-400 inline-block shrink-0" />
               של אחר — צפייה
             </span>
             <span className="flex items-center gap-1.5">

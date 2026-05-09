@@ -82,8 +82,13 @@ interface TaskRowProps {
   onOpenEdit: (taskId: string) => void;
   /** Per-user pref of which inline badges to render */
   display: RowDisplayPrefs;
-  /** When true the row is view-only: no edits, completions, or mutations */
-  readOnly?: boolean;
+  /**
+   * Access level for this row.
+   * "owner"  — full edit (default)
+   * "write"  — description + timer only (no title edit, no completion, no DnD)
+   * "read"   — view-only, no mutations
+   */
+  permission?: "owner" | "write" | "read";
   /** Sharing state of the goal, determines icon color. Omit for non-goal tasks. */
   goalShareKind?: "private" | "read" | "write";
 }
@@ -98,7 +103,7 @@ export function TaskRow({
   focusTaskId,
   onOpenEdit,
   display,
-  readOnly = false,
+  permission = "owner",
   goalShareKind,
 }: TaskRowProps) {
   const { task, children, depth } = node;
@@ -114,6 +119,8 @@ export function TaskRow({
       ? "delegated"
       : "mine";
   const isAssigned = taskOwnershipMode === "assigned";
+  const isReadOnly = permission === "read";
+  const isWriteOnly = permission === "write";
 
   const updateTask = useUpdateTask();
   const completeTask = useCompleteTask();
@@ -645,8 +652,8 @@ export function TaskRow({
           )}
         </button>
 
-        {/* Drag handle — hidden for read-only viewers */}
-        {!readOnly && (
+        {/* Drag handle — hidden for non-owner viewers */}
+        {!isReadOnly && !isWriteOnly && (
           <button
             {...attributes}
             {...listeners}
@@ -657,7 +664,7 @@ export function TaskRow({
             <GripVertical className="w-3.5 h-3.5" />
           </button>
         )}
-        {readOnly && <span className="w-3.5 shrink-0" />}
+        {(isReadOnly || isWriteOnly) && <span className="w-3.5 shrink-0" />}
 
         {/* Expand / collapse chevron */}
         {children.length > 0 ? (
@@ -686,13 +693,13 @@ export function TaskRow({
             Uses showAsDone so the click→500ms grace window shows the green
             check immediately. */}
         <button
-          onClick={readOnly ? undefined : toggleComplete}
-          disabled={readOnly}
+          onClick={isReadOnly || isWriteOnly ? undefined : toggleComplete}
+          disabled={isReadOnly || isWriteOnly}
           className={cn(
             "mt-0.5 w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center transition-all",
             showAsDone
               ? "bg-success-500 border-success-500 text-white"
-              : readOnly
+              : (isReadOnly || isWriteOnly)
               ? "border-ink-200 cursor-default"
               : "border-ink-300 hover:border-success-500"
           )}
@@ -725,15 +732,15 @@ export function TaskRow({
         <input
           ref={inputRef}
           value={draft}
-          readOnly={readOnly || isAssigned}
-          onChange={readOnly || isAssigned ? undefined : (e) => setDraft(e.target.value)}
-          onBlur={readOnly || isAssigned ? undefined : commitTitle}
-          onKeyDown={readOnly || isAssigned ? undefined : handleKeyDown}
-          onDoubleClick={readOnly || isAssigned ? undefined : () => onOpenEdit(task.id)}
+          readOnly={isReadOnly || isWriteOnly || isAssigned}
+          onChange={isReadOnly || isWriteOnly || isAssigned ? undefined : (e) => setDraft(e.target.value)}
+          onBlur={isReadOnly || isWriteOnly || isAssigned ? undefined : commitTitle}
+          onKeyDown={isReadOnly || isWriteOnly || isAssigned ? undefined : handleKeyDown}
+          onDoubleClick={isReadOnly ? undefined : () => onOpenEdit(task.id)}
           placeholder="משימה חדשה..."
           className={cn(
             "flex-1 min-w-0 bg-transparent border-0 outline-none text-sm py-0.5",
-            (readOnly || isAssigned) && "cursor-default select-text",
+            (isReadOnly || isWriteOnly || isAssigned) && "cursor-default select-text",
             !taskIsRecurring && showAsDone && "line-through text-ink-400"
           )}
         />
@@ -956,7 +963,7 @@ export function TaskRow({
           </a>
         )}
 
-        {display.timer && (
+        {!isReadOnly && display.timer && (
           <button
             onClick={toggleTimer}
             className={cn(
@@ -977,7 +984,7 @@ export function TaskRow({
           </button>
         )}
 
-        {display.timer && task.actual_seconds > 0 && (
+        {!isReadOnly && display.timer && task.actual_seconds > 0 && (
           <button
             type="button"
             onClick={() => onOpenEdit(task.id)}
@@ -989,7 +996,7 @@ export function TaskRow({
         )}
 
         {/* Outside action cluster: + subtask, edit pencil — hidden when read-only or assigned */}
-        {!readOnly && !isAssigned && (
+        {!isReadOnly && !isWriteOnly && !isAssigned && (
           <button
             onClick={handleAddSubtask}
             className="shrink-0 p-1 rounded-md text-ink-400 hover:text-primary-700 hover:bg-primary-50 opacity-0 group-hover:opacity-100 transition-opacity"
@@ -1001,7 +1008,7 @@ export function TaskRow({
           </button>
         )}
 
-        {!readOnly && !isAssigned && (
+        {!isReadOnly && !isWriteOnly && !isAssigned && (
           <button
             onClick={() => onOpenEdit(task.id)}
             className="shrink-0 p-1 rounded-md text-ink-400 hover:text-ink-900 hover:bg-ink-100 opacity-0 group-hover:opacity-100 transition-opacity"
@@ -1012,10 +1019,22 @@ export function TaskRow({
             <Pencil className="w-3.5 h-3.5" />
           </button>
         )}
+        {/* Write-only: show pencil to access description + timer in modal */}
+        {isWriteOnly && (
+          <button
+            onClick={() => onOpenEdit(task.id)}
+            className="shrink-0 p-1 rounded-md text-ink-400 hover:text-ink-900 hover:bg-ink-100 opacity-0 group-hover:opacity-100 transition-opacity"
+            aria-label="ערוך תיאור"
+            title="ערוך תיאור"
+            type="button"
+          >
+            <Pencil className="w-3.5 h-3.5" />
+          </button>
+        )}
         </div>
         {/* end desktop-only badges wrapper */}
 
-        {!readOnly && <div className="relative shrink-0">
+        {!isReadOnly && <div className="relative shrink-0">
           <button
             ref={menuTriggerRef}
             onClick={() => (menuOpen ? closeMenu() : openMenu())}
@@ -1032,8 +1051,8 @@ export function TaskRow({
                 className="fixed w-64 md:w-56 bg-white border border-ink-200 rounded-xl shadow-lift z-[61] py-1 text-sm max-h-[80vh] overflow-y-auto"
                 style={{ top: menuPos.top, right: menuPos.right, left: menuPos.left }}
               >
-                {/* Mobile-only section — assigned tasks get a stripped-down menu */}
-                {isAssigned ? (
+                {/* Mobile-only section — assigned/write-only tasks get a stripped-down menu */}
+                {(isAssigned || isWriteOnly) ? (
                   <div className="md:hidden">
                     <MenuBtn
                       icon={<Pencil className="w-3.5 h-3.5" />}
@@ -1204,7 +1223,7 @@ export function TaskRow({
                 </div>
                 )} {/* end isAssigned ternary */}
 
-                {!isAssigned && <><MenuBtn
+                {!isAssigned && !isWriteOnly && <><MenuBtn
                   icon={<Copy className="w-3.5 h-3.5" />}
                   onClick={handleDuplicateSingle}
                 >
@@ -1314,6 +1333,7 @@ export function TaskRow({
           focusTaskId={focusTaskId}
           onOpenEdit={onOpenEdit}
           display={display}
+          permission={permission}
           goalShareKind={goalShareKind}
         />
       )}
@@ -1349,6 +1369,7 @@ function ChildrenBlock({
   focusTaskId,
   onOpenEdit,
   display,
+  permission,
   goalShareKind,
 }: {
   children: TaskTreeNode[];
@@ -1359,6 +1380,7 @@ function ChildrenBlock({
   focusTaskId: string | null;
   onOpenEdit: (taskId: string) => void;
   display: RowDisplayPrefs;
+  permission?: "owner" | "write" | "read";
   goalShareKind?: "private" | "read" | "write";
 }) {
   const [showCompleted, setShowCompleted] = useState(false);
@@ -1379,6 +1401,7 @@ function ChildrenBlock({
           focusTaskId={focusTaskId}
           onOpenEdit={onOpenEdit}
           display={display}
+          permission={permission}
           goalShareKind={goalShareKind}
         />
       ))}
@@ -1415,6 +1438,7 @@ function ChildrenBlock({
                 focusTaskId={focusTaskId}
                 onOpenEdit={onOpenEdit}
                 display={display}
+                permission={permission}
                 goalShareKind={goalShareKind}
               />
             ))}

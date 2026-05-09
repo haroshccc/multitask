@@ -239,9 +239,16 @@ export function TaskColumn({
   // non-owners get only their own share row via RLS.
   const { data: shares = [] } = useTaskListShares(!list ? null : list.id);
   const myPermission: "read" | "write" | null = isOwner
-    ? "write"
+    ? null
     : (shares.find((s) => s.user_id === user?.id)?.permission ?? null);
-  const canEdit = !!list && (isOwner || myPermission === "write");
+  // Column-level controls (rename, color, emoji, archive, order) — owner only.
+  const canEdit = !!list && isOwner;
+  // Task-level effective permission for rows in this column.
+  const effectivePermission: "owner" | "write" | "read" = isOwner
+    ? "owner"
+    : myPermission === "write"
+      ? "write"
+      : "read";
 
   // Determine goal icon color for tasks in this column.
   // Owners: check if anyone else has shares (write → green, read-only → pink, none → yellow).
@@ -576,7 +583,7 @@ export function TaskColumn({
                 focusTaskId={focusTaskId}
                 onOpenEdit={onOpenEdit}
                 display={display}
-                readOnly={!canEdit}
+                permission={effectivePermission}
                 goalShareKind={goalShareKind}
               />
             ))}
@@ -635,7 +642,7 @@ export function TaskColumn({
                       focusTaskId={focusTaskId}
                       onOpenEdit={onOpenEdit}
                       display={display}
-                      readOnly={!canEdit}
+                      permission={effectivePermission}
                       goalShareKind={goalShareKind}
                     />
                   ))}

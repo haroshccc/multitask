@@ -16,7 +16,9 @@ import {
   Plus,
   Columns,
   Tag,
+  Upload,
 } from "lucide-react";
+import { ImportTasksModal } from "@/components/tasks/ImportTasksModal";
 import { MAX_VISIBLE_BOUNDS } from "@/lib/hooks/useMaxVisibleColumns";
 import { ScreenScaffold } from "@/components/layout/ScreenScaffold";
 import { TasksChrome, type TasksLayout } from "@/components/tasks/TasksChrome";
@@ -74,6 +76,7 @@ export function Tasks() {
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [rowDisplayOpen, setRowDisplayOpen] = useState(false);
   const [statusesOpen, setStatusesOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
     return localStorage.getItem("multitask.tasks.filtersOpen") === "true";
@@ -658,6 +661,18 @@ export function Tasks() {
                   <Archive className="w-4 h-4" />
                   ארכיון רשימות
                 </button>
+                <div className="h-px bg-ink-100 mx-2" />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setImportOpen(true);
+                    setPageMenuOpen(false);
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-ink-700 hover:bg-ink-100 text-start"
+                >
+                  <Upload className="w-4 h-4" />
+                  ייבוא משימות
+                </button>
               </div>
             </>
           )}
@@ -854,6 +869,8 @@ export function Tasks() {
       )}
 
       {statusesOpen && <StatusesModal onClose={() => setStatusesOpen(false)} />}
+
+      {importOpen && <ImportTasksModal onClose={() => setImportOpen(false)} />}
 
       <BulkActionsToolbar allTasks={tasks} />
 

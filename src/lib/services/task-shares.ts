@@ -65,3 +65,28 @@ export async function removeTaskShare(taskId: string, userId: string): Promise<v
     .eq("user_id", userId);
   if (error) throw error;
 }
+
+/** Lightweight row used when batch-loading shares for many tasks at once. */
+export interface TaskShareSummary {
+  entity_id: string;
+  user_id: string;
+  permission: "read" | "write";
+  organization_id: string;
+}
+
+/** Batch-load share rows for multiple task IDs in a single query. */
+export async function listTaskSharesForTasks(taskIds: string[]): Promise<TaskShareSummary[]> {
+  if (taskIds.length === 0) return [];
+  const { data, error } = await (supabase as any)
+    .from("shares")
+    .select("entity_id, user_id, permission, organization_id")
+    .eq("entity_type", "task")
+    .in("entity_id", taskIds);
+  if (error) throw error;
+  return (data ?? []).map((r: any) => ({
+    entity_id: r.entity_id as string,
+    user_id: r.user_id as string,
+    permission: r.permission as "read" | "write",
+    organization_id: r.organization_id as string,
+  }));
+}

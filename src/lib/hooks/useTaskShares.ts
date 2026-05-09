@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import * as service from "@/lib/services/task-shares";
+export type { TaskShareSummary } from "@/lib/services/task-shares";
 
 export function useTaskShares(taskId: string | null) {
   return useQuery({
@@ -35,5 +36,15 @@ export function useRemoveTaskShare() {
       service.removeTaskShare(taskId, userId),
     onSuccess: (_d, { taskId }) =>
       qc.invalidateQueries({ queryKey: ["task-shares", taskId] }),
+  });
+}
+
+/** Batch-load share rows for many task IDs at once (single query). */
+export function useTaskSharesForTasks(taskIds: string[]) {
+  const key = [...taskIds].sort().join(",");
+  return useQuery({
+    queryKey: ["task-shares-batch", key],
+    queryFn: () => service.listTaskSharesForTasks(taskIds),
+    enabled: taskIds.length > 0,
   });
 }

@@ -24,6 +24,7 @@ import { ScreenScaffold } from "@/components/layout/ScreenScaffold";
 import { cn } from "@/lib/utils/cn";
 import { useTasks } from "@/lib/hooks/useTasks";
 import { useTaskLists, useSharesForTaskLists } from "@/lib/hooks/useTaskLists";
+import { useTaskSharesForTasks } from "@/lib/hooks/useTaskShares";
 import { useTimeEntriesByRange } from "@/lib/hooks/useTimer";
 import { useOrgScope } from "@/lib/hooks/useOrgScope";
 import { useOrgMembers } from "@/lib/hooks/useOrgMembers";
@@ -169,7 +170,7 @@ export function Goals() {
 
   const { data: listShares = [] } = useSharesForTaskLists(goalListIds);
 
-  // Map: listId → { hasWrite, hasRead } across all visible share rows
+  // Map: listId → { hasWrite, hasRead } across all visible list-level share rows
   const listShareMap = useMemo(() => {
     const m = new Map<string, { hasWrite: boolean; hasRead: boolean }>();
     for (const s of listShares) {
@@ -180,6 +181,22 @@ export function Goals() {
     }
     return m;
   }, [listShares]);
+
+  // Task-level shares (more specific than list shares)
+  const goalTaskIds = useMemo(() => goalTasks.map((t) => t.id), [goalTasks]);
+  const { data: taskShares = [] } = useTaskSharesForTasks(goalTaskIds);
+
+  // Map: taskId → { hasWrite, hasRead }
+  const taskShareMap = useMemo(() => {
+    const m = new Map<string, { hasWrite: boolean; hasRead: boolean }>();
+    for (const s of taskShares) {
+      const cur = m.get(s.entity_id) ?? { hasWrite: false, hasRead: false };
+      if (s.permission === "write") cur.hasWrite = true;
+      else cur.hasRead = true;
+      m.set(s.entity_id, cur);
+    }
+    return m;
+  }, [taskShares]);
 
   // Map: userId → display name
   const memberNameById = useMemo(() => {
@@ -206,14 +223,17 @@ export function Goals() {
   // ---------------------------------------------------------------------------
   function getShareKind(task: Task): ShareKind {
     const isMine = task.owner_id === userId;
-    const info = task.task_list_id ? listShareMap.get(task.task_list_id) : undefined;
+    // Task-level shares take precedence; fall back to list-level shares
+    const taskInfo = taskShareMap.get(task.id);
+    const listInfo = task.task_list_id ? listShareMap.get(task.task_list_id) : undefined;
+    const hasWrite = taskInfo?.hasWrite || listInfo?.hasWrite;
+    const hasRead = taskInfo?.hasRead || listInfo?.hasRead;
     if (isMine) {
-      if (info?.hasWrite) return "mine-write";
-      if (info?.hasRead) return "mine-read";
+      if (hasWrite) return "mine-write";
+      if (hasRead) return "mine-read";
       return "private";
     }
-    // Not mine: my share row is the only one visible (RLS)
-    if (info?.hasWrite) return "other-write";
+    if (hasWrite) return "other-write";
     return "other-read";
   }
 
@@ -268,8 +288,11 @@ export function Goals() {
     if (userFilter) {
       if (scopeFilter === "shared") {
         result = result.filter((t) => {
-          if (!t.task_list_id) return false;
-          return listShares.some((s) => s.entity_id === t.task_list_id && s.user_id === userFilter);
+          const byList = t.task_list_id
+            ? listShares.some((s) => s.entity_id === t.task_list_id && s.user_id === userFilter)
+            : false;
+          const byTask = taskShares.some((s) => s.entity_id === t.id && s.user_id === userFilter);
+          return byList || byTask;
         });
       } else {
         result = result.filter((t) => t.owner_id === userFilter);
@@ -281,7 +304,7 @@ export function Goals() {
     if (typeFilter === "habit") result = result.filter(isHabit);
 
     return result;
-  }, [goalTasks, scopeFilter, userFilter, typeFilter, userId, listShareMap, listShares]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [goalTasks, scopeFilter, userFilter, typeFilter, userId, listShareMap, listShares, taskShares, taskShareMap]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // For columns layout: group by task_list_id
   const columns = useMemo(() => {
@@ -320,14 +343,16 @@ export function Goals() {
     [orgMembers, userId]
   );
 
-  // Members I've explicitly shared with (for "shared" scope user filter)
+  // Members I've explicitly shared with (list-level OR task-level, for "shared" scope user filter)
   const sharedWithMembers = useMemo(() => {
     const myListIds = new Set(lists.filter((l) => l.owner_id === userId).map((l) => l.id));
-    const sharedUserIds = new Set(
-      listShares.filter((s) => myListIds.has(s.entity_id)).map((s) => s.user_id)
-    );
+    const myTaskIds = new Set(goalTasks.filter((t) => t.owner_id === userId).map((t) => t.id));
+    const sharedUserIds = new Set([
+      ...listShares.filter((s) => myListIds.has(s.entity_id)).map((s) => s.user_id),
+      ...taskShares.filter((s) => myTaskIds.has(s.entity_id)).map((s) => s.user_id),
+    ]);
     return orgMembers.filter((m) => sharedUserIds.has(m.membership.user_id));
-  }, [listShares, lists, userId, orgMembers]);
+  }, [listShares, taskShares, lists, goalTasks, userId, orgMembers]);
 
   const setTypeFilterPersist = (v: GoalTypeFilter) => {
     setTypeFilter(v);

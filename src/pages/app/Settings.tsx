@@ -1,12 +1,14 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { ScreenScaffold } from "@/components/layout/ScreenScaffold";
 import { cn } from "@/lib/utils/cn";
 import {
   User, Building2, Users, Bell, Trash2, Mail, Copy, Check,
   Shield, Clock, Plus, ChevronDown, ChevronUp, ArrowUpRight,
   ArrowDownLeft, CheckCircle2, AlertCircle, MessageCircle, HardDrive,
+  Phone,
   type LucideIcon
 } from "lucide-react";
+import { supabase } from "@/lib/supabase/client";
 import { BackupRestoreSection } from "@/components/settings/BackupRestoreSection";
 import { useAuth } from "@/lib/auth/AuthContext";
 import { useOrgMembers } from "@/lib/hooks/useOrgMembers";
@@ -57,7 +59,7 @@ const ROLE_LABELS: Record<string, string> = {
 
 // ---------------------------------------------------------------------------
 
-const COMING_SOON_TABS: Tab[] = ["profile", "notifications"];
+const COMING_SOON_TABS: Tab[] = ["notifications"];
 
 export function Settings() {
   const [tab, setTab] = useState<Tab>("organization");
@@ -98,7 +100,7 @@ export function Settings() {
         </nav>
 
         <div className="min-w-0">
-          {tab === "profile"       && <Placeholder text="פרופיל — בקרוב" />}
+          {tab === "profile"       && <ProfileTab />}
           {tab === "organization"  && <OrgTab />}
           {tab === "sharing"       && <SharingTab />}
           {tab === "notifications" && <Placeholder text="התראות — בקרוב" />}
@@ -899,6 +901,125 @@ function SharingTab() {
         </section>
       )}
 
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Profile tab
+// ---------------------------------------------------------------------------
+
+function ProfileTab() {
+  const { user } = useAuth();
+  const [phone, setPhone]       = useState("");
+  const [fullName, setFullName] = useState("");
+  const [saving, setSaving]     = useState(false);
+  const [saved, setSaved]       = useState(false);
+  const [error, setError]       = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!user) return;
+    const db = supabase as any;
+    db.from("profiles")
+      .select("full_name,whatsapp_phone_e164")
+      .eq("id", user.id)
+      .maybeSingle()
+      .then(({ data }: { data: { full_name?: string; whatsapp_phone_e164?: string } | null }) => {
+        if (data) {
+          setFullName(data.full_name ?? "");
+          setPhone(data.whatsapp_phone_e164 ?? "");
+        }
+      });
+  }, [user]);
+
+  const handleSave = async () => {
+    if (!user) return;
+    setSaving(true);
+    setError(null);
+    const db = supabase as any;
+    const phoneVal = phone.trim() || null;
+    const { error: err } = await db
+      .from("profiles")
+      .update({ full_name: fullName.trim() || null, whatsapp_phone_e164: phoneVal })
+      .eq("id", user.id);
+    setSaving(false);
+    if (err) { setError(err.message); return; }
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2500);
+  };
+
+  return (
+    <div className="space-y-4">
+      <section className="card p-4 space-y-4">
+        <h2 className="font-semibold text-ink-900 text-sm">פרופיל משתמש</h2>
+
+        <div className="space-y-1.5">
+          <label className="text-xs text-ink-500">שם מלא</label>
+          <input
+            value={fullName}
+            onChange={e => setFullName(e.target.value)}
+            placeholder="השם שלך"
+            className="field text-sm w-full"
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <label className="text-xs text-ink-500">כתובת מייל</label>
+          <input
+            value={user?.email ?? ""}
+            disabled
+            className="field text-sm w-full text-ink-400 cursor-not-allowed"
+          />
+        </div>
+      </section>
+
+      <section className="card p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <Phone className="w-4 h-4 text-green-600" />
+          <h2 className="font-semibold text-ink-900 text-sm">WhatsApp</h2>
+        </div>
+        <p className="text-xs text-ink-500">
+          הזן את מספר הטלפון שלך בפורמט בינלאומי (E.164) כדי לשלוח מחשבות דרך WhatsApp.
+          לדוגמה: <code className="bg-ink-100 px-1 rounded text-ink-700">+972501234567</code>
+        </p>
+
+        <div className="space-y-1.5">
+          <label className="text-xs text-ink-500">מספר טלפון (E.164)</label>
+          <input
+            value={phone}
+            onChange={e => setPhone(e.target.value)}
+            placeholder="+972501234567"
+            dir="ltr"
+            className="field text-sm w-full"
+          />
+        </div>
+
+        <div className="rounded-xl bg-green-50 border border-green-200 p-3 space-y-1">
+          <p className="text-xs font-semibold text-green-800">איך זה עובד?</p>
+          <ol className="text-xs text-green-700 space-y-0.5 list-decimal list-inside">
+            <li>הוסף את מספר הוואטסאפ של האפליקציה לאנשי הקשר שלך</li>
+            <li>שלח הודעת טקסט — תיווצר מחשבה עם כותרת שנוצרת ב-AI</li>
+            <li>שלח הקלטה קולית — תתומלל ותיווצר מחשבה אוטומטית</li>
+          </ol>
+        </div>
+      </section>
+
+      {error && (
+        <p className="text-xs text-danger-600 bg-danger-50 rounded-xl px-4 py-2">{error}</p>
+      )}
+
+      <div className="flex justify-end">
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="flex items-center gap-2 px-5 py-2 rounded-xl bg-primary-500 text-white text-sm font-medium hover:bg-primary-600 disabled:opacity-50 transition-colors"
+        >
+          {saved
+            ? <><Check className="w-4 h-4" /> נשמר</>
+            : saving ? "שומר..." : "שמור שינויים"
+          }
+        </button>
+      </div>
     </div>
   );
 }

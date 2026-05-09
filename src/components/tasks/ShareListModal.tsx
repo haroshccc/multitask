@@ -16,9 +16,9 @@ interface ShareListModalProps {
 }
 
 /**
- * Explicit share roster for a list. RLS on task_lists already grants read
- * access to every org member — this UI adds write permissions (and a future
- * notification hook) for people you actively collaborate with.
+ * Explicit share roster for a list.
+ * "עריכה" = description + timer only (no title/status/urgency changes).
+ * "צפייה" = read-only, no mutations.
  */
 export function ShareListModal({ list, onClose }: ShareListModalProps) {
   const { user } = useAuth();
@@ -53,8 +53,9 @@ export function ShareListModal({ list, onClose }: ShareListModalProps) {
 
         <div className="p-4 space-y-1 flex-1 overflow-y-auto min-h-0">
           <p className="text-xs text-ink-500 mb-3 leading-relaxed">
-            הרשימה פרטית שלך. כאן אפשר לשתף אותה עם משתמשים ספציפיים מהקבוצה —
-            בחרי הרשאת עריכה או צפייה לכל אחד.
+            הרשימה פרטית שלך. שתף עם משתמשים ספציפיים מהקבוצה.
+            <strong> עריכה</strong> = תיאור + סטופר בלבד.
+            <strong> צפייה</strong> = קריאה בלבד, ללא שינויים.
           </p>
           {members.length === 0 && (
             <p className="text-sm text-ink-500 text-center py-6">

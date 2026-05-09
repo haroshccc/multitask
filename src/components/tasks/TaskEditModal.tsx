@@ -152,6 +152,7 @@ export function TaskEditModal({
   const completeTask = useCompleteTask();
   const createTask = useCreateTask();
   const deleteTaskM = useDeleteTask();
+  const setShareAuto = useSetTaskShare();
 
   const [tab, setTab] = useState<Tab>(defaultTab);
 
@@ -337,6 +338,7 @@ export function TaskEditModal({
 
   const [guardOpen, setGuardOpen] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [autoShareNotice, setAutoShareNotice] = useState<string | null>(null);
 
   const saveAll = async (): Promise<boolean> => {
     setSaveError(null);
@@ -601,12 +603,12 @@ export function TaskEditModal({
             </div>
 
             {/* Body — isReadView disables everything; isWriteView disables most fields but not description+timer */}
-            <fieldset disabled={isReadView} style={{ border: "none", padding: 0, margin: 0 }}>
+            <fieldset disabled={isReadView} style={{ border: "none", padding: 0, margin: 0 }} className={cn(isReadView && "opacity-50")}>
             <div className="p-5 max-h-[calc(100vh-16rem)] overflow-y-auto">
               {tab === "overview" && (
                 <div className="space-y-4">
                   {/* --- Fields locked in write mode --- */}
-                  <fieldset disabled={isWriteView} style={{ border: "none", padding: 0, margin: 0 }}>
+                  <fieldset disabled={isWriteView} style={{ border: "none", padding: 0, margin: 0 }} className={cn(isWriteView && "opacity-50")}>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <Field label="סטטוס">
                       <StatusPicker
@@ -648,7 +650,12 @@ export function TaskEditModal({
                         currentUserId={user?.id ?? null}
                         onChange={(v) => {
                           setAssigneeId(v);
-                          if (!v) setRequiresApproval(false);
+                          if (!v) { setRequiresApproval(false); setAutoShareNotice(null); return; }
+                          if (v !== user?.id && taskId && effectiveDelegateOrgId) {
+                            setShareAuto.mutate({ orgId: effectiveDelegateOrgId, taskId, userId: v, permission: "write" });
+                            const memberName = delegateOrgMembers.find((m) => m.membership.user_id === v)?.profile?.full_name ?? v;
+                            setAutoShareNotice(`שיתפנו אוטומטית עם ${memberName}`);
+                          }
                         }}
                       />
                     </Field>
@@ -741,6 +748,24 @@ export function TaskEditModal({
                   </fieldset>
                   {/* --- End locked fields --- */}
 
+                  {autoShareNotice && assigneeId && assigneeId !== user?.id && (
+                    <div className="flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2">
+                      <span>✓</span>
+                      <span>{autoShareNotice}</span>
+                    </div>
+                  )}
+
+                  {/* Task sharing section — adjacent to delegation, owner only, not in create mode */}
+                  {viewMode === "owner" && !isCreate && task && (
+                    <TaskShareSection
+                      taskId={task.id}
+                      assigneeId={assigneeId}
+                      allOrgs={allOrgs}
+                      currentUserId={user?.id ?? null}
+                      activeOrgId={activeOrganizationId ?? null}
+                    />
+                  )}
+
                   {/* Description — editable in write mode too */}
                   <Field label="תיאור">
                     <RichTextArea
@@ -751,7 +776,7 @@ export function TaskEditModal({
                   </Field>
 
                   {/* --- More locked fields --- */}
-                  <fieldset disabled={isWriteView} style={{ border: "none", padding: 0, margin: 0 }}>
+                  <fieldset disabled={isWriteView} style={{ border: "none", padding: 0, margin: 0 }} className={cn(isWriteView && "opacity-50")}>
                   <Field label="תגים">
                     <TagInput tags={tags} onChange={setTags} onBlur={() => {}} />
                   </Field>
@@ -807,17 +832,6 @@ export function TaskEditModal({
 
                   {task?.source_thought_id && (
                     <TaskSourceThoughtRow thoughtId={task.source_thought_id} />
-                  )}
-
-                  {/* Task sharing section — owner only, not in create mode */}
-                  {viewMode === "owner" && !isCreate && task && (
-                    <TaskShareSection
-                      taskId={task.id}
-                      assigneeId={assigneeId}
-                      allOrgs={allOrgs}
-                      currentUserId={user?.id ?? null}
-                      activeOrgId={activeOrganizationId ?? null}
-                    />
                   )}
                 </div>
               )}
@@ -957,14 +971,14 @@ export function TaskEditModal({
               {!isReadView && (
                 <button
                   onClick={async () => {
+                    if (!dirty) { onClose(); return; }
                     const ok = await saveAll();
                     if (ok) onClose();
                   }}
-                  disabled={!dirty || updateTask.isPending}
+                  disabled={updateTask.isPending}
                   className={cn(
                     "btn-primary text-sm",
-                    (!dirty || updateTask.isPending) &&
-                      "opacity-40 cursor-not-allowed"
+                    updateTask.isPending && "opacity-40 cursor-not-allowed"
                   )}
                   type="button"
                 >

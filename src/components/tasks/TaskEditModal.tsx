@@ -23,6 +23,8 @@ import {
   ClipboardList,
   Trophy,
   Repeat,
+  Share2,
+  UserPlus,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import {
@@ -55,6 +57,11 @@ import {
 import { slugifyStatusKey } from "@/lib/services/user-task-statuses";
 import { useOrgMembersForOrg } from "@/lib/hooks/useOrgMembers";
 import { useUserOrganizations } from "@/lib/hooks/useOrganizations";
+import {
+  useTaskShares,
+  useSetTaskShare,
+  useRemoveTaskShare,
+} from "@/lib/hooks/useTaskShares";
 import { useAuth } from "@/lib/auth/AuthContext";
 import { useTaskEdits, type TaskEditEntry } from "@/lib/hooks/useTaskEdits";
 import type { TimeEntry, UserTaskStatus } from "@/lib/types/domain";
@@ -96,8 +103,15 @@ interface TaskEditModalProps {
   /** Fires once after the create-mode save completes. */
   onCreated?: (taskId: string) => void;
   topSlot?: React.ReactNode;
-  /** When true, the modal is read-only (task delegated to the current user). */
+  /** When true, the modal shows write-only mode (task delegated to the current user). */
   assigneeView?: boolean;
+  /**
+   * Override view permission from a list share:
+   * "write" — only description + timer/history tab editable
+   * "read"  — view-only
+   * Omit (or "owner") for full editing.
+   */
+  sharePermission?: "write" | "read";
 }
 
 type Tab = "overview" | "schedule" | "history" | "edits" | "attachments";
@@ -110,7 +124,20 @@ export function TaskEditModal({
   onCreated,
   topSlot,
   assigneeView = false,
+  sharePermission,
 }: TaskEditModalProps) {
+  // Effective view mode:
+  // "owner" — full edit (default)
+  // "write" — only description + timer tab editable
+  // "read"  — everything view-only
+  const viewMode: "owner" | "write" | "read" =
+    sharePermission === "read"
+      ? "read"
+      : assigneeView || sharePermission === "write"
+      ? "write"
+      : "owner";
+  const isWriteView = viewMode === "write";
+  const isReadView = viewMode === "read";
   const isCreate = !taskId && !!createDraft;
   const open = !!taskId || isCreate;
   const { data: task } = useTask(taskId);
@@ -516,8 +543,8 @@ export function TaskEditModal({
                 </button>
                 <input
                   value={title}
-                  readOnly={assigneeView}
-                  onChange={assigneeView ? undefined : (e) => setTitle(e.target.value)}
+                  readOnly={isWriteView || isReadView}
+                  onChange={isWriteView || isReadView ? undefined : (e) => setTitle(e.target.value)}
                   placeholder="שם המשימה"
                   className="text-lg font-semibold text-ink-900 bg-transparent border-0 outline-none flex-1 min-w-0"
                 />
@@ -536,10 +563,16 @@ export function TaskEditModal({
               </div>
             )}
 
-            {assigneeView && (
+            {isWriteView && (
+              <div className="px-5 py-2.5 bg-blue-50 border-b border-blue-200 text-sm text-blue-800 flex items-center gap-2">
+                <span aria-hidden="true">✏️</span>
+                <span>גישת עריכה — ניתן לערוך תיאור ולנהל סטופר בלבד.</span>
+              </div>
+            )}
+            {isReadView && (
               <div className="px-5 py-2.5 bg-amber-50 border-b border-amber-200 text-sm text-amber-800 flex items-center gap-2">
                 <span aria-hidden="true">🔒</span>
-                <span>משימה הוצאלה לך — ניתן לסמן כסיום ✓ בלבד. יתר הפרטים לעיון.</span>
+                <span>גישת צפייה בלבד.</span>
               </div>
             )}
 
@@ -567,11 +600,13 @@ export function TaskEditModal({
               </TabBtn>
             </div>
 
-            {/* Body */}
-            <fieldset disabled={assigneeView} style={{ border: "none", padding: 0, margin: 0 }}>
+            {/* Body — isReadView disables everything; isWriteView disables most fields but not description+timer */}
+            <fieldset disabled={isReadView} style={{ border: "none", padding: 0, margin: 0 }}>
             <div className="p-5 max-h-[calc(100vh-16rem)] overflow-y-auto">
               {tab === "overview" && (
                 <div className="space-y-4">
+                  {/* --- Fields locked in write mode --- */}
+                  <fieldset disabled={isWriteView} style={{ border: "none", padding: 0, margin: 0 }}>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <Field label="סטטוס">
                       <StatusPicker
@@ -703,7 +738,10 @@ export function TaskEditModal({
                     )}
                   </div>
                   )}
+                  </fieldset>
+                  {/* --- End locked fields --- */}
 
+                  {/* Description — editable in write mode too */}
                   <Field label="תיאור">
                     <RichTextArea
                       value={description}
@@ -712,6 +750,8 @@ export function TaskEditModal({
                     />
                   </Field>
 
+                  {/* --- More locked fields --- */}
+                  <fieldset disabled={isWriteView} style={{ border: "none", padding: 0, margin: 0 }}>
                   <Field label="תגים">
                     <TagInput tags={tags} onChange={setTags} onBlur={() => {}} />
                   </Field>
@@ -762,9 +802,22 @@ export function TaskEditModal({
                       </div>
                     </label>
                   )}
+                  </fieldset>
+                  {/* --- End more locked fields --- */}
 
                   {task?.source_thought_id && (
                     <TaskSourceThoughtRow thoughtId={task.source_thought_id} />
+                  )}
+
+                  {/* Task sharing section — owner only, not in create mode */}
+                  {viewMode === "owner" && !isCreate && task && (
+                    <TaskShareSection
+                      taskId={task.id}
+                      assigneeId={assigneeId}
+                      allOrgs={allOrgs}
+                      currentUserId={user?.id ?? null}
+                      activeOrgId={activeOrganizationId ?? null}
+                    />
                   )}
                 </div>
               )}
@@ -884,12 +937,12 @@ export function TaskEditModal({
 
             {/* Footer */}
             <div className="px-5 py-3 border-t border-ink-200 flex items-center justify-end gap-2">
-              {!assigneeView && saveError && (
+              {!isReadView && saveError && (
                 <span className="text-xs font-medium text-danger-600 me-auto">
                   {saveError}
                 </span>
               )}
-              {!assigneeView && !saveError && dirty && (
+              {!isReadView && !saveError && dirty && (
                 <span className="text-xs font-medium text-warning-600 me-auto">
                   יש שינויים לא שמורים
                 </span>
@@ -901,7 +954,7 @@ export function TaskEditModal({
               >
                 סגור
               </button>
-              {!assigneeView && (
+              {!isReadView && (
                 <button
                   onClick={async () => {
                     const ok = await saveAll();
@@ -1215,6 +1268,147 @@ function UrgencyBars({ value, onChange }: { value: number; onChange: (v: number)
           <span className="text-[10px] font-mono text-ink-500">{n}</span>
         </button>
       ))}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// TaskShareSection — individual task sharing (owner-only, not in create mode)
+// ---------------------------------------------------------------------------
+function TaskShareSection({
+  taskId,
+  assigneeId,
+  allOrgs,
+  currentUserId,
+  activeOrgId,
+}: {
+  taskId: string;
+  assigneeId: string | null;
+  allOrgs: { id: string; name: string }[];
+  currentUserId: string | null;
+  activeOrgId: string | null;
+}) {
+  const { data: shares = [] } = useTaskShares(taskId);
+  const setShare = useSetTaskShare();
+  const removeShare = useRemoveTaskShare();
+  const [addOrgId, setAddOrgId] = useState<string | null>(activeOrgId ?? null);
+  const { data: addOrgMembers = [] } = useOrgMembersForOrg(addOrgId);
+  const [addUserId, setAddUserId] = useState<string | null>(null);
+  const [addPermission, setAddPermission] = useState<"read" | "write">("write");
+
+  const sharedUserIds = new Set(shares.map((s) => s.user_id));
+  const addableMembers = addOrgMembers.filter(
+    (m) => m.membership.user_id !== currentUserId && !sharedUserIds.has(m.membership.user_id)
+  );
+
+  const handleAdd = () => {
+    if (!addUserId || !addOrgId) return;
+    setShare.mutate({ orgId: addOrgId, taskId, userId: addUserId, permission: addPermission });
+    setAddUserId(null);
+  };
+
+  const permLabel = (p: "read" | "write") => (p === "write" ? "עריכה" : "צפייה");
+
+  return (
+    <div className="rounded-xl border border-ink-200 p-3 space-y-2.5">
+      <div className="flex items-center gap-2 text-sm font-medium text-ink-700">
+        <Share2 className="w-4 h-4" />
+        שיתוף משימה
+      </div>
+      <p className="text-[11px] text-ink-400 leading-relaxed">
+        שתף עם משתמשים ספציפיים. <strong>עריכה</strong> = תיאור + סטופר בלבד. <strong>צפייה</strong> = קריאה בלבד.
+      </p>
+
+      {/* Existing shares */}
+      {shares.map((share) => {
+        const isAutoByAssignee = share.user_id === assigneeId;
+        const displayName = share.full_name ?? share.user_id;
+        return (
+          <div key={share.user_id} className="flex items-center gap-2 py-1">
+            <div className="w-6 h-6 rounded-full bg-ink-100 text-ink-600 flex items-center justify-center text-xs font-medium shrink-0 overflow-hidden">
+              {share.avatar_url ? (
+                <img src={share.avatar_url} alt="" className="w-full h-full object-cover" />
+              ) : (
+                (displayName[0] ?? "?").toUpperCase()
+              )}
+            </div>
+            <span className="flex-1 text-sm text-ink-800 truncate">
+              {displayName}
+              {isAutoByAssignee && (
+                <span className="ms-1 text-[10px] text-amber-600 bg-amber-50 rounded px-1">האצלה</span>
+              )}
+            </span>
+            <select
+              value={share.permission}
+              onChange={(e) =>
+                setShare.mutate({
+                  orgId: share.organization_id,
+                  taskId,
+                  userId: share.user_id,
+                  permission: e.target.value as "read" | "write",
+                })
+              }
+              className="field text-xs py-1 ps-2 pe-6 w-auto"
+            >
+              <option value="write">עריכה</option>
+              <option value="read">צפייה</option>
+            </select>
+            <button
+              type="button"
+              onClick={() => removeShare.mutate({ taskId, userId: share.user_id })}
+              className="shrink-0 p-1 rounded-md text-ink-400 hover:text-danger-600 hover:bg-danger-50"
+              title={`הסר שיתוף עם ${displayName}`}
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        );
+      })}
+
+      {/* Add new share row */}
+      <div className="flex items-center gap-1.5 pt-1 border-t border-ink-100">
+        {allOrgs.length > 1 && (
+          <select
+            value={addOrgId ?? ""}
+            onChange={(e) => { setAddOrgId(e.target.value); setAddUserId(null); }}
+            className="field text-xs py-1 ps-2 pe-6 w-auto"
+          >
+            {allOrgs.map((o) => (
+              <option key={o.id} value={o.id}>{o.name}</option>
+            ))}
+          </select>
+        )}
+        <select
+          value={addUserId ?? ""}
+          onChange={(e) => setAddUserId(e.target.value || null)}
+          className="field text-xs py-1 ps-2 pe-6 flex-1"
+        >
+          <option value="">בחר משתמש...</option>
+          {addableMembers.map((m) => (
+            <option key={m.membership.user_id} value={m.membership.user_id}>
+              {m.profile?.full_name ?? m.membership.user_id}
+            </option>
+          ))}
+        </select>
+        <select
+          value={addPermission}
+          onChange={(e) => setAddPermission(e.target.value as "read" | "write")}
+          className="field text-xs py-1 ps-2 pe-6 w-auto"
+        >
+          <option value="write">עריכה</option>
+          <option value="read">צפייה</option>
+        </select>
+        <button
+          type="button"
+          onClick={handleAdd}
+          disabled={!addUserId}
+          className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-medium bg-primary-500 text-white hover:bg-primary-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          title={`הוסף שיתוף (${permLabel(addPermission)})`}
+        >
+          <UserPlus className="w-3.5 h-3.5" />
+          הוסף
+        </button>
+      </div>
     </div>
   );
 }

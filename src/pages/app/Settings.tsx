@@ -4,9 +4,10 @@ import { cn } from "@/lib/utils/cn";
 import {
   User, Building2, Users, Bell, Trash2, Mail, Copy, Check,
   Shield, Clock, Plus, ChevronDown, ChevronUp, ArrowUpRight,
-  ArrowDownLeft, CheckCircle2, AlertCircle, MessageCircle,
+  ArrowDownLeft, CheckCircle2, AlertCircle, MessageCircle, HardDrive,
   type LucideIcon
 } from "lucide-react";
+import { BackupRestoreSection } from "@/components/settings/BackupRestoreSection";
 import { useAuth } from "@/lib/auth/AuthContext";
 import { useOrgMembers } from "@/lib/hooks/useOrgMembers";
 import { useTasks } from "@/lib/hooks/useTasks";
@@ -24,7 +25,7 @@ import {
 } from "@/lib/hooks/useOrganizations";
 import type { OrgType } from "@/lib/services/organizations";
 
-type Tab = "profile" | "organization" | "sharing" | "notifications";
+type Tab = "profile" | "organization" | "sharing" | "notifications" | "backup";
 
 interface TabDef { key: Tab; label: string; icon: LucideIcon; }
 
@@ -33,6 +34,7 @@ const TABS: TabDef[] = [
   { key: "organization",  label: "ניהול קבוצה",  icon: Building2 },
   { key: "sharing",       label: "שיתופים",      icon: Users },
   { key: "notifications", label: "התראות",       icon: Bell },
+  { key: "backup",        label: "גיבוי",        icon: HardDrive },
 ];
 
 const ORG_TYPE_LABELS: Record<OrgType, string> = {
@@ -100,6 +102,7 @@ export function Settings() {
           {tab === "organization"  && <OrgTab />}
           {tab === "sharing"       && <SharingTab />}
           {tab === "notifications" && <Placeholder text="התראות — בקרוב" />}
+          {tab === "backup"        && <BackupRestoreSection />}
         </div>
       </div>
     </ScreenScaffold>

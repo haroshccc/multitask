@@ -47,7 +47,7 @@ export function ImportTasksModal({ onClose }: ImportTasksModalProps) {
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 px-5 pb-1 shrink-0">
+        <div className="flex gap-1 px-5 pb-3 shrink-0 border-b border-ink-100">
           <TabButton active={tab === "text"} onClick={() => setTab("text")} icon={FileText}>
             טקסט
           </TabButton>
@@ -60,7 +60,7 @@ export function ImportTasksModal({ onClose }: ImportTasksModalProps) {
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto px-5 pb-5 pt-3">
+        <div className="flex-1 overflow-y-auto px-5 pb-5 pt-4">
           {tab === "text" && <TextImportTab onClose={onClose} />}
           {tab === "image" && <ImageImportTab onClose={onClose} />}
           {tab === "google" && <GoogleTasksStubTab />}
@@ -99,6 +99,16 @@ function TabButton({
       {children}
     </button>
   );
+}
+
+// ---------------------------------------------------------------------------
+
+function friendlyError(err: unknown): string {
+  const msg = err instanceof Error ? err.message : String(err);
+  if (msg.toLowerCase().includes("failed to fetch") || msg.toLowerCase().includes("networkerror")) {
+    return "לא ניתן להגיע לשרת — ייתכן שהפיצ'ר עדיין לא פרוס. נסה שוב מאוחר יותר.";
+  }
+  return msg;
 }
 
 // ---------------------------------------------------------------------------
@@ -323,7 +333,14 @@ function ImageImportTab({ onClose }: { onClose: () => void }) {
       });
 
       if (!res.ok) {
-        const msg = await res.text().catch(() => "שגיאת שרת");
+        const body = await res.json().catch(() => null) as { error?: string } | null;
+        const code = body?.error ?? "";
+        const msg =
+          code === "anthropic_not_configured" ? "מפתח AI לא מוגדר בשרת" :
+          code === "image_too_large" ? "התמונה גדולה מדי (מקסימום 5MB)" :
+          code === "unsupported media type" ? "סוג קובץ לא נתמך" :
+          code === "unauthorized" ? "שגיאת הרשאה" :
+          "שגיאת שרת — נסה שוב";
         throw new Error(msg);
       }
 
@@ -332,7 +349,7 @@ function ImageImportTab({ onClose }: { onClose: () => void }) {
       setParsed(titles.map((title) => ({ title, selected: true })));
       setState("preview");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "שגיאה בניתוח התמונה");
+      setError(friendlyError(err));
       setState("error");
     }
   };
@@ -394,7 +411,7 @@ function ImageImportTab({ onClose }: { onClose: () => void }) {
           <p className="text-xs text-ink-400">PNG, JPG, WEBP</p>
         </div>
         {state === "error" && error && (
-          <div className="flex items-center gap-2 text-sm text-rose-700">
+          <div className="flex items-center gap-2 text-sm text-rose-700 rounded-xl bg-rose-50 border border-rose-200 px-3 py-2.5">
             <AlertCircle className="w-4 h-4 shrink-0" />
             {error}
           </div>

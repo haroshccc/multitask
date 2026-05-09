@@ -115,6 +115,7 @@ const URGENCY_LABELS: Record<number, string> = {
 };
 
 type TaskRow = {
+  id: string;
   title: string;
   description?: string | null;
   status: string;
@@ -125,6 +126,7 @@ type TaskRow = {
   recurrence_rule?: string | null;
   created_at?: string | null;
   task_list_id?: string | null;
+  parent_task_id?: string | null;
   owner_id?: string | null;
   assignee_user_id?: string | null;
 };
@@ -154,7 +156,7 @@ export async function buildTasksCsv(organizationId: string): Promise<string> {
   const [{ data: tasks }, { data: lists }] = await Promise.all([
     db
       .from("tasks")
-      .select("title,description,status,urgency,tags,deadline_at,scheduled_at,recurrence_rule,created_at,task_list_id,owner_id,assignee_user_id")
+      .select("id,title,description,status,urgency,tags,deadline_at,scheduled_at,recurrence_rule,created_at,task_list_id,parent_task_id,owner_id,assignee_user_id")
       .eq("organization_id", organizationId)
       .order("created_at", { ascending: true }),
     db.from("task_lists").select("id,name").eq("organization_id", organizationId),
@@ -164,10 +166,15 @@ export async function buildTasksCsv(organizationId: string): Promise<string> {
     ((lists ?? []) as TaskListRow[]).map((l) => [l.id, l.name])
   );
 
-  const rows: TaskRow[] = tasks ?? [];
+  const rawRows: TaskRow[] = tasks ?? [];
+
+  // Build title lookup and sort so parents appear before their children
+  const titleById = new Map<string, string>(rawRows.map((t) => [t.id, t.title]));
+  const rows = topoSort(rawRows);
 
   const headers = [
     "כותרת",
+    "תת-משימה של",
     "תיאור",
     "סטטוס",
     "עדיפות",
@@ -182,8 +189,10 @@ export async function buildTasksCsv(organizationId: string): Promise<string> {
   const lines: string[] = [headers.map(escapeCsvCell).join(",")];
 
   for (const t of rows) {
+    const parentTitle = t.parent_task_id ? (titleById.get(t.parent_task_id) ?? "") : "";
     const cells = [
       t.title ?? "",
+      parentTitle,
       t.description ?? "",
       STATUS_LABELS[t.status] ?? t.status ?? "",
       t.urgency != null ? (URGENCY_LABELS[t.urgency] ?? String(t.urgency)) : "",
@@ -217,4 +226,24 @@ function triggerDownload(blob: Blob, filename: string) {
   a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+// Sort tasks so each parent row appears before its children (depth-first).
+function topoSort(tasks: TaskRow[]): TaskRow[] {
+  const byId = new Map<string, TaskRow>(tasks.map((t) => [t.id, t]));
+  const childrenOf = new Map<string | null, TaskRow[]>();
+  for (const t of tasks) {
+    const pid = t.parent_task_id && byId.has(t.parent_task_id) ? t.parent_task_id : null;
+    if (!childrenOf.has(pid)) childrenOf.set(pid, []);
+    childrenOf.get(pid)!.push(t);
+  }
+  const out: TaskRow[] = [];
+  const visit = (pid: string | null) => {
+    for (const t of childrenOf.get(pid) ?? []) {
+      out.push(t);
+      visit(t.id);
+    }
+  };
+  visit(null);
+  return out;
 }

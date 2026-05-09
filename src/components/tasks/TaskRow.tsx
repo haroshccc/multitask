@@ -90,7 +90,7 @@ interface TaskRowProps {
    */
   permission?: "owner" | "write" | "read";
   /** Sharing state of the goal, determines icon color. Omit for non-goal tasks. */
-  goalShareKind?: "private" | "read" | "write";
+  goalShareKind?: "private" | "mine-read" | "mine-write" | "other-read" | "other-write";
 }
 
 export function TaskRow({
@@ -805,17 +805,21 @@ export function TaskRow({
           </span>
         )}
 
-        {/* Goal indicator — colored by share kind: yellow=private, pink=read-shared, green=write-shared */}
+        {/* Goal indicator — border color/style reflects share kind (amber=mine, pink=other; dashed=read, dotted=write) */}
         {(task.goal_period || (task as any).goal_type === "achievement") && (
           <span
             className={cn(
               "shrink-0 inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded-full border",
               showAsDone && "opacity-60",
-              goalShareKind === "write"
-                ? "text-green-700 bg-green-50 border-green-200"
-                : goalShareKind === "read"
-                  ? "text-pink-700 bg-pink-50 border-pink-200"
-                  : "text-amber-700 bg-amber-50 border-amber-200"
+              goalShareKind === "other-read"
+                ? "text-pink-700 bg-pink-50 border-dashed border-pink-400"
+                : goalShareKind === "other-write"
+                  ? "text-pink-700 bg-pink-50 border-dotted border-pink-400"
+                  : goalShareKind === "mine-read"
+                    ? "text-amber-700 bg-amber-50 border-dashed border-amber-400"
+                    : goalShareKind === "mine-write"
+                      ? "text-amber-700 bg-amber-50 border-dotted border-amber-400"
+                      : "text-amber-700 bg-amber-50 border-amber-200"
             )}
             title={
               (task as any).goal_type === "achievement"
@@ -1381,7 +1385,7 @@ function ChildrenBlock({
   onOpenEdit: (taskId: string) => void;
   display: RowDisplayPrefs;
   permission?: "owner" | "write" | "read";
-  goalShareKind?: "private" | "read" | "write";
+  goalShareKind?: "private" | "mine-read" | "mine-write" | "other-read" | "other-write";
 }) {
   const [showCompleted, setShowCompleted] = useState(false);
   const incomplete = children.filter((c) => !c.task.completed_at);

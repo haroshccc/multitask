@@ -250,20 +250,16 @@ export function TaskColumn({
       ? "write"
       : "read";
 
-  // Determine goal icon color for tasks in this column.
-  // Owners: check if anyone else has shares (write → green, read-only → pink, none → yellow).
-  // Non-owners: color based on my own permission level.
-  const goalShareKind: "private" | "read" | "write" = isOwner
+  // Determine goal icon style for tasks in this column (5-variant: mine vs other × read/write/private).
+  const goalShareKind: "private" | "mine-read" | "mine-write" | "other-read" | "other-write" = isOwner
     ? shares.some((s) => s.permission === "write")
-      ? "write"
+      ? "mine-write"
       : shares.length > 0
-        ? "read"
+        ? "mine-read"
         : "private"
     : myPermission === "write"
-      ? "write"
-      : myPermission === "read"
-        ? "read"
-        : "private";
+      ? "other-write"
+      : "other-read";
   const isPinnedByFlag = !!list?.is_pinned;
 
   return (

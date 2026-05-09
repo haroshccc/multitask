@@ -153,6 +153,8 @@ export function TaskEditModal({
   const createTask = useCreateTask();
   const deleteTaskM = useDeleteTask();
   const setShareAuto = useSetTaskShare();
+  const { data: mainTaskShares = [] } = useTaskShares(taskId);
+  const hasWriteShare = mainTaskShares.some((s) => s.permission === "write");
 
   const [tab, setTab] = useState<Tab>(defaultTab);
 
@@ -568,7 +570,7 @@ export function TaskEditModal({
             {isWriteView && (
               <div className="px-5 py-2.5 bg-blue-50 border-b border-blue-200 text-sm text-blue-800 flex items-center gap-2">
                 <span aria-hidden="true">✏️</span>
-                <span>גישת עריכה — ניתן לערוך תיאור ולנהל סטופר בלבד.</span>
+                <span>גישת עריכה — ניתן לערוך תיאור, לנהל סטופר ולסמן כהושלם (אם לא נדרש אישור).</span>
               </div>
             )}
             {isReadView && (
@@ -661,7 +663,7 @@ export function TaskEditModal({
                     </Field>
                   </div>
 
-                  {assigneeId && assigneeId !== user?.id && (
+                  {((assigneeId && assigneeId !== user?.id) || hasWriteShare) && (
                   <div className="rounded-xl border border-ink-200 p-3 space-y-2.5">
                     <label className="flex items-center gap-2.5 cursor-pointer select-none">
                       <input

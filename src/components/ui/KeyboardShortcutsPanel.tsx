@@ -37,6 +37,7 @@ const GROUPS: ShortcutGroup[] = [
     title: "שורת משימה",
     shortcuts: [
       { keys: ["Enter"], description: "משימה חדשה (סיבלינג)" },
+      { keys: ["Shift", "Enter"], description: "פתח / ערוך פירוט המשימה" },
       { keys: ["Ctrl", "Enter"], description: "תת-משימה חדשה" },
       { keys: ["Ctrl", "E"], description: "פתח עריכה מלאה" },
       { keys: ["Ctrl", "D"], description: "שכפל משימה" },

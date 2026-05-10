@@ -21,8 +21,8 @@ export const GANTT_STANDARD_COLUMNS: Array<{
   { id: "end_date", defaultLabel: "סיום" },
   { id: "deadline_at", defaultLabel: "דד-ליין", defaultHidden: true },
   { id: "urgency", defaultLabel: "דחיפות" },
-  { id: "status", defaultLabel: "סטטוס" },
-  { id: "duration_minutes", defaultLabel: "משך (ד׳)", defaultHidden: true },
+  { id: "status", defaultLabel: "סטאטוס", defaultHidden: true },
+  { id: "duration_minutes", defaultLabel: "משך" },
   { id: "dependencies", defaultLabel: "תלויות" },
   { id: "percent_complete", defaultLabel: "% סיום" },
 ];

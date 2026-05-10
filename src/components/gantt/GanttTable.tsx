@@ -12,6 +12,7 @@ import {
   useCreateTaskDependency,
   useDeleteTaskDependency,
   useUpdateTask,
+  useUpdateTaskDependency,
 } from "@/lib/hooks/useTasks";
 import {
   GANTT_STANDARD_COLUMNS,
@@ -123,6 +124,7 @@ export function GanttTable({
   const completeTask = useCompleteTask();
   const createDep = useCreateTaskDependency();
   const deleteDep = useDeleteTaskDependency();
+  const updateDep = useUpdateTaskDependency();
   const [newTitle, setNewTitle] = useState("");
   const cols = useGanttColumnPrefs();
   const [colMgrOpen, setColMgrOpen] = useState(false);
@@ -261,7 +263,7 @@ export function GanttTable({
                 <div role="columnheader" className="text-center font-semibold text-ink-700 px-1 py-2">
                   <ColumnHeader
                     id="status"
-                    label={cols.getLabel("status", "סטטוס")}
+                    label={cols.getLabel("status", "סטאטוס")}
                     onRename={(l) => cols.renameColumn("status", l)}
                   />
                 </div>
@@ -452,14 +454,17 @@ export function GanttTable({
                 }
                 onAddDep={
                   r.kind === "task" && r.task
-                    ? (predecessorId) =>
+                    ? (predecessorId, relation, lagDays) =>
                         createDep.mutate({
                           taskId: r.task!.id,
                           dependsOnTaskId: predecessorId,
+                          relation,
+                          lagDays,
                         })
                     : undefined
                 }
                 onRemoveDep={(depId) => deleteDep.mutate(depId)}
+                onUpdateDep={(depId, patch) => updateDep.mutate({ depId, patch })}
                 onToggleCritical={onToggleCritical}
                 multipleListsVisible={multipleListsVisible}
                 wbsNumber={r.task ? wbsNumbers.get(r.task.id) : undefined}
@@ -516,7 +521,7 @@ export function GanttTable({
   );
 }
 
-// ─── Body Row ─────────────────────────────────────────────────────────────────────────────────
+// ─── Body Row ────────────────────────────────────────────────────────────────
 
 interface GanttTableBodyRowProps {
   row: GanttRow;
@@ -534,8 +539,9 @@ interface GanttTableBodyRowProps {
     prev: Partial<Task>
   ) => void;
   onComplete: (taskId: string, completed: boolean) => void;
-  onAddDep?: (predecessorId: string) => void;
+  onAddDep?: (predecessorId: string, relation?: "finish_to_start" | "start_to_start" | "finish_to_finish" | "start_to_finish", lagDays?: number) => void;
   onRemoveDep: (depId: string) => void;
+  onUpdateDep: (depId: string, patch: { relation?: "finish_to_start" | "start_to_start" | "finish_to_finish" | "start_to_finish"; lag_days?: number }) => void;
   onToggleCritical?: (taskId: string, critical: boolean) => void;
   multipleListsVisible: boolean;
   wbsNumber?: string;
@@ -556,6 +562,7 @@ function GanttTableBodyRow({
   onComplete,
   onAddDep,
   onRemoveDep,
+  onUpdateDep,
   onToggleCritical,
   multipleListsVisible,
   wbsNumber,
@@ -808,12 +815,12 @@ function GanttTableBodyRow({
           {isTask && row.task && (
             <EndDateCell
               task={row.task}
-              onCommit={(newDuration) =>
+              onCommit={(patch) =>
                 onUpdate(
                   row.task!.id,
-                  { duration_minutes: newDuration },
+                  patch,
                   "שינוי תאריך סיום",
-                  { duration_minutes: row.task!.duration_minutes }
+                  { duration_minutes: row.task!.duration_minutes, scheduled_at: row.task!.scheduled_at }
                 )
               }
             />
@@ -841,7 +848,7 @@ function GanttTableBodyRow({
       {cols.isVisible("duration_minutes") && (
         <div role="cell" className="px-1 py-1 flex items-center justify-center">
           {isTask && row.task && (
-            <NumberCell
+            <DurationDaysCell
               value={row.task.duration_minutes}
               onCommit={(next) =>
                 onUpdate(row.task!.id, { duration_minutes: next }, "שינוי משך", {
@@ -863,6 +870,7 @@ function GanttTableBodyRow({
               visibleTaskMap={visibleTaskMap}
               onAdd={onAddDep}
               onRemove={onRemoveDep}
+              onUpdate={onUpdateDep}
             />
           )}
         </div>
@@ -905,7 +913,7 @@ function GanttTableBodyRow({
   );
 }
 
-// ─── Cell sub-components ───────────────────────────────────────────────────────────────────────────
+// ─── Cell sub-components ─────────────────────────────────────────────────────
 
 function TitleCell({
   task,
@@ -978,7 +986,7 @@ function EndDateCell({
   onCommit,
 }: {
   task: Task;
-  onCommit: (newDuration: number | null) => void;
+  onCommit: (patch: Partial<Pick<Task, "scheduled_at" | "duration_minutes">>) => void;
 }) {
   const endDateStr = useMemo(() => {
     if (!task.scheduled_at || task.duration_minutes == null) return "";
@@ -998,17 +1006,23 @@ function EndDateCell({
       onBlur={() => {
         if (draft === endDateStr) return;
         if (!draft) {
-          onCommit(null);
+          onCommit({ duration_minutes: null });
           return;
         }
-        if (!task.scheduled_at) return;
-        const startDay = new Date(task.scheduled_at.slice(0, 10) + "T00:00:00");
         const endDay = new Date(draft + "T00:00:00");
-        const daysDiff = Math.round(
-          (endDay.getTime() - startDay.getTime()) / (1440 * 60_000)
-        );
-        const newDuration = Math.max(0, daysDiff * 1440);
-        if (newDuration !== task.duration_minutes) onCommit(newDuration);
+        if (task.scheduled_at) {
+          // start known → derive duration
+          const startDay = new Date(task.scheduled_at.slice(0, 10) + "T00:00:00");
+          const daysDiff = Math.round(
+            (endDay.getTime() - startDay.getTime()) / (1440 * 60_000)
+          );
+          const newDuration = Math.max(0, daysDiff * 1440);
+          if (newDuration !== task.duration_minutes) onCommit({ duration_minutes: newDuration });
+        } else if (task.duration_minutes != null && task.duration_minutes > 0) {
+          // duration known, no start → derive start = end − duration
+          const startMs = endDay.getTime() - task.duration_minutes * 60_000;
+          onCommit({ scheduled_at: new Date(startMs).toISOString() });
+        }
       }}
       className="text-[11px] bg-transparent border border-transparent hover:border-ink-200 focus:border-primary-400 outline-none rounded-sm px-1 py-0.5 w-full"
     />
@@ -1058,28 +1072,68 @@ function PercentCompleteCell({ pct }: { pct: number }) {
   );
 }
 
+function DurationDaysCell({
+  value,
+  onCommit,
+}: {
+  value: number | null;
+  onCommit: (next: number | null) => void;
+}) {
+  const toDays = (mins: number | null) =>
+    mins == null ? "" : mins % 1440 === 0 ? String(mins / 1440) : (mins / 1440).toFixed(1);
+  const [draft, setDraft] = useState(toDays(value));
+  useEffect(() => setDraft(toDays(value)), [value]);
+  return (
+    <input
+      type="number"
+      min={0}
+      step={1}
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => {
+        const trimmed = draft.trim();
+        const next = trimmed === "" ? null : Math.round(Number(trimmed) * 1440);
+        if (next !== value && (next === null || !Number.isNaN(next))) onCommit(next);
+      }}
+      className="w-12 text-center text-[11px] bg-transparent border border-transparent hover:border-ink-200 focus:border-primary-400 outline-none rounded-sm px-1 py-0.5"
+      title="משך בימים"
+    />
+  );
+}
+
+type DepRelation = "finish_to_start" | "start_to_start" | "finish_to_finish" | "start_to_finish";
+
+const RELATION_LABELS: Record<DepRelation, string> = {
+  finish_to_start: "FS",
+  start_to_start: "SS",
+  finish_to_finish: "FF",
+  start_to_finish: "SF",
+};
+
 function DependenciesCell({
   task,
   deps,
   visibleTaskMap,
   onAdd,
   onRemove,
+  onUpdate,
 }: {
   task: Task;
   deps: TaskDependency[];
   visibleTaskMap: Map<string, GanttRow>;
-  onAdd: (predecessorId: string) => void;
+  onAdd: (predecessorId: string, relation?: DepRelation, lagDays?: number) => void;
   onRemove: (depId: string) => void;
+  onUpdate: (depId: string, patch: { relation?: DepRelation; lag_days?: number }) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState("");
 
   const choices = useMemo(() => {
-    const out: Array<{ id: string; title: string; isLinked: boolean; depId?: string }> = [];
+    const out: Array<{ id: string; title: string; isLinked: boolean; dep?: TaskDependency }> = [];
     for (const [id, row] of visibleTaskMap) {
       if (id === task.id) continue;
       const dep = deps.find((d) => d.depends_on_task_id === id);
-      out.push({ id, title: row.title, isLinked: !!dep, depId: dep?.id });
+      out.push({ id, title: row.title, isLinked: !!dep, dep });
     }
     out.sort((a, b) => {
       if (a.isLinked !== b.isLinked) return a.isLinked ? -1 : 1;
@@ -1110,16 +1164,10 @@ function DependenciesCell({
       </button>
       {open && (
         <>
-          <div
-            className="fixed inset-0 z-30"
-            onClick={() => {
-              setOpen(false);
-              setFilter("");
-            }}
-          />
-          <div className="absolute end-0 mt-1 z-40 w-72 bg-white border border-ink-200 rounded-xl shadow-lift overflow-hidden">
+          <div className="fixed inset-0 z-30" onClick={() => { setOpen(false); setFilter(""); }} />
+          <div className="absolute end-0 mt-1 z-40 w-80 bg-white border border-ink-200 rounded-xl shadow-lift overflow-hidden">
             <div className="px-3 py-2 border-b border-ink-100 bg-ink-50/60">
-              <div className="text-[11px] font-semibold text-ink-700 mb-1">תלוי ב…</div>
+              <div className="text-[11px] font-semibold text-ink-700 mb-1">תלויות</div>
               <input
                 value={filter}
                 onChange={(e) => setFilter(e.target.value)}
@@ -1128,39 +1176,57 @@ function DependenciesCell({
                 className="w-full text-xs bg-white border border-ink-200 rounded-md px-2 py-1 outline-none focus:border-primary-400"
               />
             </div>
-            <div className="max-h-64 overflow-y-auto py-1">
+            <div className="max-h-72 overflow-y-auto py-1">
               {filtered.length === 0 ? (
                 <div className="px-3 py-3 text-xs text-ink-500 text-center">אין משימות תואמות</div>
               ) : (
                 filtered.map((c) => (
-                  <div key={c.id} className="flex items-center gap-2 px-3 py-1.5 hover:bg-ink-50 group">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (c.isLinked && c.depId) {
-                          onRemove(c.depId);
-                        } else {
-                          onAdd(c.id);
-                        }
-                      }}
-                      className="flex-1 text-start text-xs text-ink-900 truncate"
-                    >
-                      <span
-                        className={cn(
-                          "inline-block w-3 h-3 rounded-sm border me-2 align-middle",
-                          c.isLinked ? "bg-primary-500 border-primary-500" : "border-ink-300 bg-white"
-                        )}
-                      />
-                      {c.title}
-                    </button>
-                    {c.isLinked && c.depId && (
+                  <div key={c.id} className={cn("px-2 py-1 hover:bg-ink-50", c.isLinked && "bg-primary-50/40")}>
+                    {c.isLinked && c.dep ? (
+                      /* linked dep row: name + relation select + lag input + delete */
+                      <div className="flex items-center gap-1">
+                        <span className="flex-1 text-xs text-ink-900 truncate min-w-0">{c.title}</span>
+                        <select
+                          value={c.dep.relation}
+                          onChange={(e) => onUpdate(c.dep!.id, { relation: e.target.value as DepRelation })}
+                          onClick={(e) => e.stopPropagation()}
+                          className="text-[10px] border border-ink-200 rounded px-0.5 py-0 bg-white outline-none focus:border-primary-400 shrink-0"
+                          title="סוג תלות"
+                        >
+                          {(Object.entries(RELATION_LABELS) as [DepRelation, string][]).map(([val, label]) => (
+                            <option key={val} value={val}>{label}</option>
+                          ))}
+                        </select>
+                        <span className="text-[10px] text-ink-400 shrink-0">פיגור:</span>
+                        <input
+                          type="number"
+                          defaultValue={c.dep.lag_days ?? 0}
+                          onBlur={(e) => {
+                            const v = Number(e.target.value);
+                            if (v !== (c.dep!.lag_days ?? 0)) onUpdate(c.dep!.id, { lag_days: v });
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                          className="w-10 text-[10px] text-center border border-ink-200 rounded px-0.5 py-0 bg-white outline-none focus:border-primary-400 shrink-0"
+                          title="ימי פיגור (שלילי = קידום)"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => onRemove(c.dep!.id)}
+                          className="p-0.5 rounded text-ink-400 hover:text-danger-500 shrink-0"
+                          title="הסר תלות"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ) : (
+                      /* unlinked: click to add with default FS+0 */
                       <button
                         type="button"
-                        onClick={() => onRemove(c.depId!)}
-                        className="opacity-0 group-hover:opacity-100 p-1 rounded text-ink-400 hover:text-danger-500"
-                        title="הסר תלות"
+                        onClick={() => onAdd(c.id, "finish_to_start", 0)}
+                        className="w-full text-start text-xs text-ink-700 truncate flex items-center gap-1"
                       >
-                        <Trash2 className="w-3 h-3" />
+                        <span className="text-ink-300">+</span>
+                        {c.title}
                       </button>
                     )}
                   </div>

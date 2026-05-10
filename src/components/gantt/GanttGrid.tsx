@@ -41,6 +41,10 @@ interface GanttGridProps {
   /** Click on an unscheduled task's row in the timeline → schedule it at
    *  the clicked date (defaults to 09:00 on that day). */
   onScheduleTask?: (row: GanttRow, date: Date) => void;
+  /** Baseline task map: taskId → { scheduled_at, duration_minutes }. When
+   *  provided, a thin grey bar is drawn below each task's current bar to
+   *  indicate the original planned schedule. */
+  baselineMap?: Map<string, { scheduled_at: string | null; duration_minutes: number | null }>;
 }
 
 export function GanttGrid({
@@ -57,6 +61,7 @@ export function GanttGrid({
   onToggleSidebar,
   hideInternalSidebar,
   onScheduleTask,
+  baselineMap,
 }: GanttGridProps) {
   const pxPerDay = pxPerDayFn(zoom);
   const totalDays = Math.max(
@@ -325,6 +330,34 @@ export function GanttGrid({
                       onChange={(patch) => onBarChange(r, patch)}
                     />
                   </div>
+                );
+              })}
+
+              {/* Baseline bars — thin strip below each task bar showing original plan */}
+              {baselineMap && rows.map((r, i) => {
+                if (r.kind !== "task" || !r.task) return null;
+                const bl = baselineMap.get(r.task.id);
+                if (!bl?.scheduled_at || bl.duration_minutes == null) return null;
+                const blStart = new Date(bl.scheduled_at);
+                const blEnd = new Date(blStart.getTime() + bl.duration_minutes * 60_000);
+                const left = ((blStart.getTime() - windowStart.getTime()) / DAY_MS) * pxPerDay;
+                const width = Math.max(4, ((blEnd.getTime() - blStart.getTime()) / DAY_MS) * pxPerDay);
+                if (left + width < 0 || left > timelineWidth) return null;
+                return (
+                  <div
+                    key={r.id + "-baseline"}
+                    className="absolute pointer-events-none"
+                    style={{
+                      top: i * ROW_HEIGHT + ROW_HEIGHT - 6,
+                      height: 4,
+                      insetInlineStart: left,
+                      width,
+                      backgroundColor: "#94a3b8",
+                      borderRadius: 2,
+                      opacity: 0.7,
+                    }}
+                    title={`בסיס: ${blStart.toLocaleDateString("he-IL")} – ${blEnd.toLocaleDateString("he-IL")}`}
+                  />
                 );
               })}
 

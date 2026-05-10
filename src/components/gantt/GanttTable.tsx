@@ -35,6 +35,32 @@ function stripHtml(html: string): string {
   return div.textContent ?? "";
 }
 
+function computePercentMap(rows: GanttRow[]): Map<string, number> {
+  const taskRows = rows.filter((r) => r.kind === "task" && r.task && !r.isPhase);
+  const childrenOf = new Map<string, string[]>();
+  for (const r of taskRows) {
+    const parentId = r.task!.parent_task_id ?? "__root__";
+    if (!childrenOf.has(parentId)) childrenOf.set(parentId, []);
+    childrenOf.get(parentId)!.push(r.task!.id);
+  }
+  const taskById = new Map<string, GanttRow>();
+  for (const r of taskRows) taskById.set(r.task!.id, r);
+
+  const memo = new Map<string, number>();
+  function getPercent(taskId: string): number {
+    if (memo.has(taskId)) return memo.get(taskId)!;
+    const children = childrenOf.get(taskId) ?? [];
+    const pct =
+      children.length === 0
+        ? taskById.get(taskId)?.task?.completed_at ? 100 : 0
+        : Math.round(children.reduce((s, c) => s + getPercent(c), 0) / children.length);
+    memo.set(taskId, pct);
+    return pct;
+  }
+  for (const id of taskById.keys()) getPercent(id);
+  return memo;
+}
+
 function computeWbs(rows: GanttRow[]): Map<string, string> {
   const map = new Map<string, string>();
   const counters: number[] = [];
@@ -64,6 +90,7 @@ function buildGridTemplate(
   if (cols.isVisible("deadline_at")) parts.push("100px");
   if (cols.isVisible("duration_minutes")) parts.push("64px");
   if (cols.isVisible("dependencies")) parts.push("80px");
+  if (cols.isVisible("percent_complete")) parts.push("72px");
   for (let i = 0; i < visibleCustomFields.length; i++) parts.push("120px");
   parts.push("32px");
   return parts.join(" ");
@@ -117,6 +144,7 @@ export function GanttTable({
   }, [lists]);
 
   const wbsNumbers = useMemo(() => computeWbs(rows), [rows]);
+  const percentMap = useMemo(() => computePercentMap(rows), [rows]);
 
   const visibleCustomFields = useMemo(
     () => customFields.filter((cf) => cols.isVisible(cf.id)),
@@ -289,6 +317,16 @@ export function GanttTable({
                 </div>
               )}
 
+              {cols.isVisible("percent_complete") && (
+                <div role="columnheader" className="text-center font-semibold text-ink-700 px-1 py-2">
+                  <ColumnHeader
+                    id="percent_complete"
+                    label={cols.getLabel("percent_complete", "% סיום")}
+                    onRename={(l) => cols.renameColumn("percent_complete", l)}
+                  />
+                </div>
+              )}
+
               {visibleCustomFields.map((cf) => (
                 <div
                   key={cf.id}
@@ -425,6 +463,7 @@ export function GanttTable({
                 onToggleCritical={onToggleCritical}
                 multipleListsVisible={multipleListsVisible}
                 wbsNumber={r.task ? wbsNumbers.get(r.task.id) : undefined}
+                percentComplete={r.task ? percentMap.get(r.task.id) : undefined}
                 listName={
                   r.task?.task_list_id
                     ? listNameMap.get(r.task.task_list_id)
@@ -477,7 +516,7 @@ export function GanttTable({
   );
 }
 
-// ─── Body Row ────────────────────────────────────────────────────────────────
+// ─── Body Row ─────────────────────────────────────────────────────────────────────────────────
 
 interface GanttTableBodyRowProps {
   row: GanttRow;
@@ -500,6 +539,7 @@ interface GanttTableBodyRowProps {
   onToggleCritical?: (taskId: string, critical: boolean) => void;
   multipleListsVisible: boolean;
   wbsNumber?: string;
+  percentComplete?: number;
   listName?: string;
 }
 
@@ -519,6 +559,7 @@ function GanttTableBodyRow({
   onToggleCritical,
   multipleListsVisible,
   wbsNumber,
+  percentComplete,
   listName,
 }: GanttTableBodyRowProps) {
   const isTask = row.kind === "task" && !!row.task;
@@ -827,6 +868,15 @@ function GanttTableBodyRow({
         </div>
       )}
 
+      {/* % Complete */}
+      {cols.isVisible("percent_complete") && (
+        <div role="cell" className="px-1 py-1 flex items-center justify-center">
+          {isTask && percentComplete !== undefined && (
+            <PercentCompleteCell pct={percentComplete} />
+          )}
+        </div>
+      )}
+
       {/* Custom field cells */}
       {visibleCustomFields.map((cf) => (
         <div key={cf.id} role="cell" className="px-1 py-1 flex items-center justify-center">
@@ -855,7 +905,7 @@ function GanttTableBodyRow({
   );
 }
 
-// ─── Cell sub-components ─────────────────────────────────────────────────────
+// ─── Cell sub-components ───────────────────────────────────────────────────────────────────────────
 
 function TitleCell({
   task,
@@ -989,6 +1039,22 @@ function NumberCell({
       }}
       className="w-12 text-center text-[11px] bg-transparent border border-transparent hover:border-ink-200 focus:border-primary-400 outline-none rounded-sm px-1 py-0.5"
     />
+  );
+}
+
+function PercentCompleteCell({ pct }: { pct: number }) {
+  const color =
+    pct === 100 ? "#22c55e" : pct >= 50 ? "#3b82f6" : pct > 0 ? "#f59e0b" : "#d1d5db";
+  return (
+    <div className="flex flex-col items-center gap-0.5 w-full px-1">
+      <span className="text-[10px] font-mono tabular-nums text-ink-700">{pct}%</span>
+      <div className="w-full h-1.5 rounded-full bg-ink-100 overflow-hidden">
+        <div
+          className="h-full rounded-full transition-all"
+          style={{ width: `${pct}%`, backgroundColor: color }}
+        />
+      </div>
+    </div>
   );
 }
 

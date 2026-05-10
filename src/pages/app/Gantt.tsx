@@ -284,11 +284,20 @@ export function Gantt() {
     start: Date;
     end: Date;
     kind: "event" | "task";
+    taskListId?: string | null;
   } | null>(null);
 
   const handleGanttCreateAt = (start: Date) => {
     const end = new Date(start.getTime() + 60 * 60_000);
-    setCreating({ start, end, kind: "event" });
+    // Resolve the task list from the current scope so new tasks land in the
+    // right list. "all" scope leaves it null — the modal lets the user pick.
+    let taskListId: string | null = null;
+    if (source.kind === "list") {
+      taskListId = source.id;
+    } else if (source.kind === "project") {
+      taskListId = lists.find((l) => l.project_id === source.id)?.id ?? null;
+    }
+    setCreating({ start, end, kind: "event", taskListId });
   };
 
   const handleRowClick = (row: GanttRow) => {
@@ -873,6 +882,7 @@ export function Gantt() {
             duration_minutes: Math.round(
               (creating.end.getTime() - creating.start.getTime()) / 60000
             ),
+            task_list_id: creating.taskListId ?? null,
           }}
           defaultTab="schedule"
           topSlot={

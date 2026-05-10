@@ -573,6 +573,11 @@ function GanttTableBodyRow({
             } as React.CSSProperties)
           : {}),
       }}
+      onDoubleClick={(e) => {
+        const tag = (e.target as HTMLElement).tagName.toLowerCase();
+        if (tag === "input" || tag === "button" || tag === "select" || tag === "textarea") return;
+        onRowClick(row);
+      }}
     >
       {/* ── Drop zones (invisible strips, pointer-events:none) ── */}
       {isTask && (
@@ -1450,4 +1455,3 @@ function GanttCfDateCell({
     />
   );
 }
-

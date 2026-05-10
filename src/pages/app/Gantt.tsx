@@ -53,6 +53,15 @@ import { useProjectCustomFields } from "@/lib/hooks/useTaskCustomFields";
 import type { GanttSource } from "@/components/gantt/GanttChrome";
 import { useTaskSelectionStore } from "@/lib/selection/store";
 import { pushUndo } from "@/lib/undo/store";
+import {
+  useGanttBaselines,
+  useGanttBaselineTasks,
+  useCreateBaseline,
+  useDeleteBaseline,
+  buildBaselineMap,
+} from "@/lib/hooks/useGanttBaselines";
+import { useOrgMembers } from "@/lib/hooks/useOrgMembers";
+import { ResourceHistogram } from "@/components/gantt/ResourceHistogram";
 
 export function Gantt() {
   const { user } = useAuth();
@@ -95,6 +104,9 @@ export function Gantt() {
     localStorage.setItem("multitask.gantt.tableLayout", tableLayout);
   }, [tableLayout]);
 
+  const [selectedBaselineId, setSelectedBaselineId] = useState<string | null>(null);
+  const [showHistogram, setShowHistogram] = useState(false);
+
   const [filters, setFilters] = useFiltersFromUrl();
   const { data: tasks = [] } = useTasks(filters);
   const { data: deps = [] } = useAllTaskDependencies();
@@ -133,6 +145,55 @@ export function Gantt() {
     if (typeof window === "undefined") return;
     localStorage.setItem("multitask.gantt.source", JSON.stringify(source));
   }, [source]);
+
+  const { data: baselines = [] } = useGanttBaselines();
+  const { data: baselineTasksRaw = [] } = useGanttBaselineTasks(selectedBaselineId);
+  const createBaseline = useCreateBaseline();
+  const deleteBaseline = useDeleteBaseline();
+  const { data: orgMembers = [] } = useOrgMembers();
+
+  const baselineMap = useMemo(
+    () => (selectedBaselineId ? buildBaselineMap(baselineTasksRaw) : null),
+    [selectedBaselineId, baselineTasksRaw]
+  );
+
+  const memberNames = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const om of orgMembers) {
+      if (om.profile) {
+        const name =
+          om.profile.full_name?.trim() ||
+          om.profile.email?.split("@")[0] ||
+          om.membership.user_id.slice(0, 8);
+        m.set(om.membership.user_id, name);
+      }
+    }
+    return m;
+  }, [orgMembers]);
+
+  const handleSaveBaseline = async () => {
+    const name =
+      window.prompt(
+        "שם לבסיס (Baseline):",
+        `בסיס ${new Date().toLocaleDateString("he-IL")}`
+      ) ?? "";
+    if (!name.trim()) return;
+    const taskSnapshots = filteredTasks
+      .filter((t) => t.scheduled_at)
+      .map((t) => ({
+        task_id: t.id,
+        scheduled_at: t.scheduled_at,
+        duration_minutes: t.duration_minutes,
+      }));
+    const bl = await createBaseline.mutateAsync({ name: name.trim(), tasks: taskSnapshots });
+    setSelectedBaselineId(bl.id);
+  };
+
+  const handleDeleteBaseline = async (id: string) => {
+    if (!window.confirm("למחוק את הבסיס הזה?")) return;
+    await deleteBaseline.mutateAsync(id);
+    if (selectedBaselineId === id) setSelectedBaselineId(null);
+  };
 
   const updateTask = useUpdateTask();
   const updateEvent = useUpdateEvent();
@@ -756,6 +817,53 @@ export function Gantt() {
           />
         )}
 
+        {/* Baseline + Histogram toolbar */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={handleSaveBaseline}
+            className="btn-ghost text-xs"
+            title="שמור את התזמון הנוכחי כבסיס להשוואה"
+          >
+            📌 שמור בסיס
+          </button>
+          {baselines.length > 0 && (
+            <>
+              <select
+                value={selectedBaselineId ?? ""}
+                onChange={(e) => setSelectedBaselineId(e.target.value || null)}
+                className="field text-xs py-0.5 px-2 h-7"
+              >
+                <option value="">— ללא בסיס —</option>
+                {baselines.map((bl) => (
+                  <option key={bl.id} value={bl.id}>
+                    {bl.name} ({new Date(bl.created_at).toLocaleDateString("he-IL")})
+                  </option>
+                ))}
+              </select>
+              {selectedBaselineId && (
+                <button
+                  type="button"
+                  onClick={() => handleDeleteBaseline(selectedBaselineId)}
+                  className="btn-ghost text-xs text-danger-500"
+                  title="מחק בסיס זה"
+                >
+                  ✕
+                </button>
+              )}
+            </>
+          )}
+          <div className="h-4 border-e border-ink-200 mx-1" />
+          <button
+            type="button"
+            onClick={() => setShowHistogram((v) => !v)}
+            className={showHistogram ? "btn-accent text-xs" : "btn-ghost text-xs"}
+            title="הצג/הסתר היסטוגרמת משאבים"
+          >
+            📊 עומס משאבים
+          </button>
+        </div>
+
         {/* Table + Gantt layout. The user picks side-by-side (default) or
             stacked. In side mode RTL puts the table on the right and Gantt
             on the left at a 1:2 width ratio. In stacked mode each takes
@@ -778,6 +886,7 @@ export function Gantt() {
             onScheduleTask={handleScheduleTask}
             sidebarCollapsed={sidebarCollapsed}
             onToggleSidebar={() => setSidebarCollapsed((v) => !v)}
+            baselineMap={baselineMap ?? undefined}
           />
         ) : tableLayout === "side" ? (
           <DndContext
@@ -814,6 +923,7 @@ export function Gantt() {
                   onCreateAt={handleGanttCreateAt}
                   onScheduleTask={handleScheduleTask}
                   hideInternalSidebar
+                  baselineMap={baselineMap ?? undefined}
                 />
               </div>
             </div>
@@ -850,9 +960,20 @@ export function Gantt() {
                 onCreateAt={handleGanttCreateAt}
                 onScheduleTask={handleScheduleTask}
                 hideInternalSidebar
+                baselineMap={baselineMap ?? undefined}
               />
             </div>
           </DndContext>
+        )}
+
+        {showHistogram && (
+          <ResourceHistogram
+            rows={visibleRows}
+            zoom={zoom}
+            windowStart={windowStart}
+            windowEnd={windowEnd}
+            memberNames={memberNames}
+          />
         )}
       </div>
 

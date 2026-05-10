@@ -89,46 +89,23 @@ function isGoal(task: Task): boolean {
 // ---------------------------------------------------------------------------
 
 function getBorderClass(kind: ShareKind): string {
-  switch (kind) {
-    case "private":
-      return "border-2 border-amber-400";
-    case "mine-read":
-      return "border-2 border-dashed border-amber-400";
-    case "mine-write":
-      return "border-4 border-dotted border-amber-400";
-    case "other-read":
-      return "border-2 border-dashed border-pink-400";
-    case "other-write":
-      return "border-4 border-dotted border-pink-400";
-  }
+  if (kind === "mine-read" || kind === "mine-write") return "border-2 border-pink-400";
+  if (kind === "other-read" || kind === "other-write") return "border-2 border-blue-400";
+  return "border-2 border-amber-400";
 }
 
 function getIconColorClass(kind: ShareKind): string {
-  switch (kind) {
-    case "mine-read":
-    case "other-read":
-      return "text-pink-500";
-    case "mine-write":
-    case "other-write":
-      return "text-green-500";
-    default:
-      return "text-amber-500";
-  }
+  if (kind === "mine-read" || kind === "mine-write") return "text-pink-500";
+  if (kind === "other-read" || kind === "other-write") return "text-blue-500";
+  return "text-amber-500";
 }
 
 function getSharingBadge(kind: ShareKind): { label: string; icon: React.ReactNode; className: string } | null {
-  switch (kind) {
-    case "mine-read":
-      return { label: "שיתוף צפייה", icon: <Eye className="w-3 h-3" />, className: "text-pink-700 bg-pink-50 border-pink-200" };
-    case "mine-write":
-      return { label: "שיתוף עריכה", icon: <Edit3 className="w-3 h-3" />, className: "text-green-700 bg-green-50 border-green-200" };
-    case "other-read":
-      return { label: "צפייה בלבד", icon: <Eye className="w-3 h-3" />, className: "text-slate-600 bg-slate-50 border-slate-200" };
-    case "other-write":
-      return { label: "עריכה משותפת", icon: <Edit3 className="w-3 h-3" />, className: "text-green-700 bg-green-50 border-green-200" };
-    default:
-      return null;
-  }
+  if (kind === "mine-read" || kind === "mine-write")
+    return { label: "שיתפתי", icon: <Users className="w-3 h-3" />, className: "text-pink-700 bg-pink-50 border-pink-200" };
+  if (kind === "other-read" || kind === "other-write")
+    return { label: "שותף איתי", icon: <Eye className="w-3 h-3" />, className: "text-blue-700 bg-blue-50 border-blue-200" };
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -508,23 +485,15 @@ export function Goals() {
           <div className="flex items-center gap-4 flex-wrap text-[11px] text-ink-500">
             <span className="flex items-center gap-1.5">
               <span className="w-4 h-4 rounded border-2 border-amber-400 inline-block shrink-0" />
-              יעד פרטי
+              שלי בלבד
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="w-4 h-4 rounded border-2 border-dashed border-amber-400 inline-block shrink-0" />
-              שיתפתי לצפייה
+              <span className="w-4 h-4 rounded border-2 border-pink-400 inline-block shrink-0" />
+              שיתפתי עם אחרים
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="w-4 h-4 rounded border-4 border-dotted border-amber-400 inline-block shrink-0" />
-              שיתפתי לעריכה
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="w-4 h-4 rounded border-2 border-dashed border-pink-400 inline-block shrink-0" />
-              של אחר — צפייה
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="w-4 h-4 rounded border-4 border-dotted border-pink-400 inline-block shrink-0" />
-              של אחר — עריכה
+              <span className="w-4 h-4 rounded border-2 border-blue-400 inline-block shrink-0" />
+              שותף איתי
             </span>
           </div>
         </div>

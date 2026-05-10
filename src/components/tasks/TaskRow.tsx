@@ -808,10 +808,7 @@ export function TaskRow({
         {/* Goal indicator — icon only, color reflects share kind */}
         {(task.goal_period || (task as any).goal_type === "achievement") && (
           <span
-            className={cn(
-              "shrink-0 inline-flex",
-              showAsDone && "opacity-60",
-            )}
+            className={cn("shrink-0 inline-flex", showAsDone && "opacity-60")}
             title={
               (task as any).goal_type === "achievement"
                 ? "יעד הישגי"

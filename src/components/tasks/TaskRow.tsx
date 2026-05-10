@@ -209,7 +209,16 @@ export function TaskRow({
 
   const commitTitle = () => {
     const trimmed = draft.trim();
-    if (!trimmed || trimmed === task.title) {
+    if (!trimmed) {
+      if (!task.title) {
+        // Freshly-created task abandoned without a title — clean it up.
+        deleteTaskM.mutate(task.id);
+      } else {
+        setDraft(task.title);
+      }
+      return;
+    }
+    if (trimmed === task.title) {
       setDraft(task.title);
       return;
     }

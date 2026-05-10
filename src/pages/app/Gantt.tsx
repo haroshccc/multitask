@@ -207,10 +207,14 @@ export function Gantt() {
     [filteredTasks, filteredEvents, layer, lists]
   );
 
-  const criticalSet = useMemo(
-    () => computeCriticalPath(rows, deps),
-    [rows, deps]
-  );
+  const criticalSet = useMemo(() => {
+    const autoSet = computeCriticalPath(rows, deps);
+    const merged = new Set(autoSet);
+    for (const t of filteredTasks) {
+      if ((t as any).is_critical) merged.add(t.id);
+    }
+    return merged;
+  }, [rows, deps, filteredTasks]);
 
   const visibleRows = useMemo(() => {
     if (!showCriticalOnly) return rows;
@@ -286,6 +290,15 @@ export function Gantt() {
     kind: "event" | "task";
     taskListId?: string | null;
   } | null>(null);
+
+  const handleToggleCritical = (taskId: string, critical: boolean) => {
+    updateTask.mutate({ taskId, patch: { is_critical: critical } as any });
+    pushUndo({
+      description: critical ? "סימון כקריטי" : "הסרת קריטיות",
+      undo: () => updateTask.mutate({ taskId, patch: { is_critical: !critical } as any }),
+      redo: () => updateTask.mutate({ taskId, patch: { is_critical: critical } as any }),
+    });
+  };
 
   const handleGanttCreateAt = (start: Date) => {
     const end = new Date(start.getTime() + 60 * 60_000);
@@ -784,6 +797,8 @@ export function Gantt() {
                     source.kind === "all" ? undefined : handleCreateTaskInScope
                   }
                   customFields={customFields}
+                  lists={unifiedLists}
+                  onToggleCritical={handleToggleCritical}
                 />
               </div>
               <div className="basis-2/3 min-w-0 grow">
@@ -820,6 +835,8 @@ export function Gantt() {
                   source.kind === "all" ? undefined : handleCreateTaskInScope
                 }
                 customFields={customFields}
+                lists={unifiedLists}
+                onToggleCritical={handleToggleCritical}
               />
               <GanttGrid
                 rows={visibleRows}

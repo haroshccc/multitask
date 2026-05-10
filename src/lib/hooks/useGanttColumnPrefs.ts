@@ -1,36 +1,28 @@
 import { useEffect, useState } from "react";
 
-/**
- * Per-user, per-screen column visibility + label overrides for the Gantt
- * editable table. Persisted to localStorage so the user's pruning sticks
- * across sessions. Standard columns are identified by a stable string id
- * (`title`, `urgency`, `status`, ...); custom fields would extend this
- * via their UUID.
- */
 export interface GanttColumnPref {
   id: string;
-  /** When false, the column is hidden from the table. `title` can never be
-   *  hidden — that's the row's identity. */
   visible: boolean;
-  /** Label override. Empty/missing → use the default label. */
   label?: string;
 }
 
 const STORAGE_KEY = "multitask.gantt.columnPrefs.v1";
 
-/** Standard columns — order = render order. `title` is always visible. */
 export const GANTT_STANDARD_COLUMNS: Array<{
   id: string;
   defaultLabel: string;
   alwaysVisible?: boolean;
+  defaultHidden?: boolean;
 }> = [
   { id: "title", defaultLabel: "משימה", alwaysVisible: true },
   { id: "task_list", defaultLabel: "רשימה" },
+  { id: "description", defaultLabel: "תיאור" },
+  { id: "scheduled_at", defaultLabel: "התחלה" },
+  { id: "end_date", defaultLabel: "סיום" },
+  { id: "deadline_at", defaultLabel: "דד-ליין", defaultHidden: true },
   { id: "urgency", defaultLabel: "דחיפות" },
   { id: "status", defaultLabel: "סטטוס" },
-  { id: "scheduled_at", defaultLabel: "תזמון" },
-  { id: "deadline_at", defaultLabel: "דד-ליין" },
-  { id: "duration_minutes", defaultLabel: "משך (ד׳)" },
+  { id: "duration_minutes", defaultLabel: "משך (ד׳)", defaultHidden: true },
   { id: "dependencies", defaultLabel: "תלויות" },
 ];
 
@@ -54,12 +46,6 @@ function savePrefs(prefs: GanttColumnPref[]) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(prefs));
 }
 
-/**
- * Returns the current prefs map keyed by column id, plus setters that
- * mutate localStorage and re-render. Components consume the resolved
- * `getLabel(id)` and `isVisible(id)` accessors so the storage shape
- * stays an internal detail.
- */
 export function useGanttColumnPrefs() {
   const [prefs, setPrefs] = useState<GanttColumnPref[]>(loadPrefs);
 
@@ -74,6 +60,7 @@ export function useGanttColumnPrefs() {
     if (std?.alwaysVisible) return true;
     const pref = byId.get(id);
     if (!pref) {
+      if (std?.defaultHidden) return false;
       return !!std;
     }
     return pref.visible;
@@ -112,7 +99,6 @@ export function useGanttColumnPrefs() {
     });
   };
 
-  /** Enable a custom field column (adds it as visible=true in storage). */
   const enableCustomField = (fieldId: string) => {
     setPrefs((curr) => {
       const idx = curr.findIndex((p) => p.id === fieldId);

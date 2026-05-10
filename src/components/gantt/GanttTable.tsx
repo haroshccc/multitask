@@ -26,22 +26,46 @@ import type { Task, TaskCustomField, TaskDependency } from "@/lib/types/domain";
 import type { GanttRow } from "./gantt-utils";
 
 const ROW_HEIGHT = 40;
-const HEADER_HEIGHT = 64; // matches GanttGrid timeline header
+const HEADER_HEIGHT = 64;
 
-/** Build the CSS grid-template-columns string from the current column prefs. */
+function stripHtml(html: string): string {
+  if (typeof document === "undefined" || !html) return html ?? "";
+  const div = document.createElement("div");
+  div.innerHTML = html;
+  return div.textContent ?? "";
+}
+
+function computeWbs(rows: GanttRow[]): Map<string, string> {
+  const map = new Map<string, string>();
+  const counters: number[] = [];
+  for (const row of rows) {
+    if (row.kind !== "task" || !row.task) continue;
+    const depth = row.depth;
+    while (counters.length <= depth) counters.push(0);
+    counters[depth] = (counters[depth] ?? 0) + 1;
+    counters.length = depth + 1;
+    map.set(row.task.id, counters.join("."));
+  }
+  return map;
+}
+
 function buildGridTemplate(
   cols: ReturnType<typeof useGanttColumnPrefs>,
-  visibleCustomFields: TaskCustomField[]
+  visibleCustomFields: TaskCustomField[],
+  multipleListsVisible: boolean
 ): string {
-  const parts = ["80px", "minmax(200px,1fr)"];
+  const parts = ["80px", "40px", "minmax(200px,1fr)"];
+  if (cols.isVisible("description")) parts.push("minmax(120px,1fr)");
+  if (multipleListsVisible && cols.isVisible("task_list")) parts.push("90px");
   if (cols.isVisible("urgency")) parts.push("56px");
   if (cols.isVisible("status")) parts.push("96px");
-  if (cols.isVisible("scheduled_at")) parts.push("144px");
-  if (cols.isVisible("deadline_at")) parts.push("144px");
+  if (cols.isVisible("scheduled_at")) parts.push("100px");
+  if (cols.isVisible("end_date")) parts.push("100px");
+  if (cols.isVisible("deadline_at")) parts.push("100px");
   if (cols.isVisible("duration_minutes")) parts.push("64px");
   if (cols.isVisible("dependencies")) parts.push("80px");
   for (let i = 0; i < visibleCustomFields.length; i++) parts.push("120px");
-  parts.push("32px"); // settings icon column
+  parts.push("32px");
   return parts.join(" ");
 }
 
@@ -52,20 +76,11 @@ interface GanttTableProps {
   onRowClick: (row: GanttRow) => void;
   layout: "side" | "stacked";
   onCreateTask?: (title: string) => Promise<void> | void;
-  /** Custom fields of the currently-scoped project (only present when
-   *  source.kind === "project"). Used to populate the custom field column
-   *  section in the column manager and to render cells. */
   customFields?: TaskCustomField[];
+  lists?: Array<{ id: string; name: string }>;
+  onToggleCritical?: (taskId: string, critical: boolean) => void;
 }
 
-/**
- * Editable Gantt table — CSS-grid-based (not a <table>) so each row can be
- * position:relative and host the three @dnd-kit droppable zones needed for
- * drag-to-reorder and drag-to-nest (above / into / below).
- *
- * Wave 9.2 — initial table.
- * Wave 14.C — converted <table> → CSS grid for drag-to-nest support.
- */
 export function GanttTable({
   rows,
   deps,
@@ -74,6 +89,8 @@ export function GanttTable({
   layout,
   onCreateTask,
   customFields = [],
+  lists = [],
+  onToggleCritical,
 }: GanttTableProps) {
   const updateTask = useUpdateTask();
   const completeTask = useCompleteTask();
@@ -82,13 +99,32 @@ export function GanttTable({
   const [newTitle, setNewTitle] = useState("");
   const cols = useGanttColumnPrefs();
   const [colMgrOpen, setColMgrOpen] = useState(false);
+
+  const multipleListsVisible = useMemo(() => {
+    const listIds = new Set<string>();
+    for (const r of rows) {
+      if (r.kind === "task" && r.task?.task_list_id) {
+        listIds.add(r.task.task_list_id);
+      }
+    }
+    return listIds.size > 1;
+  }, [rows]);
+
+  const listNameMap = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const l of lists) m.set(l.id, l.name);
+    return m;
+  }, [lists]);
+
+  const wbsNumbers = useMemo(() => computeWbs(rows), [rows]);
+
   const visibleCustomFields = useMemo(
     () => customFields.filter((cf) => cols.isVisible(cf.id)),
     [customFields, cols]
   );
   const gridTemplate = useMemo(
-    () => buildGridTemplate(cols, visibleCustomFields),
-    [cols, visibleCustomFields]
+    () => buildGridTemplate(cols, visibleCustomFields, multipleListsVisible),
+    [cols, visibleCustomFields, multipleListsVisible]
   );
 
   const depsByTask = useMemo(() => {
@@ -143,11 +179,13 @@ export function GanttTable({
               className="grid items-center h-full"
               style={{ gridTemplateColumns: gridTemplate }}
             >
-              <div
-                role="columnheader"
-                className="px-1 py-2"
-                aria-label="פעולות שורה"
-              />
+              <div role="columnheader" className="px-1 py-2" aria-label="פעולות שורה" />
+
+              {/* WBS — always visible */}
+              <div role="columnheader" className="text-center font-semibold text-ink-500 px-1 py-2 text-[10px]">
+                WBS
+              </div>
+
               <div
                 role="columnheader"
                 className="text-start font-semibold text-ink-700 px-2 py-2 min-w-[200px]"
@@ -159,11 +197,30 @@ export function GanttTable({
                   align="start"
                 />
               </div>
+
+              {cols.isVisible("description") && (
+                <div role="columnheader" className="text-start font-semibold text-ink-700 px-1 py-2">
+                  <ColumnHeader
+                    id="description"
+                    label={cols.getLabel("description", "תיאור")}
+                    onRename={(l) => cols.renameColumn("description", l)}
+                    align="start"
+                  />
+                </div>
+              )}
+
+              {multipleListsVisible && cols.isVisible("task_list") && (
+                <div role="columnheader" className="text-center font-semibold text-ink-700 px-1 py-2">
+                  <ColumnHeader
+                    id="task_list"
+                    label={cols.getLabel("task_list", "רשימה")}
+                    onRename={(l) => cols.renameColumn("task_list", l)}
+                  />
+                </div>
+              )}
+
               {cols.isVisible("urgency") && (
-                <div
-                  role="columnheader"
-                  className="text-center font-semibold text-ink-700 px-1 py-2"
-                >
+                <div role="columnheader" className="text-center font-semibold text-ink-700 px-1 py-2">
                   <ColumnHeader
                     id="urgency"
                     label={cols.getLabel("urgency", "דחיפות")}
@@ -171,11 +228,9 @@ export function GanttTable({
                   />
                 </div>
               )}
+
               {cols.isVisible("status") && (
-                <div
-                  role="columnheader"
-                  className="text-center font-semibold text-ink-700 px-1 py-2"
-                >
+                <div role="columnheader" className="text-center font-semibold text-ink-700 px-1 py-2">
                   <ColumnHeader
                     id="status"
                     label={cols.getLabel("status", "סטטוס")}
@@ -183,23 +238,29 @@ export function GanttTable({
                   />
                 </div>
               )}
+
               {cols.isVisible("scheduled_at") && (
-                <div
-                  role="columnheader"
-                  className="text-center font-semibold text-ink-700 px-1 py-2"
-                >
+                <div role="columnheader" className="text-center font-semibold text-ink-700 px-1 py-2">
                   <ColumnHeader
                     id="scheduled_at"
-                    label={cols.getLabel("scheduled_at", "תזמון")}
+                    label={cols.getLabel("scheduled_at", "התחלה")}
                     onRename={(l) => cols.renameColumn("scheduled_at", l)}
                   />
                 </div>
               )}
+
+              {cols.isVisible("end_date") && (
+                <div role="columnheader" className="text-center font-semibold text-ink-700 px-1 py-2">
+                  <ColumnHeader
+                    id="end_date"
+                    label={cols.getLabel("end_date", "סיום")}
+                    onRename={(l) => cols.renameColumn("end_date", l)}
+                  />
+                </div>
+              )}
+
               {cols.isVisible("deadline_at") && (
-                <div
-                  role="columnheader"
-                  className="text-center font-semibold text-ink-700 px-1 py-2"
-                >
+                <div role="columnheader" className="text-center font-semibold text-ink-700 px-1 py-2">
                   <ColumnHeader
                     id="deadline_at"
                     label={cols.getLabel("deadline_at", "דד-ליין")}
@@ -207,11 +268,9 @@ export function GanttTable({
                   />
                 </div>
               )}
+
               {cols.isVisible("duration_minutes") && (
-                <div
-                  role="columnheader"
-                  className="text-center font-semibold text-ink-700 px-1 py-2"
-                >
+                <div role="columnheader" className="text-center font-semibold text-ink-700 px-1 py-2">
                   <ColumnHeader
                     id="duration_minutes"
                     label={cols.getLabel("duration_minutes", "משך (ד׳)")}
@@ -219,11 +278,9 @@ export function GanttTable({
                   />
                 </div>
               )}
+
               {cols.isVisible("dependencies") && (
-                <div
-                  role="columnheader"
-                  className="text-center font-semibold text-ink-700 px-1 py-2"
-                >
+                <div role="columnheader" className="text-center font-semibold text-ink-700 px-1 py-2">
                   <ColumnHeader
                     id="dependencies"
                     label={cols.getLabel("dependencies", "תלויות")}
@@ -231,7 +288,7 @@ export function GanttTable({
                   />
                 </div>
               )}
-              {/* Custom field column headers */}
+
               {visibleCustomFields.map((cf) => (
                 <div
                   key={cf.id}
@@ -246,11 +303,7 @@ export function GanttTable({
                 </div>
               ))}
 
-              {/* Column manager button */}
-              <div
-                role="columnheader"
-                className="flex items-center justify-center px-0 py-0"
-              >
+              <div role="columnheader" className="flex items-center justify-center px-0 py-0">
                 <div className="relative">
                   <button
                     type="button"
@@ -263,17 +316,12 @@ export function GanttTable({
                   </button>
                   {colMgrOpen && (
                     <>
-                      <div
-                        className="fixed inset-0 z-30"
-                        onClick={() => setColMgrOpen(false)}
-                      />
+                      <div className="fixed inset-0 z-30" onClick={() => setColMgrOpen(false)} />
                       <div className="absolute end-0 mt-1 z-40 w-56 bg-white border border-ink-200 rounded-xl shadow-lift py-1">
                         <div className="text-[10px] font-semibold text-ink-400 uppercase tracking-wider px-3 py-1 border-b border-ink-100">
                           עמודות גלויות
                         </div>
-                        {GANTT_STANDARD_COLUMNS.filter(
-                          (c) => !c.alwaysVisible
-                        ).map((c) => {
+                        {GANTT_STANDARD_COLUMNS.filter((c) => !c.alwaysVisible).map((c) => {
                           const visible = cols.isVisible(c.id);
                           return (
                             <button
@@ -285,33 +333,19 @@ export function GanttTable({
                               <span
                                 className={cn(
                                   "w-3 h-3 rounded-sm border flex items-center justify-center shrink-0",
-                                  visible
-                                    ? "bg-primary-500 border-primary-500"
-                                    : "border-ink-300 bg-white"
+                                  visible ? "bg-primary-500 border-primary-500" : "border-ink-300 bg-white"
                                 )}
                               >
                                 {visible && (
-                                  <svg
-                                    viewBox="0 0 20 20"
-                                    fill="currentColor"
-                                    className="w-2 h-2 text-white"
-                                  >
-                                    <path
-                                      fillRule="evenodd"
-                                      d="M16.704 5.29a1 1 0 010 1.415l-8 8a1 1 0 01-1.415 0l-4-4a1 1 0 011.415-1.414L8 12.586l7.29-7.293a1 1 0 011.415 0z"
-                                      clipRule="evenodd"
-                                    />
+                                  <svg viewBox="0 0 20 20" fill="currentColor" className="w-2 h-2 text-white">
+                                    <path fillRule="evenodd" d="M16.704 5.29a1 1 0 010 1.415l-8 8a1 1 0 01-1.415 0l-4-4a1 1 0 011.415-1.414L8 12.586l7.29-7.293a1 1 0 011.415 0z" clipRule="evenodd" />
                                   </svg>
                                 )}
                               </span>
-                              <span className="flex-1 truncate">
-                                {cols.getLabel(c.id, c.defaultLabel)}
-                              </span>
+                              <span className="flex-1 truncate">{cols.getLabel(c.id, c.defaultLabel)}</span>
                             </button>
                           );
                         })}
-                        {/* Custom fields section — only shown when scoped
-                            to a project that has custom fields. */}
                         {customFields.length > 0 && (
                           <>
                             <div className="text-[10px] font-semibold text-ink-400 uppercase tracking-wider px-3 py-1 border-t border-ink-100 mt-1">
@@ -335,28 +369,16 @@ export function GanttTable({
                                   <span
                                     className={cn(
                                       "w-3 h-3 rounded-sm border flex items-center justify-center shrink-0",
-                                      visible
-                                        ? "bg-primary-500 border-primary-500"
-                                        : "border-ink-300 bg-white"
+                                      visible ? "bg-primary-500 border-primary-500" : "border-ink-300 bg-white"
                                     )}
                                   >
                                     {visible && (
-                                      <svg
-                                        viewBox="0 0 20 20"
-                                        fill="currentColor"
-                                        className="w-2 h-2 text-white"
-                                      >
-                                        <path
-                                          fillRule="evenodd"
-                                          d="M16.704 5.29a1 1 0 010 1.415l-8 8a1 1 0 01-1.415 0l-4-4a1 1 0 011.415-1.414L8 12.586l7.29-7.293a1 1 0 011.415 0z"
-                                          clipRule="evenodd"
-                                        />
+                                      <svg viewBox="0 0 20 20" fill="currentColor" className="w-2 h-2 text-white">
+                                        <path fillRule="evenodd" d="M16.704 5.29a1 1 0 010 1.415l-8 8a1 1 0 01-1.415 0l-4-4a1 1 0 011.415-1.414L8 12.586l7.29-7.293a1 1 0 011.415 0z" clipRule="evenodd" />
                                       </svg>
                                     )}
                                   </span>
-                                  <span className="flex-1 truncate">
-                                    {cols.getLabel(cf.id, cf.field_label)}
-                                  </span>
+                                  <span className="flex-1 truncate">{cols.getLabel(cf.id, cf.field_label)}</span>
                                 </button>
                               );
                             })}
@@ -400,6 +422,14 @@ export function GanttTable({
                     : undefined
                 }
                 onRemoveDep={(depId) => deleteDep.mutate(depId)}
+                onToggleCritical={onToggleCritical}
+                multipleListsVisible={multipleListsVisible}
+                wbsNumber={r.task ? wbsNumbers.get(r.task.id) : undefined}
+                listName={
+                  r.task?.task_list_id
+                    ? listNameMap.get(r.task.task_list_id)
+                    : undefined
+                }
               />
             ))}
           </div>
@@ -411,7 +441,6 @@ export function GanttTable({
               className="grid border-b border-ink-150 bg-primary-50/40 hover:bg-primary-50"
               style={{ gridTemplateColumns: gridTemplate, height: ROW_HEIGHT }}
             >
-              {/* Spans all columns via the first cell taking full width */}
               <div
                 role="cell"
                 className="col-span-full px-4 flex items-center gap-2"
@@ -468,17 +497,12 @@ interface GanttTableBodyRowProps {
   onComplete: (taskId: string, completed: boolean) => void;
   onAddDep?: (predecessorId: string) => void;
   onRemoveDep: (depId: string) => void;
+  onToggleCritical?: (taskId: string, critical: boolean) => void;
+  multipleListsVisible: boolean;
+  wbsNumber?: string;
+  listName?: string;
 }
 
-/**
- * Single Gantt table row — a CSS-grid div (not a <tr>) with position:relative
- * so the three @dnd-kit droppable zones can be absolutely positioned inside.
- *
- * Drop zones:
- *   before (top 25%)  → sibling above
- *   nest   (mid 50%)  → child of this task
- *   after  (bot 25%)  → sibling below
- */
 function GanttTableBodyRow({
   row,
   gridTemplate,
@@ -492,6 +516,10 @@ function GanttTableBodyRow({
   onComplete,
   onAddDep,
   onRemoveDep,
+  onToggleCritical,
+  multipleListsVisible,
+  wbsNumber,
+  listName,
 }: GanttTableBodyRowProps) {
   const isTask = row.kind === "task" && !!row.task;
   const isCritical = isTask && criticalSet.has(row.task!.id);
@@ -499,7 +527,6 @@ function GanttTableBodyRow({
   const isEvent = row.kind === "event";
   const isUnscheduled = !!row.unscheduled;
 
-  // ── Draggable ──
   const {
     attributes,
     listeners,
@@ -516,7 +543,6 @@ function GanttTableBodyRow({
     disabled: !isTask,
   });
 
-  // ── Drop zones ──
   const { setNodeRef: setBeforeRef, isOver: isOverBefore } = useDroppable({
     id: `gantt-before:${row.id}`,
     data: {
@@ -579,48 +605,25 @@ function GanttTableBodyRow({
         onRowClick(row);
       }}
     >
-      {/* ── Drop zones (invisible strips, pointer-events:none) ── */}
       {isTask && (
         <>
-          <div
-            ref={setBeforeRef}
-            className="absolute top-0 inset-x-0 h-1/4 pointer-events-none z-10"
-            aria-hidden
-          />
-          <div
-            ref={setNestRef}
-            className="absolute top-1/4 inset-x-0 h-1/2 pointer-events-none z-10"
-            aria-hidden
-          />
-          <div
-            ref={setAfterRef}
-            className="absolute bottom-0 inset-x-0 h-1/4 pointer-events-none z-10"
-            aria-hidden
-          />
+          <div ref={setBeforeRef} className="absolute top-0 inset-x-0 h-1/4 pointer-events-none z-10" aria-hidden />
+          <div ref={setNestRef} className="absolute top-1/4 inset-x-0 h-1/2 pointer-events-none z-10" aria-hidden />
+          <div ref={setAfterRef} className="absolute bottom-0 inset-x-0 h-1/4 pointer-events-none z-10" aria-hidden />
           {isOverBefore && !isDragging && (
-            <div
-              className="absolute top-0 inset-x-1 h-0.5 bg-primary-500 rounded-full pointer-events-none z-20"
-              aria-hidden
-            />
+            <div className="absolute top-0 inset-x-1 h-0.5 bg-primary-500 rounded-full pointer-events-none z-20" aria-hidden />
           )}
           {isOverAfter && !isDragging && (
-            <div
-              className="absolute bottom-0 inset-x-1 h-0.5 bg-primary-500 rounded-full pointer-events-none z-20"
-              aria-hidden
-            />
+            <div className="absolute bottom-0 inset-x-1 h-0.5 bg-primary-500 rounded-full pointer-events-none z-20" aria-hidden />
           )}
         </>
       )}
 
-      {/* ── Actions cell ── */}
-      <div
-        role="cell"
-        className="px-1 py-1 flex items-center gap-0.5"
-      >
+      {/* Actions cell */}
+      <div role="cell" className="px-1 py-1 flex items-center gap-0.5">
         {isTask && row.task && (
           <>
             <SelectionCheckbox taskId={row.task.id} />
-            {/* Drag handle */}
             <button
               {...attributes}
               {...listeners}
@@ -639,27 +642,43 @@ function GanttTableBodyRow({
         )}
       </div>
 
-      {/* ── Title cell ── */}
+      {/* WBS cell */}
+      <div role="cell" className="px-1 py-1 flex items-center justify-center">
+        {isTask && wbsNumber && (
+          <span className="text-[10px] font-mono text-ink-400 select-none">{wbsNumber}</span>
+        )}
+      </div>
+
+      {/* Title cell */}
       <div
         role="cell"
         className="px-2 py-1 flex items-center gap-2 min-w-0"
         style={{ paddingInlineStart: `${8 + row.depth * 16}px` }}
       >
-        <button
-          type="button"
-          onClick={() => onRowClick(row)}
-          className="w-1.5 h-1.5 rounded-full shrink-0 hover:scale-150 transition-transform"
-          style={{
-            backgroundColor: isCritical
-              ? "#ef4444"
-              : isEvent
-              ? "#3b82f6"
-              : isPhase
-              ? row.accentColor ?? "#6b6b80"
-              : "#a8a8bc",
-          }}
-          title="פתח עריכה מלאה"
-        />
+        {/* Critical dot — clickable toggle for regular tasks, color indicator for phases/events */}
+        {isTask && row.task && !isPhase ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleCritical?.(row.task!.id, !isCritical);
+            }}
+            className="w-1.5 h-1.5 rounded-full shrink-0 hover:scale-150 transition-transform"
+            style={{ backgroundColor: isCritical ? "#ef4444" : "#d1d5db" }}
+            title={isCritical ? "הסר מסלול קריטי" : "סמן כקריטי"}
+          />
+        ) : (
+          <div
+            className="w-1.5 h-1.5 rounded-full shrink-0"
+            style={{
+              backgroundColor: isEvent
+                ? "#3b82f6"
+                : isPhase
+                ? row.accentColor ?? "#6b6b80"
+                : "#d1d5db",
+            }}
+          />
+        )}
         {isTask && row.task ? (
           <TitleCell
             task={row.task}
@@ -674,25 +693,48 @@ function GanttTableBodyRow({
         )}
       </div>
 
-      {/* ── Conditional cells ── */}
+      {/* Description cell */}
+      {cols.isVisible("description") && (
+        <div role="cell" className="px-1 py-1 flex items-center min-w-0">
+          {isTask && row.task && row.task.description && (
+            <span className="text-[11px] text-ink-500 truncate">
+              {stripHtml(row.task.description)}
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Task list cell — only when multiple lists visible */}
+      {multipleListsVisible && cols.isVisible("task_list") && (
+        <div role="cell" className="px-1 py-1 flex items-center justify-center">
+          {isTask && listName && (
+            <span
+              className="text-[10px] text-ink-600 truncate max-w-full px-1 py-0.5 rounded bg-ink-100"
+              title={listName}
+            >
+              {listName}
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Urgency */}
       {cols.isVisible("urgency") && (
         <div role="cell" className="px-1 py-1 flex items-center justify-center">
           {isTask && row.task && (
             <UrgencyMiniChip
               value={row.task.urgency}
               onChange={(v) =>
-                onUpdate(
-                  row.task!.id,
-                  { urgency: v },
-                  "שינוי דחיפות",
-                  { urgency: row.task!.urgency }
-                )
+                onUpdate(row.task!.id, { urgency: v }, "שינוי דחיפות", {
+                  urgency: row.task!.urgency,
+                })
               }
             />
           )}
         </div>
       )}
 
+      {/* Status */}
       {cols.isVisible("status") && (
         <div role="cell" className="px-1 py-1 flex items-center justify-center">
           {isTask && row.task && (
@@ -703,52 +745,33 @@ function GanttTableBodyRow({
         </div>
       )}
 
+      {/* Start date — date only */}
       {cols.isVisible("scheduled_at") && (
         <div role="cell" className="px-1 py-1 flex items-center justify-center">
           {isTask && row.task && (
-            <DateTimeCell
+            <DateOnlyCell
               value={row.task.scheduled_at}
               onCommit={(next) =>
-                onUpdate(
-                  row.task!.id,
-                  { scheduled_at: next },
-                  "שינוי תזמון",
-                  { scheduled_at: row.task!.scheduled_at }
-                )
+                onUpdate(row.task!.id, { scheduled_at: next }, "שינוי תאריך התחלה", {
+                  scheduled_at: row.task!.scheduled_at,
+                })
               }
             />
           )}
         </div>
       )}
 
-      {cols.isVisible("deadline_at") && (
+      {/* End date — virtual, derived from scheduled_at + duration */}
+      {cols.isVisible("end_date") && (
         <div role="cell" className="px-1 py-1 flex items-center justify-center">
           {isTask && row.task && (
-            <DateTimeCell
-              value={row.task.deadline_at}
-              onCommit={(next) =>
+            <EndDateCell
+              task={row.task}
+              onCommit={(newDuration) =>
                 onUpdate(
                   row.task!.id,
-                  { deadline_at: next },
-                  "שינוי דד-ליין",
-                  { deadline_at: row.task!.deadline_at }
-                )
-              }
-            />
-          )}
-        </div>
-      )}
-
-      {cols.isVisible("duration_minutes") && (
-        <div role="cell" className="px-1 py-1 flex items-center justify-center">
-          {isTask && row.task && (
-            <NumberCell
-              value={row.task.duration_minutes}
-              onCommit={(next) =>
-                onUpdate(
-                  row.task!.id,
-                  { duration_minutes: next },
-                  "שינוי משך",
+                  { duration_minutes: newDuration },
+                  "שינוי תאריך סיום",
                   { duration_minutes: row.task!.duration_minutes }
                 )
               }
@@ -757,6 +780,39 @@ function GanttTableBodyRow({
         </div>
       )}
 
+      {/* Deadline — date only, hidden by default */}
+      {cols.isVisible("deadline_at") && (
+        <div role="cell" className="px-1 py-1 flex items-center justify-center">
+          {isTask && row.task && (
+            <DateOnlyCell
+              value={row.task.deadline_at}
+              onCommit={(next) =>
+                onUpdate(row.task!.id, { deadline_at: next }, "שינוי דד-ליין", {
+                  deadline_at: row.task!.deadline_at,
+                })
+              }
+            />
+          )}
+        </div>
+      )}
+
+      {/* Duration */}
+      {cols.isVisible("duration_minutes") && (
+        <div role="cell" className="px-1 py-1 flex items-center justify-center">
+          {isTask && row.task && (
+            <NumberCell
+              value={row.task.duration_minutes}
+              onCommit={(next) =>
+                onUpdate(row.task!.id, { duration_minutes: next }, "שינוי משך", {
+                  duration_minutes: row.task!.duration_minutes,
+                })
+              }
+            />
+          )}
+        </div>
+      )}
+
+      {/* Dependencies */}
       {cols.isVisible("dependencies") && (
         <div role="cell" className="px-1 py-1 flex items-center justify-center">
           {isTask && row.task && onAddDep && (
@@ -771,21 +827,16 @@ function GanttTableBodyRow({
         </div>
       )}
 
-      {/* ── Custom field cells ── */}
+      {/* Custom field cells */}
       {visibleCustomFields.map((cf) => (
-        <div
-          key={cf.id}
-          role="cell"
-          className="px-1 py-1 flex items-center justify-center"
-        >
+        <div key={cf.id} role="cell" className="px-1 py-1 flex items-center justify-center">
           {isTask && row.task && (
             <GanttCustomFieldCell
               field={cf}
               task={row.task}
               onSave={(value) => {
                 const prev =
-                  (row.task!.custom_fields as Record<string, unknown> | null) ??
-                  {};
+                  (row.task!.custom_fields as Record<string, unknown> | null) ?? {};
                 const next = { ...prev, [cf.id]: value };
                 onUpdate(
                   row.task!.id,
@@ -799,7 +850,6 @@ function GanttTableBodyRow({
         </div>
       ))}
 
-      {/* Trailing cell — aligns with the column-manager header */}
       <div role="cell" />
     </div>
   );
@@ -839,35 +889,76 @@ function TitleCell({
   );
 }
 
-function DateTimeCell({
+function DateOnlyCell({
   value,
   onCommit,
 }: {
   value: string | null;
   onCommit: (next: string | null) => void;
 }) {
-  const toLocalInput = (iso: string | null): string => {
+  const toDateInput = (iso: string | null): string => {
     if (!iso) return "";
-    const d = new Date(iso);
-    const pad = (n: number) => String(n).padStart(2, "0");
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    return iso.slice(0, 10);
   };
-  const fromLocalInput = (s: string): string | null => {
-    if (!s) return null;
-    return new Date(s).toISOString();
-  };
-
-  const [draft, setDraft] = useState(toLocalInput(value));
-  useEffect(() => setDraft(toLocalInput(value)), [value]);
+  const [draft, setDraft] = useState(toDateInput(value));
+  useEffect(() => setDraft(toDateInput(value)), [value]);
 
   return (
     <input
-      type="datetime-local"
+      type="date"
       value={draft}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={() => {
-        const next = fromLocalInput(draft);
-        if (next !== value) onCommit(next);
+        if (!draft) {
+          if (value !== null) onCommit(null);
+          return;
+        }
+        if (value && value.slice(0, 10) === draft) return;
+        // Replace the date part, keep existing time suffix if present
+        const nextISO = value ? draft + value.slice(10) : draft + "T00:00:00.000Z";
+        if (nextISO !== value) onCommit(nextISO);
+      }}
+      className="text-[11px] bg-transparent border border-transparent hover:border-ink-200 focus:border-primary-400 outline-none rounded-sm px-1 py-0.5 w-full"
+    />
+  );
+}
+
+function EndDateCell({
+  task,
+  onCommit,
+}: {
+  task: Task;
+  onCommit: (newDuration: number | null) => void;
+}) {
+  const endDateStr = useMemo(() => {
+    if (!task.scheduled_at || task.duration_minutes == null) return "";
+    const endMs =
+      new Date(task.scheduled_at).getTime() + task.duration_minutes * 60_000;
+    return new Date(endMs).toISOString().slice(0, 10);
+  }, [task.scheduled_at, task.duration_minutes]);
+
+  const [draft, setDraft] = useState(endDateStr);
+  useEffect(() => setDraft(endDateStr), [endDateStr]);
+
+  return (
+    <input
+      type="date"
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => {
+        if (draft === endDateStr) return;
+        if (!draft) {
+          onCommit(null);
+          return;
+        }
+        if (!task.scheduled_at) return;
+        const startDay = new Date(task.scheduled_at.slice(0, 10) + "T00:00:00");
+        const endDay = new Date(draft + "T00:00:00");
+        const daysDiff = Math.round(
+          (endDay.getTime() - startDay.getTime()) / (1440 * 60_000)
+        );
+        const newDuration = Math.max(0, daysDiff * 1440);
+        if (newDuration !== task.duration_minutes) onCommit(newDuration);
       }}
       className="text-[11px] bg-transparent border border-transparent hover:border-ink-200 focus:border-primary-400 outline-none rounded-sm px-1 py-0.5 w-full"
     />
@@ -881,9 +972,7 @@ function NumberCell({
   value: number | null;
   onCommit: (next: number | null) => void;
 }) {
-  const [draft, setDraft] = useState<string>(
-    value == null ? "" : String(value)
-  );
+  const [draft, setDraft] = useState<string>(value == null ? "" : String(value));
   useEffect(() => setDraft(value == null ? "" : String(value)), [value]);
   return (
     <input
@@ -920,12 +1009,7 @@ function DependenciesCell({
   const [filter, setFilter] = useState("");
 
   const choices = useMemo(() => {
-    const out: Array<{
-      id: string;
-      title: string;
-      isLinked: boolean;
-      depId?: string;
-    }> = [];
+    const out: Array<{ id: string; title: string; isLinked: boolean; depId?: string }> = [];
     for (const [id, row] of visibleTaskMap) {
       if (id === task.id) continue;
       const dep = deps.find((d) => d.depends_on_task_id === id);
@@ -953,16 +1037,10 @@ function DependenciesCell({
           "inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md hover:bg-ink-100 text-[11px]",
           deps.length > 0 ? "text-ink-900 bg-ink-100" : "text-ink-400"
         )}
-        title={
-          deps.length === 0
-            ? "אין תלויות"
-            : `${deps.length} תלויות (לחצי לעריכה)`
-        }
+        title={deps.length === 0 ? "אין תלויות" : `${deps.length} תלויות (לחצי לעריכה)`}
       >
         <Link2 className="w-3 h-3" />
-        {deps.length > 0 && (
-          <span className="font-mono">{deps.length}</span>
-        )}
+        {deps.length > 0 && <span className="font-mono">{deps.length}</span>}
       </button>
       {open && (
         <>
@@ -975,9 +1053,7 @@ function DependenciesCell({
           />
           <div className="absolute end-0 mt-1 z-40 w-72 bg-white border border-ink-200 rounded-xl shadow-lift overflow-hidden">
             <div className="px-3 py-2 border-b border-ink-100 bg-ink-50/60">
-              <div className="text-[11px] font-semibold text-ink-700 mb-1">
-                תלוי ב…
-              </div>
+              <div className="text-[11px] font-semibold text-ink-700 mb-1">תלוי ב…</div>
               <input
                 value={filter}
                 onChange={(e) => setFilter(e.target.value)}
@@ -988,15 +1064,10 @@ function DependenciesCell({
             </div>
             <div className="max-h-64 overflow-y-auto py-1">
               {filtered.length === 0 ? (
-                <div className="px-3 py-3 text-xs text-ink-500 text-center">
-                  אין משימות תואמות
-                </div>
+                <div className="px-3 py-3 text-xs text-ink-500 text-center">אין משימות תואמות</div>
               ) : (
                 filtered.map((c) => (
-                  <div
-                    key={c.id}
-                    className="flex items-center gap-2 px-3 py-1.5 hover:bg-ink-50 group"
-                  >
+                  <div key={c.id} className="flex items-center gap-2 px-3 py-1.5 hover:bg-ink-50 group">
                     <button
                       type="button"
                       onClick={() => {
@@ -1011,9 +1082,7 @@ function DependenciesCell({
                       <span
                         className={cn(
                           "inline-block w-3 h-3 rounded-sm border me-2 align-middle",
-                          c.isLinked
-                            ? "bg-primary-500 border-primary-500"
-                            : "border-ink-300 bg-white"
+                          c.isLinked ? "bg-primary-500 border-primary-500" : "border-ink-300 bg-white"
                         )}
                       />
                       {c.title}
@@ -1059,10 +1128,7 @@ function UrgencyMiniChip({
         {[3, 2, 1].map((n) => (
           <span
             key={n}
-            className={cn(
-              "h-[2px] w-3 rounded-sm transition-colors",
-              n <= filled ? "bg-ink-900" : "bg-ink-200"
-            )}
+            className={cn("h-[2px] w-3 rounded-sm transition-colors", n <= filled ? "bg-ink-900" : "bg-ink-200")}
           />
         ))}
       </button>
@@ -1084,18 +1150,13 @@ function UrgencyMiniChip({
                 )}
               >
                 {n === 0 ? (
-                  <span className="text-ink-400 text-xs h-[15px] flex items-center">
-                    ∅
-                  </span>
+                  <span className="text-ink-400 text-xs h-[15px] flex items-center">∅</span>
                 ) : (
                   <div className="flex flex-col items-center gap-[2px]">
                     {[3, 2, 1].map((row) => (
                       <span
                         key={row}
-                        className={cn(
-                          "h-[2px] w-4 rounded-sm",
-                          row <= n ? "bg-ink-900" : "bg-ink-200"
-                        )}
+                        className={cn("h-[2px] w-4 rounded-sm", row <= n ? "bg-ink-900" : "bg-ink-200")}
                       />
                     ))}
                   </div>
@@ -1193,11 +1254,7 @@ function SelectionCheckbox({ taskId }: { taskId: string }) {
     >
       {isSelected && (
         <svg viewBox="0 0 20 20" fill="currentColor" className="w-2 h-2">
-          <path
-            fillRule="evenodd"
-            d="M16.704 5.29a1 1 0 010 1.415l-8 8a1 1 0 01-1.415 0l-4-4a1 1 0 011.415-1.414L8 12.586l7.29-7.293a1 1 0 011.415 0z"
-            clipRule="evenodd"
-          />
+          <path fillRule="evenodd" d="M16.704 5.29a1 1 0 010 1.415l-8 8a1 1 0 01-1.415 0l-4-4a1 1 0 011.415-1.414L8 12.586l7.29-7.293a1 1 0 011.415 0z" clipRule="evenodd" />
         </svg>
       )}
     </button>
@@ -1213,9 +1270,6 @@ function CompletionCircle({
   completed: boolean;
   onToggle: (completed: boolean) => void;
 }) {
-  // 500ms grace window: when completing, fill green immediately and only
-  // fire the mutation after the delay so accidental clicks are reversible
-  // (a second click within the window cancels). Symmetric with TaskRow.
   const [pendingComplete, setPendingComplete] = useState(false);
   const pendingTimerRef = useRef<number | null>(null);
   useEffect(() => {
@@ -1260,19 +1314,13 @@ function CompletionCircle({
     >
       {showAsDone && (
         <svg viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3">
-          <path
-            fillRule="evenodd"
-            d="M16.704 5.29a1 1 0 010 1.415l-8 8a1 1 0 01-1.415 0l-4-4a1 1 0 011.415-1.414L8 12.586l7.29-7.293a1 1 0 011.415 0z"
-            clipRule="evenodd"
-          />
+          <path fillRule="evenodd" d="M16.704 5.29a1 1 0 010 1.415l-8 8a1 1 0 01-1.415 0l-4-4a1 1 0 011.415-1.414L8 12.586l7.29-7.293a1 1 0 011.415 0z" clipRule="evenodd" />
         </svg>
       )}
     </button>
   );
 }
 
-/** Compact custom field cell for the Gantt table. Supports the common field
- *  types inline; complex types (file, multiselect) are read-only badges. */
 function GanttCustomFieldCell({
   field,
   task,
@@ -1290,24 +1338,12 @@ function GanttCustomFieldCell({
     case "url":
     case "location":
     case "person":
-      return (
-        <GanttCfTextCell
-          value={(value as string) ?? ""}
-          onSave={onSave}
-        />
-      );
+      return <GanttCfTextCell value={(value as string) ?? ""} onSave={onSave} />;
     case "number":
     case "time":
-      return (
-        <GanttCfNumberCell
-          value={value as number | null}
-          onSave={onSave}
-        />
-      );
+      return <GanttCfNumberCell value={value as number | null} onSave={onSave} />;
     case "date":
-      return (
-        <GanttCfDateCell value={(value as string) ?? ""} onSave={onSave} />
-      );
+      return <GanttCfDateCell value={(value as string) ?? ""} onSave={onSave} />;
     case "checkbox":
       return (
         <button
@@ -1334,10 +1370,7 @@ function GanttCustomFieldCell({
               key={n}
               type="button"
               onClick={() => onSave(n === stars ? 0 : n)}
-              className={cn(
-                "text-[10px]",
-                n <= stars ? "text-amber-400" : "text-ink-200"
-              )}
+              className={cn("text-[10px]", n <= stars ? "text-amber-400" : "text-ink-200")}
             >
               ★
             </button>
@@ -1355,44 +1388,28 @@ function GanttCustomFieldCell({
         >
           <option value="">—</option>
           {opts.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
+            <option key={o.value} value={o.value}>{o.label}</option>
           ))}
         </select>
       );
     }
     case "tag": {
       const tags = (value as string[]) ?? [];
-      return (
-        <span className="text-[10px] text-ink-600 truncate">
-          {tags.join(", ") || "—"}
-        </span>
-      );
+      return <span className="text-[10px] text-ink-600 truncate">{tags.join(", ") || "—"}</span>;
     }
     default:
-      return (
-        <span className="text-[10px] text-ink-300 truncate">—</span>
-      );
+      return <span className="text-[10px] text-ink-300 truncate">—</span>;
   }
 }
 
-function GanttCfTextCell({
-  value,
-  onSave,
-}: {
-  value: string;
-  onSave: (v: string) => void;
-}) {
+function GanttCfTextCell({ value, onSave }: { value: string; onSave: (v: string) => void }) {
   const [draft, setDraft] = useState(value);
   useEffect(() => setDraft(value), [value]);
   return (
     <input
       value={draft}
       onChange={(e) => setDraft(e.target.value)}
-      onBlur={() => {
-        if (draft !== value) onSave(draft);
-      }}
+      onBlur={() => { if (draft !== value) onSave(draft); }}
       onKeyDown={(e) => {
         if (e.key === "Enter") (e.target as HTMLInputElement).blur();
         if (e.key === "Escape") setDraft(value);
@@ -1402,13 +1419,7 @@ function GanttCfTextCell({
   );
 }
 
-function GanttCfNumberCell({
-  value,
-  onSave,
-}: {
-  value: number | null;
-  onSave: (v: number | null) => void;
-}) {
+function GanttCfNumberCell({ value, onSave }: { value: number | null; onSave: (v: number | null) => void }) {
   const [draft, setDraft] = useState(value == null ? "" : String(value));
   useEffect(() => setDraft(value == null ? "" : String(value)), [value]);
   return (
@@ -1425,20 +1436,10 @@ function GanttCfNumberCell({
   );
 }
 
-function GanttCfDateCell({
-  value,
-  onSave,
-}: {
-  value: string;
-  onSave: (v: string | null) => void;
-}) {
+function GanttCfDateCell({ value, onSave }: { value: string; onSave: (v: string | null) => void }) {
   const toDateInput = (iso: string): string => {
     if (!iso) return "";
-    try {
-      return new Date(iso).toISOString().slice(0, 10);
-    } catch {
-      return "";
-    }
+    try { return new Date(iso).toISOString().slice(0, 10); } catch { return ""; }
   };
   const [draft, setDraft] = useState(toDateInput(value));
   useEffect(() => setDraft(toDateInput(value)), [value]);

@@ -25,6 +25,7 @@ import {
   useTaskListShares,
   useRemoveTaskListShare,
 } from "@/lib/hooks/useTaskLists";
+import { useTaskSharesForTasks } from "@/lib/hooks/useTaskShares";
 import { useAuth } from "@/lib/auth/AuthContext";
 import {
   useEventCalendars,
@@ -250,16 +251,36 @@ export function TaskColumn({
       ? "write"
       : "read";
 
-  // Determine goal icon style for tasks in this column (5-variant: mine vs other × read/write/private).
-  const goalShareKind: "private" | "mine-read" | "mine-write" | "other-read" | "other-write" = isOwner
-    ? shares.some((s) => s.permission === "write")
-      ? "mine-write"
-      : shares.length > 0
-        ? "mine-read"
-        : "private"
-    : myPermission === "write"
-      ? "other-write"
-      : "other-read";
+  // Determine goal icon style — combines list-level shares with per-task shares
+  // so goals shared at the task level (in a private list) still render in the
+  // correct color. 5-variant: mine vs other × read/write/private.
+  const allGoalTaskIds = collectGoalTaskIds(roots);
+  const { data: taskShares = [] } = useTaskSharesForTasks(allGoalTaskIds);
+  const taskShareMap = (() => {
+    const m = new Map<string, { hasWrite: boolean; hasRead: boolean }>();
+    for (const s of taskShares) {
+      const cur = m.get(s.entity_id) ?? { hasWrite: false, hasRead: false };
+      if (s.permission === "write") cur.hasWrite = true;
+      else cur.hasRead = true;
+      m.set(s.entity_id, cur);
+    }
+    return m;
+  })();
+  const listHasWrite = shares.some((s) => s.permission === "write");
+  const listHasRead = shares.length > 0;
+  const getGoalShareKind = (
+    taskId: string,
+  ): "private" | "mine-read" | "mine-write" | "other-read" | "other-write" => {
+    const ts = taskShareMap.get(taskId);
+    if (isOwner) {
+      const hasWrite = listHasWrite || !!ts?.hasWrite;
+      const hasRead = listHasRead || !!ts?.hasRead;
+      if (hasWrite) return "mine-write";
+      if (hasRead) return "mine-read";
+      return "private";
+    }
+    return myPermission === "write" ? "other-write" : "other-read";
+  };
   const isPinnedByFlag = !!list?.is_pinned;
 
   return (
@@ -580,7 +601,7 @@ export function TaskColumn({
                 onOpenEdit={onOpenEdit}
                 display={display}
                 permission={effectivePermission}
-                goalShareKind={goalShareKind}
+                goalShareKind={getGoalShareKind(node.task.id)}
               />
             ))}
 
@@ -639,7 +660,7 @@ export function TaskColumn({
                       onOpenEdit={onOpenEdit}
                       display={display}
                       permission={effectivePermission}
-                      goalShareKind={goalShareKind}
+                      goalShareKind={getGoalShareKind(node.task.id)}
                     />
                   ))}
               </div>
@@ -837,4 +858,16 @@ function MenuItem({
       {children}
     </button>
   );
+}
+
+function collectGoalTaskIds(nodes: TaskTreeNode[]): string[] {
+  const out: string[] = [];
+  const walk = (n: TaskTreeNode) => {
+    if (n.task.goal_period || (n.task as any).goal_type === "achievement") {
+      out.push(n.task.id);
+    }
+    for (const c of n.children) walk(c);
+  };
+  for (const n of nodes) walk(n);
+  return out;
 }

@@ -164,6 +164,19 @@ mcp__github__push_files({ owner: "haroshccc", repo: "multitask", branch: "main",
 After a successful MCP push, sync local: `git fetch origin main && git reset --hard origin/main`.
 **Always push to `main`** — production runs from `main` (Vercel auto-deploys on push).
 
+### ⚠️ Sub-agents and `push_files` — placeholder corruption hazard
+
+Spawning a sub-agent (`Agent` tool) to call `mcp__github__push_files` for **large files** has historically caused the agent to substitute the file content with placeholders like `__TASKROW__` or `// PLACEHOLDER`, **silently corrupting `main`**. This wiped TaskRow.tsx down to 11 bytes once.
+
+**Rules:**
+- Prefer calling `mcp__github__push_files` **directly from the main session** for any non-trivial file.
+- If you must delegate, the sub-agent prompt MUST:
+  - Tell the agent to Read the file with no offset/limit, then strip the line-number+tab prefix.
+  - List exact pre-flight checks (expected byte size, expected substrings).
+  - Explicitly forbid placeholder substitution.
+  - Demand abort+report on any verification failure.
+- After any MCP push, verify with `git fetch origin main && git show origin/main:<path> | wc -l` before assuming success — the deploy may roll back to the previous READY build, hiding corruption.
+
 ## Migrations applied
 
 | File | Description |
@@ -175,3 +188,25 @@ After a successful MCP push, sync local: `git fetch origin main && git reset --h
 1. **Unused variable** (`noUnusedLocals`) — prefix with `_` or remove
 2. **Prop is `(v: T) => void`**, not a React state setter — cannot pass a function, must pass a value directly
 3. **`supabase` type lag** — cast to `any` as `const db = supabase as any` at top of service files
+4. **Lucide icons don't accept `title`** — `<Target title="...">` fails TS2322. Wrap in `<span title="...">` and put colors/size on the icon's `className`.
+
+## Goal sharing — icon color (5-variant share kind)
+
+The `<Target>` icon on a goal task is colored by its `goalShareKind`:
+
+| share kind | meaning | color |
+|---|---|---|
+| `private` | my goal, not shared | `text-amber-500` |
+| `mine-read` / `mine-write` | my goal, shared with others | `text-pink-500` |
+| `other-read` / `other-write` | someone else's goal, shared with me | `text-blue-500` |
+
+In `TaskRow.tsx` the icon is wrapped in `<span title="...">` (Lucide doesn't accept `title`).
+
+### Computing share kind in different surfaces
+
+A goal can be shared **at the list level** (`task_list_shares`) **or at the task level** (`task_shares`). Both must be checked:
+
+- **`Goals.tsx`** (`getShareKind`) — combines `useTaskSharesForTasks(goalTaskIds)` + `useSharesForTaskLists(goalListIds)`. ✅ correct.
+- **`TaskColumn.tsx`** — historically only checked list-level shares, so a task-shared goal in a private list rendered amber. **Fixed**: column now also calls `useTaskSharesForTasks(allGoalTaskIds)` and exposes `getGoalShareKind(taskId)` per row. `collectGoalTaskIds(roots)` walks the tree to find all goal task IDs.
+
+When adding a new surface that renders the `<Target>` icon, **never** infer share kind from list-level shares alone.

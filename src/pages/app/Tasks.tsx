@@ -777,6 +777,7 @@ export function Tasks() {
                 hiddenListIds={hiddenSet}
                 onToggleListVisibility={toggleListVisibility}
                 onCreateList={handleCreateList}
+                onMoveListInOrder={handleMoveListInOrder}
                 filtersActiveCount={filtersActiveCount}
                 filtersOpen={filtersOpen}
                 onToggleFilters={() => setFiltersOpen((v) => !v)}

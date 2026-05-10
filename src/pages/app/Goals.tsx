@@ -417,7 +417,7 @@ export function Goals() {
               ))}
             </div>
 
-            {/* Layout toggle */}
+            {/* Layout toggle — labeled so "לפי רשימה" is discoverable */}
             <div className="inline-flex rounded-lg border border-ink-200 overflow-hidden text-sm ms-auto">
               <button
                 type="button"
@@ -480,7 +480,8 @@ export function Goals() {
               ))}
             </div>
 
-            {/* User filter */}
+            {/* User filter — shown for "shared" (filter by who I shared with)
+                or "all"/"others" (filter by goal owner) */}
             {(
               (scopeFilter === "shared" && sharedWithMembers.length > 0) ||
               ((scopeFilter === "all" || scopeFilter === "others") && othersCount > 0 && otherMembers.length > 0)
@@ -488,7 +489,7 @@ export function Goals() {
               <select
                 value={userFilter ?? ""}
                 onChange={(e) => setUserFilter(e.target.value || null)}
-                className="field w-auto ms-auto text-sm py-1.5 pe-8 ps-3 rounded-lg border border-ink-200"
+                className="ms-auto shrink-0 text-sm py-1.5 pe-7 ps-3 rounded-lg border border-ink-200 bg-white text-ink-700 max-w-[9rem]"
                 aria-label="סינון לפי משתמש"
               >
                 <option value="">
@@ -983,6 +984,11 @@ function StatCell({
     </div>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Helper — wrapper because getShareBadge and getShareBadgeLabel had to be
+// called from JSX without a hook, so extracted as plain function
+// ---------------------------------------------------------------------------
 
 function getShareBadge(kind: ShareKind) {
   return getSharingBadge(kind);

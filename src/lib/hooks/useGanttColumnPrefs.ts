@@ -24,6 +24,7 @@ export const GANTT_STANDARD_COLUMNS: Array<{
   { id: "status", defaultLabel: "סטטוס" },
   { id: "duration_minutes", defaultLabel: "משך (ד׳)", defaultHidden: true },
   { id: "dependencies", defaultLabel: "תלויות" },
+  { id: "percent_complete", defaultLabel: "% סיום" },
 ];
 
 function loadPrefs(): GanttColumnPref[] {

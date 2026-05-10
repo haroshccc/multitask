@@ -346,20 +346,16 @@ export function computeCriticalPath(
     if (r.kind === "task" && r.task && !r.isPhase) byId.set(r.task.id, r);
   }
 
-  // Forward edges: predecessorId → [successorId...]
-  const forward = new Map<string, string[]>();
-  // Reverse edges: successorId → [predecessorId...]
-  const reverse = new Map<string, string[]>();
+  // Reverse edges with lag: successorId → [{ predId, lagMs }]
+  const reverse = new Map<string, Array<{ predId: string; lagMs: number }>>();
   for (const d of deps) {
     if (d.relation !== "finish_to_start") continue;
     if (!byId.has(d.task_id) || !byId.has(d.depends_on_task_id)) continue;
-    // depends_on_task_id finishes → task_id can start (FS).
     const pred = d.depends_on_task_id;
     const succ = d.task_id;
-    if (!forward.has(pred)) forward.set(pred, []);
-    forward.get(pred)!.push(succ);
+    const lagMs = (d.lag_days ?? 0) * 86400_000;
     if (!reverse.has(succ)) reverse.set(succ, []);
-    reverse.get(succ)!.push(pred);
+    reverse.get(succ)!.push({ predId: pred, lagMs });
   }
 
   const projectEnd = Math.max(...rows.map((r) => r.end.getTime()));
@@ -376,6 +372,8 @@ export function computeCriticalPath(
   }
 
   // Walk backward along reverse edges, marking zero-slack predecessors.
+  // Lag shifts the effective constraint: successor must start after
+  // predecessor.end + lag, so zero slack means currentStart ≈ predEnd + lagMs.
   const stack = [...critical];
   const visited = new Set(stack);
   while (stack.length > 0) {
@@ -383,16 +381,15 @@ export function computeCriticalPath(
     const currentRow = byId.get(current);
     if (!currentRow) continue;
     const preds = reverse.get(current) ?? [];
-    for (const p of preds) {
-      const predRow = byId.get(p);
+    for (const { predId, lagMs } of preds) {
+      const predRow = byId.get(predId);
       if (!predRow) continue;
-      // Zero slack: predecessor ends exactly when current starts.
-      const slack = currentRow.start.getTime() - predRow.end.getTime();
+      const slack = currentRow.start.getTime() - (predRow.end.getTime() + lagMs);
       if (slack <= EPS) {
-        if (!visited.has(p)) {
-          visited.add(p);
-          critical.add(p);
-          stack.push(p);
+        if (!visited.has(predId)) {
+          visited.add(predId);
+          critical.add(predId);
+          stack.push(predId);
         }
       }
     }

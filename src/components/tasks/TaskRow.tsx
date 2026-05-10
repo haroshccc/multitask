@@ -108,10 +108,6 @@ export function TaskRow({
 }: TaskRowProps) {
   const { task, children, depth } = node;
   const { user } = useAuth();
-  // Task ownership visual modes:
-  // 'mine'       — I own AND execute (owner==me, no assignee or assignee==me)
-  // 'delegated'  — I own but someone else executes (owner==me, assignee!=me)
-  // 'assigned'   — Someone else owns, I execute (assignee==me, owner!=me)
   const taskOwnershipMode: "mine" | "delegated" | "assigned" =
     user && task.owner_id && task.owner_id !== user.id && task.assignee_user_id === user.id
       ? "assigned"
@@ -137,6 +133,9 @@ export function TaskRow({
   const { data: activeTimer } = useActiveTimer();
 
   const [draft, setDraft] = useState(task.title);
+  const [descDraft, setDescDraft] = useState(() => stripHtml(task.description ?? ""));
+  const [descFocused, setDescFocused] = useState(false);
+  const descRef = useRef<HTMLTextAreaElement>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState<{
@@ -153,9 +152,6 @@ export function TaskRow({
     const el = menuTriggerRef.current;
     if (el) {
       const r = el.getBoundingClientRect();
-      // Anchor to whichever edge keeps the menu on-screen. In RTL the ⋯
-      // button lands near the left edge; using `right` there would push the
-      // menu far off-screen to the left.
       if (r.left < window.innerWidth / 2) {
         setMenuPos({ top: r.bottom + 4, left: Math.max(8, r.left) });
       } else {
@@ -190,16 +186,17 @@ export function TaskRow({
   const isActive = activeTimer?.task_id === task.id;
   const isDone = !!task.completed_at;
 
-  // Total (including nested) + completed counts — for the compact "N/M" badge.
   const totalInSubtree = countDescendants(children);
   const doneInSubtree = countCompletedDescendants(children);
 
-  // keep draft in sync when task title changes externally (e.g. realtime)
   useEffect(() => {
     setDraft(task.title);
   }, [task.title]);
 
-  // auto-focus when parent just created this row
+  useEffect(() => {
+    if (!descFocused) setDescDraft(stripHtml(task.description ?? ""));
+  }, [task.description, descFocused]);
+
   useEffect(() => {
     if (focusTaskId === task.id) {
       inputRef.current?.focus();
@@ -211,7 +208,6 @@ export function TaskRow({
     const trimmed = draft.trim();
     if (!trimmed) {
       if (!task.title) {
-        // Freshly-created task abandoned without a title — clean it up.
         deleteTaskM.mutate(task.id);
       } else {
         setDraft(task.title);
@@ -233,10 +229,22 @@ export function TaskRow({
     });
   };
 
+  const commitDescription = () => {
+    const trimmed = descDraft.trim();
+    const current = stripHtml(task.description ?? "");
+    if (trimmed === current) return;
+    const prev = task.description;
+    updateTask.mutate({ taskId: task.id, patch: { description: trimmed || null } });
+    pushUndo({
+      description: "עדכון פירוט",
+      undo: () => updateTask.mutate({ taskId: task.id, patch: { description: prev } }),
+      redo: () => updateTask.mutate({ taskId: task.id, patch: { description: trimmed || null } }),
+    });
+  };
+
   const handleKeyDown = async (e: React.KeyboardEvent<HTMLInputElement>) => {
     const mod = e.metaKey || e.ctrlKey;
 
-    // Ctrl+Enter — create subtask under this task
     if (mod && e.code === "Enter") {
       e.preventDefault();
       commitTitle();
@@ -244,24 +252,29 @@ export function TaskRow({
       return;
     }
 
-    // Ctrl+E — open full edit modal
     if (mod && e.code === "KeyE") {
       e.preventDefault();
       onOpenEdit(task.id);
       return;
     }
 
-    // Ctrl+D — duplicate this task
     if (mod && e.code === "KeyD") {
       e.preventDefault();
       handleDuplicateSingle();
       return;
     }
 
+    if (e.key === "Enter" && e.shiftKey && !mod) {
+      e.preventDefault();
+      commitTitle();
+      setDescFocused(true);
+      setTimeout(() => descRef.current?.focus(), 0);
+      return;
+    }
+
     if (e.key === "Enter" && !e.shiftKey && !mod) {
       e.preventDefault();
       commitTitle();
-      // Create new sibling right after this one.
       const payload = {
         title: "",
         task_list_id: listId ?? null,
@@ -279,7 +292,6 @@ export function TaskRow({
       return;
     }
     if (e.key === "Tab" && !e.shiftKey) {
-      // Indent: make this a child of previous sibling.
       if (!prevSiblingId) return;
       e.preventDefault();
       commitTitle();
@@ -293,7 +305,6 @@ export function TaskRow({
       return;
     }
     if (e.key === "Tab" && e.shiftKey) {
-      // Outdent: promote one level. Only possible if this is a child.
       if (!parentTaskId) return;
       e.preventDefault();
       commitTitle();
@@ -313,11 +324,6 @@ export function TaskRow({
     }
   };
 
-  // Pending-complete state: a 500ms grace window between the click and the
-  // actual mutation. The circle fills green immediately so the user sees
-  // confirmation, but the row only moves to "completed" after the delay.
-  // A second click during the window cancels the pending completion (so
-  // accidental clicks are reversible without ever hitting the DB).
   const [pendingComplete, setPendingComplete] = useState(false);
   const pendingTimerRef = useRef<number | null>(null);
   useEffect(() => {
@@ -326,27 +332,16 @@ export function TaskRow({
     };
   }, []);
 
-  // Recurring task state — drives the row's "active occurrence" semantics.
-  // A row is recurring when it has both a recurrence rule and a scheduled
-  // anchor. The active occurrence is the next non-completed instance in
-  // the lookahead window; when it's in the past (or now), the row reads
-  // as bright "do this now". When it's in the future or there's no active
-  // occurrence at all, the row reads as dim+✓ ("done for now, will wake
-  // up automatically when the next slot becomes due").
   const taskIsRecurring = isTaskRecurring(task);
   const now = new Date();
   const activeOccurrence = taskIsRecurring ? getActiveOccurrence(task, now) : null;
   const recurringSlotIsPast = !!activeOccurrence && activeOccurrence <= now;
 
   const showAsDone = taskIsRecurring
-    ? // Dim if no active occurrence in window, OR active is in the future
-      // (= we just completed the most recent slot, nothing to do until next).
-      // pendingComplete keeps the green check on during the 500ms grace.
-      pendingComplete || !recurringSlotIsPast
+    ? pendingComplete || !recurringSlotIsPast
     : isDone || pendingComplete;
 
   const toggleComplete = () => {
-    // Cancel a pending click (works for both recurring and non-recurring).
     if (pendingComplete) {
       if (pendingTimerRef.current) {
         window.clearTimeout(pendingTimerRef.current);
@@ -358,8 +353,6 @@ export function TaskRow({
 
     if (taskIsRecurring) {
       if (recurringSlotIsPast && activeOccurrence) {
-        // BRIGHT → DIM: mark the active (overdue/now) occurrence done after
-        // the 500ms grace.
         setPendingComplete(true);
         pendingTimerRef.current = window.setTimeout(() => {
           toggleOccurrence.mutate({
@@ -386,9 +379,6 @@ export function TaskRow({
         }, 500);
         return;
       }
-      // DIM → BRIGHT: un-mark the most recent completed occurrence at-or
-      // -before now (the user is undoing a previous completion). Instant —
-      // no grace window because they can re-click to redo.
       const completed = getCompletedOccurrences(task);
       const latest = completed
         .filter((iso) => new Date(iso).getTime() <= now.getTime())
@@ -421,7 +411,6 @@ export function TaskRow({
     }
 
     if (isDone) {
-      // Un-completing: instant, no delay.
       completeTask.mutate({ taskId: task.id, completed: false });
       pushUndo({
         description: "ביטול השלמה",
@@ -430,7 +419,6 @@ export function TaskRow({
       });
       return;
     }
-    // Completing: show green check now, fire mutation after 500ms.
     setPendingComplete(true);
     pendingTimerRef.current = window.setTimeout(() => {
       completeTask.mutate({ taskId: task.id, completed: true });
@@ -468,8 +456,6 @@ export function TaskRow({
 
   const handleDelete = async () => {
     const taskId = task.id;
-    // Snapshot the subtree (root + descendants) before deleting so undo can
-    // restore the whole branch with the original ids and parent links.
     let subtree: Awaited<ReturnType<typeof tasksService.fetchTaskSubtree>> = [];
     try {
       subtree = await tasksService.fetchTaskSubtree(taskId);
@@ -509,13 +495,6 @@ export function TaskRow({
     onRequestFocus(newTask.id);
   };
 
-  // DnD — the row is both a drag source AND three drop targets:
-  //   - top 25% strip → drop *before* this row (sibling above)
-  //   - middle 50% → nest as a child of this row
-  //   - bottom 25% → drop *after* this row (sibling below)
-  // Three zones lets the user reorder siblings AND nest with the same drag,
-  // disambiguated only by where they release. A visual indicator (top/bottom
-  // line, or full-row tint for nest) shows what will happen before they let go.
   const {
     attributes,
     listeners,
@@ -561,9 +540,6 @@ export function TaskRow({
     if (e.shiftKey) {
       store.shiftSelect(task.id);
     } else {
-      // Selecting a parent automatically selects the whole subtree —
-      // the user expects "I clicked one row, the things hanging off it
-      // come with me". Clicking again on the parent deselects it all.
       const descendantIds = collectDescendantIds(children);
       if (descendantIds.length > 0) {
         store.toggleSubtree(task.id, descendantIds);
@@ -579,19 +555,12 @@ export function TaskRow({
         ref={setDragRef}
         className={cn(
           "group relative flex items-start gap-1.5 rounded-md transition-colors px-1.5 py-1 hover:bg-ink-50",
-          // Ownership visual modes
           taskOwnershipMode === "assigned" && !isSelected && "border border-dotted border-rose-300 bg-rose-50/60",
           taskOwnershipMode === "delegated" && !isSelected && "border border-dashed border-rose-300 bg-rose-50/40",
           isDragging && "opacity-40",
           isOverNest && "bg-primary-50 ring-1 ring-primary-300",
           isSelected && "bg-primary-50/60 ring-1 ring-primary-300",
-          // Recurring tasks whose current slot is already done go dim. The
-          // row "wakes up" automatically when the next occurrence's time
-          // becomes due (the active-occurrence calc re-runs on every render).
           taskIsRecurring && showAsDone && !isSelected && "opacity-60",
-          // Phase rows get a colored stripe on the leading edge, slightly
-          // larger font, and a subtle background tint to read as a
-          // group-header visually.
           isPhase &&
             "border-s-4 bg-[color:var(--list-color,#6b6b80)]/5 py-1.5 text-[14px] font-semibold"
         )}
@@ -602,9 +571,6 @@ export function TaskRow({
             : {}),
         }}
       >
-        {/* Drop zones — three invisible strips. pointer-events:none so they
-            don't intercept clicks on the row itself; dnd-kit detects collisions
-            by element rect, not pointer events. */}
         <div
           ref={setBeforeRef}
           className="absolute top-0 inset-x-0 h-1/4 pointer-events-none"
@@ -620,8 +586,6 @@ export function TaskRow({
           className="absolute bottom-0 inset-x-0 h-1/4 pointer-events-none"
           aria-hidden
         />
-        {/* Visual cue: 2px colored line at the top/bottom edge while a drag
-            hovers in the corresponding zone. */}
         {isOverBefore && (
           <div
             className="absolute top-0 inset-x-1 h-0.5 bg-primary-500 rounded-full pointer-events-none"
@@ -634,10 +598,6 @@ export function TaskRow({
             aria-hidden
           />
         )}
-        {/* Selection checkbox — appears on hover, or always when selected.
-            Cmd/Ctrl+click also works on the row directly via the title input
-            (handled in handleKeyDown), but the visible checkbox is the
-            primary affordance. Shift+click extends a range from the anchor. */}
         <button
           type="button"
           onClick={handleSelectClick}
@@ -661,7 +621,6 @@ export function TaskRow({
           )}
         </button>
 
-        {/* Drag handle — hidden for non-owner viewers */}
         {!isReadOnly && !isWriteOnly && (
           <button
             {...attributes}
@@ -675,7 +634,6 @@ export function TaskRow({
         )}
         {(isReadOnly || isWriteOnly) && <span className="w-3.5 shrink-0" />}
 
-        {/* Expand / collapse chevron */}
         {children.length > 0 ? (
           <button
             onClick={() => setCollapsed((v) => !v)}
@@ -698,9 +656,6 @@ export function TaskRow({
           <span className="w-3.5 shrink-0" />
         )}
 
-        {/* Completion circle — always green when done, gray border otherwise.
-            Uses showAsDone so the click→500ms grace window shows the green
-            check immediately. */}
         <button
           onClick={isReadOnly || isWriteOnly ? undefined : toggleComplete}
           disabled={isReadOnly || isWriteOnly}
@@ -726,7 +681,6 @@ export function TaskRow({
           )}
         </button>
 
-        {/* Phase badge — visible chip so the row reads as a header */}
         {isPhase && (
           <span
             className="shrink-0 self-center inline-flex items-center rounded-sm px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white"
@@ -737,31 +691,66 @@ export function TaskRow({
           </span>
         )}
 
-        {/* Title input */}
-        <input
-          ref={inputRef}
-          value={draft}
-          readOnly={isReadOnly || isWriteOnly || isAssigned}
-          onChange={isReadOnly || isWriteOnly || isAssigned ? undefined : (e) => setDraft(e.target.value)}
-          onBlur={isReadOnly || isWriteOnly || isAssigned ? undefined : commitTitle}
-          onKeyDown={isReadOnly || isWriteOnly || isAssigned ? undefined : handleKeyDown}
-          onDoubleClick={isReadOnly ? undefined : () => onOpenEdit(task.id)}
-          placeholder="משימה חדשה..."
-          className={cn(
-            "flex-1 min-w-0 bg-transparent border-0 outline-none text-sm py-0.5",
-            (isReadOnly || isWriteOnly || isAssigned) && "cursor-default select-text",
-            !taskIsRecurring && showAsDone && "line-through text-ink-400"
+        {/* Title + description column */}
+        <div className="flex-1 min-w-0 flex flex-col">
+          <input
+            ref={inputRef}
+            value={draft}
+            readOnly={isReadOnly || isWriteOnly || isAssigned}
+            onChange={isReadOnly || isWriteOnly || isAssigned ? undefined : (e) => setDraft(e.target.value)}
+            onBlur={isReadOnly || isWriteOnly || isAssigned ? undefined : commitTitle}
+            onKeyDown={isReadOnly || isWriteOnly || isAssigned ? undefined : handleKeyDown}
+            onDoubleClick={isReadOnly ? undefined : () => onOpenEdit(task.id)}
+            placeholder="משימה חדשה..."
+            className={cn(
+              "w-full bg-transparent border-0 outline-none text-sm py-0.5",
+              (isReadOnly || isWriteOnly || isAssigned) && "cursor-default select-text",
+              !taskIsRecurring && showAsDone && "line-through text-ink-400"
+            )}
+          />
+          {/* Inline description — only shown when there is content or when focused */}
+          {(!!task.description || descFocused) && (
+            descFocused ? (
+              <textarea
+                ref={descRef}
+                value={descDraft}
+                onChange={(e) => setDescDraft(e.target.value)}
+                onBlur={() => {
+                  setDescFocused(false);
+                  commitDescription();
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    setDescDraft(stripHtml(task.description ?? ""));
+                    setDescFocused(false);
+                    inputRef.current?.focus();
+                  }
+                }}
+                placeholder="פירוט..."
+                rows={2}
+                className="w-full bg-transparent border-0 outline-none text-xs text-ink-500 py-0.5 resize-none leading-relaxed"
+              />
+            ) : (
+              <div
+                className="text-xs text-ink-400 leading-relaxed line-clamp-2 py-0.5 cursor-text [&_*]:leading-relaxed"
+                dangerouslySetInnerHTML={{ __html: task.description ?? "" }}
+                onClick={() => {
+                  if (!isReadOnly && !isWriteOnly && !isAssigned) {
+                    setDescDraft(stripHtml(task.description ?? ""));
+                    setDescFocused(true);
+                  }
+                }}
+              />
+            )
           )}
-        />
+        </div>
 
-        {/* Ownership mode micro-labels — keep small, no bg tint (border already signals mode) */}
         {taskOwnershipMode === "assigned" && (
           <span className="shrink-0 text-[9px] text-ink-500 font-medium leading-none">הוצאל</span>
         )}
         {taskOwnershipMode === "delegated" && (
           <span className="shrink-0 text-[9px] text-ink-500 font-medium leading-none">האצלתי</span>
         )}
-        {/* Pending-approval half-check — clickable by approver, static badge for everyone else */}
         {task.status === "pending_approval" && (
           <HalfCheckIcon
             size={14}
@@ -783,10 +772,6 @@ export function TaskRow({
           />
         )}
 
-        {/* Recurrence indicator — small ↻ icon plus the next occurrence
-            label ("היום 9:00", "מחר 9:00", "ב-15 במאי 9:00"). Always visible
-            on recurring rows so the user can tell at a glance which tasks
-            repeat. */}
         {taskIsRecurring && (
           <span
             className={cn(
@@ -814,7 +799,6 @@ export function TaskRow({
           </span>
         )}
 
-        {/* Goal indicator — icon only, color reflects share kind */}
         {(task.goal_period || (task as any).goal_type === "achievement") && (
           <span
             className={cn("shrink-0 inline-flex", showAsDone && "opacity-60")}
@@ -841,8 +825,6 @@ export function TaskRow({
           </span>
         )}
 
-        {/* All inline badges + quick actions render on desktop only. On
-            mobile they collapse into the ⋯ menu below to keep the row clean. */}
         <div className="hidden md:contents">
         {display.urgency && (
           <UrgencyChip
@@ -905,11 +887,6 @@ export function TaskRow({
           </span>
         )}
 
-        {/* Deadline — separate from scheduled_at. Shown always when set and
-            not completed; severity coded by colour:
-              red    = past deadline
-              orange = within 24h
-              ink    = further out */}
         {task.deadline_at && !isDone && (() => {
           const dl = new Date(task.deadline_at);
           const ms = dl.getTime() - Date.now();
@@ -1005,7 +982,6 @@ export function TaskRow({
           </button>
         )}
 
-        {/* Outside action cluster: + subtask, edit pencil — hidden when read-only or assigned */}
         {!isReadOnly && !isWriteOnly && !isAssigned && (
           <button
             onClick={handleAddSubtask}
@@ -1029,7 +1005,6 @@ export function TaskRow({
             <Pencil className="w-3.5 h-3.5" />
           </button>
         )}
-        {/* Write-only: show pencil to access description + timer in modal */}
         {isWriteOnly && (
           <button
             onClick={() => onOpenEdit(task.id)}
@@ -1042,7 +1017,6 @@ export function TaskRow({
           </button>
         )}
         </div>
-        {/* end desktop-only badges wrapper */}
 
         {!isReadOnly && <div className="relative shrink-0">
           <button
@@ -1061,7 +1035,6 @@ export function TaskRow({
                 className="fixed w-64 md:w-56 bg-white border border-ink-200 rounded-xl shadow-lift z-[61] py-1 text-sm max-h-[80vh] overflow-y-auto"
                 style={{ top: menuPos.top, right: menuPos.right, left: menuPos.left }}
               >
-                {/* Mobile-only section — assigned/write-only tasks get a stripped-down menu */}
                 {(isAssigned || isWriteOnly) ? (
                   <div className="md:hidden">
                     <MenuBtn
@@ -1332,7 +1305,6 @@ export function TaskRow({
         </div>
       )}
 
-      {/* Children */}
       {!collapsed && children.length > 0 && (
         <ChildrenBlock
           children={children}
@@ -1351,6 +1323,13 @@ export function TaskRow({
   );
 }
 
+function stripHtml(html: string): string {
+  if (!html) return "";
+  const tmp = document.createElement("div");
+  tmp.innerHTML = html;
+  return tmp.textContent ?? tmp.innerText ?? "";
+}
+
 function formatShortDate(iso: string): string {
   const d = new Date(iso);
   return `${d.getDate()}.${d.getMonth() + 1}`;
@@ -1365,11 +1344,6 @@ function formatHoursShort(hours: number): string {
   return `הוקצו ${m}ד`;
 }
 
-/**
- * Renders a list of child TaskRows with the completed ones tucked into a
- * collapsible "הושלמו N" strip at the bottom (per SPEC §15: completed subtasks
- * sink to bottom of their parent's children).
- */
 function ChildrenBlock({
   children,
   parentTaskId,
@@ -1458,9 +1432,6 @@ function ChildrenBlock({
   );
 }
 
-/** Collapsed urgency chip: three short horizontal lines stacked vertically,
- *  filled bottom-up by value (1-3). Click to open a picker with 1-3 options.
- *  Legacy data values 4/5 are clamped to 3. */
 function UrgencyChip({
   value,
   onChange,
@@ -1480,7 +1451,6 @@ function UrgencyChip({
         title={`דחיפות ${filled}/3`}
         className="flex flex-col items-center justify-center gap-[2px] px-1 py-1 rounded-md hover:bg-ink-100"
       >
-        {/* Top, middle, bottom — fill bottom-up. */}
         {[3, 2, 1].map((n) => (
           <span
             key={n}
@@ -1553,8 +1523,6 @@ function countCompletedDescendants(children: TaskTreeNode[]): number {
   return n;
 }
 
-/** Flat list of every descendant id under `nodes`, depth-first. Used by the
- *  selection checkbox so toggling a parent cascades to its whole subtree. */
 function collectDescendantIds(nodes: TaskTreeNode[]): string[] {
   const out: string[] = [];
   for (const n of nodes) {

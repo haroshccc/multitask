@@ -39,6 +39,17 @@ import { TaskRow, type TaskTreeNode } from "./TaskRow";
 import { ShareListModal } from "./ShareListModal";
 import { LIST_ICON_PRESETS, ListIcon } from "./list-icons";
 
+/** Walk the task tree and collect IDs of tasks with no title, skipping
+ *  the currently-focused task (which may be mid-creation). */
+function collectEmptyTaskIds(nodes: TaskTreeNode[], skipId: string | null): string[] {
+  const result: string[] = [];
+  for (const n of nodes) {
+    if (!n.task.title && n.task.id !== skipId) result.push(n.task.id);
+    result.push(...collectEmptyTaskIds(n.children, skipId));
+  }
+  return result;
+}
+
 interface TaskColumnProps {
   /** null = the "unassigned" pinned column */
   list: TaskList | null;
@@ -124,6 +135,15 @@ export function TaskColumn({
   useEffect(() => {
     setNameDraft(list?.name ?? "");
   }, [list?.name]);
+
+  // Auto-delete any tasks with an empty title (abandoned creates, or ones
+  // that slipped through before the onBlur fix). Skip the task currently
+  // being created/focused so we don't delete it mid-type.
+  useEffect(() => {
+    const emptyIds = collectEmptyTaskIds(roots, focusTaskId);
+    for (const id of emptyIds) deleteTaskM.mutate(id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roots, focusTaskId]);
 
   const incompleteRoots = roots.filter((n) => !n.task.completed_at);
   const completedRoots = roots.filter((n) => !!n.task.completed_at);
@@ -236,24 +256,17 @@ export function TaskColumn({
   const { user } = useAuth();
   const removeShare = useRemoveTaskListShare();
   const isOwner = !!user && !!list && list.owner_id === user.id;
-  // Always load shares: owners need to know if they've shared with others (for goal icon coloring);
-  // non-owners get only their own share row via RLS.
   const { data: shares = [] } = useTaskListShares(!list ? null : list.id);
   const myPermission: "read" | "write" | null = isOwner
     ? null
     : (shares.find((s) => s.user_id === user?.id)?.permission ?? null);
-  // Column-level controls (rename, color, emoji, archive, order) — owner only.
   const canEdit = !!list && isOwner;
-  // Task-level effective permission for rows in this column.
   const effectivePermission: "owner" | "write" | "read" = isOwner
     ? "owner"
     : myPermission === "write"
       ? "write"
       : "read";
 
-  // Determine goal icon style — combines list-level shares with per-task shares
-  // so goals shared at the task level (in a private list) still render in the
-  // correct color. 5-variant: mine vs other × read/write/private.
   const allGoalTaskIds = collectGoalTaskIds(roots);
   const { data: taskShares = [] } = useTaskSharesForTasks(allGoalTaskIds);
   const taskShareMap = (() => {

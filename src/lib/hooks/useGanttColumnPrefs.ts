@@ -25,6 +25,7 @@ export const GANTT_STANDARD_COLUMNS: Array<{
   alwaysVisible?: boolean;
 }> = [
   { id: "title", defaultLabel: "משימה", alwaysVisible: true },
+  { id: "task_list", defaultLabel: "רשימה" },
   { id: "urgency", defaultLabel: "דחיפות" },
   { id: "status", defaultLabel: "סטטוס" },
   { id: "scheduled_at", defaultLabel: "תזמון" },
@@ -73,8 +74,6 @@ export function useGanttColumnPrefs() {
     if (std?.alwaysVisible) return true;
     const pref = byId.get(id);
     if (!pref) {
-      // Standard columns default to visible; unknown ids (custom fields) default
-      // to hidden — the user explicitly adds them via the column manager.
       return !!std;
     }
     return pref.visible;
@@ -91,7 +90,6 @@ export function useGanttColumnPrefs() {
       if (std?.alwaysVisible) return curr;
       const idx = curr.findIndex((p) => p.id === id);
       if (idx === -1) {
-        // Not yet in storage — add a hidden override (defaults to visible).
         return [...curr, { id, visible: false }];
       }
       const next = [...curr];
@@ -119,7 +117,6 @@ export function useGanttColumnPrefs() {
     setPrefs((curr) => {
       const idx = curr.findIndex((p) => p.id === fieldId);
       if (idx !== -1) {
-        // Already stored — flip to visible.
         const next = [...curr];
         next[idx] = { ...next[idx]!, visible: true };
         return next;

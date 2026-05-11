@@ -17,6 +17,7 @@ export const GANTT_STANDARD_COLUMNS: Array<{
   { id: "title", defaultLabel: "משימה", alwaysVisible: true },
   { id: "task_list", defaultLabel: "רשימה" },
   { id: "description", defaultLabel: "תיאור" },
+  { id: "notes", defaultLabel: "הערות" },
   { id: "scheduled_at", defaultLabel: "התחלה" },
   { id: "end_date", defaultLabel: "סיום" },
   { id: "deadline_at", defaultLabel: "דד-ליין", defaultHidden: true },

@@ -83,6 +83,7 @@ function buildGridTemplate(
 ): string {
   const parts = ["80px", "40px", "minmax(200px,1fr)"];
   if (cols.isVisible("description")) parts.push("minmax(120px,1fr)");
+  if (cols.isVisible("notes")) parts.push("minmax(120px,1fr)");
   if (multipleListsVisible && cols.isVisible("task_list")) parts.push("90px");
   if (cols.isVisible("urgency")) parts.push("56px");
   if (cols.isVisible("status")) parts.push("96px");
@@ -218,6 +219,11 @@ export function GanttTable({
               {cols.isVisible("description") && (
                 <div role="columnheader" className="text-start font-semibold text-ink-700 px-1 py-2">
                   <ColumnHeader id="description" label={cols.getLabel("description", "תיאור")} onRename={(l) => cols.renameColumn("description", l)} align="start" />
+                </div>
+              )}
+              {cols.isVisible("notes") && (
+                <div role="columnheader" className="text-start font-semibold text-ink-700 px-1 py-2">
+                  <ColumnHeader id="notes" label={cols.getLabel("notes", "הערות")} onRename={(l) => cols.renameColumn("notes", l)} align="start" />
                 </div>
               )}
               {multipleListsVisible && cols.isVisible("task_list") && (
@@ -496,6 +502,14 @@ function GanttTableBodyRow({
         </div>
       )}
 
+      {cols.isVisible("notes") && (
+        <div role="cell" className="px-1 py-1 flex items-center min-w-0">
+          {isTask && row.task && (
+            <NotesCellInline value={row.task.notes} onCommit={(next) => onUpdate(row.task!.id, { notes: next }, "עדכון הערות", { notes: row.task!.notes })} />
+          )}
+        </div>
+      )}
+
       {multipleListsVisible && cols.isVisible("task_list") && (
         <div role="cell" className="px-1 py-1 flex items-center justify-center">
           {isTask && listName && <span className="text-[10px] text-ink-600 truncate max-w-full px-1 py-0.5 rounded bg-ink-100" title={listName}>{listName}</span>}
@@ -574,6 +588,28 @@ function GanttTableBodyRow({
 
       <div role="cell" />
     </div>
+  );
+}
+
+function NotesCellInline({ value, onCommit }: { value: string | null; onCommit: (next: string | null) => void }) {
+  const [draft, setDraft] = useState(value ?? "");
+  useEffect(() => setDraft(value ?? ""), [value]);
+  return (
+    <input
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => {
+        const trimmed = draft.trim();
+        const next = trimmed || null;
+        if (next !== (value ?? null)) onCommit(next);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+        if (e.key === "Escape") setDraft(value ?? "");
+      }}
+      placeholder="הוסף הערה..."
+      className="flex-1 min-w-0 w-full bg-transparent border border-transparent hover:border-ink-200 focus:border-primary-400 focus:bg-white outline-none rounded-sm px-1 py-0.5 text-[11px] text-ink-700 placeholder:text-ink-300"
+    />
   );
 }
 

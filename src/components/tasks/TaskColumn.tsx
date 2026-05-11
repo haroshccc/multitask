@@ -260,7 +260,7 @@ export function TaskColumn({
   const myPermission: "read" | "write" | null = isOwner
     ? null
     : (shares.find((s) => s.user_id === user?.id)?.permission ?? null);
-  const canEdit = !!list && isOwner;
+  const canEdit = !!list && (isOwner || myPermission === "write");
   const effectivePermission: "owner" | "write" | "read" = isOwner
     ? "owner"
     : myPermission === "write"

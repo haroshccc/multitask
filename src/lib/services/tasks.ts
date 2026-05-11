@@ -18,7 +18,8 @@ export async function listTasks(
     .from("tasks")
     .select("*")
     .eq("organization_id", organizationId)
-    .order("sort_order", { ascending: true });
+    .order("sort_order", { ascending: true })
+    .limit(5000);
 
   if (filters.lists?.length) query = query.in("task_list_id", filters.lists);
   if (filters.statuses?.length) query = query.in("status", filters.statuses);
@@ -52,7 +53,8 @@ export async function listTasksByList(
     .from("tasks")
     .select("*")
     .eq("organization_id", organizationId)
-    .order("sort_order", { ascending: true });
+    .order("sort_order", { ascending: true })
+    .limit(5000);
 
   if (listId === null) query = query.is("task_list_id", null);
   else query = query.eq("task_list_id", listId);
@@ -80,7 +82,8 @@ export async function listTasksByProject(
     .from("tasks")
     .select("*")
     .in("task_list_id", listIds)
-    .order("sort_order", { ascending: true });
+    .order("sort_order", { ascending: true })
+    .limit(5000);
   if (error) throw error;
   return data ?? [];
 }

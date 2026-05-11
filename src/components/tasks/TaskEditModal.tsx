@@ -856,6 +856,7 @@ export function TaskEditModal({
                         onChange={setDurationMinutes}
                         placeholder="00:00"
                         ariaLabel="משך משימה"
+                        showUnitToggle
                       />
                     </Field>
                   </div>

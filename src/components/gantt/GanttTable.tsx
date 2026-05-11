@@ -89,7 +89,7 @@ function buildGridTemplate(
   if (cols.isVisible("scheduled_at")) parts.push("100px");
   if (cols.isVisible("end_date")) parts.push("100px");
   if (cols.isVisible("deadline_at")) parts.push("100px");
-  if (cols.isVisible("duration_minutes")) parts.push("64px");
+  if (cols.isVisible("duration_minutes")) parts.push("72px");
   if (cols.isVisible("dependencies")) parts.push("80px");
   if (cols.isVisible("percent_complete")) parts.push("72px");
   for (let i = 0; i < visibleCustomFields.length; i++) parts.push("120px");
@@ -652,20 +652,37 @@ function DurationDaysCell({ value, onCommit }: { value: number | null; onCommit:
   const [draft, setDraft] = useState(toDays(value));
   useEffect(() => setDraft(toDays(value)), [value]);
   return (
-    <input type="number" min={0} step={1} value={draft} onChange={(e) => setDraft(e.target.value)}
-      onBlur={() => {
-        const trimmed = draft.trim();
-        const next = trimmed === "" ? null : Math.round(Number(trimmed) * 1440);
-        if (next !== value && (next === null || !Number.isNaN(next))) onCommit(next);
-      }}
-      className="w-12 text-center text-[11px] bg-transparent border border-transparent hover:border-ink-200 focus:border-primary-400 outline-none rounded-sm px-1 py-0.5"
-      title="משך בימים"
-    />
+    <div className="flex items-center gap-0.5">
+      <input type="number" min={0} step={0.5} value={draft} onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => {
+          const trimmed = draft.trim();
+          const next = trimmed === "" ? null : Math.round(Number(trimmed) * 1440);
+          if (next !== value && (next === null || !Number.isNaN(next))) onCommit(next);
+        }}
+        className="w-10 text-center text-[11px] bg-transparent border border-transparent hover:border-ink-200 focus:border-primary-400 outline-none rounded-sm px-1 py-0.5"
+        title="משך בימים"
+      />
+      <span className="text-[10px] text-ink-400 select-none shrink-0">ד׳</span>
+    </div>
   );
 }
 
 type DepRelation = "finish_to_start" | "start_to_start" | "finish_to_finish" | "start_to_finish";
 const RELATION_LABELS: Record<DepRelation, string> = { finish_to_start: "FS", start_to_start: "SS", finish_to_finish: "FF", start_to_finish: "SF" };
+
+function DepLagInput({ dep, onUpdate }: { dep: TaskDependency; onUpdate: (depId: string, patch: { lag_days?: number }) => void }) {
+  const [draft, setDraft] = useState(String(dep.lag_days ?? 0));
+  useEffect(() => setDraft(String(dep.lag_days ?? 0)), [dep.lag_days]);
+  return (
+    <input type="number" value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => { const v = Number(draft); if (v !== (dep.lag_days ?? 0)) onUpdate(dep.id, { lag_days: v }); }}
+      onClick={(e) => e.stopPropagation()}
+      className="w-10 text-[10px] text-center border border-ink-200 rounded px-0.5 py-0 bg-white outline-none focus:border-primary-400 shrink-0"
+      title="ימי פיגור (שלילי = קידום)"
+    />
+  );
+}
 
 function DependenciesCell({ task, deps, visibleTaskMap, onAdd, onRemove, onUpdate }: {
   task: Task;
@@ -723,17 +740,13 @@ function DependenciesCell({ task, deps, visibleTaskMap, onAdd, onRemove, onUpdat
                         {(Object.entries(RELATION_LABELS) as [DepRelation, string][]).map(([val, label]) => <option key={val} value={val}>{label}</option>)}
                       </select>
                       <span className="text-[10px] text-ink-400 shrink-0">פיגור:</span>
-                      <input type="number" defaultValue={c.dep.lag_days ?? 0}
-                        onBlur={(e) => { const v = Number(e.target.value); if (v !== (c.dep!.lag_days ?? 0)) onUpdate(c.dep!.id, { lag_days: v }); }}
-                        onClick={(e) => e.stopPropagation()}
-                        className="w-10 text-[10px] text-center border border-ink-200 rounded px-0.5 py-0 bg-white outline-none focus:border-primary-400 shrink-0" title="ימי פיגור (שלילי = קידום)"
-                      />
+                      <DepLagInput dep={c.dep} onUpdate={onUpdate} />
                       <button type="button" onClick={() => onRemove(c.dep!.id)} className="p-0.5 rounded text-ink-400 hover:text-danger-500 shrink-0" title="הסר תלות">
                         <Trash2 className="w-3 h-3" />
                       </button>
                     </div>
                   ) : (
-                    <button type="button" onClick={() => onAdd(c.id, "finish_to_start", 0)} className="w-full text-start text-xs text-ink-700 truncate flex items-center gap-1">
+                    <button type="button" onClick={() => { onAdd(c.id, "finish_to_start", 0); setOpen(false); setFilter(""); }} className="w-full text-start text-xs text-ink-700 truncate flex items-center gap-1">
                       <span className="text-ink-300">+</span>{c.title}
                     </button>
                   )}

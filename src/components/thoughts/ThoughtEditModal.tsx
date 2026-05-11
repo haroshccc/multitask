@@ -39,6 +39,7 @@ import { ListIcon } from "@/components/tasks/list-icons";
 import { AudioPlayer } from "@/components/recordings/AudioPlayer";
 import { UnsavedChangesGuard } from "@/components/ui/UnsavedChangesGuard";
 import { ThoughtAiBanner } from "./ThoughtAiBanner";
+import { mockProvider } from "@/lib/ai/thought-suggestions";
 
 interface ThoughtEditModalProps {
   thoughtId: string | null;
@@ -89,6 +90,22 @@ export function ThoughtEditModal({
       patch: { text_content: transcript },
     });
   }, [thought?.id, thought?.text_content, linkedRecording?.status, linkedRecording?.transcript_text]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-generate title when transcript arrives and no title exists yet.
+  const autoTitleRanRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!thought) return;
+    if (thought.ai_generated_title) return;
+    const text = (thought.text_content ?? "").trim();
+    if (!text) return;
+    if (autoTitleRanRef.current.has(thought.id)) return;
+    autoTitleRanRef.current.add(thought.id);
+    mockProvider.generateTitle(text).then((generatedTitle) => {
+      if (generatedTitle) {
+        updateThought.mutate({ thoughtId: thought.id, patch: { ai_generated_title: generatedTitle } });
+      }
+    }).catch(() => { /* silent */ });
+  }, [thought?.id, thought?.text_content, thought?.ai_generated_title]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [tab, setTab] = useState<Tab>("overview");
   const [title, setTitle] = useState("");

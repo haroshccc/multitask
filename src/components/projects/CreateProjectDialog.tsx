@@ -3,6 +3,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { X, FolderPlus } from "lucide-react";
 import { useCreateProject } from "@/lib/hooks/useProjects";
 import type { ProjectPricingMode } from "@/lib/types/domain";
+import { LIST_ICON_PRESETS, ListIcon } from "@/components/tasks/list-icons";
+import { cn } from "@/lib/utils/cn";
 
 interface Props {
   open: boolean;
@@ -29,14 +31,10 @@ const PRICING_OPTIONS: { value: ProjectPricingMode; label: string; hint: string 
 ];
 
 const COLOR_PALETTE = [
-  "#f59e0b",
-  "#ec4899",
-  "#8b5cf6",
-  "#3b82f6",
-  "#10b981",
-  "#ef4444",
-  "#14b8a6",
-  "#a8a8bc",
+  "#f59e0b", "#f97316", "#ef4444", "#ec4899",
+  "#8b5cf6", "#6366f1", "#3b82f6", "#0ea5e9",
+  "#06b6d4", "#14b8a6", "#10b981", "#22c55e",
+  "#84cc16", "#eab308", "#a8a8bc", "#1f2937",
 ];
 
 export function CreateProjectDialog({ open, onClose, onCreated }: Props) {
@@ -45,6 +43,7 @@ export function CreateProjectDialog({ open, onClose, onCreated }: Props) {
   const [pricingMode, setPricingMode] = useState<ProjectPricingMode>("hourly");
   const [emoji, setEmoji] = useState("");
   const [color, setColor] = useState<string>(COLOR_PALETTE[0]);
+  const [iconPickerOpen, setIconPickerOpen] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -52,6 +51,7 @@ export function CreateProjectDialog({ open, onClose, onCreated }: Props) {
     setPricingMode("hourly");
     setEmoji("");
     setColor(COLOR_PALETTE[0]);
+    setIconPickerOpen(false);
   }, [open]);
 
   const submit = async () => {
@@ -148,36 +148,87 @@ export function CreateProjectDialog({ open, onClose, onCreated }: Props) {
                 </div>
               </div>
 
-              <div className="grid grid-cols-[1fr_auto] gap-3">
-                <div>
-                  <label className="eyebrow mb-1.5 block">צבע</label>
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    {COLOR_PALETTE.map((c) => (
-                      <button
-                        key={c}
-                        type="button"
-                        onClick={() => setColor(c)}
-                        className={
-                          "w-7 h-7 rounded-full border-2 transition-transform " +
-                          (color === c
-                            ? "border-ink-900 scale-110"
-                            : "border-white hover:scale-105")
-                        }
-                        style={{ backgroundColor: c }}
-                        aria-label={`צבע ${c}`}
-                      />
-                    ))}
-                  </div>
+              <div>
+                <label className="eyebrow mb-1.5 block">צבע</label>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {COLOR_PALETTE.map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => setColor(c)}
+                      className={
+                        "w-7 h-7 rounded-full border-2 transition-transform " +
+                        (color === c
+                          ? "border-ink-900 scale-110"
+                          : "border-white hover:scale-105")
+                      }
+                      style={{ backgroundColor: c }}
+                      aria-label={`צבע ${c}`}
+                    />
+                  ))}
                 </div>
-                <div>
-                  <label className="eyebrow mb-1.5 block">אימוג'י</label>
-                  <input
-                    value={emoji}
-                    onChange={(e) => setEmoji(e.target.value.slice(0, 4))}
-                    placeholder="📁"
-                    className="field text-center w-16"
-                    maxLength={4}
-                  />
+              </div>
+
+              <div>
+                <label className="eyebrow mb-1.5 block">אייקון</label>
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setIconPickerOpen((v) => !v)}
+                    className="flex items-center gap-2 rounded-lg border border-ink-300 px-3 py-2 text-sm hover:border-ink-400"
+                  >
+                    {emoji ? (
+                      <ListIcon emoji={emoji} className="w-4 h-4" />
+                    ) : (
+                      <span className="text-ink-400">בחר אייקון...</span>
+                    )}
+                  </button>
+                  {iconPickerOpen && (
+                    <>
+                      <div className="fixed inset-0 z-10" onClick={() => setIconPickerOpen(false)} />
+                      <div className="absolute start-0 top-full mt-1 z-20 bg-white border border-ink-200 rounded-xl shadow-lift p-2 w-64">
+                        <div className="grid grid-cols-7 gap-1 max-h-48 overflow-y-auto">
+                          {LIST_ICON_PRESETS.map((preset) => {
+                            const PresetIcon = preset.icon;
+                            const stored = `icon:${preset.key}`;
+                            const selected = emoji === stored;
+                            return (
+                              <button
+                                key={preset.key}
+                                type="button"
+                                onClick={() => { setEmoji(stored); setIconPickerOpen(false); }}
+                                title={preset.label}
+                                className={cn(
+                                  "w-8 h-8 rounded-md flex items-center justify-center text-ink-900 hover:bg-ink-100",
+                                  selected && "bg-ink-100 ring-1 ring-ink-300"
+                                )}
+                              >
+                                <PresetIcon className="w-4 h-4" strokeWidth={1.75} />
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <div className="mt-1 pt-1 border-t border-ink-100 flex items-center gap-2">
+                          <input
+                            value={emoji.startsWith("icon:") ? "" : emoji}
+                            onChange={(e) => setEmoji(e.target.value.slice(0, 4))}
+                            placeholder="אימוג'י מותאם..."
+                            className="field text-sm flex-1"
+                            maxLength={4}
+                          />
+                          {emoji && (
+                            <button
+                              type="button"
+                              onClick={() => setEmoji("")}
+                              className="text-xs text-ink-400 hover:text-danger-500"
+                            >
+                              הסר
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             </div>

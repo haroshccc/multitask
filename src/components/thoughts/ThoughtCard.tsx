@@ -224,9 +224,6 @@ export function ThoughtCard({
               <div className="text-[10px] font-semibold text-ink-400 uppercase tracking-wider px-3 py-1">
                 בחר רשימה
               </div>
-              {/* "Unassign from all" — symmetric with the existing drag-to-
-                  unassigned column. Disabled when the thought has no current
-                  assignments. */}
               <button
                 disabled={!hasAssignments}
                 onClick={() => {
@@ -416,7 +413,7 @@ function RowMenuItem({
 }) {
   return (
     <button
-      onClick={onClick}
+      onClick={(e) => { e.stopPropagation(); onClick(); }}
       className="w-full text-start px-3 py-1.5 text-sm text-ink-700 hover:bg-ink-50"
       type="button"
     >
@@ -449,4 +446,3 @@ function hexToRgba(hex: string, alpha: number): string {
   const b = parseInt(h.substring(4, 6), 16);
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
-

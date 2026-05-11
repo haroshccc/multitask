@@ -16,14 +16,18 @@ import { LIST_ICON_PRESETS, ListIcon } from "@/components/tasks/list-icons";
  * when the user picks vivid hues. Same hex shapes; rearranged set.
  */
 const THOUGHT_COLOR_PRESETS = [
-  // Cool greys & inks (the "default neutral" feel)
+  // Cool greys & inks
   "#1f2937", "#374151", "#4b5563", "#6b7280", "#94a3b8", "#a8a8bc",
-  // Cool blues / teals
+  "#cbd5e1", "#e2e8f0", "#9ca3af", "#d1d5db", "#f3f4f6", "#111827",
+  // Blues / teals
   "#0ea5e9", "#0891b2", "#06b6d4", "#14b8a6", "#10b981", "#22c55e",
-  // Soft warms
+  "#38bdf8", "#22d3ee", "#2dd4bf", "#34d399", "#4ade80", "#0284c7",
+  // Warms
   "#84cc16", "#eab308", "#f59e0b", "#f97316", "#ef4444", "#ec4899",
-  // Purples
+  "#a3e635", "#fde047", "#fcd34d", "#fb923c", "#f87171", "#f472b6",
+  // Purples / pinks
   "#8b5cf6", "#6366f1", "#3b82f6", "#a855f7", "#c026d3", "#db2777",
+  "#7c3aed", "#4f46e5", "#2563eb", "#9333ea", "#a21caf", "#be185d",
 ];
 
 interface ThoughtListEditDialogProps {
@@ -151,7 +155,7 @@ export function ThoughtListEditDialog({
               {/* Color */}
               <div>
                 <div className="eyebrow mb-1">צבע</div>
-                <div className="grid grid-cols-6 gap-1.5">
+                <div className="grid grid-cols-6 gap-1.5 max-h-36 overflow-y-auto">
                   {THOUGHT_COLOR_PRESETS.map((c) => (
                     <button
                       key={c}
@@ -175,7 +179,7 @@ export function ThoughtListEditDialog({
               {/* Icon — monochrome line icons (the "פשוט שחור ויפה" brief). */}
               <div>
                 <div className="eyebrow mb-1">אייקון</div>
-                <div className="grid grid-cols-7 gap-1">
+                <div className="grid grid-cols-7 gap-1 max-h-36 overflow-y-auto">
                   <button
                     type="button"
                     onClick={() => setEmoji(null)}

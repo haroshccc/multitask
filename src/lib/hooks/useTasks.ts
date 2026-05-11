@@ -86,15 +86,29 @@ export function useUpdateTask() {
     // Optimistic update: patch the cached task immediately so UI feels snappy.
     onMutate: async ({ taskId, patch }) => {
       await qc.cancelQueries({ queryKey: queryKeys.task(taskId) });
+      if (scope.organizationId) {
+        await qc.cancelQueries({ queryKey: queryFamilies.allTasks(scope.organizationId) });
+      }
       const previous = qc.getQueryData<Task>(queryKeys.task(taskId));
       if (previous) {
         qc.setQueryData<Task>(queryKeys.task(taskId), { ...previous, ...patch } as Task);
+      }
+      // Also patch every allTasks list query so collectEmptyTaskIds sees the
+      // updated title immediately (without waiting for the network refetch).
+      if (scope.organizationId) {
+        qc.setQueriesData<Task[]>(
+          { queryKey: queryFamilies.allTasks(scope.organizationId) },
+          (old) => old?.map((t) => t.id === taskId ? { ...t, ...patch } as Task : t) ?? old,
+        );
       }
       return { previous };
     },
     onError: (_err, { taskId }, ctx) => {
       if (ctx?.previous) {
         qc.setQueryData(queryKeys.task(taskId), ctx.previous);
+      }
+      if (scope.organizationId) {
+        qc.invalidateQueries({ queryKey: queryFamilies.allTasks(scope.organizationId) });
       }
     },
     onSettled: (_data, _err, { taskId }) => {

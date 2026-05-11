@@ -99,7 +99,7 @@ export function Thoughts() {
   const { data: thoughtPrefs } = useUserThoughtPreferences();
   const updateThoughtPrefs = useUpdateUserThoughtPreferences();
   const autoTranscribeRecordedThoughts =
-    thoughtPrefs?.auto_transcribe_recorded_thoughts ?? false;
+    thoughtPrefs?.auto_transcribe_recorded_thoughts ?? true;
   const triggerRecordingProcessing = useTriggerRecordingProcessing();
 
   const thoughtIds = useMemo(() => thoughts.map((t) => t.id), [thoughts]);

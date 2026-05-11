@@ -133,8 +133,9 @@ export function TaskRow({
   const { data: activeTimer } = useActiveTimer();
 
   const [draft, setDraft] = useState(task.title);
-  const [descDraft, setDescDraft] = useState(() => stripHtml(task.description ?? ""));
+  const [descDraft, setDescDraft] = useState(() => stripDescHtml(task.description ?? ""));
   const [descFocused, setDescFocused] = useState(false);
+  const [titleFocused, setTitleFocused] = useState(false);
   const descRef = useRef<HTMLTextAreaElement>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -145,7 +146,7 @@ export function TaskRow({
   } | null>(null);
   const [duplicateToListOpen, setDuplicateToListOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLDivElement>(null);
   const menuTriggerRef = useRef<HTMLButtonElement>(null);
 
   const openMenu = () => {
@@ -191,58 +192,89 @@ export function TaskRow({
 
   useEffect(() => {
     setDraft(task.title);
+    if (inputRef.current && document.activeElement !== inputRef.current) {
+      inputRef.current.innerHTML = task.title ?? "";
+    }
   }, [task.title]);
 
   useEffect(() => {
-    if (!descFocused) setDescDraft(stripHtml(task.description ?? ""));
+    if (!descFocused) setDescDraft(stripDescHtml(task.description ?? ""));
   }, [task.description, descFocused]);
 
   useEffect(() => {
     if (focusTaskId === task.id) {
-      inputRef.current?.focus();
-      inputRef.current?.select();
+      const el = inputRef.current;
+      if (el) {
+        el.focus();
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        window.getSelection()?.removeAllRanges();
+        window.getSelection()?.addRange(range);
+      }
     }
   }, [focusTaskId, task.id]);
 
   const commitTitle = () => {
-    const trimmed = draft.trim();
-    if (!trimmed) {
+    const el = inputRef.current;
+    const html = el
+      ? el.innerHTML.replace(/<br\s*\/?>/gi, "").trim()
+      : draft.trim();
+    if (!html) {
       if (!task.title) {
         deleteTaskM.mutate(task.id);
       } else {
-        setDraft(task.title);
+        if (el) el.innerHTML = task.title ?? "";
+        setDraft(task.title ?? "");
       }
       return;
     }
-    if (trimmed === task.title) {
-      setDraft(task.title);
+    if (html === task.title) {
+      setDraft(html);
       return;
     }
     const prevTitle = task.title;
-    updateTask.mutate({ taskId: task.id, patch: { title: trimmed } });
+    setDraft(html);
+    updateTask.mutate({ taskId: task.id, patch: { title: html } });
     pushUndo({
       description: "שינוי כותרת",
       undo: () =>
         updateTask.mutate({ taskId: task.id, patch: { title: prevTitle } }),
       redo: () =>
-        updateTask.mutate({ taskId: task.id, patch: { title: trimmed } }),
+        updateTask.mutate({ taskId: task.id, patch: { title: html } }),
     });
+  };
+
+  const insertListPrefix = (type: "ordered" | "bullet" | "dash") => {
+    const el = descRef.current;
+    if (!el) return;
+    const prefix = type === "ordered" ? "1. " : type === "bullet" ? "• " : "— ";
+    const start = el.selectionStart ?? 0;
+    const text = descDraft;
+    const lineStart = text.lastIndexOf("\n", start - 1) + 1;
+    const newText = text.slice(0, lineStart) + prefix + text.slice(lineStart);
+    setDescDraft(newText);
+    setTimeout(() => {
+      el.selectionStart = start + prefix.length;
+      el.selectionEnd = start + prefix.length;
+      el.focus();
+    }, 0);
   };
 
   const commitDescription = () => {
     const trimmed = descDraft.trim();
-    const current = stripHtml(task.description ?? "");
+    const current = stripDescHtml(task.description ?? "");
     if (trimmed === current) return;
     const prev = task.description;
-    updateTask.mutate({ taskId: task.id, patch: { description: trimmed || null } });
+    const htmlContent = convertDescToHtml(trimmed);
+    updateTask.mutate({ taskId: task.id, patch: { description: htmlContent || null } });
     pushUndo({
       description: "עדכון פירוט",
       undo: () => updateTask.mutate({ taskId: task.id, patch: { description: prev } }),
-      redo: () => updateTask.mutate({ taskId: task.id, patch: { description: trimmed || null } }),
+      redo: () => updateTask.mutate({ taskId: task.id, patch: { description: htmlContent || null } }),
     });
   };
 
-  const handleKeyDown = async (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyDown = async (e: React.KeyboardEvent<HTMLDivElement>) => {
     const mod = e.metaKey || e.ctrlKey;
 
     if (mod && e.code === "Enter") {
@@ -319,7 +351,8 @@ export function TaskRow({
       return;
     }
     if (e.key === "Escape") {
-      setDraft(task.title);
+      if (inputRef.current) inputRef.current.innerHTML = task.title ?? "";
+      setDraft(task.title ?? "");
       inputRef.current?.blur();
     }
   };
@@ -693,50 +726,84 @@ export function TaskRow({
 
         {/* Title + description column */}
         <div className="flex-1 min-w-0 flex flex-col">
-          <input
-            ref={inputRef}
-            value={draft}
-            readOnly={isReadOnly || isWriteOnly || isAssigned}
-            onChange={isReadOnly || isWriteOnly || isAssigned ? undefined : (e) => setDraft(e.target.value)}
-            onBlur={isReadOnly || isWriteOnly || isAssigned ? undefined : commitTitle}
-            onKeyDown={isReadOnly || isWriteOnly || isAssigned ? undefined : handleKeyDown}
-            onDoubleClick={isReadOnly ? undefined : () => onOpenEdit(task.id)}
-            placeholder="משימה חדשה..."
-            className={cn(
-              "w-full bg-transparent border-0 outline-none text-sm py-0.5",
-              (isReadOnly || isWriteOnly || isAssigned) && "cursor-default select-text",
-              !taskIsRecurring && showAsDone && "line-through text-ink-400"
+          <div className="relative">
+            <div
+              ref={inputRef}
+              contentEditable={isReadOnly || isWriteOnly || isAssigned ? undefined : "true"}
+              suppressContentEditableWarning
+              onFocus={() => setTitleFocused(true)}
+              onBlur={
+                isReadOnly || isWriteOnly || isAssigned
+                  ? undefined
+                  : () => { setTitleFocused(false); commitTitle(); }
+              }
+              onKeyDown={isReadOnly || isWriteOnly || isAssigned ? undefined : handleKeyDown}
+              onDoubleClick={isReadOnly ? undefined : () => onOpenEdit(task.id)}
+              data-placeholder="משימה חדשה..."
+              className={cn(
+                "w-full bg-transparent border-0 outline-none text-sm py-0.5 break-words min-h-[1.25rem]",
+                "[&:empty]:before:content-[attr(data-placeholder)] [&:empty]:before:text-ink-300 [&:empty]:before:pointer-events-none",
+                (isReadOnly || isWriteOnly || isAssigned) && "cursor-default select-text",
+                !taskIsRecurring && showAsDone && "line-through text-ink-400"
+              )}
+            />
+            {titleFocused && !isReadOnly && !isWriteOnly && !isAssigned && (
+              <RichTextTitleBar targetRef={inputRef} />
             )}
-          />
+          </div>
           {/* Inline description — only shown when there is content or when focused */}
           {(!!task.description || descFocused) && (
             descFocused ? (
-              <textarea
-                ref={descRef}
-                value={descDraft}
-                onChange={(e) => setDescDraft(e.target.value)}
-                onBlur={() => {
-                  setDescFocused(false);
-                  commitDescription();
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Escape") {
-                    setDescDraft(stripHtml(task.description ?? ""));
+              <>
+                {!isReadOnly && !isWriteOnly && !isAssigned && (
+                  <div className="flex items-center gap-1 mt-0.5">
+                    <button
+                      type="button"
+                      onMouseDown={(e) => { e.preventDefault(); insertListPrefix("ordered"); }}
+                      title="מספור"
+                      className="px-1.5 py-0.5 text-[10px] font-mono text-ink-500 hover:bg-ink-100 rounded"
+                    >1.</button>
+                    <button
+                      type="button"
+                      onMouseDown={(e) => { e.preventDefault(); insertListPrefix("bullet"); }}
+                      title="נקודות"
+                      className="px-1.5 py-0.5 text-[10px] text-ink-500 hover:bg-ink-100 rounded"
+                    >•</button>
+                    <button
+                      type="button"
+                      onMouseDown={(e) => { e.preventDefault(); insertListPrefix("dash"); }}
+                      title="מקף"
+                      className="px-1.5 py-0.5 text-[10px] text-ink-500 hover:bg-ink-100 rounded"
+                    >—</button>
+                  </div>
+                )}
+                <textarea
+                  ref={descRef}
+                  value={descDraft}
+                  onChange={(e) => setDescDraft(e.target.value)}
+                  onBlur={() => {
                     setDescFocused(false);
-                    inputRef.current?.focus();
-                  }
-                }}
-                placeholder="פירוט..."
-                rows={2}
-                className="w-full bg-transparent border-0 outline-none text-xs text-ink-500 py-0.5 resize-none leading-relaxed"
-              />
+                    commitDescription();
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") {
+                      setDescDraft(stripDescHtml(task.description ?? ""));
+                      setDescFocused(false);
+                      inputRef.current?.focus();
+                    }
+                  }}
+                  placeholder="פירוט..."
+                  rows={2}
+                  className="w-full bg-transparent border-0 outline-none text-xs text-ink-500 py-0.5 resize-none leading-relaxed"
+                />
+              </>
             ) : (
               <div
                 className="text-xs text-ink-400 leading-relaxed line-clamp-2 py-0.5 cursor-text [&_*]:leading-relaxed"
                 dangerouslySetInnerHTML={{ __html: task.description ?? "" }}
                 onClick={() => {
                   if (!isReadOnly && !isWriteOnly && !isAssigned) {
-                    setDescDraft(stripHtml(task.description ?? ""));
+                    setDescDraft(stripDescHtml(task.description ?? ""));
                     setDescFocused(true);
                   }
                 }}
@@ -1328,6 +1395,172 @@ function stripHtml(html: string): string {
   const tmp = document.createElement("div");
   tmp.innerHTML = html;
   return tmp.textContent ?? tmp.innerText ?? "";
+}
+
+function stripDescHtml(html: string): string {
+  if (!html) return "";
+  const tmp = document.createElement("div");
+  tmp.innerHTML = html;
+  const lines: string[] = [];
+  const visit = (node: Node, listType: "ol" | "ul" | null, cnt: { n: number }) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const t = (node.textContent ?? "").trim();
+      if (t) lines.push(t);
+    } else if (node.nodeType === Node.ELEMENT_NODE) {
+      const el = node as Element;
+      const tag = el.tagName.toLowerCase();
+      if (tag === "ul") {
+        el.childNodes.forEach((c) => visit(c, "ul", cnt));
+      } else if (tag === "ol") {
+        const c2 = { n: 1 };
+        el.childNodes.forEach((c) => visit(c, "ol", c2));
+      } else if (tag === "li") {
+        const text = (el.textContent ?? "").trim();
+        lines.push(listType === "ol" ? `${cnt.n++}. ${text}` : `• ${text}`);
+      } else if (tag === "br") {
+        lines.push("");
+      } else if (tag === "p" || tag === "div") {
+        el.childNodes.forEach((c) => visit(c, listType, cnt));
+        lines.push("");
+      } else {
+        el.childNodes.forEach((c) => visit(c, listType, cnt));
+      }
+    }
+  };
+  tmp.childNodes.forEach((n) => visit(n, null, { n: 1 }));
+  return lines
+    .filter((l, i) => l !== "" || (i > 0 && lines[i - 1] !== ""))
+    .join("\n")
+    .trim();
+}
+
+function convertDescToHtml(text: string): string {
+  if (!text) return "";
+  const lines = text.split("\n");
+  const parts: string[] = [];
+  let listType: "ol" | "ul" | null = null;
+  const closeList = () => {
+    if (listType) { parts.push(`</${listType}>`); listType = null; }
+  };
+  for (const line of lines) {
+    const ordM = line.match(/^(\d+)\.\s+(.*)$/);
+    const bulM = line.match(/^•\s+(.*)$/);
+    const dasM = line.match(/^[—\-]\s+(.*)$/);
+    if (ordM) {
+      if (listType !== "ol") { closeList(); parts.push("<ol>"); listType = "ol"; }
+      parts.push(`<li>${ordM[2]}</li>`);
+    } else if (bulM) {
+      if (listType !== "ul") { closeList(); parts.push("<ul>"); listType = "ul"; }
+      parts.push(`<li>${bulM[1]}</li>`);
+    } else if (dasM) {
+      if (listType !== "ul") { closeList(); parts.push("<ul>"); listType = "ul"; }
+      parts.push(`<li>${dasM[1]}</li>`);
+    } else {
+      closeList();
+      if (line.trim()) parts.push(`<p>${line}</p>`);
+    }
+  }
+  closeList();
+  return parts.join("");
+}
+
+const TITLE_FORMAT_COLORS = [
+  "#ef4444", "#f97316", "#eab308", "#22c55e",
+  "#3b82f6", "#8b5cf6", "#ec4899", "#1f2937",
+];
+
+function RichTextTitleBar({ targetRef }: { targetRef: { current: HTMLDivElement | null } }) {
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const [colorOpen, setColorOpen] = useState(false);
+  const barRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const update = () => {
+      const sel = window.getSelection();
+      if (!sel || sel.isCollapsed || !sel.rangeCount) { setPos(null); return; }
+      const range = sel.getRangeAt(0);
+      const target = targetRef.current;
+      if (!target || !target.contains(range.commonAncestorContainer)) { setPos(null); return; }
+      const rect = range.getBoundingClientRect();
+      setPos({ top: rect.top + window.scrollY - 42, left: rect.left + window.scrollX + rect.width / 2 });
+    };
+    document.addEventListener("selectionchange", update);
+    return () => document.removeEventListener("selectionchange", update);
+  }, [targetRef]);
+
+  useEffect(() => {
+    if (!colorOpen) return;
+    const handle = (e: MouseEvent) => {
+      if (!barRef.current?.contains(e.target as Node)) setColorOpen(false);
+    };
+    document.addEventListener("mousedown", handle);
+    return () => document.removeEventListener("mousedown", handle);
+  }, [colorOpen]);
+
+  if (!pos) return null;
+
+  const exec = (cmd: string, val?: string) => {
+    document.execCommand(cmd, false, val);
+    targetRef.current?.focus();
+  };
+
+  const handlePaste = async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      document.execCommand("insertText", false, text);
+    } catch {
+      document.execCommand("paste");
+    }
+  };
+
+  return createPortal(
+    <div
+      ref={barRef}
+      className="fixed z-50 -translate-x-1/2 flex items-center gap-0.5 bg-ink-900 text-white rounded-lg px-1.5 py-1 shadow-xl"
+      style={{ top: pos.top, left: pos.left }}
+      onMouseDown={(e) => e.preventDefault()}
+    >
+      <button type="button"
+        onMouseDown={(e) => { e.preventDefault(); exec("bold"); }}
+        className="w-6 h-6 flex items-center justify-center rounded hover:bg-ink-700 font-bold text-xs">B</button>
+      <button type="button"
+        onMouseDown={(e) => { e.preventDefault(); exec("italic"); }}
+        className="w-6 h-6 flex items-center justify-center rounded hover:bg-ink-700 italic text-xs">I</button>
+      <button type="button"
+        onMouseDown={(e) => { e.preventDefault(); exec("underline"); }}
+        className="w-6 h-6 flex items-center justify-center rounded hover:bg-ink-700 underline text-xs">U</button>
+      <div className="w-px h-4 bg-ink-600 mx-0.5" />
+      <div className="relative">
+        <button type="button"
+          onMouseDown={(e) => { e.preventDefault(); setColorOpen((v) => !v); }}
+          className="w-6 h-6 flex items-center justify-center rounded hover:bg-ink-700 text-xs font-bold"
+          style={{ color: "#f59e0b" }}>A</button>
+        {colorOpen && (
+          <div className="absolute bottom-full mb-1 start-0 grid grid-cols-4 gap-1 bg-white border border-ink-200 rounded-lg shadow-lg p-1.5">
+            {TITLE_FORMAT_COLORS.map((c) => (
+              <button
+                key={c}
+                type="button"
+                onMouseDown={(e) => { e.preventDefault(); exec("foreColor", c); setColorOpen(false); }}
+                className="w-5 h-5 rounded-full border border-ink-200 hover:scale-110 transition-transform"
+                style={{ backgroundColor: c }}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="w-px h-4 bg-ink-600 mx-0.5" />
+      <button type="button"
+        onMouseDown={(e) => { e.preventDefault(); exec("copy"); }}
+        title="העתק"
+        className="w-6 h-6 flex items-center justify-center rounded hover:bg-ink-700 text-[10px]">⎘</button>
+      <button type="button"
+        onMouseDown={(e) => { e.preventDefault(); void handlePaste(); }}
+        title="הדבק"
+        className="w-6 h-6 flex items-center justify-center rounded hover:bg-ink-700 text-[10px]">📋</button>
+    </div>,
+    document.body
+  );
 }
 
 function formatShortDate(iso: string): string {

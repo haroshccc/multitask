@@ -17,6 +17,9 @@ import {
   Columns2,
   Rows2,
   FolderKanban,
+  FileDown,
+  ZoomIn,
+  ZoomOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { ListIcon } from "@/components/tasks/list-icons";
@@ -54,6 +57,19 @@ interface GanttChromeProps {
   anchor: Date;
   onAnchorChange: (d: Date) => void;
 
+  /** Visible-range width in weeks. The Gantt window = anchor − 1/4·span ..
+   *  anchor + 3/4·span. The user controls this from the chrome so they
+   *  can plan a few months or a year+ without scrolling. */
+  spanWeeks: number;
+  onSpanWeeksChange: (n: number) => void;
+
+  /** Continuous zoom multiplier (0.5 .. 2.5) for column density. */
+  zoomScale: number;
+  onZoomScaleChange: (n: number) => void;
+
+  /** Open the Excel-export modal. */
+  onExport: () => void;
+
   // Layer (tasks / events / both)
   layer: GanttLayer;
   onLayerChange: (l: GanttLayer) => void;
@@ -68,19 +84,13 @@ interface GanttChromeProps {
   projects: UnifiedProject[];
   source: GanttSource;
   onSourceChange: (s: GanttSource) => void;
-  /** Create a new (empty) list and select it as the source. The Gantt
-   *  refreshes to show the empty table; the user adds tasks from there. */
+  /** Create a new (empty) list and select it as the source. */
   onCreateNewList?: () => void;
-  /** Same for a new project. The project will get its own initial task
-   *  list created behind the scenes; new tasks land in that list. */
+  /** Create a new project + initial list, and select it. */
   onCreateNewProject?: () => void;
-  /** Convert the currently-selected list into a project (creates a new
-   *  project + sets list.project_id). Only meaningful when
-   *  source.kind === "list". */
+  /** Promote the selected list into a project. */
   onConvertListToProject?: () => void;
-  /** Demote the currently-selected project to a list (archives the
-   *  project, optionally merging multiple lists into one). Only
-   *  meaningful when source.kind === "project". */
+  /** Demote the selected project to a list. */
   onConvertProjectToList?: () => void;
 
   // Filter panel toggle
@@ -120,23 +130,16 @@ const LAYER_LABELS: Record<GanttLayer, string> = {
   events: "אירועים",
 };
 
-/**
- * Compact top chrome for the Gantt screen. Mirrors `CalendarChrome` +
- * `TasksChrome`. Uses the shared `ToggleButton` / `PopoverButton` from
- * `layout/ChromeControls`.
- *
- * Controls:
- *   - Date nav (← היום →)
- *   - Zoom level popover (day / week / month / quarter)
- *   - Lists popover
- *   - Filter toggle
- *   - Critical-path-only toggle
- */
 export function GanttChrome({
   zoom,
   onZoomChange,
   anchor,
   onAnchorChange,
+  spanWeeks,
+  onSpanWeeksChange,
+  zoomScale,
+  onZoomScaleChange,
+  onExport,
   layer,
   onLayerChange,
   lists,
@@ -173,7 +176,7 @@ export function GanttChrome({
       ? "כל המשימות"
       : source.kind === "list"
       ? lists.find((l) => l.id === source.id)?.name ?? "רשימה"
-      : projects.find((p) => p.id === source.id)?.name ?? "פרויקט";
+      : projects.find((p) => p.id === source.id)?.name ?? "פרוייקט";
 
   return (
     <div
@@ -182,11 +185,6 @@ export function GanttChrome({
         className
       )}
     >
-      {/* Source picker — pinned to the leading edge of the chrome so it's
-          the first thing the user picks. Single selection: "all" / one list
-          / one project. Outline-style button with the FolderKanban icon and
-          the active label inline so it reads as a "scope" indicator and
-          doesn't get lost among the toggles. */}
       <SourcePicker
         source={source}
         sourceLabel={sourceLabel}
@@ -199,9 +197,6 @@ export function GanttChrome({
         onConvertProjectToList={onConvertProjectToList}
       />
 
-      {/* Date nav. The "היום" button snaps to today; the dated label
-          opens a native date input so the user can jump to any anchor
-          (e.g. "show me Q3" without paginating week-by-week). */}
       <div className="inline-flex items-center gap-0.5">
         <button
           onClick={() => step(-1)}
@@ -249,8 +244,20 @@ export function GanttChrome({
         ))}
       </div>
 
+      {/* Span (weeks) — the visible-window width. */}
+      <SpanWeeksInput value={spanWeeks} onChange={onSpanWeeksChange} />
+
+      {/* Continuous zoom slider — fine-tune column density. */}
+      <ZoomSlider value={zoomScale} onChange={onZoomScaleChange} />
+
       <div className="ms-auto inline-flex items-center gap-1 flex-wrap">
-        {/* Layer popover (tasks / events / both) */}
+        <ToggleButton
+          active={false}
+          onClick={onExport}
+          icon={<FileDown className="w-3.5 h-3.5" />}
+          label="ייצוא Excel"
+        />
+
         <PopoverButton
           icon={<Layers className="w-3.5 h-3.5" />}
           label={LAYER_LABELS[layer]}
@@ -282,7 +289,6 @@ export function GanttChrome({
           )}
         </PopoverButton>
 
-        {/* Lists popover */}
         <PopoverButton
           icon={<ListIcon2 className="w-3.5 h-3.5" />}
           label={`רשימות (${visibleListCount}/${lists.length})`}
@@ -296,9 +302,7 @@ export function GanttChrome({
                 רשימות פעילות בתצוגה
               </div>
               {lists.length === 0 ? (
-                <p className="px-3 py-2 text-xs text-ink-500">
-                  עוד אין רשימות.
-                </p>
+                <p className="px-3 py-2 text-xs text-ink-500">עוד אין רשימות.</p>
               ) : (
                 lists.map((l) => {
                   const hidden = hiddenListIds.has(l.id);
@@ -319,19 +323,10 @@ export function GanttChrome({
                         {!hidden && <Check className="w-2.5 h-2.5 text-white" />}
                       </span>
                       {l.emoji && <ListIcon emoji={l.emoji} className="w-3.5 h-3.5" />}
-                      <span
-                        className={cn(
-                          "truncate flex-1",
-                          hidden ? "text-ink-500" : "text-ink-900"
-                        )}
-                      >
+                      <span className={cn("truncate flex-1", hidden ? "text-ink-500" : "text-ink-900")}>
                         {l.name}
                       </span>
-                      {hidden ? (
-                        <EyeOff className="w-3 h-3 text-ink-400" />
-                      ) : (
-                        <Eye className="w-3 h-3 text-ink-400" />
-                      )}
+                      {hidden ? <EyeOff className="w-3 h-3 text-ink-400" /> : <Eye className="w-3 h-3 text-ink-400" />}
                     </button>
                   );
                 })
@@ -370,27 +365,17 @@ export function GanttChrome({
           active={sidebarCollapsed}
           onClick={onToggleSidebar}
           icon={
-            sidebarCollapsed ? (
-              <PanelRightOpen className="w-3.5 h-3.5" />
-            ) : (
-              <PanelRightClose className="w-3.5 h-3.5" />
-            )
+            sidebarCollapsed ? <PanelRightOpen className="w-3.5 h-3.5" /> : <PanelRightClose className="w-3.5 h-3.5" />
           }
           label={sidebarCollapsed ? "הצג שמות" : "מזער שמות"}
         />
 
-        {/* Table-vs-Gantt layout toggle. Two icons: side (Columns2) puts the
-            table next to the Gantt at 1/3 width; stacked (Rows2) gives both
-            full width with the table on top. Persisted in localStorage by
-            Gantt.tsx so the user's choice sticks across sessions. */}
         <div className="inline-flex rounded-md border border-ink-200 p-0.5 bg-ink-50">
           <button
             onClick={() => onTableLayoutChange("side")}
             className={cn(
               "p-1 rounded-sm transition-colors",
-              tableLayout === "side"
-                ? "bg-white text-ink-900 shadow-soft"
-                : "text-ink-600 hover:text-ink-900"
+              tableLayout === "side" ? "bg-white text-ink-900 shadow-soft" : "text-ink-600 hover:text-ink-900"
             )}
             title="טבלה לצד הגאנט"
             aria-label="טבלה לצד הגאנט"
@@ -402,9 +387,7 @@ export function GanttChrome({
             onClick={() => onTableLayoutChange("stacked")}
             className={cn(
               "p-1 rounded-sm transition-colors",
-              tableLayout === "stacked"
-                ? "bg-white text-ink-900 shadow-soft"
-                : "text-ink-600 hover:text-ink-900"
+              tableLayout === "stacked" ? "bg-white text-ink-900 shadow-soft" : "text-ink-600 hover:text-ink-900"
             )}
             title="טבלה מעל הגאנט"
             aria-label="טבלה מעל הגאנט"
@@ -418,13 +401,6 @@ export function GanttChrome({
   );
 }
 
-
-/**
- * SourcePicker — single-selection chooser for Gantt scope.
- * Renders as a prominent outlined pill at the leading edge of the chrome
- * with the active source name visible at all times. Opens a dropdown with
- * three groups: "all", lists (radio), projects (radio).
- */
 function SourcePicker({
   source,
   sourceLabel,
@@ -469,10 +445,7 @@ function SourcePicker({
           <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
           <div className="absolute top-full start-0 mt-1 z-40 w-64 bg-white border border-ink-200 rounded-xl shadow-lift py-1 max-h-80 overflow-y-auto">
             <button
-              onClick={() => {
-                onSourceChange({ kind: "all" });
-                setOpen(false);
-              }}
+              onClick={() => { onSourceChange({ kind: "all" }); setOpen(false); }}
               className={cn(
                 "w-full flex items-center gap-2 px-3 py-1.5 text-sm text-start hover:bg-ink-50",
                 source.kind === "all" && "bg-primary-50 text-primary-700 font-medium"
@@ -486,28 +459,20 @@ function SourcePicker({
 
             {lists.length > 0 && (
               <>
-                <div className="text-[10px] font-semibold text-ink-400 uppercase tracking-wider px-3 py-1 mt-1 border-t border-ink-100">
-                  רשימות
-                </div>
+                <div className="text-[10px] font-semibold text-ink-400 uppercase tracking-wider px-3 py-1 mt-1 border-t border-ink-100">רשימות</div>
                 {lists.map((l) => {
                   const selected = source.kind === "list" && source.id === l.id;
                   return (
                     <button
                       key={l.id}
-                      onClick={() => {
-                        onSourceChange({ kind: "list", id: l.id });
-                        setOpen(false);
-                      }}
+                      onClick={() => { onSourceChange({ kind: "list", id: l.id }); setOpen(false); }}
                       className={cn(
                         "w-full flex items-center gap-2 px-3 py-1.5 text-sm text-start hover:bg-ink-50",
                         selected && "bg-primary-50 text-primary-700 font-medium"
                       )}
                       type="button"
                     >
-                      <span
-                        className="w-3 h-3 rounded-sm shrink-0"
-                        style={{ backgroundColor: l.color ?? "#6b6b80" }}
-                      />
+                      <span className="w-3 h-3 rounded-sm shrink-0" style={{ backgroundColor: l.color ?? "#6b6b80" }} />
                       {l.emoji && <ListIcon emoji={l.emoji} className="w-3.5 h-3.5" />}
                       <span className="truncate flex-1">{l.name}</span>
                       {selected && <Check className="w-3.5 h-3.5" />}
@@ -519,28 +484,20 @@ function SourcePicker({
 
             {projects.length > 0 && (
               <>
-                <div className="text-[10px] font-semibold text-ink-400 uppercase tracking-wider px-3 py-1 mt-1 border-t border-ink-100">
-                  פרויקטים
-                </div>
+                <div className="text-[10px] font-semibold text-ink-400 uppercase tracking-wider px-3 py-1 mt-1 border-t border-ink-100">פרוייקטים</div>
                 {projects.map((p) => {
                   const selected = source.kind === "project" && source.id === p.id;
                   return (
                     <button
                       key={p.id}
-                      onClick={() => {
-                        onSourceChange({ kind: "project", id: p.id });
-                        setOpen(false);
-                      }}
+                      onClick={() => { onSourceChange({ kind: "project", id: p.id }); setOpen(false); }}
                       className={cn(
                         "w-full flex items-center gap-2 px-3 py-1.5 text-sm text-start hover:bg-ink-50",
                         selected && "bg-primary-50 text-primary-700 font-medium"
                       )}
                       type="button"
                     >
-                      <span
-                        className="w-3 h-3 rounded-sm shrink-0"
-                        style={{ backgroundColor: p.color ?? "#6b6b80" }}
-                      />
+                      <span className="w-3 h-3 rounded-sm shrink-0" style={{ backgroundColor: p.color ?? "#6b6b80" }} />
                       {p.emoji && <span className="text-sm">{p.emoji}</span>}
                       <span className="truncate flex-1">{p.name}</span>
                       {selected && <Check className="w-3.5 h-3.5" />}
@@ -551,72 +508,33 @@ function SourcePicker({
             )}
 
             {lists.length === 0 && projects.length === 0 && (
-              <div className="px-3 py-3 text-xs text-ink-500 text-center">
-                עדיין אין רשימות או פרויקטים.
-              </div>
+              <div className="px-3 py-3 text-xs text-ink-500 text-center">עדיין אין רשימות או פרוייקטים.</div>
             )}
 
-            {/* Create-new actions — sit at the bottom of the dropdown so the
-                primary "switch context" affordance is on top, and the rarer
-                "scaffold a new container" lives below. */}
             {(onCreateNewList || onCreateNewProject || onConvertListToProject) && (
               <div className="border-t border-ink-100 mt-1 pt-1">
                 {onCreateNewList && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onCreateNewList();
-                      setOpen(false);
-                    }}
-                    className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-start text-primary-600 hover:bg-ink-50"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    רשימה חדשה (ריקה)
+                  <button type="button" onClick={() => { onCreateNewList(); setOpen(false); }}
+                    className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-start text-primary-600 hover:bg-ink-50">
+                    <Plus className="w-3.5 h-3.5" />רשימה חדשה (ריקה)
                   </button>
                 )}
                 {onCreateNewProject && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onCreateNewProject();
-                      setOpen(false);
-                    }}
-                    className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-start text-primary-600 hover:bg-ink-50"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    פרויקט חדש (ריק)
+                  <button type="button" onClick={() => { onCreateNewProject(); setOpen(false); }}
+                    className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-start text-primary-600 hover:bg-ink-50">
+                    <Plus className="w-3.5 h-3.5" />פרוייקט חדש (ריק)
                   </button>
                 )}
-                {/* Promote the selected list to a project. Only meaningful
-                    when a single list is selected; hidden otherwise. */}
                 {source.kind === "list" && onConvertListToProject && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onConvertListToProject();
-                      setOpen(false);
-                    }}
-                    className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-start text-ink-700 hover:bg-ink-50 border-t border-ink-100 mt-1 pt-2"
-                  >
-                    <FolderKanban className="w-3.5 h-3.5" />
-                    הפוך את "{sourceLabel}" לפרויקט
+                  <button type="button" onClick={() => { onConvertListToProject(); setOpen(false); }}
+                    className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-start text-ink-700 hover:bg-ink-50 border-t border-ink-100 mt-1 pt-2">
+                    <FolderKanban className="w-3.5 h-3.5" />הפוך את "{sourceLabel}" לפרוייקט
                   </button>
                 )}
-
-                {/* Demote the selected project to a list. The handler
-                    decides whether to merge multiple lists; the dropdown
-                    just exposes the action. */}
                 {source.kind === "project" && onConvertProjectToList && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onConvertProjectToList();
-                      setOpen(false);
-                    }}
-                    className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-start text-ink-700 hover:bg-ink-50 border-t border-ink-100 mt-1 pt-2"
-                  >
-                    <ListIcon2 className="w-3.5 h-3.5" />
-                    הפוך את "{sourceLabel}" לרשימה
+                  <button type="button" onClick={() => { onConvertProjectToList(); setOpen(false); }}
+                    className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-start text-ink-700 hover:bg-ink-50 border-t border-ink-100 mt-1 pt-2">
+                    <ListIcon2 className="w-3.5 h-3.5" />הפוך את "{sourceLabel}" לרשימה
                   </button>
                 )}
               </div>
@@ -629,12 +547,122 @@ function SourcePicker({
 }
 
 /**
- * Anchor date picker — a button that shows the current anchor date in
- * Hebrew locale and opens a native date input on click. Handles the ISO
- * <-> Date conversion locally so the chrome's `onAnchorChange` keeps its
- * `Date` API. The native input avoids pulling in another date-picker lib
- * for what's essentially a "jump to any day" affordance.
+ * SpanWeeksInput — number input + presets to control how many weeks the
+ * Gantt window shows.
  */
+function SpanWeeksInput({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: (n: number) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const PRESETS: { weeks: number; label: string }[] = [
+    { weeks: 4, label: "חודש" },
+    { weeks: 13, label: "רבעון" },
+    { weeks: 26, label: "חצי שנה" },
+    { weeks: 52, label: "שנה" },
+    { weeks: 104, label: "שנתיים" },
+  ];
+  return (
+    <div className="relative inline-flex items-center">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-md border border-ink-200 hover:bg-ink-50 text-ink-700 font-medium tabular-nums"
+        title="טווח התצוגה בשבועות"
+      >
+        <span>{value} שב'</span>
+        <ChevronLeft className={cn("w-3 h-3 transition-transform", open && "-rotate-90")} />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
+          <div className="absolute top-full start-0 mt-1 z-40 w-44 bg-white border border-ink-200 rounded-xl shadow-lift py-1">
+            <div className="text-[10px] font-semibold text-ink-400 uppercase tracking-wider px-3 py-1 border-b border-ink-100">טווח תצוגה</div>
+            {PRESETS.map((p) => (
+              <button
+                key={p.weeks}
+                type="button"
+                onClick={() => { onChange(p.weeks); setOpen(false); }}
+                className={cn(
+                  "w-full flex items-center justify-between gap-2 px-3 py-1.5 text-sm text-start hover:bg-ink-50",
+                  p.weeks === value && "bg-primary-50 text-primary-700 font-medium"
+                )}
+              >
+                <span>{p.label}</span>
+                <span className="text-[10px] text-ink-400 tabular-nums">{p.weeks} שב'</span>
+              </button>
+            ))}
+            <div className="border-t border-ink-100 mt-1 pt-1 px-2 pb-1">
+              <label className="text-[10px] text-ink-500 block mb-0.5">מותאם אישית (שבועות)</label>
+              <input
+                type="number"
+                min={2}
+                max={260}
+                value={value}
+                onChange={(e) => {
+                  const n = Number(e.target.value);
+                  if (Number.isFinite(n) && n >= 2 && n <= 260) onChange(n);
+                }}
+                className="w-full text-sm px-2 py-1 border border-ink-200 rounded-md tabular-nums"
+              />
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/**
+ * ZoomSlider — continuous column-density control. Range 0.5..2.5.
+ */
+function ZoomSlider({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: (n: number) => void;
+}) {
+  const MIN = 0.5;
+  const MAX = 2.5;
+  const STEP = 0.1;
+  return (
+    <div className="inline-flex items-center gap-0.5">
+      <button
+        type="button"
+        onClick={() => onChange(Math.max(MIN, +(value - 0.25).toFixed(2)))}
+        className="p-1 rounded-md hover:bg-ink-100 text-ink-600"
+        title="הקטן עמודות"
+        aria-label="הקטן עמודות"
+      >
+        <ZoomOut className="w-3.5 h-3.5" />
+      </button>
+      <input
+        type="range"
+        min={MIN}
+        max={MAX}
+        step={STEP}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="w-20 accent-primary-500"
+        title={`זום ${Math.round(value * 100)}%`}
+      />
+      <button
+        type="button"
+        onClick={() => onChange(Math.min(MAX, +(value + 0.25).toFixed(2)))}
+        className="p-1 rounded-md hover:bg-ink-100 text-ink-600"
+        title="הגדל עמודות"
+        aria-label="הגדל עמודות"
+      >
+        <ZoomIn className="w-3.5 h-3.5" />
+      </button>
+    </div>
+  );
+}
+
 function AnchorDatePicker({
   anchor,
   onChange,
@@ -660,8 +688,6 @@ function AnchorDatePicker({
       <button
         type="button"
         onClick={() => {
-          // Native pickers — try showPicker() (Chrome/Safari recent), fall
-          // back to focus + click to coax the popup open.
           const el = inputRef.current;
           if (!el) return;
           const anyEl = el as HTMLInputElement & { showPicker?: () => void };
@@ -688,8 +714,6 @@ function AnchorDatePicker({
           if (!y || !m || !d) return;
           onChange(new Date(y, m - 1, d));
         }}
-        // Hide the input itself; we drive it from the visible button so we
-        // get our own styling but the browser still owns the calendar UI.
         className="absolute inset-0 opacity-0 pointer-events-none w-0 h-0"
         tabIndex={-1}
       />

@@ -20,6 +20,7 @@ import { EventEditModal } from "@/components/calendar/EventEditModal";
 import { GanttChrome } from "@/components/gantt/GanttChrome";
 import { GanttGrid } from "@/components/gantt/GanttGrid";
 import { GanttTable } from "@/components/gantt/GanttTable";
+import { GanttExportModal } from "@/components/gantt/GanttExportModal";
 import {
   type GanttLayer,
   type GanttRow,
@@ -27,8 +28,8 @@ import {
   addDays,
   buildRows,
   computeCriticalPath,
-  defaultSpanDays,
   startOfDay,
+  weeksToDays,
 } from "@/components/gantt/gantt-utils";
 import {
   useAllTaskDependencies,
@@ -99,6 +100,31 @@ export function Gantt() {
 
   const [selectedBaselineId, setSelectedBaselineId] = useState<string | null>(null);
   const [showHistogram, setShowHistogram] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
+
+  /** Configurable visible range — in weeks. Default 26 (~6 months). */
+  const [spanWeeks, setSpanWeeks] = useState<number>(() => {
+    if (typeof window === "undefined") return 26;
+    const raw = localStorage.getItem("multitask.gantt.spanWeeks");
+    const n = raw ? Number(raw) : NaN;
+    return Number.isFinite(n) && n >= 2 && n <= 260 ? n : 26;
+  });
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem("multitask.gantt.spanWeeks", String(spanWeeks));
+  }, [spanWeeks]);
+
+  /** Continuous zoom multiplier (0.5 .. 2.5). */
+  const [zoomScale, setZoomScale] = useState<number>(() => {
+    if (typeof window === "undefined") return 1;
+    const raw = localStorage.getItem("multitask.gantt.zoomScale");
+    const n = raw ? Number(raw) : NaN;
+    return Number.isFinite(n) && n >= 0.4 && n <= 3 ? n : 1;
+  });
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem("multitask.gantt.zoomScale", String(zoomScale));
+  }, [zoomScale]);
 
   const [filters, setFilters] = useFiltersFromUrl();
   const { data: tasks = [] } = useTasks(filters);
@@ -176,11 +202,16 @@ export function Gantt() {
   const scopedProjectId = source.kind === "project" ? source.id : null;
   const { data: customFields = [] } = useProjectCustomFields(scopedProjectId);
 
+  // Window: 1/4 of the span sits before the anchor (so the user sees a bit
+  // of history) and 3/4 after (which is what they actually plan into).
   const windowStart = useMemo(() => {
-    const span = defaultSpanDays(zoom);
-    return addDays(startOfDay(anchor), -Math.floor(span / 3));
-  }, [anchor, zoom]);
-  const windowEnd = useMemo(() => addDays(windowStart, defaultSpanDays(zoom)), [windowStart, zoom]);
+    const span = weeksToDays(spanWeeks);
+    return addDays(startOfDay(anchor), -Math.floor(span / 4));
+  }, [anchor, spanWeeks]);
+  const windowEnd = useMemo(
+    () => addDays(windowStart, weeksToDays(spanWeeks)),
+    [windowStart, spanWeeks]
+  );
 
   const { data: events = [] } = useEvents({ from: windowStart.toISOString(), to: windowEnd.toISOString() });
 
@@ -304,7 +335,7 @@ export function Gantt() {
   };
 
   const handleCreateNewProject = async () => {
-    const name = window.prompt("שם הפרויקט החדש:");
+    const name = window.prompt("שם הפרוייקט החדש:");
     if (!name?.trim()) return;
     const project = await createProject.mutateAsync({ name: name.trim() });
     await createTaskList.mutateAsync({ name: name.trim(), kind: "custom", project_id: project.id });
@@ -332,20 +363,20 @@ export function Gantt() {
     if (!project) return;
     const projectLists = lists.filter((l) => l.project_id === source.id);
     if (projectLists.length === 0) {
-      if (!window.confirm(`הפרויקט "${project.name}" ריק. להעבירו לארכיון?`)) return;
+      if (!window.confirm(`הפרוייקט "${project.name}" ריק. להעבירו לארכיון?`)) return;
       await archiveProject.mutateAsync(source.id);
       setSource({ kind: "all" });
       return;
     }
     if (projectLists.length === 1) {
       const list = projectLists[0]!;
-      if (!window.confirm(`להפוך את הפרויקט "${project.name}" לרשימה? הפרויקט יועבר לארכיון; הרשימה והמשימות יישארו.`)) return;
+      if (!window.confirm(`להפוך את הפרוייקט "${project.name}" לרשימה? הפרוייקט יועבר לארכיון; הרשימה והמשימות יישארו.`)) return;
       await updateTaskList.mutateAsync({ listId: list.id, patch: { project_id: null } });
       await archiveProject.mutateAsync(source.id);
       setSource({ kind: "list", id: list.id });
       return;
     }
-    if (!window.confirm(`הפרויקט "${project.name}" מכיל ${projectLists.length} רשימות. כל המשימות יועברו לרשימה חדשה אחת בשם הפרויקט; הפרויקט יועבר לארכיון. להמשיך?`)) return;
+    if (!window.confirm(`הפרוייקט "${project.name}" מכיל ${projectLists.length} רשימות. כל המשימות יועברו לרשימה חדשה אחת בשם הפרוייקט; הפרוייקט יועבר לארכיון. להמשיך?`)) return;
     const newList = await createTaskList.mutateAsync({ name: project.name, kind: "custom", color: project.color, emoji: project.emoji });
     const tasksToMove = tasks.filter((t) => !!t.task_list_id && projectLists.some((l) => l.id === t.task_list_id));
     for (const t of tasksToMove) await moveTaskToList.mutateAsync({ taskId: t.id, listId: newList.id });
@@ -357,7 +388,7 @@ export function Gantt() {
     if (source.kind !== "list") return;
     const list = lists.find((l) => l.id === source.id);
     if (!list) return;
-    if (!window.confirm(`להפוך את הרשימה "${list.name}" לפרויקט?\nכל המשימות יישארו במקומן.`)) return;
+    if (!window.confirm(`להפוך את הרשימה "${list.name}" לפרוייקט?\nכל המשימות יישארו במקומן.`)) return;
     const project = await createProject.mutateAsync({ name: list.name, color: list.color, emoji: list.emoji });
     await updateTaskList.mutateAsync({ listId: list.id, patch: { project_id: project.id } });
     setSource({ kind: "project", id: project.id });
@@ -437,11 +468,26 @@ export function Gantt() {
   const unifiedLists = useMemo(() => lists.map((l) => ({ id: l.id, name: l.name, emoji: l.emoji, color: l.color, project_id: l.project_id })), [lists]);
   const unifiedProjects = useMemo(() => projects.map((p) => ({ id: p.id, name: p.name, emoji: p.emoji ?? null, color: p.color ?? null })), [projects]);
 
+  const listNamesMap = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const l of lists) m.set(l.id, l.name);
+    return m;
+  }, [lists]);
+
+  const exportTitle = useMemo(() => {
+    if (source.kind === "list") return lists.find((l) => l.id === source.id)?.name ?? "Gantt";
+    if (source.kind === "project") return projects.find((p) => p.id === source.id)?.name ?? "Gantt";
+    return "Gantt";
+  }, [source, lists, projects]);
+
   return (
     <ScreenScaffold title="Gantt" subtitle="">
       <div className="space-y-2">
         <GanttChrome
           zoom={zoom} onZoomChange={setZoom} anchor={anchor} onAnchorChange={setAnchor}
+          spanWeeks={spanWeeks} onSpanWeeksChange={setSpanWeeks}
+          zoomScale={zoomScale} onZoomScaleChange={setZoomScale}
+          onExport={() => setExportOpen(true)}
           layer={layer} onLayerChange={setLayer} lists={unifiedLists} hiddenListIds={hiddenLists}
           onToggleListVisibility={toggleListVisibility} onCreateList={handleCreateList}
           projects={unifiedProjects} source={source} onSourceChange={setSource}
@@ -475,7 +521,7 @@ export function Gantt() {
         </div>
 
         {sidebarCollapsed ? (
-          <GanttGrid rows={visibleRows} deps={deps} zoom={zoom} windowStart={windowStart} windowEnd={windowEnd} criticalSet={criticalSet} onRowClick={handleRowClick} onBarChange={handleBarChange} onCreateAt={handleGanttCreateAt} onScheduleTask={handleScheduleTask} sidebarCollapsed={sidebarCollapsed} onToggleSidebar={() => setSidebarCollapsed((v) => !v)} baselineMap={baselineMap ?? undefined} />
+          <GanttGrid rows={visibleRows} deps={deps} zoom={zoom} zoomScale={zoomScale} windowStart={windowStart} windowEnd={windowEnd} criticalSet={criticalSet} onRowClick={handleRowClick} onBarChange={handleBarChange} onCreateAt={handleGanttCreateAt} onScheduleTask={handleScheduleTask} sidebarCollapsed={sidebarCollapsed} onToggleSidebar={() => setSidebarCollapsed((v) => !v)} baselineMap={baselineMap ?? undefined} />
         ) : tableLayout === "side" ? (
           <DndContext sensors={dndSensors} collisionDetection={pointerWithin} onDragEnd={handleGanttDragEnd}>
             <div className="flex gap-2 items-stretch">
@@ -483,7 +529,7 @@ export function Gantt() {
                 <GanttTable rows={visibleRows} deps={deps} criticalSet={criticalSet} onRowClick={handleRowClick} layout="side" onCreateTask={source.kind === "all" ? undefined : handleCreateTaskInScope} customFields={customFields} lists={unifiedLists} onToggleCritical={handleToggleCritical} />
               </div>
               <div className="basis-2/3 min-w-0 grow">
-                <GanttGrid rows={visibleRows} deps={deps} zoom={zoom} windowStart={windowStart} windowEnd={windowEnd} criticalSet={criticalSet} onRowClick={handleRowClick} onBarChange={handleBarChange} onCreateAt={handleGanttCreateAt} onScheduleTask={handleScheduleTask} hideInternalSidebar baselineMap={baselineMap ?? undefined} />
+                <GanttGrid rows={visibleRows} deps={deps} zoom={zoom} zoomScale={zoomScale} windowStart={windowStart} windowEnd={windowEnd} criticalSet={criticalSet} onRowClick={handleRowClick} onBarChange={handleBarChange} onCreateAt={handleGanttCreateAt} onScheduleTask={handleScheduleTask} hideInternalSidebar baselineMap={baselineMap ?? undefined} />
               </div>
             </div>
           </DndContext>
@@ -491,7 +537,7 @@ export function Gantt() {
           <DndContext sensors={dndSensors} collisionDetection={pointerWithin} onDragEnd={handleGanttDragEnd}>
             <div className="flex flex-col gap-2">
               <GanttTable rows={visibleRows} deps={deps} criticalSet={criticalSet} onRowClick={handleRowClick} layout="stacked" onCreateTask={source.kind === "all" ? undefined : handleCreateTaskInScope} customFields={customFields} lists={unifiedLists} onToggleCritical={handleToggleCritical} />
-              <GanttGrid rows={visibleRows} deps={deps} zoom={zoom} windowStart={windowStart} windowEnd={windowEnd} criticalSet={criticalSet} onRowClick={handleRowClick} onBarChange={handleBarChange} onCreateAt={handleGanttCreateAt} onScheduleTask={handleScheduleTask} hideInternalSidebar baselineMap={baselineMap ?? undefined} />
+              <GanttGrid rows={visibleRows} deps={deps} zoom={zoom} zoomScale={zoomScale} windowStart={windowStart} windowEnd={windowEnd} criticalSet={criticalSet} onRowClick={handleRowClick} onBarChange={handleBarChange} onCreateAt={handleGanttCreateAt} onScheduleTask={handleScheduleTask} hideInternalSidebar baselineMap={baselineMap ?? undefined} />
             </div>
           </DndContext>
         )}
@@ -516,6 +562,17 @@ export function Gantt() {
           topSlot={<GanttCreateKindToggle kind="task" onChange={(k) => setCreating((c) => (c ? { ...c, kind: k } : c))} />}
         />
       )}
+
+      <GanttExportModal
+        open={exportOpen}
+        onClose={() => setExportOpen(false)}
+        rows={visibleRows}
+        defaultFrom={windowStart}
+        defaultTo={windowEnd}
+        listNames={listNamesMap}
+        memberNames={memberNames}
+        title={exportTitle}
+      />
     </ScreenScaffold>
   );
 }

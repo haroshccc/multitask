@@ -1390,13 +1390,6 @@ export function TaskRow({
   );
 }
 
-function stripHtml(html: string): string {
-  if (!html) return "";
-  const tmp = document.createElement("div");
-  tmp.innerHTML = html;
-  return tmp.textContent ?? tmp.innerText ?? "";
-}
-
 function stripDescHtml(html: string): string {
   if (!html) return "";
   const tmp = document.createElement("div");

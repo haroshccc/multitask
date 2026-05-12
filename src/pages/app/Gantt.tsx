@@ -315,6 +315,10 @@ export function Gantt() {
     }
   };
 
+  const handlePhaseColorChange = (taskId: string, color: string) => {
+    updateTask.mutate({ taskId, patch: { accent_color: color } });
+  };
+
   const toggleListVisibility = (listId: string) => {
     const current = visibility?.hidden_list_ids ?? [];
     const next = current.includes(listId) ? current.filter((id) => id !== listId) : [...current, listId];
@@ -521,7 +525,7 @@ export function Gantt() {
         </div>
 
         {sidebarCollapsed ? (
-          <GanttGrid rows={visibleRows} deps={deps} zoom={zoom} zoomScale={zoomScale} windowStart={windowStart} windowEnd={windowEnd} criticalSet={criticalSet} onRowClick={handleRowClick} onBarChange={handleBarChange} onCreateAt={handleGanttCreateAt} onScheduleTask={handleScheduleTask} sidebarCollapsed={sidebarCollapsed} onToggleSidebar={() => setSidebarCollapsed((v) => !v)} baselineMap={baselineMap ?? undefined} />
+          <GanttGrid rows={visibleRows} deps={deps} zoom={zoom} zoomScale={zoomScale} windowStart={windowStart} windowEnd={windowEnd} criticalSet={criticalSet} onRowClick={handleRowClick} onBarChange={handleBarChange} onCreateAt={handleGanttCreateAt} onScheduleTask={handleScheduleTask} sidebarCollapsed={sidebarCollapsed} onToggleSidebar={() => setSidebarCollapsed((v) => !v)} baselineMap={baselineMap ?? undefined} onPhaseColorChange={handlePhaseColorChange} />
         ) : tableLayout === "side" ? (
           <DndContext sensors={dndSensors} collisionDetection={pointerWithin} onDragEnd={handleGanttDragEnd}>
             <div className="flex gap-2 items-stretch">
@@ -529,7 +533,7 @@ export function Gantt() {
                 <GanttTable rows={visibleRows} deps={deps} criticalSet={criticalSet} onRowClick={handleRowClick} layout="side" onCreateTask={source.kind === "all" ? undefined : handleCreateTaskInScope} customFields={customFields} lists={unifiedLists} onToggleCritical={handleToggleCritical} />
               </div>
               <div className="basis-2/3 min-w-0 grow">
-                <GanttGrid rows={visibleRows} deps={deps} zoom={zoom} zoomScale={zoomScale} windowStart={windowStart} windowEnd={windowEnd} criticalSet={criticalSet} onRowClick={handleRowClick} onBarChange={handleBarChange} onCreateAt={handleGanttCreateAt} onScheduleTask={handleScheduleTask} hideInternalSidebar baselineMap={baselineMap ?? undefined} />
+                <GanttGrid rows={visibleRows} deps={deps} zoom={zoom} zoomScale={zoomScale} windowStart={windowStart} windowEnd={windowEnd} criticalSet={criticalSet} onRowClick={handleRowClick} onBarChange={handleBarChange} onCreateAt={handleGanttCreateAt} onScheduleTask={handleScheduleTask} hideInternalSidebar baselineMap={baselineMap ?? undefined} onPhaseColorChange={handlePhaseColorChange} />
               </div>
             </div>
           </DndContext>
@@ -537,7 +541,7 @@ export function Gantt() {
           <DndContext sensors={dndSensors} collisionDetection={pointerWithin} onDragEnd={handleGanttDragEnd}>
             <div className="flex flex-col gap-2">
               <GanttTable rows={visibleRows} deps={deps} criticalSet={criticalSet} onRowClick={handleRowClick} layout="stacked" onCreateTask={source.kind === "all" ? undefined : handleCreateTaskInScope} customFields={customFields} lists={unifiedLists} onToggleCritical={handleToggleCritical} />
-              <GanttGrid rows={visibleRows} deps={deps} zoom={zoom} zoomScale={zoomScale} windowStart={windowStart} windowEnd={windowEnd} criticalSet={criticalSet} onRowClick={handleRowClick} onBarChange={handleBarChange} onCreateAt={handleGanttCreateAt} onScheduleTask={handleScheduleTask} hideInternalSidebar baselineMap={baselineMap ?? undefined} />
+              <GanttGrid rows={visibleRows} deps={deps} zoom={zoom} zoomScale={zoomScale} windowStart={windowStart} windowEnd={windowEnd} criticalSet={criticalSet} onRowClick={handleRowClick} onBarChange={handleBarChange} onCreateAt={handleGanttCreateAt} onScheduleTask={handleScheduleTask} hideInternalSidebar baselineMap={baselineMap ?? undefined} onPhaseColorChange={handlePhaseColorChange} />
             </div>
           </DndContext>
         )}

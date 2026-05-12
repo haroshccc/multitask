@@ -272,6 +272,13 @@ export function GanttBar({
     );
   }
 
+  // Phase-inherited accent: sub-tasks of a phase render in the phase's
+  // hue family (set in buildRows). When present and not overridden by a
+  // status (event/highlight/ownership), we paint the bar with the accent
+  // color so a whole phase reads as one color group in the chart.
+  const phaseAccent = !isEvent && !isPhase && row.phaseId ? row.accentColor : null;
+  const useAccent = !!phaseAccent && !highlight;
+
   return (
     <>
       <div
@@ -282,6 +289,12 @@ export function GanttBar({
           done && "opacity-60",
           isEvent
             ? "bg-gradient-to-l from-primary-600 to-primary-400 border border-primary-700"
+            : useAccent
+            ? row.ownershipMode === "assigned"
+              ? "border-2 border-dotted border-ink-500"
+              : row.ownershipMode === "delegated"
+              ? "border-2 border-dashed border-ink-500"
+              : ""
             : row.ownershipMode === "assigned"
             ? "bg-gradient-to-l from-primary-500 to-primary-400 border-2 border-dotted border-ink-500"
             : row.ownershipMode === "delegated"
@@ -293,6 +306,7 @@ export function GanttBar({
         style={{
           insetInlineStart: leftPx,
           width: Math.max(widthPx, 16),
+          ...(useAccent ? { backgroundColor: phaseAccent! } : {}),
         }}
         onPointerDown={beginDrag("move")}
         onClick={handleClick}

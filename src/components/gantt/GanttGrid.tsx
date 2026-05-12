@@ -1,4 +1,4 @@
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { cn } from "@/lib/utils/cn";
 import type { TaskDependency } from "@/lib/types/domain";
 import {
@@ -45,6 +45,10 @@ interface GanttGridProps {
    *  provided, a thin grey bar is drawn below each task's current bar to
    *  indicate the original planned schedule. */
   baselineMap?: Map<string, { scheduled_at: string | null; duration_minutes: number | null }>;
+  /** Continuous zoom multiplier from the chrome's slider — multiplies the
+   *  base pxPerDay so columns can be stretched/compressed without flipping
+   *  zoom tiers. */
+  zoomScale?: number;
 }
 
 export function GanttGrid({
@@ -62,8 +66,9 @@ export function GanttGrid({
   hideInternalSidebar,
   onScheduleTask,
   baselineMap,
+  zoomScale = 1,
 }: GanttGridProps) {
-  const pxPerDay = pxPerDayFn(zoom);
+  const pxPerDay = pxPerDayFn(zoom, zoomScale);
   const totalDays = Math.max(
     1,
     Math.ceil((windowEnd.getTime() - windowStart.getTime()) / DAY_MS)
@@ -78,6 +83,56 @@ export function GanttGrid({
   );
 
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Mouse-drag panning on the timeline — MS-Project-style. Holding the
+  // middle-button or shift+left-button anywhere in the empty timeline area
+  // scrolls horizontally. Lets the user navigate long Gantts without
+  // hunting for the scrollbar.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    let dragging = false;
+    let startX = 0;
+    let startScroll = 0;
+    const onPointerDown = (e: PointerEvent) => {
+      // Only middle-click or shift+left-click → start drag pan; left-click
+      // alone is reserved for bar drag and row click handlers below.
+      const isPan =
+        e.button === 1 ||
+        (e.button === 0 && e.shiftKey) ||
+        (e.button === 0 && (e.target as HTMLElement)?.dataset?.panDrag === "1");
+      if (!isPan) return;
+      dragging = true;
+      startX = e.clientX;
+      startScroll = el.scrollLeft;
+      el.setPointerCapture(e.pointerId);
+      el.style.cursor = "grabbing";
+      e.preventDefault();
+    };
+    const onPointerMove = (e: PointerEvent) => {
+      if (!dragging) return;
+      const dx = e.clientX - startX;
+      // RTL: dragging right should scroll content left (and vice versa).
+      const dir = document.documentElement.dir === "rtl" ? 1 : -1;
+      el.scrollLeft = startScroll + dx * dir;
+    };
+    const onPointerUp = (e: PointerEvent) => {
+      if (!dragging) return;
+      dragging = false;
+      try { el.releasePointerCapture(e.pointerId); } catch { /* noop */ }
+      el.style.cursor = "";
+    };
+    el.addEventListener("pointerdown", onPointerDown);
+    el.addEventListener("pointermove", onPointerMove);
+    el.addEventListener("pointerup", onPointerUp);
+    el.addEventListener("pointercancel", onPointerUp);
+    return () => {
+      el.removeEventListener("pointerdown", onPointerDown);
+      el.removeEventListener("pointermove", onPointerMove);
+      el.removeEventListener("pointerup", onPointerUp);
+      el.removeEventListener("pointercancel", onPointerUp);
+    };
+  }, []);
 
   const isRtl =
     typeof document !== "undefined" && document.documentElement.dir === "rtl";
@@ -101,7 +156,10 @@ export function GanttGrid({
   }
 
   return (
-    <div className="card overflow-hidden">
+    // Internal vertical scroll so the sticky timeline header stays pinned
+    // even when there are many rows. Cap height to a fraction of the
+    // viewport — MS-Project-style internal scroll container.
+    <div className="card overflow-hidden max-h-[calc(100vh-200px)] overflow-y-auto scrollbar-thin">
       <div className="flex" style={{ minHeight: timelineHeight + 64 }}>
         {/* Left column: task rows — can be collapsed to a thin strip.
             Suppressed entirely when the parent renders an external
@@ -154,6 +212,8 @@ export function GanttGrid({
                 paddingInlineStart: 8 + r.depth * 16,
                 ...(isPhase
                   ? ({ borderInlineStartWidth: 4, borderInlineStartColor: r.accentColor ?? "#6b6b80" } as React.CSSProperties)
+                  : r.phaseId && r.accentColor
+                  ? ({ borderInlineStartWidth: 2, borderInlineStartColor: r.accentColor } as React.CSSProperties)
                   : {}),
               }}
               type="button"

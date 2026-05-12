@@ -80,31 +80,42 @@ export function diffDays(a: Date, b: Date): number {
 /** Day width in pixels per zoom level. Columns shift meaning: in "day" each
  *  column = 1 day; in "week" each column = 7 days but we still use "pixels
  *  per day" as the underlying unit so bar math stays consistent. */
-export function pxPerDay(zoom: GanttZoom): number {
-  switch (zoom) {
-    case "day":
-      return 72;
-    case "week":
-      return 22;
-    case "month":
-      return 8;
-    case "quarter":
-      return 3;
-  }
+export function pxPerDay(zoom: GanttZoom, zoomScale: number = 1): number {
+  const base = (() => {
+    switch (zoom) {
+      case "day":
+        return 72;
+      case "week":
+        return 22;
+      case "month":
+        return 8;
+      case "quarter":
+        return 3;
+    }
+  })();
+  // zoomScale is a continuous multiplier (0.5 .. 2.5) controlled by the
+  // chrome's zoom slider — lets the user fine-tune column width without
+  // changing the discrete zoom level.
+  return Math.max(1, base * zoomScale);
 }
 
 /** How many days the visible window should span by default. */
 export function defaultSpanDays(zoom: GanttZoom): number {
   switch (zoom) {
     case "day":
-      return 14;
+      return 28;       // 4 weeks
     case "week":
-      return 84; // 12 weeks
+      return 182;      // 26 weeks ≈ 6 months (was 12 weeks — too short)
     case "month":
-      return 180; // ~6 months
+      return 365;      // 12 months
     case "quarter":
-      return 540; // ~18 months
+      return 730;      // ~2 years
   }
+}
+
+/** Convert weeks → days for the user-configurable span. */
+export function weeksToDays(weeks: number): number {
+  return Math.max(1, Math.round(weeks)) * 7;
 }
 
 // Row building --------------------------------------------------------------
@@ -197,11 +208,22 @@ export function buildRows(
     // those in from the table. Tasks without a timing get a placeholder
     // start/end (today's `fallback`) and an `unscheduled` flag so the
     // GanttBar renderer can skip drawing a bar.
-    const walk = (pid: string | null, depth: number, phaseId: string | null) => {
+    //
+    // Phase color inheritance: when a row is nested under a phase, its
+    // accentColor falls back to the phase's color so that all sub-tasks of
+    // a phase render in the same hue family — visual grouping in the bar
+    // area without the user needing to set anything per-row.
+    const phaseAccentById = new Map<string, string>();
+    const walk = (pid: string | null, depth: number, phaseId: string | null, phaseAccent: string | null) => {
       const kids = childrenOf.get(pid) ?? [];
       for (const t of kids) {
         const timing = calcTaskTiming(t, fallback);
         const childPhaseId = t.is_phase ? t.id : phaseId;
+        const myAccent = t.is_phase ? accentForPhase(t) : null;
+        if (t.is_phase && myAccent) phaseAccentById.set(t.id, myAccent);
+        const inheritedAccent =
+          myAccent ??
+          (phaseId ? phaseAccentById.get(phaseId) ?? phaseAccent ?? undefined : undefined);
         rows.push({
           id: `task:${t.id}`,
           kind: "task",
@@ -214,7 +236,7 @@ export function buildRows(
           isPhase: !!t.is_phase,
           phaseId: t.is_phase ? null : phaseId,
           childrenEnd: t.is_phase ? findSubtreeEnd(t.id) : null,
-          accentColor: t.is_phase ? accentForPhase(t) : undefined,
+          accentColor: inheritedAccent ?? undefined,
           unscheduled: !timing,
           ownershipMode: currentUserId
             ? t.owner_id !== currentUserId && t.assignee_user_id === currentUserId
@@ -225,13 +247,13 @@ export function buildRows(
             : "mine",
           pendingApproval: t.status === "pending_approval",
         });
-        walk(t.id, depth + 1, childPhaseId);
+        walk(t.id, depth + 1, childPhaseId, myAccent ?? phaseAccent);
       }
     };
     const orphans = tasks.filter(
       (t) => t.parent_task_id && !byId.has(t.parent_task_id)
     );
-    walk(null, 0, null);
+    walk(null, 0, null, null);
     for (const o of orphans) {
       const timing = calcTaskTiming(o, fallback);
       rows.push({
@@ -437,6 +459,9 @@ export function buildTicks(
     }
   } else if (zoom === "week") {
     // Group by month (sub-ticks = week starts).
+    // Each week sub-tick shows BOTH the week number (e.g. "ש21") AND the
+    // day-of-month — MS-Project-like header. Week numbers are essential for
+    // long-range planning where users say "let's do this in week 24".
     let cursor = startOfMonth(from);
     while (cursor < to) {
       const monthEnd = addMonths(cursor, 1);
@@ -445,12 +470,14 @@ export function buildTicks(
         year: "numeric",
       });
       const subTicks: TickGroup["subTicks"] = [];
-      // Weeks that start within this month window.
       let w = startOfWeek(cursor);
       if (w < cursor) w = addDays(w, 7);
       while (w < monthEnd) {
         if (w >= from && w < to) {
-          subTicks.push({ label: String(w.getDate()), date: w });
+          subTicks.push({
+            label: `ש${weekNumber(w)} · ${w.getDate()}`,
+            date: w,
+          });
         }
         w = addDays(w, 7);
       }

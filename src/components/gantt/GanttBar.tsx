@@ -4,6 +4,12 @@ import { cn } from "@/lib/utils/cn";
 import { type GanttRow, DAY_MS } from "./gantt-utils";
 import { HalfCheckIcon } from "@/components/ui/HalfCheckIcon";
 
+const PHASE_PALETTE = [
+  "#ef4444", "#f97316", "#eab308", "#22c55e",
+  "#14b8a6", "#3b82f6", "#8b5cf6", "#ec4899",
+  "#64748b", "#0ea5e9", "#a16207", "#16a34a",
+];
+
 interface GanttBarProps {
   row: GanttRow;
   /** Pixels per day — derived from zoom. */
@@ -15,6 +21,8 @@ interface GanttBarProps {
   onClick: () => void;
   /** Commit a new scheduled_at + duration in ISO/minutes. */
   onChange: (patch: { scheduled_at: string; duration_minutes: number }) => void;
+  /** Called when the user picks a new accent color for a phase. */
+  onColorChange?: (color: string) => void;
 }
 
 /**
@@ -34,7 +42,9 @@ export function GanttBar({
   isCritical,
   onClick,
   onChange,
+  onColorChange,
 }: GanttBarProps) {
+  const [colorPickerOpen, setColorPickerOpen] = useState(false);
   const [drag, setDrag] = useState<{
     kind: "move" | "resize";
     anchorX: number;
@@ -148,7 +158,7 @@ export function GanttBar({
   // ---------------------------------------------------------------------------
   // Hover info card — floats above the bar with a pencil-edit shortcut.
 
-  const hoverCard = hover && !drag ? (
+  const hoverCard = (hover || colorPickerOpen) && !drag ? (
     <div
       className="absolute z-30 card shadow-lift p-2 min-w-[180px] max-w-[280px] pointer-events-auto"
       style={{
@@ -156,27 +166,63 @@ export function GanttBar({
         bottom: "100%",
         marginBottom: 6,
       }}
-      // Keep the card open while hovering it.
       onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
+      onMouseLeave={() => { setHover(false); if (!colorPickerOpen) return; }}
     >
       <div className="flex items-start justify-between gap-2 mb-1">
         <span className="text-[11px] font-semibold text-ink-900 truncate">
           {isPhase ? "שלב · " : isEvent ? "אירוע · " : ""}
           {row.title || <span className="italic text-ink-400">ללא כותרת</span>}
         </span>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onClick();
-          }}
-          className="shrink-0 p-1 rounded-md text-ink-500 hover:text-primary-600 hover:bg-ink-100"
-          title="ערוך"
-          type="button"
-        >
-          <Pencil className="w-3.5 h-3.5" />
-        </button>
+        <div className="flex items-center gap-1 shrink-0">
+          {isPhase && onColorChange && (
+            <button
+              onClick={(e) => { e.stopPropagation(); setColorPickerOpen((v) => !v); }}
+              className="p-1 rounded-md hover:bg-ink-100"
+              title="שנה צבע שלב"
+              type="button"
+            >
+              <span
+                className="block w-3.5 h-3.5 rounded-full border border-white/60 shadow-sm"
+                style={{ backgroundColor: row.accentColor ?? "#6b6b80" }}
+              />
+            </button>
+          )}
+          <button
+            onClick={(e) => { e.stopPropagation(); onClick(); }}
+            className="p-1 rounded-md text-ink-500 hover:text-primary-600 hover:bg-ink-100"
+            title="ערוך"
+            type="button"
+          >
+            <Pencil className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </div>
+      {colorPickerOpen && isPhase && onColorChange && (
+        <div className="mt-1.5 mb-1">
+          <div className="grid grid-cols-6 gap-1">
+            {PHASE_PALETTE.map((c) => (
+              <button
+                key={c}
+                type="button"
+                title={c}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onColorChange(c);
+                  setColorPickerOpen(false);
+                  setHover(false);
+                }}
+                className="w-6 h-6 rounded-full border-2 transition-transform hover:scale-110"
+                style={{
+                  backgroundColor: c,
+                  borderColor: row.accentColor === c ? "#fff" : "transparent",
+                  outline: row.accentColor === c ? `2px solid ${c}` : "none",
+                }}
+              />
+            ))}
+          </div>
+        </div>
+      )}
       <div className="text-[10px] text-ink-500 tabular-nums leading-tight">
         {row.start.toLocaleString("he-IL", {
           day: "numeric",

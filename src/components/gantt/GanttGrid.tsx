@@ -49,6 +49,8 @@ interface GanttGridProps {
    *  base pxPerDay so columns can be stretched/compressed without flipping
    *  zoom tiers. */
   zoomScale?: number;
+  /** Called when user picks a new accent color for a phase from its hover card. */
+  onPhaseColorChange?: (taskId: string, color: string) => void;
 }
 
 export function GanttGrid({
@@ -67,6 +69,7 @@ export function GanttGrid({
   onScheduleTask,
   baselineMap,
   zoomScale = 1,
+  onPhaseColorChange,
 }: GanttGridProps) {
   const pxPerDay = pxPerDayFn(zoom, zoomScale);
   const totalDays = Math.max(
@@ -388,6 +391,11 @@ export function GanttGrid({
                       isCritical={isCritical}
                       onClick={() => onRowClick(r)}
                       onChange={(patch) => onBarChange(r, patch)}
+                      onColorChange={
+                        r.isPhase && r.task && onPhaseColorChange
+                          ? (color) => onPhaseColorChange(r.task!.id, color)
+                          : undefined
+                      }
                     />
                   </div>
                 );

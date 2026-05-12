@@ -170,6 +170,7 @@ export function buildRows(
     palettesByList.set(l.id, generateShades(l.color ?? "#6b6b80", 5));
   }
   const accentForPhase = (t: Task): string => {
+    if (t.accent_color) return t.accent_color;
     const palette = t.task_list_id ? palettesByList.get(t.task_list_id) : null;
     if (!palette) return "#6b6b80";
     return pickShade(t.id, palette);

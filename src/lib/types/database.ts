@@ -1986,6 +1986,7 @@ export type Database = {
       }
       tasks: {
         Row: {
+          accent_color: string | null
           actual_seconds: number
           approved_at: string | null
           approved_by_user_id: string | null
@@ -2034,6 +2035,7 @@ export type Database = {
           urgency: number
         }
         Insert: {
+          accent_color?: string | null
           actual_seconds?: number
           approved_at?: string | null
           approved_by_user_id?: string | null
@@ -2082,6 +2084,7 @@ export type Database = {
           urgency?: number
         }
         Update: {
+          accent_color?: string | null
           actual_seconds?: number
           approved_at?: string | null
           approved_by_user_id?: string | null
@@ -3187,4 +3190,3 @@ export const Constants = {
     },
   },
 } as const
-

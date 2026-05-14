@@ -29,7 +29,6 @@ import {
   buildRows,
   computeCriticalPath,
   startOfDay,
-  weeksToDays,
 } from "@/components/gantt/gantt-utils";
 import {
   useAllTaskDependencies,
@@ -67,7 +66,6 @@ import { ResourceHistogram } from "@/components/gantt/ResourceHistogram";
 export function Gantt() {
   const { user } = useAuth();
   const [zoom, setZoom] = useState<GanttZoom>("week");
-  const [anchor, setAnchor] = useState<Date>(() => new Date());
   const [showCriticalOnly, setShowCriticalOnly] = useState(false);
   /** When false, the auto-computed critical path is suppressed — only
    *  manually-flagged (is_critical) tasks count as critical. */
@@ -112,17 +110,31 @@ export function Gantt() {
   const [showHistogram, setShowHistogram] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
 
-  /** Configurable visible range — in weeks. Default 26 (~6 months). */
-  const [spanWeeks, setSpanWeeks] = useState<number>(() => {
-    if (typeof window === "undefined") return 26;
-    const raw = localStorage.getItem("multitask.gantt.spanWeeks");
-    const n = raw ? Number(raw) : NaN;
-    return Number.isFinite(n) && n >= 2 && n <= 260 ? n : 26;
-  });
+  /** Explicit visible window — the user picks the exact from/to dates.
+   *  Persisted so the choice survives reloads. Defaults to a small history
+   *  buffer before today through ~6 months ahead. */
+  const readStoredDate = (key: string, fallback: Date): Date => {
+    if (typeof window === "undefined") return fallback;
+    const raw = localStorage.getItem(key);
+    if (!raw) return fallback;
+    const d = new Date(raw);
+    return Number.isNaN(d.getTime()) ? fallback : startOfDay(d);
+  };
+  const [rangeStart, setRangeStart] = useState<Date>(() =>
+    readStoredDate("multitask.gantt.rangeStart", addDays(startOfDay(new Date()), -14))
+  );
+  const [rangeEnd, setRangeEnd] = useState<Date>(() =>
+    readStoredDate("multitask.gantt.rangeEnd", addDays(startOfDay(new Date()), 26 * 7))
+  );
   useEffect(() => {
     if (typeof window === "undefined") return;
-    localStorage.setItem("multitask.gantt.spanWeeks", String(spanWeeks));
-  }, [spanWeeks]);
+    localStorage.setItem("multitask.gantt.rangeStart", rangeStart.toISOString());
+    localStorage.setItem("multitask.gantt.rangeEnd", rangeEnd.toISOString());
+  }, [rangeStart, rangeEnd]);
+  const handleRangeChange = (start: Date, end: Date) => {
+    setRangeStart(startOfDay(start));
+    setRangeEnd(startOfDay(end));
+  };
 
   /** Continuous zoom multiplier (0.5 .. 2.5). */
   const [zoomScale, setZoomScale] = useState<number>(() => {
@@ -276,16 +288,14 @@ export function Gantt() {
   const scopedProjectId = source.kind === "project" ? source.id : null;
   const { data: customFields = [] } = useProjectCustomFields(scopedProjectId);
 
-  // Window: 1/4 of the span sits before the anchor (so the user sees a bit
-  // of history) and 3/4 after (which is what they actually plan into).
-  const windowStart = useMemo(() => {
-    const span = weeksToDays(spanWeeks);
-    return addDays(startOfDay(anchor), -Math.floor(span / 4));
-  }, [anchor, spanWeeks]);
-  const windowEnd = useMemo(
-    () => addDays(windowStart, weeksToDays(spanWeeks)),
-    [windowStart, spanWeeks]
-  );
+  // Window: exactly the from/to dates the user picked. windowEnd is guarded
+  // to always sit strictly after windowStart.
+  const windowStart = useMemo(() => startOfDay(rangeStart), [rangeStart]);
+  const windowEnd = useMemo(() => {
+    const start = startOfDay(rangeStart);
+    const end = startOfDay(rangeEnd);
+    return end.getTime() > start.getTime() ? end : addDays(start, 7);
+  }, [rangeStart, rangeEnd]);
 
   const { data: events = [] } = useEvents({ from: windowStart.toISOString(), to: windowEnd.toISOString() });
 
@@ -586,8 +596,8 @@ export function Gantt() {
     <ScreenScaffold title="Gantt" subtitle="">
       <div className="space-y-2">
         <GanttChrome
-          zoom={zoom} onZoomChange={setZoom} anchor={anchor} onAnchorChange={setAnchor}
-          spanWeeks={spanWeeks} onSpanWeeksChange={setSpanWeeks}
+          zoom={zoom} onZoomChange={setZoom}
+          rangeStart={windowStart} rangeEnd={windowEnd} onRangeChange={handleRangeChange}
           zoomScale={zoomScale} onZoomScaleChange={setZoomScale}
           onExport={() => setExportOpen(true)}
           layer={layer} onLayerChange={setLayer} lists={unifiedLists} hiddenListIds={hiddenLists}

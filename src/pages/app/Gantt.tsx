@@ -152,25 +152,29 @@ export function Gantt() {
 
   // Vertical scroll-sync group — keeps the task table and the Gantt grid
   // (and the grid's own sidebar) scrolling in lockstep so rows stay aligned.
+  // The re-entrancy lock is released synchronously: scroll events from the
+  // programmatic scrollTop writes below are dispatched async, and by the time
+  // they run every pane already matches `top`, so the `!== top` guard makes
+  // them no-ops. Releasing via rAF instead would drop every scroll event that
+  // fires within the same frame, making the follower pane lag the driver.
   const scrollSync = useMemo(() => {
     const els = new Set<HTMLElement>();
     const handlers = new Map<HTMLElement, () => void>();
-    let lock = false;
+    let syncing = false;
     return {
       register(el: HTMLElement) {
         if (els.has(el)) return () => {};
         els.add(el);
         const onScroll = () => {
-          if (lock) return;
-          lock = true;
+          if (syncing) return;
+          syncing = true;
+          const top = el.scrollTop;
           for (const other of els) {
-            if (other !== el && other.scrollTop !== el.scrollTop) {
-              other.scrollTop = el.scrollTop;
+            if (other !== el && other.scrollTop !== top) {
+              other.scrollTop = top;
             }
           }
-          requestAnimationFrame(() => {
-            lock = false;
-          });
+          syncing = false;
         };
         handlers.set(el, onScroll);
         el.addEventListener("scroll", onScroll, { passive: true });

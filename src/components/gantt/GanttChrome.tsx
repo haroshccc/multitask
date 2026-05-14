@@ -59,6 +59,10 @@ interface GanttChromeProps {
   rangeEnd: Date;
   onRangeChange: (start: Date, end: Date) => void;
 
+  /** Timeline (bars) vs calendar (week/month grid) view inside the Gantt. */
+  ganttView: "timeline" | "calendar";
+  onGanttViewChange: (v: "timeline" | "calendar") => void;
+
   /** Continuous zoom multiplier (0.5 .. 2.5) for column density. */
   zoomScale: number;
   onZoomScaleChange: (n: number) => void;
@@ -136,6 +140,8 @@ export function GanttChrome({
   rangeStart,
   rangeEnd,
   onRangeChange,
+  ganttView,
+  onGanttViewChange,
   zoomScale,
   onZoomScaleChange,
   onExport,
@@ -238,6 +244,27 @@ export function GanttChrome({
       {/* Explicit from/to window — the user picks exactly what date span
           the Gantt shows. */}
       <RangePicker start={rangeStart} end={rangeEnd} onChange={onRangeChange} />
+
+      {/* Timeline (bars) vs calendar (week/month grid) view. */}
+      <div className="inline-flex rounded-md border border-ink-200 p-0.5 bg-ink-50 text-[11px]">
+        {([["timeline", "ציר זמן"], ["calendar", "יומן"]] as const).map(
+          ([v, lbl]) => (
+            <button
+              key={v}
+              onClick={() => onGanttViewChange(v)}
+              className={cn(
+                "px-2 py-0.5 rounded-sm font-medium transition-colors",
+                ganttView === v
+                  ? "bg-white text-ink-900 shadow-soft"
+                  : "text-ink-600 hover:text-ink-900"
+              )}
+              type="button"
+            >
+              {lbl}
+            </button>
+          )
+        )}
+      </div>
 
       {/* Zoom tabs — week / month / quarter. Day was dropped (too dense). */}
       <div className="inline-flex rounded-md border border-ink-200 p-0.5 bg-ink-50 text-[11px]">

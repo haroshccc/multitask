@@ -19,6 +19,7 @@ import { BulkActionsToolbar } from "@/components/tasks/BulkActionsToolbar";
 import { EventEditModal } from "@/components/calendar/EventEditModal";
 import { GanttChrome } from "@/components/gantt/GanttChrome";
 import { GanttGrid } from "@/components/gantt/GanttGrid";
+import { GanttCalendar } from "@/components/gantt/GanttCalendar";
 import { GanttTable } from "@/components/gantt/GanttTable";
 import { GanttExportModal } from "@/components/gantt/GanttExportModal";
 import {
@@ -95,6 +96,19 @@ export function Gantt() {
     if (typeof window === "undefined") return;
     localStorage.setItem("multitask.gantt.sidebarCollapsed", String(sidebarCollapsed));
   }, [sidebarCollapsed]);
+
+  /** Timeline (bars) vs calendar (week/month grid) view. Default timeline —
+   *  the calendar view is opt-in and never changes the timeline behaviour. */
+  const [ganttView, setGanttView] = useState<"timeline" | "calendar">(() => {
+    if (typeof window === "undefined") return "timeline";
+    return localStorage.getItem("multitask.gantt.view") === "calendar"
+      ? "calendar"
+      : "timeline";
+  });
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem("multitask.gantt.view", ganttView);
+  }, [ganttView]);
 
   const [tableLayout, setTableLayout] = useState<"side" | "stacked">(() => {
     if (typeof window === "undefined") return "side";
@@ -586,6 +600,14 @@ export function Gantt() {
     return m;
   }, [lists]);
 
+  // List id → color, for the calendar view's tasks that aren't under a
+  // colored phase (so they still pick up their list's color).
+  const listColorById = useMemo(() => {
+    const m = new Map<string, string | null>();
+    for (const l of lists) m.set(l.id, l.color);
+    return m;
+  }, [lists]);
+
   const exportTitle = useMemo(() => {
     if (source.kind === "list") return lists.find((l) => l.id === source.id)?.name ?? "Gantt";
     if (source.kind === "project") return projects.find((p) => p.id === source.id)?.name ?? "Gantt";
@@ -598,6 +620,7 @@ export function Gantt() {
         <GanttChrome
           zoom={zoom} onZoomChange={setZoom}
           rangeStart={windowStart} rangeEnd={windowEnd} onRangeChange={handleRangeChange}
+          ganttView={ganttView} onGanttViewChange={setGanttView}
           zoomScale={zoomScale} onZoomScaleChange={setZoomScale}
           onExport={() => setExportOpen(true)}
           layer={layer} onLayerChange={setLayer} lists={unifiedLists} hiddenListIds={hiddenLists}
@@ -633,7 +656,18 @@ export function Gantt() {
           </button>
         </div>
 
-        {sidebarCollapsed ? (
+        {ganttView === "calendar" ? (
+          <DndContext sensors={dndSensors} collisionDetection={pointerWithin} onDragEnd={handleGanttDragEnd}>
+            <div className={tableLayout === "side" ? "flex gap-2 items-stretch" : "flex flex-col gap-2"}>
+              <div className={tableLayout === "side" ? "basis-1/3 min-w-0 shrink-0" : ""}>
+                <GanttTable rows={visibleRows} allRows={criticalFilteredRows} deps={deps} criticalSet={criticalSet} onRowClick={handleRowClick} layout={tableLayout} onCreateTask={source.kind === "all" ? undefined : handleCreateTaskInScope} customFields={customFields} lists={unifiedLists} onToggleCritical={handleToggleCritical} collapsedIds={collapsedIds} onToggleCollapsed={toggleCollapsed} />
+              </div>
+              <div className={tableLayout === "side" ? "basis-2/3 min-w-0 grow" : ""}>
+                <GanttCalendar rows={visibleRows} listColorById={listColorById} userId={user?.id} onRowClick={handleRowClick} onBarChange={handleBarChange} />
+              </div>
+            </div>
+          </DndContext>
+        ) : sidebarCollapsed ? (
           <GanttGrid rows={visibleRows} deps={deps} zoom={zoom} zoomScale={zoomScale} windowStart={windowStart} windowEnd={windowEnd} criticalSet={criticalSet} onRowClick={handleRowClick} onBarChange={handleBarChange} onCreateAt={handleGanttCreateAt} onScheduleTask={handleScheduleTask} sidebarCollapsed={sidebarCollapsed} onToggleSidebar={() => setSidebarCollapsed((v) => !v)} baselineMap={baselineMap ?? undefined} onPhaseColorChange={handlePhaseColorChange} registerScroll={scrollSync.register} />
         ) : tableLayout === "side" ? (
           <DndContext sensors={dndSensors} collisionDetection={pointerWithin} onDragEnd={handleGanttDragEnd}>

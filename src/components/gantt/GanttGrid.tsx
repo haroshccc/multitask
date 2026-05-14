@@ -529,7 +529,9 @@ export function GanttGrid({
                         insetInlineStart: -4,
                         top: ROW_HEIGHT / 2 - 4,
                         backgroundColor: color,
-                        boxShadow: "0 0 0 1px white",
+                        boxShadow: overdue
+                          ? "0 0 0 1px white, 0 0 5px 1px rgba(239,68,68,0.9)"
+                          : "0 0 0 1px white",
                       }}
                       title={`דד-ליין: ${dl.toLocaleDateString("he-IL")}${
                         overdue ? " (חריגה)" : ""

@@ -211,15 +211,21 @@ export function GanttTable({
   };
 
   return (
-    <div
-      className={cn(
-        "card overflow-hidden flex flex-col",
-        layout === "stacked" && "max-h-[40vh]",
-        layout === "side" && "max-h-[calc(100vh-200px)]"
-      )}
-    >
-      <div ref={scrollRef} className="flex-1 min-h-0 overflow-auto scrollbar-thin">
-        <div role="table" className="w-full min-w-max text-[12px] tabular-nums">
+    <div className="card overflow-hidden">
+      {/* Plain-block scroll container — a block element's width is always its
+          containing block's width, never content-driven, so the card can
+          never be widened past the page by a wide grid. Horizontal overflow
+          scrolls *inside* here. */}
+      <div
+        ref={scrollRef}
+        className={cn(
+          "overflow-auto scrollbar-thin",
+          layout === "stacked" ? "max-h-[40vh]" : "max-h-[calc(100vh-200px)]"
+        )}
+      >
+        {/* w-max → as wide as the columns need (scrolls); min-w-full → never
+            narrower than the page (fills when columns fit). */}
+        <div role="table" className="w-max min-w-full text-[12px] tabular-nums">
           <div
             role="rowgroup"
             className="sticky top-0 z-10 bg-ink-50/95 backdrop-blur-sm border-b border-ink-200"

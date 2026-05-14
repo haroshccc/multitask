@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import {
   ChevronRight,
   ChevronLeft,
@@ -24,7 +24,7 @@ import {
 import { cn } from "@/lib/utils/cn";
 import { ListIcon } from "@/components/tasks/list-icons";
 import { ToggleButton, PopoverButton } from "@/components/layout/ChromeControls";
-import { addDays, type GanttLayer, type GanttZoom } from "./gantt-utils";
+import { addDays, startOfDay, type GanttLayer, type GanttZoom } from "./gantt-utils";
 
 interface UnifiedList {
   id: string;
@@ -54,14 +54,10 @@ export type GanttSource =
 interface GanttChromeProps {
   zoom: GanttZoom;
   onZoomChange: (z: GanttZoom) => void;
-  anchor: Date;
-  onAnchorChange: (d: Date) => void;
-
-  /** Visible-range width in weeks. The Gantt window = anchor − 1/4·span ..
-   *  anchor + 3/4·span. The user controls this from the chrome so they
-   *  can plan a few months or a year+ without scrolling. */
-  spanWeeks: number;
-  onSpanWeeksChange: (n: number) => void;
+  /** The visible window — the user picks the exact from/to dates. */
+  rangeStart: Date;
+  rangeEnd: Date;
+  onRangeChange: (start: Date, end: Date) => void;
 
   /** Continuous zoom multiplier (0.5 .. 2.5) for column density. */
   zoomScale: number;
@@ -137,10 +133,9 @@ const LAYER_LABELS: Record<GanttLayer, string> = {
 export function GanttChrome({
   zoom,
   onZoomChange,
-  anchor,
-  onAnchorChange,
-  spanWeeks,
-  onSpanWeeksChange,
+  rangeStart,
+  rangeEnd,
+  onRangeChange,
   zoomScale,
   onZoomScaleChange,
   onExport,
@@ -170,9 +165,19 @@ export function GanttChrome({
   onTableLayoutChange,
   className,
 }: GanttChromeProps) {
+  // Prev/next shift the whole window by its own width; "today" re-anchors
+  // the window to start a week before today, preserving its width.
   const step = (n: 1 | -1) => {
-    const days = zoom === "day" ? 7 : zoom === "week" ? 28 : zoom === "month" ? 90 : 180;
-    onAnchorChange(addDays(anchor, n * days));
+    const width = rangeEnd.getTime() - rangeStart.getTime();
+    onRangeChange(
+      new Date(rangeStart.getTime() + n * width),
+      new Date(rangeEnd.getTime() + n * width)
+    );
+  };
+  const goToday = () => {
+    const width = rangeEnd.getTime() - rangeStart.getTime();
+    const start = startOfDay(addDays(new Date(), -7));
+    onRangeChange(start, new Date(start.getTime() + width));
   };
 
   const visibleListCount = lists.length - hiddenListIds.size;
@@ -213,14 +218,13 @@ export function GanttChrome({
           <ChevronRight className="w-4 h-4" />
         </button>
         <button
-          onClick={() => onAnchorChange(new Date())}
+          onClick={goToday}
           className="text-xs px-2 py-1 rounded-md hover:bg-ink-100 text-ink-700 font-medium"
           type="button"
-          title="חזרה להיום"
+          title="הצג מהיום"
         >
           היום
         </button>
-        <AnchorDatePicker anchor={anchor} onChange={onAnchorChange} />
         <button
           onClick={() => step(1)}
           className="p-1.5 rounded-md hover:bg-ink-100 text-ink-700"
@@ -230,6 +234,10 @@ export function GanttChrome({
           <ChevronLeft className="w-4 h-4" />
         </button>
       </div>
+
+      {/* Explicit from/to window — the user picks exactly what date span
+          the Gantt shows. */}
+      <RangePicker start={rangeStart} end={rangeEnd} onChange={onRangeChange} />
 
       {/* Zoom tabs — week / month / quarter. Day was dropped (too dense). */}
       <div className="inline-flex rounded-md border border-ink-200 p-0.5 bg-ink-50 text-[11px]">
@@ -249,9 +257,6 @@ export function GanttChrome({
           </button>
         ))}
       </div>
-
-      {/* Span (weeks) — the visible-window width. */}
-      <SpanWeeksInput value={spanWeeks} onChange={onSpanWeeksChange} />
 
       {/* Continuous zoom slider — fine-tune column density. */}
       <ZoomSlider value={zoomScale} onChange={onZoomScaleChange} />
@@ -590,71 +595,54 @@ function SourcePicker({
 }
 
 /**
- * SpanWeeksInput — number input + presets to control how many weeks the
- * Gantt window shows.
+ * RangePicker — two native date inputs that drive the Gantt's visible
+ * window directly. The user picks exactly which from/to dates to see;
+ * `min`/`max` keep the two inputs from crossing over.
  */
-function SpanWeeksInput({
-  value,
+function RangePicker({
+  start,
+  end,
   onChange,
 }: {
-  value: number;
-  onChange: (n: number) => void;
+  start: Date;
+  end: Date;
+  onChange: (start: Date, end: Date) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const PRESETS: { weeks: number; label: string }[] = [
-    { weeks: 4, label: "חודש" },
-    { weeks: 13, label: "רבעון" },
-    { weeks: 26, label: "חצי שנה" },
-    { weeks: 52, label: "שנה" },
-    { weeks: 104, label: "שנתיים" },
-  ];
+  const toIso = (d: Date): string => {
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  };
+  const parse = (v: string): Date | null => {
+    if (!v) return null;
+    const [y, m, d] = v.split("-").map(Number);
+    return y && m && d ? new Date(y, m - 1, d) : null;
+  };
+  const inputCls =
+    "text-[11px] px-1.5 py-1 rounded-md border border-ink-200 hover:bg-ink-50 text-ink-700 font-medium tabular-nums";
   return (
-    <div className="relative inline-flex items-center">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-md border border-ink-200 hover:bg-ink-50 text-ink-700 font-medium tabular-nums"
-        title="טווח התצוגה בשבועות"
-      >
-        <span>{value} שב'</span>
-        <ChevronLeft className={cn("w-3 h-3 transition-transform", open && "-rotate-90")} />
-      </button>
-      {open && (
-        <>
-          <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
-          <div className="absolute top-full start-0 mt-1 z-40 w-44 bg-white border border-ink-200 rounded-xl shadow-lift py-1">
-            <div className="text-[10px] font-semibold text-ink-400 uppercase tracking-wider px-3 py-1 border-b border-ink-100">טווח תצוגה</div>
-            {PRESETS.map((p) => (
-              <button
-                key={p.weeks}
-                type="button"
-                onClick={() => { onChange(p.weeks); setOpen(false); }}
-                className={cn(
-                  "w-full flex items-center justify-between gap-2 px-3 py-1.5 text-sm text-start hover:bg-ink-50",
-                  p.weeks === value && "bg-primary-50 text-primary-700 font-medium"
-                )}
-              >
-                <span>{p.label}</span>
-                <span className="text-[10px] text-ink-400 tabular-nums">{p.weeks} שב'</span>
-              </button>
-            ))}
-            <div className="border-t border-ink-100 mt-1 pt-1 px-2 pb-1">
-              <label className="text-[10px] text-ink-500 block mb-0.5">מותאם אישית (שבועות)</label>
-              <input
-                type="number"
-                min={2}
-                max={260}
-                value={value}
-                onChange={(e) => {
-                  const n = Number(e.target.value);
-                  if (Number.isFinite(n) && n >= 2 && n <= 260) onChange(n);
-                }}
-                className="w-full text-sm px-2 py-1 border border-ink-200 rounded-md tabular-nums"
-              />
-            </div>
-          </div>
-        </>
-      )}
+    <div className="inline-flex items-center gap-1" title="טווח התאריכים בתצוגה">
+      <span className="text-[10px] text-ink-400">מ־</span>
+      <input
+        type="date"
+        value={toIso(start)}
+        max={toIso(end)}
+        onChange={(e) => {
+          const d = parse(e.target.value);
+          if (d) onChange(d, end);
+        }}
+        className={inputCls}
+      />
+      <span className="text-[10px] text-ink-400">עד</span>
+      <input
+        type="date"
+        value={toIso(end)}
+        min={toIso(start)}
+        onChange={(e) => {
+          const d = parse(e.target.value);
+          if (d) onChange(start, d);
+        }}
+        className={inputCls}
+      />
     </div>
   );
 }
@@ -702,64 +690,6 @@ function ZoomSlider({
       >
         <ZoomIn className="w-3.5 h-3.5" />
       </button>
-    </div>
-  );
-}
-
-function AnchorDatePicker({
-  anchor,
-  onChange,
-}: {
-  anchor: Date;
-  onChange: (d: Date) => void;
-}) {
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  const toIsoDate = (d: Date): string => {
-    const pad = (n: number) => String(n).padStart(2, "0");
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-  };
-
-  const label = anchor.toLocaleDateString("he-IL", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-
-  return (
-    <div className="relative inline-flex">
-      <button
-        type="button"
-        onClick={() => {
-          const el = inputRef.current;
-          if (!el) return;
-          const anyEl = el as HTMLInputElement & { showPicker?: () => void };
-          if (typeof anyEl.showPicker === "function") {
-            anyEl.showPicker();
-          } else {
-            el.focus();
-            el.click();
-          }
-        }}
-        className="text-xs px-2 py-1 rounded-md border border-ink-200 hover:bg-ink-50 text-ink-700 font-medium tabular-nums"
-        title="קפצי לתאריך"
-      >
-        {label}
-      </button>
-      <input
-        ref={inputRef}
-        type="date"
-        value={toIsoDate(anchor)}
-        onChange={(e) => {
-          const v = e.target.value;
-          if (!v) return;
-          const [y, m, d] = v.split("-").map(Number);
-          if (!y || !m || !d) return;
-          onChange(new Date(y, m - 1, d));
-        }}
-        className="absolute inset-0 opacity-0 pointer-events-none w-0 h-0"
-        tabIndex={-1}
-      />
     </div>
   );
 }

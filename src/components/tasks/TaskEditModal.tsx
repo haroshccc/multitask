@@ -62,6 +62,11 @@ import {
   useSetTaskShare,
   useRemoveTaskShare,
 } from "@/lib/hooks/useTaskShares";
+import {
+  useTaskAssignees,
+  useAddTaskAssignee,
+  useRemoveTaskAssignee,
+} from "@/lib/hooks/useTaskAssignees";
 import { useAuth } from "@/lib/auth/AuthContext";
 import { useTaskEdits, type TaskEditEntry } from "@/lib/hooks/useTaskEdits";
 import type { TimeEntry, UserTaskStatus } from "@/lib/types/domain";
@@ -166,6 +171,52 @@ export function TaskEditModal({
   const setShareAuto = useSetTaskShare();
   const { data: mainTaskShares = [] } = useTaskShares(taskId);
   const hasWriteShare = mainTaskShares.some((s) => s.permission === "write");
+  const { data: taskAssignees = [] } = useTaskAssignees(taskId);
+  const addAssignee = useAddTaskAssignee();
+  const removeAssignee = useRemoveTaskAssignee();
+  const hasOtherAssignee = taskAssignees.some((a) => a.user_id !== user?.id);
+  const isAnAssignee = taskAssignees.some((a) => a.user_id === user?.id);
+
+  // `tasks.assignee_user_id` is kept mirrored to the primary (first)
+  // assignee so single-assignee surfaces (TaskRow badge, Gantt, services)
+  // keep working while `task_assignees` holds the full set.
+  const syncPrimaryAssignee = (ids: string[]) => {
+    const primary = ids[0] ?? null;
+    setAssigneeId(primary);
+    if (!primary) setRequiresApproval(false);
+    if (taskId && primary !== (task?.assignee_user_id ?? null)) {
+      updateTask.mutate({ taskId, patch: { assignee_user_id: primary } });
+    }
+  };
+
+  const handleAddAssignee = (uid: string) => {
+    if (!taskId || !effectiveDelegateOrgId) return;
+    addAssignee.mutate({ taskId, userId: uid, orgId: effectiveDelegateOrgId });
+    if (uid !== user?.id) {
+      setShareAuto.mutate({
+        orgId: effectiveDelegateOrgId,
+        taskId,
+        userId: uid,
+        permission: "write",
+      });
+      const memberName =
+        delegateOrgMembers.find((m) => m.membership.user_id === uid)?.profile
+          ?.full_name ?? uid;
+      setAutoShareNotice(`שיתפנו אוטומטית עם ${memberName}`);
+    }
+    syncPrimaryAssignee([
+      ...taskAssignees.map((a) => a.user_id).filter((x) => x !== uid),
+      uid,
+    ]);
+  };
+
+  const handleRemoveAssignee = (uid: string) => {
+    if (!taskId) return;
+    removeAssignee.mutate({ taskId, userId: uid });
+    syncPrimaryAssignee(
+      taskAssignees.map((a) => a.user_id).filter((x) => x !== uid)
+    );
+  };
 
   const [tab, setTab] = useState<Tab>(defaultTab);
 
@@ -687,28 +738,22 @@ export function TaskEditModal({
                     <Field label="דחיפות">
                       <UrgencyBars value={urgency} onChange={setUrgency} />
                     </Field>
-                    <Field label="האצל למשתמש אחר">
+                    <Field label="האצלת משימה">
                       <DelegationPicker
-                        assigneeId={assigneeId}
+                        taskId={taskId ?? null}
                         orgs={allOrgs}
                         delegateOrgId={effectiveDelegateOrgId}
                         onOrgChange={setDelegateOrgId}
                         members={delegateOrgMembers}
                         currentUserId={user?.id ?? null}
-                        onChange={(v) => {
-                          setAssigneeId(v);
-                          if (!v) { setRequiresApproval(false); setAutoShareNotice(null); return; }
-                          if (v !== user?.id && taskId && effectiveDelegateOrgId) {
-                            setShareAuto.mutate({ orgId: effectiveDelegateOrgId, taskId, userId: v, permission: "write" });
-                            const memberName = delegateOrgMembers.find((m) => m.membership.user_id === v)?.profile?.full_name ?? v;
-                            setAutoShareNotice(`שיתפנו אוטומטית עם ${memberName}`);
-                          }
-                        }}
+                        assigneeIds={taskAssignees.map((a) => a.user_id)}
+                        onAdd={handleAddAssignee}
+                        onRemove={handleRemoveAssignee}
                       />
                     </Field>
                   </div>
 
-                  {((assigneeId && assigneeId !== user?.id) || hasWriteShare) && (
+                  {(hasOtherAssignee || hasWriteShare) && (
                   <div className="rounded-xl border border-ink-200 p-3 space-y-2.5">
                     <label className="flex items-center gap-2.5 cursor-pointer select-none">
                       <input
@@ -721,7 +766,7 @@ export function TaskEditModal({
                     </label>
 
                     {task && task.requires_approval &&
-                      task.assignee_user_id === user?.id &&
+                      isAnAssignee &&
                       task.status === "in_progress" &&
                       !task.completion_submitted_at && (
                       <button
@@ -742,7 +787,7 @@ export function TaskEditModal({
                     )}
 
                     {task && task.status === "pending_approval" &&
-                      task.assignee_user_id === user?.id &&
+                      isAnAssignee &&
                       task.approver_user_id !== user?.id && (
                       <div className="flex items-center gap-2 text-sm text-amber-700 bg-amber-50 rounded-xl px-3 py-2">
                         <span>⏳</span>
@@ -795,7 +840,7 @@ export function TaskEditModal({
                   </fieldset>
                   {/* --- End locked fields --- */}
 
-                  {autoShareNotice && assigneeId && assigneeId !== user?.id && (
+                  {autoShareNotice && hasOtherAssignee && (
                     <div className="flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2">
                       <span>✓</span>
                       <span>{autoShareNotice}</span>
@@ -855,6 +900,14 @@ export function TaskEditModal({
                     </Field>
                   </div>
 
+                  <Field label="צבע">
+                    <ColorPicker value={accentColor} onChange={setAccentColor} />
+                    <p className="text-[11px] text-ink-500 mt-1">
+                      צבע חד-פעמי למשימה זו — גובר על צבע הרשימה/השלב ביומן
+                      וב-Gantt.
+                    </p>
+                  </Field>
+
                   {task && task.parent_task_id === null && (
                     <div className="flex items-start gap-2 p-2 rounded-md border border-ink-200">
                       <label className="flex items-start gap-2 cursor-pointer select-none flex-1 hover:bg-ink-50 rounded-md -m-1 p-1">
@@ -874,54 +927,6 @@ export function TaskEditModal({
                           </div>
                         </div>
                       </label>
-                      <div className="flex flex-col items-center gap-1 shrink-0">
-                        <span className="text-[10px] text-ink-500">צבע</span>
-                        <div className="flex items-center gap-1">
-                          {PHASE_COLOR_PRESETS.map((c) => (
-                            <button
-                              key={c}
-                              type="button"
-                              onClick={() => setAccentColor(c)}
-                              className={cn(
-                                "w-5 h-5 rounded-full border transition-transform hover:scale-110",
-                                accentColor === c
-                                  ? "border-ink-900 ring-2 ring-offset-1 ring-ink-300"
-                                  : "border-ink-200"
-                              )}
-                              style={{ backgroundColor: c }}
-                              title={c}
-                              aria-label={`צבע ${c}`}
-                            />
-                          ))}
-                          <label
-                            className="w-5 h-5 rounded-full border border-ink-200 overflow-hidden cursor-pointer relative"
-                            title="צבע מותאם אישית"
-                            style={accentColor ? { backgroundColor: accentColor } : undefined}
-                          >
-                            {!accentColor && (
-                              <span className="absolute inset-0 flex items-center justify-center text-[10px] text-ink-400">
-                                +
-                              </span>
-                            )}
-                            <input
-                              type="color"
-                              value={accentColor ?? "#6b6b80"}
-                              onChange={(e) => setAccentColor(e.target.value)}
-                              className="absolute inset-0 opacity-0 cursor-pointer"
-                            />
-                          </label>
-                          {accentColor && (
-                            <button
-                              type="button"
-                              onClick={() => setAccentColor(null)}
-                              className="text-[11px] text-ink-400 hover:text-ink-700 px-0.5"
-                              title="ברירת מחדל"
-                            >
-                              ✕
-                            </button>
-                          )}
-                        </div>
-                      </div>
                     </div>
                   )}
                   </fieldset>
@@ -1580,18 +1585,80 @@ function TaskShareSection({
   );
 }
 
-function DelegationPicker({
-  assigneeId, orgs, delegateOrgId, onOrgChange, members, currentUserId, onChange,
+/** Per-task one-off accent color: presets + custom picker + reset. */
+function ColorPicker({
+  value,
+  onChange,
 }: {
-  assigneeId: string | null;
+  value: string | null;
+  onChange: (color: string | null) => void;
+}) {
+  return (
+    <div className="flex items-center gap-1 flex-wrap">
+      {PHASE_COLOR_PRESETS.map((c) => (
+        <button
+          key={c}
+          type="button"
+          onClick={() => onChange(c)}
+          className={cn(
+            "w-5 h-5 rounded-full border transition-transform hover:scale-110",
+            value === c
+              ? "border-ink-900 ring-2 ring-offset-1 ring-ink-300"
+              : "border-ink-200"
+          )}
+          style={{ backgroundColor: c }}
+          title={c}
+          aria-label={`צבע ${c}`}
+        />
+      ))}
+      <label
+        className="w-5 h-5 rounded-full border border-ink-200 overflow-hidden cursor-pointer relative"
+        title="צבע מותאם אישית"
+        style={value ? { backgroundColor: value } : undefined}
+      >
+        {!value && (
+          <span className="absolute inset-0 flex items-center justify-center text-[10px] text-ink-400">
+            +
+          </span>
+        )}
+        <input
+          type="color"
+          value={value ?? "#6b6b80"}
+          onChange={(e) => onChange(e.target.value)}
+          className="absolute inset-0 opacity-0 cursor-pointer"
+        />
+      </label>
+      {value && (
+        <button
+          type="button"
+          onClick={() => onChange(null)}
+          className="text-[11px] text-ink-400 hover:text-ink-700 px-0.5"
+          title="ברירת מחדל"
+        >
+          ✕
+        </button>
+      )}
+    </div>
+  );
+}
+
+function DelegationPicker({
+  taskId, orgs, delegateOrgId, onOrgChange, members, currentUserId,
+  assigneeIds, onAdd, onRemove,
+}: {
+  taskId: string | null;
   orgs: { id: string; name: string }[];
   delegateOrgId: string | null;
   onOrgChange: (orgId: string) => void;
   members: { membership: { user_id: string }; profile: { full_name: string | null } | null }[];
   currentUserId: string | null;
-  onChange: (userId: string | null) => void;
+  /** User ids the task is currently delegated to (may include self). */
+  assigneeIds: string[];
+  onAdd: (userId: string) => void;
+  onRemove: (userId: string) => void;
 }) {
-  const others = members.filter((m) => m.membership.user_id !== currentUserId);
+  const assigned = new Set(assigneeIds);
+  const hasOther = assigneeIds.some((id) => id !== currentUserId);
   return (
     <div className="flex flex-col gap-1.5">
       {orgs.length > 1 && (
@@ -1599,20 +1666,43 @@ function DelegationPicker({
           {orgs.map((o) => (<option key={o.id} value={o.id}>{o.name}</option>))}
         </select>
       )}
-      <select value={assigneeId ?? ""} onChange={(e) => onChange(e.target.value || null)} className="field text-sm">
-        <option value="">ללא האצלה</option>
-        {others.map((m) => (
-          <option key={m.membership.user_id} value={m.membership.user_id}>
-            {m.profile?.full_name ?? m.membership.user_id}
-          </option>
-        ))}
-        {assigneeId && assigneeId !== currentUserId && !others.find((m) => m.membership.user_id === assigneeId) && (
-          <option value={assigneeId}>{assigneeId}</option>
-        )}
-      </select>
-      {assigneeId && assigneeId !== currentUserId && (
+      {!taskId ? (
+        <p className="text-xs text-ink-500 px-1">
+          ניתן להאציל את המשימה לאחר שמירתה.
+        </p>
+      ) : (
+        <div className="flex flex-col gap-0.5 max-h-44 overflow-auto rounded-lg border border-ink-200 p-1.5">
+          {members.length === 0 && (
+            <p className="text-xs text-ink-400 px-1.5 py-1">אין חברי ארגון להאצלה.</p>
+          )}
+          {members.map((m) => {
+            const uid = m.membership.user_id;
+            const isSelf = uid === currentUserId;
+            const checked = assigned.has(uid);
+            const name = m.profile?.full_name ?? uid;
+            return (
+              <label
+                key={uid}
+                className="flex items-center gap-2 px-1.5 py-1 rounded-md hover:bg-ink-50 cursor-pointer text-sm select-none"
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={(e) => (e.target.checked ? onAdd(uid) : onRemove(uid))}
+                  className="w-4 h-4 rounded accent-primary-500"
+                />
+                <span className="truncate">
+                  {name}
+                  {isSelf && <span className="text-ink-400"> (אני)</span>}
+                </span>
+              </label>
+            );
+          })}
+        </div>
+      )}
+      {hasOther && (
         <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 leading-snug">
-          ⚠️ האצלה זו תשתף את המשימה עם המשתמש הנבחר — הם יוכלו לראות ולערוך אותה.
+          ⚠️ האצלה למשתמשים אחרים משתפת איתם את המשימה — הם יוכלו לראות ולערוך אותה.
         </p>
       )}
     </div>

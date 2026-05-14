@@ -51,6 +51,14 @@ interface GanttGridProps {
   zoomScale?: number;
   /** Called when user picks a new accent color for a phase from its hover card. */
   onPhaseColorChange?: (taskId: string, color: string) => void;
+  /** Collapsed parent task ids — drives the chevron state in the sidebar. */
+  collapsedIds?: Set<string>;
+  /** Toggle a parent row's collapsed state. */
+  onToggleCollapsed?: (taskId: string) => void;
+  /** Register a scrollable element into the page-level vertical scroll-sync
+   *  group so the grid stays row-aligned with the task table. Returns an
+   *  unregister cleanup. */
+  registerScroll?: (el: HTMLElement) => () => void;
 }
 
 export function GanttGrid({
@@ -70,6 +78,9 @@ export function GanttGrid({
   baselineMap,
   zoomScale = 1,
   onPhaseColorChange,
+  collapsedIds,
+  onToggleCollapsed,
+  registerScroll,
 }: GanttGridProps) {
   const pxPerDay = pxPerDayFn(zoom, zoomScale);
   const totalDays = Math.max(
@@ -86,6 +97,42 @@ export function GanttGrid({
   );
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const sidebarScrollRef = useRef<HTMLDivElement>(null);
+
+  // Vertical scroll-sync. When the page-level `registerScroll` group is
+  // provided, both the sidebar and the timeline join it (so they stay
+  // aligned with each other AND with the external task table). Without it,
+  // we still sync the sidebar ↔ timeline pair internally.
+  useEffect(() => {
+    const sidebar = sidebarScrollRef.current;
+    const timeline = scrollRef.current;
+    const cleanups: Array<() => void> = [];
+    if (registerScroll) {
+      if (timeline) cleanups.push(registerScroll(timeline));
+      if (sidebar) cleanups.push(registerScroll(sidebar));
+    } else if (sidebar && timeline) {
+      let lock = false;
+      const mk = (from: HTMLElement, to: HTMLElement) => () => {
+        if (lock) return;
+        lock = true;
+        if (to.scrollTop !== from.scrollTop) to.scrollTop = from.scrollTop;
+        requestAnimationFrame(() => {
+          lock = false;
+        });
+      };
+      const a = mk(sidebar, timeline);
+      const b = mk(timeline, sidebar);
+      sidebar.addEventListener("scroll", a, { passive: true });
+      timeline.addEventListener("scroll", b, { passive: true });
+      cleanups.push(() => {
+        sidebar.removeEventListener("scroll", a);
+        timeline.removeEventListener("scroll", b);
+      });
+    }
+    return () => {
+      for (const c of cleanups) c();
+    };
+  }, [registerScroll, sidebarCollapsed, hideInternalSidebar]);
 
   // Mouse-drag panning on the timeline — MS-Project-style. Holding the
   // middle-button or shift+left-button anywhere in the empty timeline area
@@ -159,11 +206,13 @@ export function GanttGrid({
   }
 
   return (
-    // Internal vertical scroll so the sticky timeline header stays pinned
-    // even when there are many rows. Cap height to a fraction of the
-    // viewport — MS-Project-style internal scroll container.
-    <div className="card overflow-hidden max-h-[calc(100vh-200px)] overflow-y-auto scrollbar-thin">
-      <div className="flex" style={{ minHeight: timelineHeight + 64 }}>
+    // The flex row is height-capped; the sidebar and the timeline each get
+    // their own scroll. The timeline scrolls in BOTH axes so its horizontal
+    // scrollbar sits on the bottom edge of the visible box — always reachable
+    // without first scrolling to the end of the chart. Vertical scroll is
+    // kept in lockstep across the panes via the scroll-sync group.
+    <div className="card overflow-hidden">
+      <div className="flex max-h-[calc(100vh-200px)]">
         {/* Left column: task rows — can be collapsed to a thin strip.
             Suppressed entirely when the parent renders an external
             GanttTable (hideInternalSidebar=true). */}
@@ -180,11 +229,12 @@ export function GanttGrid({
           </button>
         ) : (
         <div
-          className="shrink-0 border-e border-ink-200 bg-white"
+          ref={sidebarScrollRef}
+          className="shrink-0 border-e border-ink-200 bg-white overflow-y-auto scrollbar-thin"
           style={{ width: LEFT_COL_WIDTH }}
         >
           {/* Spacer for the 2-row header */}
-          <div className="h-16 border-b border-ink-200 bg-ink-50/60 flex items-end justify-between px-3 py-2">
+          <div className="h-16 border-b border-ink-200 bg-ink-50/95 backdrop-blur-sm sticky top-0 z-10 flex items-end justify-between px-3 py-2">
             <span className="eyebrow">משימה</span>
             {onToggleSidebar && (
               <button
@@ -222,6 +272,17 @@ export function GanttGrid({
               type="button"
               title={r.title}
             >
+              {r.kind === "task" && r.task && r.hasChildren ? (
+                <span
+                  onClick={(e) => { e.stopPropagation(); onToggleCollapsed?.(r.task!.id); }}
+                  className="shrink-0 w-4 h-4 -ms-1 flex items-center justify-center text-[10px] text-ink-400 hover:text-ink-900 hover:bg-ink-150 rounded cursor-pointer"
+                  title={collapsedIds?.has(r.task.id) ? "הרחב" : "כווץ"}
+                >
+                  {collapsedIds?.has(r.task.id) ? "◂" : "▾"}
+                </span>
+              ) : (
+                <span className="shrink-0 w-4 h-4 -ms-1" aria-hidden />
+              )}
               <span
                 className={cn(
                   "w-1.5 h-1.5 rounded-full shrink-0",
@@ -249,8 +310,8 @@ export function GanttGrid({
         </div>
         )}
 
-        {/* Timeline scrollable area */}
-        <div className="flex-1 overflow-x-auto scrollbar-thin" ref={scrollRef}>
+        {/* Timeline scrollable area — scrolls in both axes. */}
+        <div className="flex-1 overflow-auto scrollbar-thin" ref={scrollRef}>
           <div className="relative" style={{ width: timelineWidth }}>
             {/* Header — 2 rows: group labels (top), sub-ticks (bottom). */}
             <div className="sticky top-0 z-10 bg-ink-50/95 backdrop-blur-sm border-b border-ink-200">

@@ -126,6 +126,66 @@ export function Gantt() {
     localStorage.setItem("multitask.gantt.zoomScale", String(zoomScale));
   }, [zoomScale]);
 
+  /** Collapsed parent/phase task ids — their descendant rows are hidden. */
+  const [collapsedIds, setCollapsedIds] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set();
+    try {
+      const raw = localStorage.getItem("multitask.gantt.collapsedIds");
+      const arr = raw ? JSON.parse(raw) : null;
+      return Array.isArray(arr) ? new Set(arr as string[]) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem("multitask.gantt.collapsedIds", JSON.stringify([...collapsedIds]));
+  }, [collapsedIds]);
+  const toggleCollapsed = (taskId: string) => {
+    setCollapsedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(taskId)) next.delete(taskId);
+      else next.add(taskId);
+      return next;
+    });
+  };
+
+  // Vertical scroll-sync group — keeps the task table and the Gantt grid
+  // (and the grid's own sidebar) scrolling in lockstep so rows stay aligned.
+  const scrollSync = useMemo(() => {
+    const els = new Set<HTMLElement>();
+    const handlers = new Map<HTMLElement, () => void>();
+    let lock = false;
+    return {
+      register(el: HTMLElement) {
+        if (els.has(el)) return () => {};
+        els.add(el);
+        const onScroll = () => {
+          if (lock) return;
+          lock = true;
+          for (const other of els) {
+            if (other !== el && other.scrollTop !== el.scrollTop) {
+              other.scrollTop = el.scrollTop;
+            }
+          }
+          requestAnimationFrame(() => {
+            lock = false;
+          });
+        };
+        handlers.set(el, onScroll);
+        el.addEventListener("scroll", onScroll, { passive: true });
+        return () => {
+          els.delete(el);
+          const h = handlers.get(el);
+          if (h) {
+            el.removeEventListener("scroll", h);
+            handlers.delete(el);
+          }
+        };
+      },
+    };
+  }, []);
+
   const [filters, setFilters] = useFiltersFromUrl();
   const { data: tasks = [] } = useTasks(filters);
   const { data: deps = [] } = useAllTaskDependencies();
@@ -246,10 +306,33 @@ export function Gantt() {
     return merged;
   }, [rows, deps, filteredTasks]);
 
-  const visibleRows = useMemo(() => {
+  const parentOf = useMemo(() => {
+    const m = new Map<string, string | null>();
+    for (const t of tasks) m.set(t.id, t.parent_task_id ?? null);
+    return m;
+  }, [tasks]);
+
+  // Rows after the "critical only" filter — still the full hierarchy. The
+  // table uses these for WBS / % computations so collapsing a phase doesn't
+  // skew a parent's rolled-up percentage.
+  const criticalFilteredRows = useMemo(() => {
     if (!showCriticalOnly) return rows;
-    return rows.filter((r) => r.kind === "task" && r.task ? criticalSet.has(r.task.id) : false);
+    return rows.filter((r) => (r.kind === "task" && r.task ? criticalSet.has(r.task.id) : false));
   }, [rows, showCriticalOnly, criticalSet]);
+
+  // Rows actually rendered — descendants of a collapsed parent are dropped.
+  const visibleRows = useMemo(() => {
+    if (collapsedIds.size === 0) return criticalFilteredRows;
+    return criticalFilteredRows.filter((r) => {
+      if (r.kind !== "task" || !r.task) return true;
+      let p = parentOf.get(r.task.id) ?? null;
+      while (p) {
+        if (collapsedIds.has(p)) return false;
+        p = parentOf.get(p) ?? null;
+      }
+      return true;
+    });
+  }, [criticalFilteredRows, collapsedIds, parentOf]);
 
   const orderedTaskIds = useMemo(
     () => visibleRows.filter((r) => r.kind === "task" && r.task).map((r) => r.task!.id),
@@ -525,23 +608,23 @@ export function Gantt() {
         </div>
 
         {sidebarCollapsed ? (
-          <GanttGrid rows={visibleRows} deps={deps} zoom={zoom} zoomScale={zoomScale} windowStart={windowStart} windowEnd={windowEnd} criticalSet={criticalSet} onRowClick={handleRowClick} onBarChange={handleBarChange} onCreateAt={handleGanttCreateAt} onScheduleTask={handleScheduleTask} sidebarCollapsed={sidebarCollapsed} onToggleSidebar={() => setSidebarCollapsed((v) => !v)} baselineMap={baselineMap ?? undefined} onPhaseColorChange={handlePhaseColorChange} />
+          <GanttGrid rows={visibleRows} deps={deps} zoom={zoom} zoomScale={zoomScale} windowStart={windowStart} windowEnd={windowEnd} criticalSet={criticalSet} onRowClick={handleRowClick} onBarChange={handleBarChange} onCreateAt={handleGanttCreateAt} onScheduleTask={handleScheduleTask} sidebarCollapsed={sidebarCollapsed} onToggleSidebar={() => setSidebarCollapsed((v) => !v)} baselineMap={baselineMap ?? undefined} onPhaseColorChange={handlePhaseColorChange} registerScroll={scrollSync.register} />
         ) : tableLayout === "side" ? (
           <DndContext sensors={dndSensors} collisionDetection={pointerWithin} onDragEnd={handleGanttDragEnd}>
             <div className="flex gap-2 items-stretch">
               <div className="basis-1/3 min-w-0 shrink-0">
-                <GanttTable rows={visibleRows} deps={deps} criticalSet={criticalSet} onRowClick={handleRowClick} layout="side" onCreateTask={source.kind === "all" ? undefined : handleCreateTaskInScope} customFields={customFields} lists={unifiedLists} onToggleCritical={handleToggleCritical} />
+                <GanttTable rows={visibleRows} allRows={criticalFilteredRows} deps={deps} criticalSet={criticalSet} onRowClick={handleRowClick} layout="side" onCreateTask={source.kind === "all" ? undefined : handleCreateTaskInScope} customFields={customFields} lists={unifiedLists} onToggleCritical={handleToggleCritical} collapsedIds={collapsedIds} onToggleCollapsed={toggleCollapsed} registerScroll={scrollSync.register} />
               </div>
               <div className="basis-2/3 min-w-0 grow">
-                <GanttGrid rows={visibleRows} deps={deps} zoom={zoom} zoomScale={zoomScale} windowStart={windowStart} windowEnd={windowEnd} criticalSet={criticalSet} onRowClick={handleRowClick} onBarChange={handleBarChange} onCreateAt={handleGanttCreateAt} onScheduleTask={handleScheduleTask} hideInternalSidebar baselineMap={baselineMap ?? undefined} onPhaseColorChange={handlePhaseColorChange} />
+                <GanttGrid rows={visibleRows} deps={deps} zoom={zoom} zoomScale={zoomScale} windowStart={windowStart} windowEnd={windowEnd} criticalSet={criticalSet} onRowClick={handleRowClick} onBarChange={handleBarChange} onCreateAt={handleGanttCreateAt} onScheduleTask={handleScheduleTask} hideInternalSidebar baselineMap={baselineMap ?? undefined} onPhaseColorChange={handlePhaseColorChange} collapsedIds={collapsedIds} onToggleCollapsed={toggleCollapsed} registerScroll={scrollSync.register} />
               </div>
             </div>
           </DndContext>
         ) : (
           <DndContext sensors={dndSensors} collisionDetection={pointerWithin} onDragEnd={handleGanttDragEnd}>
             <div className="flex flex-col gap-2">
-              <GanttTable rows={visibleRows} deps={deps} criticalSet={criticalSet} onRowClick={handleRowClick} layout="stacked" onCreateTask={source.kind === "all" ? undefined : handleCreateTaskInScope} customFields={customFields} lists={unifiedLists} onToggleCritical={handleToggleCritical} />
-              <GanttGrid rows={visibleRows} deps={deps} zoom={zoom} zoomScale={zoomScale} windowStart={windowStart} windowEnd={windowEnd} criticalSet={criticalSet} onRowClick={handleRowClick} onBarChange={handleBarChange} onCreateAt={handleGanttCreateAt} onScheduleTask={handleScheduleTask} hideInternalSidebar baselineMap={baselineMap ?? undefined} onPhaseColorChange={handlePhaseColorChange} />
+              <GanttTable rows={visibleRows} allRows={criticalFilteredRows} deps={deps} criticalSet={criticalSet} onRowClick={handleRowClick} layout="stacked" onCreateTask={source.kind === "all" ? undefined : handleCreateTaskInScope} customFields={customFields} lists={unifiedLists} onToggleCritical={handleToggleCritical} collapsedIds={collapsedIds} onToggleCollapsed={toggleCollapsed} registerScroll={scrollSync.register} />
+              <GanttGrid rows={visibleRows} deps={deps} zoom={zoom} zoomScale={zoomScale} windowStart={windowStart} windowEnd={windowEnd} criticalSet={criticalSet} onRowClick={handleRowClick} onBarChange={handleBarChange} onCreateAt={handleGanttCreateAt} onScheduleTask={handleScheduleTask} hideInternalSidebar baselineMap={baselineMap ?? undefined} onPhaseColorChange={handlePhaseColorChange} collapsedIds={collapsedIds} onToggleCollapsed={toggleCollapsed} registerScroll={scrollSync.register} />
             </div>
           </DndContext>
         )}

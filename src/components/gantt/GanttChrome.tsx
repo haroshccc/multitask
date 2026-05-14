@@ -101,6 +101,10 @@ interface GanttChromeProps {
   // Critical-path-only filter
   showCriticalOnly: boolean;
   onToggleCriticalOnly: () => void;
+  /** Auto-computed critical path on/off. When off, only manually-flagged
+   *  (is_critical) tasks are treated as critical. */
+  autoCriticalPath: boolean;
+  onToggleAutoCriticalPath: () => void;
 
   // Sidebar (task-name column) collapse
   sidebarCollapsed: boolean;
@@ -158,6 +162,8 @@ export function GanttChrome({
   onToggleFilters,
   showCriticalOnly,
   onToggleCriticalOnly,
+  autoCriticalPath,
+  onToggleAutoCriticalPath,
   sidebarCollapsed,
   onToggleSidebar,
   tableLayout,
@@ -353,13 +359,50 @@ export function GanttChrome({
           badge={filtersActiveCount > 0 ? String(filtersActiveCount) : undefined}
         />
 
-        <ToggleButton
-          active={showCriticalOnly}
-          onClick={onToggleCriticalOnly}
+        <PopoverButton
           icon={<Flame className="w-3.5 h-3.5" />}
           label="נתיב קריטי"
-          badge={showCriticalOnly ? "on" : undefined}
-        />
+          title="נתיב קריטי"
+          badge={showCriticalOnly ? "on" : !autoCriticalPath ? "ידני" : undefined}
+        >
+          {() => (
+            <div className="py-1">
+              <button
+                type="button"
+                onClick={onToggleAutoCriticalPath}
+                className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-start hover:bg-ink-50"
+              >
+                <span
+                  className={cn(
+                    "w-3 h-3 rounded-sm border flex items-center justify-center shrink-0",
+                    autoCriticalPath ? "bg-primary-500 border-primary-500" : "border-ink-300 bg-white"
+                  )}
+                >
+                  {autoCriticalPath && <Check className="w-2.5 h-2.5 text-white" />}
+                </span>
+                <span className="flex-1">חישוב אוטומטי</span>
+              </button>
+              <button
+                type="button"
+                onClick={onToggleCriticalOnly}
+                className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-start hover:bg-ink-50"
+              >
+                <span
+                  className={cn(
+                    "w-3 h-3 rounded-sm border flex items-center justify-center shrink-0",
+                    showCriticalOnly ? "bg-primary-500 border-primary-500" : "border-ink-300 bg-white"
+                  )}
+                >
+                  {showCriticalOnly && <Check className="w-2.5 h-2.5 text-white" />}
+                </span>
+                <span className="flex-1">הצג רק קריטי</span>
+              </button>
+              <p className="text-[10px] text-ink-400 px-3 py-1.5 border-t border-ink-100 mt-1 leading-relaxed">
+                כשחישוב אוטומטי כבוי — רק משימות שסומנו ידנית נחשבות קריטיות.
+              </p>
+            </div>
+          )}
+        </PopoverButton>
 
         <ToggleButton
           active={sidebarCollapsed}

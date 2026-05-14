@@ -506,7 +506,9 @@ export function GanttGrid({
                   ((dl.getTime() - windowStart.getTime()) / DAY_MS) * pxPerDay;
                 if (left < 0 || left > timelineWidth) return null;
                 const overdue = r.end.getTime() > dl.getTime();
-                const color = overdue ? "#ef4444" : "#f59e0b";
+                // Marker takes the row's phase color; overdue stays red as a
+                // warning. Tasks outside any phase fall back to amber.
+                const color = overdue ? "#ef4444" : r.accentColor ?? "#f59e0b";
                 return (
                   <div
                     key={r.id + "-deadline"}

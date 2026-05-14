@@ -177,11 +177,44 @@ Spawning a sub-agent (`Agent` tool) to call `mcp__github__push_files` for **larg
   - Demand abort+report on any verification failure.
 - After any MCP push, verify with `git fetch origin main && git show origin/main:<path> | wc -l` before assuming success — the deploy may roll back to the previous READY build, hiding corruption.
 
+## Gantt / calendar
+
+### Per-task accent color
+A task's `accent_color` wins over phase/list color in the Gantt bars and the
+Gantt calendar (`gantt-utils.ts`). The color picker is a standalone field on
+**every** task in `TaskEditModal`, not just phases.
+
+### Gantt calendar day notes
+The Gantt screen's calendar (week & month) displays and edits the per-day note
+shown at the top of each day cell, reusing the regular calendar's notes (same
+`calendar_day_notes` table). Day notes have an optional `text_color` (CSS
+color) — color picker in `DayNoteDialog`, applied in `DayNoteSlot`, threaded
+through week/month/day views in both the regular calendar and the Gantt one.
+
+### Month-view deadlines
+Deadlines render as a distinct hourglass + underline chip in
+`CalendarMonthView`, matching the day view.
+
+## Multi-user task delegation
+
+`task_assignees` join table — a task can be delegated to several users at once
+(including yourself). `tasks.assignee_user_id` stays mirrored to the **primary**
+assignee (first one) for backward compatibility with single-assignee surfaces
+(TaskRow badge, Gantt, services filter, approval flow). `task_assignees` is the
+source of truth for the full set; "requires approval" stays global to the task.
+
+- `handle_task_assignee_added` trigger notifies new assignees; self-delegation
+  skips the notification, the auto-share, and the warning.
+- The delegation picker in `TaskEditModal` is a multi-select.
+- Service: `src/lib/services/task-assignees.ts`; hook: `useTaskAssignees.ts`.
+
 ## Migrations applied
 
 | File | Description |
 |---|---|
 | `20260508000001_food_sharing.sql` | Adds `food_shared` to orgs, `org_food_is_shared()` helper, updated RLS for all food tables |
+| `20260514000003_task_assignees.sql` | `task_assignees` join table + RLS + notify trigger; backfill from `assignee_user_id` |
+| `20260514000004_calendar_day_note_text_color.sql` | Adds `text_color` column to `calendar_day_notes` |
 
 ## Common build errors to watch for
 

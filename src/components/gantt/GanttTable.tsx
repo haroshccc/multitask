@@ -223,9 +223,10 @@ export function GanttTable({
           layout === "stacked" ? "max-h-[40vh]" : "max-h-[calc(100vh-200px)]"
         )}
       >
-        {/* w-max → as wide as the columns need (scrolls); min-w-full → never
-            narrower than the page (fills when columns fit). */}
-        <div role="table" className="w-max min-w-full text-[12px] tabular-nums">
+        {/* w-full → the grid always fits its container width; the flexible
+            (1fr) columns absorb the slack so the table fills the page instead
+            of forcing a horizontal scrollbar. */}
+        <div role="table" className="w-full text-[12px] tabular-nums">
           <div
             role="rowgroup"
             className="sticky top-0 z-10 bg-ink-50/95 backdrop-blur-sm border-b border-ink-200"

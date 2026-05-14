@@ -497,6 +497,46 @@ export function GanttGrid({
                 );
               })}
 
+              {/* Deadline markers — a diamond on each task's row at its
+                  deadline date. Turns red when the bar runs past it. */}
+              {rows.map((r, i) => {
+                if (r.kind !== "task" || !r.task?.deadline_at) return null;
+                const dl = new Date(r.task.deadline_at);
+                const left =
+                  ((dl.getTime() - windowStart.getTime()) / DAY_MS) * pxPerDay;
+                if (left < 0 || left > timelineWidth) return null;
+                const overdue = r.end.getTime() > dl.getTime();
+                const color = overdue ? "#ef4444" : "#f59e0b";
+                return (
+                  <div
+                    key={r.id + "-deadline"}
+                    className="absolute z-10"
+                    style={{
+                      insetInlineStart: left,
+                      top: i * ROW_HEIGHT,
+                      height: ROW_HEIGHT,
+                    }}
+                  >
+                    <div
+                      className="absolute top-1 bottom-1 w-px pointer-events-none"
+                      style={{ backgroundColor: color, insetInlineStart: -0.5 }}
+                    />
+                    <div
+                      className="absolute w-2 h-2 rotate-45"
+                      style={{
+                        insetInlineStart: -4,
+                        top: ROW_HEIGHT / 2 - 4,
+                        backgroundColor: color,
+                        boxShadow: "0 0 0 1px white",
+                      }}
+                      title={`דד-ליין: ${dl.toLocaleDateString("he-IL")}${
+                        overdue ? " (חריגה)" : ""
+                      }`}
+                    />
+                  </div>
+                );
+              })}
+
               {/* Dependency arrows */}
               <GanttDependencyArrows
                 rows={rows}

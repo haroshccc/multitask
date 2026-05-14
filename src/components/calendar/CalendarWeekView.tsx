@@ -57,6 +57,8 @@ interface CalendarWeekViewProps {
   onItemDrop?: ItemDropHandler;
   /** Lookup: per-date note body (yyyy-mm-dd → string). */
   notesByDate?: Map<string, string>;
+  /** Lookup: per-date note text color (yyyy-mm-dd → CSS color). */
+  noteColorsByDate?: Map<string, string>;
   /** Click on a column's date digit → open the per-day note editor. */
   onDateNoteClick?: (date: Date) => void;
   /** Display-only mode — hides the per-task check-off controls. */
@@ -74,6 +76,7 @@ export function CalendarWeekView({
   onCreateAt,
   onItemDrop,
   notesByDate,
+  noteColorsByDate,
   onDateNoteClick,
   readOnly,
 }: CalendarWeekViewProps) {
@@ -319,7 +322,11 @@ export function CalendarWeekView({
                   </div>
                   <div className="text-sm font-semibold">{day.getDate()}</div>
                 </button>
-                <DayNoteSlot body={noteBody} className="flex-1 text-end" />
+                <DayNoteSlot
+                  body={noteBody}
+                  textColor={noteColorsByDate?.get(dayNoteKey(day))}
+                  className="flex-1 text-end"
+                />
               </div>
             </div>
           );

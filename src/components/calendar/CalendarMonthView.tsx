@@ -54,6 +54,8 @@ interface CalendarMonthViewProps {
   onItemDrop?: ItemDropHandler;
   /** Lookup: per-date note body (yyyy-mm-dd → string). */
   notesByDate?: Map<string, string>;
+  /** Lookup: per-date note text color (yyyy-mm-dd → CSS color). */
+  noteColorsByDate?: Map<string, string>;
   /** Display-only mode — hides the per-task check-off controls. */
   readOnly?: boolean;
 }
@@ -66,6 +68,7 @@ export function CalendarMonthView({
   onCellClick,
   onItemDrop,
   notesByDate,
+  noteColorsByDate,
   readOnly,
 }: CalendarMonthViewProps) {
   /**
@@ -289,6 +292,7 @@ export function CalendarMonthView({
                         </button>
                         <DayNoteSlot
                           body={notesByDate?.get(monthDayKey(day))}
+                          textColor={noteColorsByDate?.get(monthDayKey(day))}
                           className="flex-1 text-end"
                         />
                       </div>

@@ -131,7 +131,7 @@ export function Calendar() {
 
   // Per-day notes for the visible window. Empty `notesByDate` is fine —
   // the views just render the date digit without a note next to it.
-  const { notesByDate } = useCalendarDayNotes(
+  const { notesByDate, noteColorsByDate } = useCalendarDayNotes(
     dateKey(range.from),
     dateKey(range.to)
   );
@@ -566,6 +566,7 @@ export function Calendar() {
             onCreateAt={handleCreateAt}
             onItemDrop={handleItemDrop}
             dayNote={notesByDate.get(dateKey(anchor))}
+            dayNoteColor={noteColorsByDate.get(dateKey(anchor))}
             onDateNoteClick={setEditingNoteDate}
           />
         )}
@@ -581,6 +582,7 @@ export function Calendar() {
             onCreateAt={handleCreateAt}
             onItemDrop={handleItemDrop}
             notesByDate={notesByDate}
+            noteColorsByDate={noteColorsByDate}
             onDateNoteClick={setEditingNoteDate}
           />
         )}
@@ -593,6 +595,7 @@ export function Calendar() {
             onCellClick={handleMonthCellClick}
             onItemDrop={handleItemDrop}
             notesByDate={notesByDate}
+            noteColorsByDate={noteColorsByDate}
           />
         )}
         {view === "agenda" && (
@@ -677,6 +680,11 @@ export function Calendar() {
         date={editingNoteDate}
         initialBody={
           editingNoteDate ? notesByDate.get(dateKey(editingNoteDate)) ?? "" : ""
+        }
+        initialColor={
+          editingNoteDate
+            ? noteColorsByDate.get(dateKey(editingNoteDate)) ?? null
+            : null
         }
         onClose={() => setEditingNoteDate(null)}
       />

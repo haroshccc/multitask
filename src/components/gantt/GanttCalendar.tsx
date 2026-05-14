@@ -38,6 +38,14 @@ interface GanttCalendarProps {
     row: GanttRow,
     patch: { scheduled_at: string; duration_minutes: number }
   ) => void;
+  /** Drag a single occurrence of a recurring task and choose "this
+   *  occurrence only" → suppress the original instance and add a
+   *  standalone replacement at `newStart`. */
+  onMoveOccurrence: (
+    row: GanttRow,
+    originalStart: Date,
+    newStart: Date
+  ) => void;
 }
 
 /**
@@ -55,6 +63,7 @@ export function GanttCalendar({
   userId,
   onRowClick,
   onBarChange,
+  onMoveOccurrence,
 }: GanttCalendarProps) {
   const { effectiveRange } = useCalendarPrefs();
 
@@ -202,11 +211,14 @@ export function GanttCalendar({
   const handleItemDrop = (item: CalendarItem, action: DropAction) => {
     const row = rowByItemId.get(item.id);
     if (!row) return;
-    // Only plain (non-recurring) tasks/events reschedule by drag. Dragging a
-    // single expanded occurrence shouldn't rewrite the whole series, and a
-    // deadline marker isn't a field the timeline's bar-change understands.
+    // A deadline marker isn't a field the timeline's bar-change understands.
     if (item.kind === "deadline") return;
-    if (item.id.split(":").length > 2) return; // expanded occurrence
+    // `entity:uuid:timestamp` → an expanded occurrence of a recurring item.
+    const isOccurrence = item.id.split(":").length > 2;
+    // Recurring EVENT occurrences aren't individually movable (no
+    // per-occurrence storage for events) — leave the series untouched.
+    if (isOccurrence && item.kind !== "task") return;
+
     let newStart = item.start;
     let newEnd = item.end;
     if (action.kind === "move") {
@@ -224,11 +236,33 @@ export function GanttCalendar({
         newStart = new Date(newEnd.getTime() - 15 * 60_000);
       }
     }
+    const durationMinutes = Math.round(
+      (newEnd.getTime() - newStart.getTime()) / 60_000
+    );
+
+    if (isOccurrence) {
+      // Resizing a single occurrence isn't supported — duration is a
+      // series-level property and there's no per-occurrence store for it.
+      if (action.kind !== "move") return;
+      const moveAll = window.confirm(
+        "להזיז את כל החזרות של המשימה?\n\n" +
+          "אישור = כל הסדרה תזוז יחד.\n" +
+          "ביטול = רק המופע הזה יזוז (ייווצר מועד ספציפי בתוך הסדרה)."
+      );
+      if (moveAll) {
+        onBarChange(row, {
+          scheduled_at: newStart.toISOString(),
+          duration_minutes: durationMinutes,
+        });
+      } else {
+        onMoveOccurrence(row, item.start, newStart);
+      }
+      return;
+    }
+
     onBarChange(row, {
       scheduled_at: newStart.toISOString(),
-      duration_minutes: Math.round(
-        (newEnd.getTime() - newStart.getTime()) / 60_000
-      ),
+      duration_minutes: durationMinutes,
     });
   };
 
@@ -299,6 +333,7 @@ export function GanttCalendar({
             onItemClick={handleItemClick}
             onCreateAt={() => {}}
             onItemDrop={handleItemDrop}
+            readOnly
           />
         ) : (
           <CalendarMonthView
@@ -307,6 +342,7 @@ export function GanttCalendar({
             onItemClick={handleItemClick}
             onDayClick={() => {}}
             onItemDrop={handleItemDrop}
+            readOnly
           />
         )}
       </div>

@@ -59,6 +59,8 @@ interface CalendarWeekViewProps {
   notesByDate?: Map<string, string>;
   /** Click on a column's date digit → open the per-day note editor. */
   onDateNoteClick?: (date: Date) => void;
+  /** Display-only mode — hides the per-task check-off controls. */
+  readOnly?: boolean;
 }
 
 export function CalendarWeekView({
@@ -73,6 +75,7 @@ export function CalendarWeekView({
   onItemDrop,
   notesByDate,
   onDateNoteClick,
+  readOnly,
 }: CalendarWeekViewProps) {
   const weekStart = startOfWeek(anchor);
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
@@ -366,6 +369,7 @@ export function CalendarWeekView({
               span={span}
               row={row}
               onClick={() => onItemClick(item)}
+              readOnly={readOnly}
             />
           ))}
         </div>
@@ -409,7 +413,7 @@ export function CalendarWeekView({
                           : "bg-violet-100 text-violet-800 hover:bg-violet-200"
                       )}
                     >
-                      {isTask && (
+                      {isTask && !readOnly && (
                         <TaskCheckButton
                           taskId={(item.source as { id: string }).id}
                           completed={item.completed}
@@ -536,6 +540,7 @@ export function CalendarWeekView({
                     actuals={taskActuals}
                     onClick={() => onItemClick(item)}
                     compact
+                    readOnly={readOnly}
                   />
                 );
               })}
@@ -626,6 +631,7 @@ function MultiDayBand({
   span,
   row,
   onClick,
+  readOnly,
 }: {
   item: CalendarItem;
   now: Date;
@@ -633,6 +639,7 @@ function MultiDayBand({
   span: number;
   row: number;
   onClick: () => void;
+  readOnly?: boolean;
 }) {
   const isTask = item.kind === "task";
   const isPhase = !!item.isPhase;
@@ -702,7 +709,7 @@ function MultiDayBand({
       }}
       title={itemTooltip(item)}
     >
-      {isTask && !isPhase && (
+      {isTask && !isPhase && !readOnly && (
         <TaskCheckButton
           taskId={(item.source as { id: string }).id}
           completed={item.completed}

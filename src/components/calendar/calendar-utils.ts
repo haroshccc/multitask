@@ -262,11 +262,23 @@ export function taskExtraOccurrences(t: Task): Date[] {
 }
 
 /**
+ * Parse a task's `excluded_occurrences` JSONB column into a Set of ISO
+ * timestamp strings — the RRULE-expanded instances the user has moved
+ * away (suppressed) via a single-occurrence reschedule.
+ */
+export function taskExcludedOccurrences(t: Task): Set<string> {
+  const raw = (t as { excluded_occurrences?: unknown }).excluded_occurrences;
+  if (!Array.isArray(raw)) return new Set();
+  return new Set(raw.filter((x): x is string => typeof x === "string"));
+}
+
+/**
  * The full set of occurrence start-times for a task inside [from, to):
  * RRULE-expanded occurrences (if any) merged with the task's ad-hoc
- * `extra_occurrences`, de-duplicated and sorted. When the task has no
- * RRULE the base `scheduled_at` is seeded as the first occurrence so a
- * plain task with only extra dates still shows its original slot.
+ * `extra_occurrences`, minus any `excluded_occurrences`, de-duplicated
+ * and sorted. When the task has no RRULE the base `scheduled_at` is
+ * seeded as the first occurrence so a plain task with only extra dates
+ * still shows its original slot.
  */
 export function expandTaskOccurrences(
   t: Task,
@@ -283,6 +295,11 @@ export function expandTaskOccurrences(
     }
   } else if (base.start >= from && base.start < to) {
     occ = [base.start];
+  }
+  // Drop instances the user moved away (single-occurrence reschedule).
+  const excluded = taskExcludedOccurrences(t);
+  if (excluded.size > 0) {
+    occ = occ.filter((d) => !excluded.has(d.toISOString()));
   }
   const seen = new Set(occ.map((d) => d.getTime()));
   for (const d of taskExtraOccurrences(t)) {

@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import {
+  Eye,
+  EyeOff,
   GripVertical,
   Link2,
   Settings2,
@@ -115,6 +117,12 @@ interface GanttTableProps {
   collapsedIds?: Set<string>;
   /** Toggle a parent row's collapsed state. */
   onToggleCollapsed?: (taskId: string) => void;
+  /** Individually-hidden task ids — these rows stay in the table (dimmed)
+   *  but are removed from the Gantt grid / calendar views. Independent of
+   *  collapse: hiding a task does NOT hide its children. */
+  hiddenTaskIds?: Set<string>;
+  /** Toggle a single task's hidden state. */
+  onToggleHidden?: (taskId: string) => void;
   /** Register the scroll container into the page-level vertical scroll-sync
    *  group so the table stays row-aligned with the Gantt grid. */
   registerScroll?: (el: HTMLElement) => () => void;
@@ -133,6 +141,8 @@ export function GanttTable({
   allRows,
   collapsedIds,
   onToggleCollapsed,
+  hiddenTaskIds,
+  onToggleHidden,
   registerScroll,
 }: GanttTableProps) {
   const baseRows = allRows ?? rows;
@@ -379,6 +389,8 @@ export function GanttTable({
                 listName={r.task?.task_list_id ? listNameMap.get(r.task.task_list_id) : undefined}
                 collapsedIds={collapsedIds}
                 onToggleCollapsed={onToggleCollapsed}
+                hiddenTaskIds={hiddenTaskIds}
+                onToggleHidden={onToggleHidden}
               />
             ))}
           </div>
@@ -428,19 +440,22 @@ interface GanttTableBodyRowProps {
   listName?: string;
   collapsedIds?: Set<string>;
   onToggleCollapsed?: (taskId: string) => void;
+  hiddenTaskIds?: Set<string>;
+  onToggleHidden?: (taskId: string) => void;
 }
 
 function GanttTableBodyRow({
   row, gridTemplate, cols, criticalSet, taskDeps, visibleTaskMap, visibleCustomFields,
   onRowClick, onUpdate, onComplete, onAddDep, onRemoveDep, onUpdateDep, onToggleCritical,
   multipleListsVisible, wbsNumber, percentComplete, listName,
-  collapsedIds, onToggleCollapsed,
+  collapsedIds, onToggleCollapsed, hiddenTaskIds, onToggleHidden,
 }: GanttTableBodyRowProps) {
   const isTask = row.kind === "task" && !!row.task;
   const isCritical = isTask && criticalSet.has(row.task!.id);
   const isPhase = !!row.isPhase;
   const isEvent = row.kind === "event";
   const isUnscheduled = !!row.unscheduled;
+  const isHidden = isTask && !!hiddenTaskIds?.has(row.task!.id);
 
   const { attributes, listeners, setNodeRef: setDragRef, isDragging } = useDraggable({
     id: `gantt-task:${row.id}`,
@@ -471,6 +486,7 @@ function GanttTableBodyRow({
         "relative grid border-b border-ink-150 hover:bg-ink-100 group/sel",
         isUnscheduled ? "bg-ink-100" : "bg-white",
         row.completed && "opacity-60",
+        isHidden && "opacity-40",
         isCritical && "bg-danger-500/5",
         isPhase && !isUnscheduled && "bg-ink-50/60 font-semibold",
         isPhase && isUnscheduled && "font-semibold",
@@ -537,6 +553,20 @@ function GanttTableBodyRow({
           <TitleCell task={row.task} onCommit={(next) => onUpdate(row.task!.id, { title: next }, "שינוי כותרת", { title: row.task!.title })} />
         ) : (
           <span className="truncate flex-1 min-w-0">{row.title}</span>
+        )}
+        {isTask && row.task && onToggleHidden && (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onToggleHidden(row.task!.id); }}
+            className={cn(
+              "shrink-0 w-5 h-5 flex items-center justify-center rounded text-ink-400 hover:text-ink-900 hover:bg-ink-150 transition-opacity",
+              isHidden ? "opacity-100 text-ink-700" : "opacity-0 group-hover/sel:opacity-100"
+            )}
+            title={isHidden ? "הצג בגאנט/יומן" : "הסתר מהגאנט/יומן (יישאר בטבלה)"}
+            aria-pressed={isHidden}
+          >
+            {isHidden ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+          </button>
         )}
       </div>
 

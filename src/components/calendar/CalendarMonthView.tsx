@@ -54,6 +54,8 @@ interface CalendarMonthViewProps {
   onItemDrop?: ItemDropHandler;
   /** Lookup: per-date note body (yyyy-mm-dd → string). */
   notesByDate?: Map<string, string>;
+  /** Display-only mode — hides the per-task check-off controls. */
+  readOnly?: boolean;
 }
 
 export function CalendarMonthView({
@@ -64,6 +66,7 @@ export function CalendarMonthView({
   onCellClick,
   onItemDrop,
   notesByDate,
+  readOnly,
 }: CalendarMonthViewProps) {
   /**
    * Compute the target Date for a drop on `day`. For "move" we keep the
@@ -296,6 +299,7 @@ export function CalendarMonthView({
                             item={it}
                             now={now}
                             onClick={() => onItemClick(it)}
+                            readOnly={readOnly}
                           />
                         ))}
                         {overflow > 0 && (
@@ -508,10 +512,12 @@ function MonthItemChip({
   item,
   now,
   onClick,
+  readOnly,
 }: {
   item: CalendarItem;
   now: Date;
   onClick: () => void;
+  readOnly?: boolean;
 }) {
   const { prefs } = useCalendarPrefs();
   const tz = prefs.timezone;
@@ -597,15 +603,17 @@ function MonthItemChip({
       }}
       title={`${itemTooltip(item)}\n${formatHour(item.start, tz)} עד ${formatHour(item.end, tz)}`}
     >
-      <TaskCheckButton
-        taskId={(item.source as { id: string }).id}
-        completed={item.completed}
-        accent={accent}
-        size="sm"
-        occurrenceStart={
-          item.id.split(":").length === 3 ? item.start : undefined
-        }
-      />
+      {!readOnly && (
+        <TaskCheckButton
+          taskId={(item.source as { id: string }).id}
+          completed={item.completed}
+          accent={accent}
+          size="sm"
+          occurrenceStart={
+            item.id.split(":").length === 3 ? item.start : undefined
+          }
+        />
+      )}
       <span className="shrink-0 text-ink-500 tabular-nums">
         {item.allDay
           ? ""

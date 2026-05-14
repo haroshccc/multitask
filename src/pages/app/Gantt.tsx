@@ -186,6 +186,32 @@ export function Gantt() {
     });
   };
 
+  /** Individually-hidden task ids. Unlike collapse, hiding a task removes
+   *  only that row from the Gantt grid / calendar — its children stay
+   *  visible. The task table still shows the row, dimmed. */
+  const [hiddenTaskIds, setHiddenTaskIds] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set();
+    try {
+      const raw = localStorage.getItem("multitask.gantt.hiddenTaskIds");
+      const arr = raw ? JSON.parse(raw) : null;
+      return Array.isArray(arr) ? new Set(arr as string[]) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem("multitask.gantt.hiddenTaskIds", JSON.stringify([...hiddenTaskIds]));
+  }, [hiddenTaskIds]);
+  const toggleHidden = (taskId: string) => {
+    setHiddenTaskIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(taskId)) next.delete(taskId);
+      else next.add(taskId);
+      return next;
+    });
+  };
+
   // Vertical scroll-sync group — keeps the task table and the Gantt grid
   // (and the grid's own sidebar) scrolling in lockstep so rows stay aligned.
   // The re-entrancy lock is released synchronously: scroll events from the
@@ -373,6 +399,17 @@ export function Gantt() {
     });
   }, [criticalFilteredRows, collapsedIds, parentOf]);
 
+  // Rows for the Gantt grid / calendar / histogram — `visibleRows` minus
+  // any individually-hidden tasks. Only the hidden task itself is dropped;
+  // its children stay (unlike a collapse). The task table keeps using
+  // `visibleRows` so hidden rows still show there, dimmed.
+  const gridRows = useMemo(() => {
+    if (hiddenTaskIds.size === 0) return visibleRows;
+    return visibleRows.filter(
+      (r) => !(r.kind === "task" && r.task && hiddenTaskIds.has(r.task.id))
+    );
+  }, [visibleRows, hiddenTaskIds]);
+
   const orderedTaskIds = useMemo(
     () => visibleRows.filter((r) => r.kind === "task" && r.task).map((r) => r.task!.id),
     [visibleRows]
@@ -425,6 +462,47 @@ export function Gantt() {
       const endsAt = new Date(new Date(patch.scheduled_at).getTime() + patch.duration_minutes * 60_000).toISOString();
       updateEvent.mutate({ eventId: row.event.id, patch: { starts_at: patch.scheduled_at, ends_at: endsAt } });
     }
+  };
+
+  /** "Move this occurrence only" — suppress the dragged instance and add a
+   *  standalone replacement at the new time. If the dragged occurrence was
+   *  already an ad-hoc extra, just relocate that entry. */
+  const handleMoveOccurrence = (
+    row: GanttRow,
+    originalStart: Date,
+    newStart: Date
+  ) => {
+    if (row.kind !== "task" || !row.task) return;
+    const t = row.task;
+    const origIso = originalStart.toISOString();
+    const newIso = newStart.toISOString();
+    const asStrings = (v: unknown): string[] =>
+      Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+    const extra = asStrings((t as any).extra_occurrences);
+    const excluded = asStrings((t as any).excluded_occurrences);
+    const nextExtra = [...extra];
+    const nextExcluded = [...excluded];
+    const exIdx = nextExtra.indexOf(origIso);
+    if (exIdx >= 0) {
+      nextExtra[exIdx] = newIso;
+    } else {
+      if (!nextExcluded.includes(origIso)) nextExcluded.push(origIso);
+      nextExtra.push(newIso);
+    }
+    const prevPatch = {
+      extra_occurrences: extra,
+      excluded_occurrences: excluded,
+    } as any;
+    const nextPatch = {
+      extra_occurrences: nextExtra,
+      excluded_occurrences: nextExcluded,
+    } as any;
+    updateTask.mutate({ taskId: t.id, patch: nextPatch });
+    pushUndo({
+      description: "הזזת מופע בודד",
+      undo: () => updateTask.mutate({ taskId: t.id, patch: prevPatch }),
+      redo: () => updateTask.mutate({ taskId: t.id, patch: nextPatch }),
+    });
   };
 
   const handleScheduleTask = (row: GanttRow, date: Date) => {
@@ -657,41 +735,44 @@ export function Gantt() {
         </div>
 
         {ganttView === "calendar" ? (
-          <DndContext sensors={dndSensors} collisionDetection={pointerWithin} onDragEnd={handleGanttDragEnd}>
-            <div className={sidebarCollapsed ? "" : tableLayout === "side" ? "flex gap-2 items-stretch" : "flex flex-col gap-2"}>
-              {!sidebarCollapsed && (
+          <div className={sidebarCollapsed ? "" : tableLayout === "side" ? "flex gap-2 items-stretch" : "flex flex-col gap-2"}>
+            {!sidebarCollapsed && (
+              // Scope the dnd-kit context to the task table only — the
+              // calendar uses its own native drag-and-drop, and nesting it
+              // under DndContext interfered with those drag gestures.
+              <DndContext sensors={dndSensors} collisionDetection={pointerWithin} onDragEnd={handleGanttDragEnd}>
                 <div className={tableLayout === "side" ? "basis-1/3 min-w-0 shrink-0" : ""}>
-                  <GanttTable rows={visibleRows} allRows={criticalFilteredRows} deps={deps} criticalSet={criticalSet} onRowClick={handleRowClick} layout={tableLayout} onCreateTask={source.kind === "all" ? undefined : handleCreateTaskInScope} customFields={customFields} lists={unifiedLists} onToggleCritical={handleToggleCritical} collapsedIds={collapsedIds} onToggleCollapsed={toggleCollapsed} />
+                  <GanttTable rows={visibleRows} allRows={criticalFilteredRows} deps={deps} criticalSet={criticalSet} onRowClick={handleRowClick} layout={tableLayout} onCreateTask={source.kind === "all" ? undefined : handleCreateTaskInScope} customFields={customFields} lists={unifiedLists} onToggleCritical={handleToggleCritical} collapsedIds={collapsedIds} onToggleCollapsed={toggleCollapsed} hiddenTaskIds={hiddenTaskIds} onToggleHidden={toggleHidden} />
                 </div>
-              )}
-              <div className={sidebarCollapsed ? "" : tableLayout === "side" ? "basis-2/3 min-w-0 grow" : ""}>
-                <GanttCalendar rows={visibleRows} listColorById={listColorById} userId={user?.id} onRowClick={handleRowClick} onBarChange={handleBarChange} />
-              </div>
+              </DndContext>
+            )}
+            <div className={sidebarCollapsed ? "" : tableLayout === "side" ? "basis-2/3 min-w-0 grow" : ""}>
+              <GanttCalendar rows={gridRows} listColorById={listColorById} userId={user?.id} onRowClick={handleRowClick} onBarChange={handleBarChange} onMoveOccurrence={handleMoveOccurrence} />
             </div>
-          </DndContext>
+          </div>
         ) : sidebarCollapsed ? (
-          <GanttGrid rows={visibleRows} deps={deps} zoom={zoom} zoomScale={zoomScale} windowStart={windowStart} windowEnd={windowEnd} criticalSet={criticalSet} onRowClick={handleRowClick} onBarChange={handleBarChange} onCreateAt={handleGanttCreateAt} onScheduleTask={handleScheduleTask} sidebarCollapsed={sidebarCollapsed} onToggleSidebar={() => setSidebarCollapsed((v) => !v)} baselineMap={baselineMap ?? undefined} onPhaseColorChange={handlePhaseColorChange} registerScroll={scrollSync.register} />
+          <GanttGrid rows={gridRows} deps={deps} zoom={zoom} zoomScale={zoomScale} windowStart={windowStart} windowEnd={windowEnd} criticalSet={criticalSet} onRowClick={handleRowClick} onBarChange={handleBarChange} onCreateAt={handleGanttCreateAt} onScheduleTask={handleScheduleTask} sidebarCollapsed={sidebarCollapsed} onToggleSidebar={() => setSidebarCollapsed((v) => !v)} baselineMap={baselineMap ?? undefined} onPhaseColorChange={handlePhaseColorChange} registerScroll={scrollSync.register} />
         ) : tableLayout === "side" ? (
           <DndContext sensors={dndSensors} collisionDetection={pointerWithin} onDragEnd={handleGanttDragEnd}>
             <div className="flex gap-2 items-stretch">
               <div className="basis-1/3 min-w-0 shrink-0">
-                <GanttTable rows={visibleRows} allRows={criticalFilteredRows} deps={deps} criticalSet={criticalSet} onRowClick={handleRowClick} layout="side" onCreateTask={source.kind === "all" ? undefined : handleCreateTaskInScope} customFields={customFields} lists={unifiedLists} onToggleCritical={handleToggleCritical} collapsedIds={collapsedIds} onToggleCollapsed={toggleCollapsed} registerScroll={scrollSync.register} />
+                <GanttTable rows={visibleRows} allRows={criticalFilteredRows} deps={deps} criticalSet={criticalSet} onRowClick={handleRowClick} layout="side" onCreateTask={source.kind === "all" ? undefined : handleCreateTaskInScope} customFields={customFields} lists={unifiedLists} onToggleCritical={handleToggleCritical} collapsedIds={collapsedIds} onToggleCollapsed={toggleCollapsed} hiddenTaskIds={hiddenTaskIds} onToggleHidden={toggleHidden} registerScroll={scrollSync.register} />
               </div>
               <div className="basis-2/3 min-w-0 grow">
-                <GanttGrid rows={visibleRows} deps={deps} zoom={zoom} zoomScale={zoomScale} windowStart={windowStart} windowEnd={windowEnd} criticalSet={criticalSet} onRowClick={handleRowClick} onBarChange={handleBarChange} onCreateAt={handleGanttCreateAt} onScheduleTask={handleScheduleTask} hideInternalSidebar baselineMap={baselineMap ?? undefined} onPhaseColorChange={handlePhaseColorChange} collapsedIds={collapsedIds} onToggleCollapsed={toggleCollapsed} registerScroll={scrollSync.register} />
+                <GanttGrid rows={gridRows} deps={deps} zoom={zoom} zoomScale={zoomScale} windowStart={windowStart} windowEnd={windowEnd} criticalSet={criticalSet} onRowClick={handleRowClick} onBarChange={handleBarChange} onCreateAt={handleGanttCreateAt} onScheduleTask={handleScheduleTask} hideInternalSidebar baselineMap={baselineMap ?? undefined} onPhaseColorChange={handlePhaseColorChange} collapsedIds={collapsedIds} onToggleCollapsed={toggleCollapsed} registerScroll={scrollSync.register} />
               </div>
             </div>
           </DndContext>
         ) : (
           <DndContext sensors={dndSensors} collisionDetection={pointerWithin} onDragEnd={handleGanttDragEnd}>
             <div className="flex flex-col gap-2">
-              <GanttTable rows={visibleRows} allRows={criticalFilteredRows} deps={deps} criticalSet={criticalSet} onRowClick={handleRowClick} layout="stacked" onCreateTask={source.kind === "all" ? undefined : handleCreateTaskInScope} customFields={customFields} lists={unifiedLists} onToggleCritical={handleToggleCritical} collapsedIds={collapsedIds} onToggleCollapsed={toggleCollapsed} registerScroll={scrollSync.register} />
-              <GanttGrid rows={visibleRows} deps={deps} zoom={zoom} zoomScale={zoomScale} windowStart={windowStart} windowEnd={windowEnd} criticalSet={criticalSet} onRowClick={handleRowClick} onBarChange={handleBarChange} onCreateAt={handleGanttCreateAt} onScheduleTask={handleScheduleTask} hideInternalSidebar baselineMap={baselineMap ?? undefined} onPhaseColorChange={handlePhaseColorChange} collapsedIds={collapsedIds} onToggleCollapsed={toggleCollapsed} registerScroll={scrollSync.register} />
+              <GanttTable rows={visibleRows} allRows={criticalFilteredRows} deps={deps} criticalSet={criticalSet} onRowClick={handleRowClick} layout="stacked" onCreateTask={source.kind === "all" ? undefined : handleCreateTaskInScope} customFields={customFields} lists={unifiedLists} onToggleCritical={handleToggleCritical} collapsedIds={collapsedIds} onToggleCollapsed={toggleCollapsed} hiddenTaskIds={hiddenTaskIds} onToggleHidden={toggleHidden} registerScroll={scrollSync.register} />
+              <GanttGrid rows={gridRows} deps={deps} zoom={zoom} zoomScale={zoomScale} windowStart={windowStart} windowEnd={windowEnd} criticalSet={criticalSet} onRowClick={handleRowClick} onBarChange={handleBarChange} onCreateAt={handleGanttCreateAt} onScheduleTask={handleScheduleTask} hideInternalSidebar baselineMap={baselineMap ?? undefined} onPhaseColorChange={handlePhaseColorChange} collapsedIds={collapsedIds} onToggleCollapsed={toggleCollapsed} registerScroll={scrollSync.register} />
             </div>
           </DndContext>
         )}
 
-        {showHistogram && <ResourceHistogram rows={visibleRows} zoom={zoom} windowStart={windowStart} windowEnd={windowEnd} memberNames={memberNames} />}
+        {showHistogram && <ResourceHistogram rows={gridRows} zoom={zoom} windowStart={windowStart} windowEnd={windowEnd} memberNames={memberNames} />}
       </div>
 
       <BulkActionsToolbar allTasks={tasks} />

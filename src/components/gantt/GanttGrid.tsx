@@ -221,7 +221,7 @@ export function GanttGrid({
     // without first scrolling to the end of the chart. Vertical scroll is
     // kept in lockstep across the panes via the scroll-sync group.
     <div className="card overflow-hidden">
-      <div className="flex max-h-[calc(100vh-200px)]">
+      <div className="flex max-h-[calc(100vh-200px)] min-w-0">
         {/* Left column: task rows — can be collapsed to a thin strip.
             Suppressed entirely when the parent renders an external
             GanttTable (hideInternalSidebar=true). */}

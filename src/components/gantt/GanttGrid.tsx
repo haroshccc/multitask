@@ -96,6 +96,15 @@ export function GanttGrid({
     [zoom, windowStart.getTime(), windowEnd.getTime()]
   );
 
+  // Flattened sub-ticks across all groups. Each sub-tick's rendered width
+  // runs to the *next* sub-tick (regardless of group), so weeks that span a
+  // month boundary aren't truncated at the boundary — which previously left
+  // gaps / made adjacent week labels collide.
+  const allSubTicks = useMemo(
+    () => tickGroups.flatMap((g) => g.subTicks),
+    [tickGroups]
+  );
+
   const scrollRef = useRef<HTMLDivElement>(null);
   const sidebarScrollRef = useRef<HTMLDivElement>(null);
 
@@ -311,7 +320,7 @@ export function GanttGrid({
         )}
 
         {/* Timeline scrollable area — scrolls in both axes. */}
-        <div className="flex-1 overflow-auto scrollbar-thin" ref={scrollRef}>
+        <div className="flex-1 min-w-0 overflow-auto scrollbar-thin" ref={scrollRef}>
           <div className="relative" style={{ width: timelineWidth }}>
             {/* Header — 2 rows: group labels (top), sub-ticks (bottom). */}
             <div className="sticky top-0 z-10 bg-ink-50/95 backdrop-blur-sm border-b border-ink-200">
@@ -334,26 +343,24 @@ export function GanttGrid({
                 })}
               </div>
               <div className="flex h-8 relative border-t border-ink-150">
-                {tickGroups.flatMap((g) =>
-                  g.subTicks.map((st, i) => {
-                    const nextTick = g.subTicks[i + 1];
-                    const end = nextTick ? nextTick.date : g.end;
-                    const left =
-                      ((st.date.getTime() - windowStart.getTime()) / DAY_MS) *
-                      pxPerDay;
-                    const width =
-                      ((end.getTime() - st.date.getTime()) / DAY_MS) * pxPerDay;
-                    return (
-                      <div
-                        key={g.start.toISOString() + "-" + i}
-                        className="absolute top-0 bottom-0 border-e border-ink-150 flex items-center justify-center text-[10px] text-ink-500"
-                        style={{ insetInlineStart: left, width }}
-                      >
-                        <span className="truncate px-1">{st.label}</span>
-                      </div>
-                    );
-                  })
-                )}
+                {allSubTicks.map((st, i) => {
+                  const nextTick = allSubTicks[i + 1];
+                  const end = nextTick ? nextTick.date : windowEnd;
+                  const left =
+                    ((st.date.getTime() - windowStart.getTime()) / DAY_MS) *
+                    pxPerDay;
+                  const width =
+                    ((end.getTime() - st.date.getTime()) / DAY_MS) * pxPerDay;
+                  return (
+                    <div
+                      key={st.date.toISOString() + "-" + i}
+                      className="absolute top-0 bottom-0 border-e border-ink-150 flex items-center justify-center text-[10px] text-ink-500"
+                      style={{ insetInlineStart: left, width }}
+                    >
+                      <span className="truncate px-1">{st.label}</span>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 

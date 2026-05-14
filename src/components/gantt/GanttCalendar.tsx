@@ -98,7 +98,7 @@ export function GanttCalendar({
     const map = new Map<string, GanttRow>();
 
     for (const r of rows) {
-      if (r.kind === "task" && r.task && !r.unscheduled) {
+      if (r.kind === "task" && r.task) {
         const t = r.task;
         // Phase color first, then the task's list color, then null (the
         // calendar falls back to its default amber).

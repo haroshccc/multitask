@@ -63,6 +63,9 @@ export interface GanttRow {
   ownershipMode?: "mine" | "delegated" | "assigned";
   /** Task is pending approval. */
   pendingApproval?: boolean;
+  /** True when this task has at least one child row — drives the
+   *  collapse/expand chevron in the table and grid sidebar. */
+  hasChildren?: boolean;
 }
 
 // Time helpers ---------------------------------------------------------------
@@ -257,6 +260,7 @@ export function buildRows(
             : inheritedAccent
             ? lightenHex(inheritedAccent, 0.4)
             : undefined,
+          hasChildren: (childrenOf.get(t.id) ?? []).length > 0,
           unscheduled: !timing,
           ownershipMode: currentUserId
             ? t.owner_id !== currentUserId && t.assignee_user_id === currentUserId
@@ -289,6 +293,7 @@ export function buildRows(
         phaseId: null,
         childrenEnd: o.is_phase ? findSubtreeEnd(o.id) : null,
         accentColor: o.is_phase ? accentForPhase(o) : undefined,
+        hasChildren: (childrenOf.get(o.id) ?? []).length > 0,
         unscheduled: !timing,
       });
     }

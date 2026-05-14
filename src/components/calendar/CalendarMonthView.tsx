@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { Repeat } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import {
   type CalendarItem,
@@ -201,7 +202,10 @@ export function CalendarMonthView({
             bandRows > 0 ? bandRows * (BAND_HEIGHT + BAND_GAP) + BAND_GAP : 0;
 
           return (
-            <div key={weekIdx} className="relative">
+            <div
+              key={weekIdx}
+              className={cn("relative", weekIdx % 2 === 1 && "bg-ink-100/40")}
+            >
               {/* Band overlay — sits on top of the week, aligned to the
                   top of the cells. Cells get paddingTop = bandAreaHeight
                   so chips start below the bands. */}
@@ -567,6 +571,7 @@ function MonthItemChip({
             : `${formatHour(item.start, tz)}–${formatHour(item.end, tz)}`}
         </span>
         <span className="truncate">{item.title}</span>
+        {item.recurring && <Repeat className="w-2.5 h-2.5 shrink-0 text-white/80" />}
       </div>
     );
   }
@@ -609,6 +614,7 @@ function MonthItemChip({
       <span className={cn("truncate", item.completed && "line-through")}>
         {item.title}
       </span>
+      {item.recurring && <Repeat className="w-2.5 h-2.5 shrink-0 text-ink-400" />}
       {overdue && !item.completed && (
         <span
           className="absolute -top-0.5 -end-0.5 w-1.5 h-1.5 rounded-full bg-danger-500 pointer-events-none"

@@ -29,6 +29,8 @@ import {
   addDays,
   eventToItem,
   expandRrule,
+  expandTaskOccurrences,
+  taskExtraOccurrences,
   startOfDay,
   startOfMonth,
   endOfMonth,
@@ -180,20 +182,17 @@ export function Calendar() {
             // is the anchor; each occurrence is its own CalendarItem with
             // a synthesized id like `task:abc:1234567890` and a per-occurrence
             // `completed` flag based on `completed_occurrences[]`.
-            if (t.recurrence_rule) {
+            const hasExtras = taskExtraOccurrences(t).length > 0;
+            if (t.recurrence_rule || hasExtras) {
               const anchorStart = base.start;
               const duration = base.end.getTime() - anchorStart.getTime();
-              let occurrences: Date[] = [];
-              try {
-                occurrences = expandRrule(
-                  t.recurrence_rule,
-                  anchorStart,
-                  range.from,
-                  range.to
-                );
-              } catch {
-                // malformed RRULE — treat as non-recurring
-              }
+              // RRULE occurrences merged with ad-hoc extra_occurrences.
+              const occurrences = expandTaskOccurrences(
+                t,
+                base,
+                range.from,
+                range.to
+              );
               const completedSet = new Set(
                 Array.isArray(t.completed_occurrences)
                   ? (t.completed_occurrences as unknown[]).filter(

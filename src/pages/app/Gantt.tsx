@@ -658,11 +658,13 @@ export function Gantt() {
 
         {ganttView === "calendar" ? (
           <DndContext sensors={dndSensors} collisionDetection={pointerWithin} onDragEnd={handleGanttDragEnd}>
-            <div className={tableLayout === "side" ? "flex gap-2 items-stretch" : "flex flex-col gap-2"}>
-              <div className={tableLayout === "side" ? "basis-1/3 min-w-0 shrink-0" : ""}>
-                <GanttTable rows={visibleRows} allRows={criticalFilteredRows} deps={deps} criticalSet={criticalSet} onRowClick={handleRowClick} layout={tableLayout} onCreateTask={source.kind === "all" ? undefined : handleCreateTaskInScope} customFields={customFields} lists={unifiedLists} onToggleCritical={handleToggleCritical} collapsedIds={collapsedIds} onToggleCollapsed={toggleCollapsed} />
-              </div>
-              <div className={tableLayout === "side" ? "basis-2/3 min-w-0 grow" : ""}>
+            <div className={sidebarCollapsed ? "" : tableLayout === "side" ? "flex gap-2 items-stretch" : "flex flex-col gap-2"}>
+              {!sidebarCollapsed && (
+                <div className={tableLayout === "side" ? "basis-1/3 min-w-0 shrink-0" : ""}>
+                  <GanttTable rows={visibleRows} allRows={criticalFilteredRows} deps={deps} criticalSet={criticalSet} onRowClick={handleRowClick} layout={tableLayout} onCreateTask={source.kind === "all" ? undefined : handleCreateTaskInScope} customFields={customFields} lists={unifiedLists} onToggleCritical={handleToggleCritical} collapsedIds={collapsedIds} onToggleCollapsed={toggleCollapsed} />
+                </div>
+              )}
+              <div className={sidebarCollapsed ? "" : tableLayout === "side" ? "basis-2/3 min-w-0 grow" : ""}>
                 <GanttCalendar rows={visibleRows} listColorById={listColorById} userId={user?.id} onRowClick={handleRowClick} onBarChange={handleBarChange} />
               </div>
             </div>

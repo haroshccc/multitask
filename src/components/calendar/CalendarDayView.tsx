@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Hourglass } from "lucide-react";
+import { Hourglass, Repeat } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import {
   HOUR,
@@ -610,6 +610,11 @@ export function CalendarBlock({
           <span className={cn("text-[9px] font-medium truncate flex-1 min-w-0", completed && "line-through")}>
             {item.title}
           </span>
+          {item.recurring && (
+            <Repeat
+              className={cn("w-2.5 h-2.5 shrink-0", isTask ? "text-ink-400" : "text-white/80")}
+            />
+          )}
           {isTask && overdue && !completed && (
             <span className="w-1.5 h-1.5 rounded-full bg-danger-500 shrink-0" title="באיחור" />
           )}
@@ -646,6 +651,14 @@ export function CalendarBlock({
             >
               {item.title}
             </span>
+            {item.recurring && (
+              <Repeat
+                className={cn(
+                  "w-3 h-3 shrink-0 mt-0.5",
+                  isTask ? "text-ink-400" : "text-white/80"
+                )}
+              />
+            )}
             {isTask && item.ownershipMode === "assigned" && (
               <span className="shrink-0 text-[8px] text-ink-500 font-medium leading-tight mt-0.5">הוצאל</span>
             )}

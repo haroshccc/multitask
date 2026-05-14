@@ -10,6 +10,8 @@ import {
   addMonths,
   eventToItem,
   expandRrule,
+  expandTaskOccurrences,
+  taskExtraOccurrences,
   formatMonthYear,
   formatWeekRange,
   startOfMonth,
@@ -97,19 +99,16 @@ export function GanttCalendar({
         if (t.scheduled_at) {
           const base = taskToItem(t, color, userId);
           if (base) {
-            if (t.recurrence_rule) {
+            const hasExtras = taskExtraOccurrences(t).length > 0;
+            if (t.recurrence_rule || hasExtras) {
               const duration = base.end.getTime() - base.start.getTime();
-              let occ: Date[] = [];
-              try {
-                occ = expandRrule(
-                  t.recurrence_rule,
-                  base.start,
-                  range.from,
-                  range.to
-                );
-              } catch {
-                // malformed RRULE — treat as non-recurring below
-              }
+              // RRULE occurrences merged with ad-hoc extra_occurrences.
+              const occ = expandTaskOccurrences(
+                t,
+                base,
+                range.from,
+                range.to
+              );
               const completedSet = new Set(
                 Array.isArray(t.completed_occurrences)
                   ? (t.completed_occurrences as unknown[]).filter(

@@ -257,9 +257,8 @@ export function buildRows(
           childrenEnd: t.is_phase ? findSubtreeEnd(t.id) : null,
           accentColor: t.is_phase
             ? myAccent ?? undefined
-            : inheritedAccent
-            ? lightenHex(inheritedAccent, 0.4)
-            : undefined,
+            : t.accent_color ??
+              (inheritedAccent ? lightenHex(inheritedAccent, 0.4) : undefined),
           hasChildren: (childrenOf.get(t.id) ?? []).length > 0,
           unscheduled: !timing,
           ownershipMode: currentUserId

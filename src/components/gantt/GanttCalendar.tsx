@@ -2,8 +2,11 @@ import { useMemo, useState } from "react";
 import { ChevronRight, ChevronLeft } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { useCalendarPrefs } from "@/lib/hooks/useCalendarPrefs";
+import { useCalendarDayNotes } from "@/lib/hooks/useCalendarDayNotes";
+import { dateKey } from "@/lib/services/calendar-day-notes";
 import { CalendarWeekView } from "@/components/calendar/CalendarWeekView";
 import { CalendarMonthView } from "@/components/calendar/CalendarMonthView";
+import { DayNoteDialog } from "@/components/calendar/DayNoteDialog";
 import {
   type CalendarItem,
   addDays,
@@ -92,6 +95,14 @@ export function GanttCalendar({
     const from = startOfWeek(startOfMonth(anchor));
     return { from, to: addDays(from, 42) };
   }, [mode, anchor]);
+
+  // Per-day notes — shared with the regular Calendar (same table). The
+  // Gantt calendar can both display and edit them.
+  const { notesByDate, noteColorsByDate } = useCalendarDayNotes(
+    dateKey(range.from),
+    dateKey(range.to)
+  );
+  const [editingNoteDate, setEditingNoteDate] = useState<Date | null>(null);
 
   const { items, rowByItemId } = useMemo(() => {
     const out: CalendarItem[] = [];
@@ -333,6 +344,9 @@ export function GanttCalendar({
             onItemClick={handleItemClick}
             onCreateAt={() => {}}
             onItemDrop={handleItemDrop}
+            notesByDate={notesByDate}
+            noteColorsByDate={noteColorsByDate}
+            onDateNoteClick={setEditingNoteDate}
             readOnly
           />
         ) : (
@@ -340,12 +354,29 @@ export function GanttCalendar({
             anchor={anchor}
             items={items}
             onItemClick={handleItemClick}
-            onDayClick={() => {}}
+            onDayClick={setEditingNoteDate}
             onItemDrop={handleItemDrop}
+            notesByDate={notesByDate}
+            noteColorsByDate={noteColorsByDate}
             readOnly
           />
         )}
       </div>
+
+      <DayNoteDialog
+        date={editingNoteDate}
+        initialBody={
+          editingNoteDate
+            ? notesByDate.get(dateKey(editingNoteDate)) ?? ""
+            : ""
+        }
+        initialColor={
+          editingNoteDate
+            ? noteColorsByDate.get(dateKey(editingNoteDate)) ?? null
+            : null
+        }
+        onClose={() => setEditingNoteDate(null)}
+      />
     </div>
   );
 }

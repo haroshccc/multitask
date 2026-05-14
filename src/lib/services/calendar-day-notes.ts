@@ -37,6 +37,7 @@ export async function upsertDayNote(input: {
   user_id: string;
   date: string;
   body: string;
+  text_color?: string | null;
 }): Promise<CalendarDayNote> {
   const { data, error } = await supabase
     .from("calendar_day_notes")

@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Repeat } from "lucide-react";
+import { Repeat, Hourglass } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import {
   type CalendarItem,
@@ -54,6 +54,8 @@ interface CalendarMonthViewProps {
   onItemDrop?: ItemDropHandler;
   /** Lookup: per-date note body (yyyy-mm-dd → string). */
   notesByDate?: Map<string, string>;
+  /** Lookup: per-date note text color (yyyy-mm-dd → CSS color). */
+  noteColorsByDate?: Map<string, string>;
   /** Display-only mode — hides the per-task check-off controls. */
   readOnly?: boolean;
 }
@@ -66,6 +68,7 @@ export function CalendarMonthView({
   onCellClick,
   onItemDrop,
   notesByDate,
+  noteColorsByDate,
   readOnly,
 }: CalendarMonthViewProps) {
   /**
@@ -289,6 +292,7 @@ export function CalendarMonthView({
                         </button>
                         <DayNoteSlot
                           body={notesByDate?.get(monthDayKey(day))}
+                          textColor={noteColorsByDate?.get(monthDayKey(day))}
                           className="flex-1 text-end"
                         />
                       </div>
@@ -549,6 +553,30 @@ function MonthItemChip({
       onClick();
     }
   };
+
+  // Deadline marker — flat label + hourglass with a coloured underline,
+  // no border/background. Visually distinct from a regular task chip.
+  if (item.kind === "deadline") {
+    return (
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={onClick}
+        onKeyDown={handleKeyDown}
+        className="w-full text-start cursor-pointer px-1.5 rounded-sm hover:bg-ink-50"
+        title={`דד-ליין: ${item.title}`}
+      >
+        <div className="flex items-center gap-1 text-[10px]">
+          <Hourglass className="w-2.5 h-2.5 shrink-0 text-ink-700" />
+          <span className="truncate font-medium text-ink-900">{item.title}</span>
+        </div>
+        <div
+          className="h-[2px] mt-0.5 rounded-full"
+          style={{ backgroundColor: accent }}
+        />
+      </div>
+    );
+  }
 
   if (!isTask) {
     return (

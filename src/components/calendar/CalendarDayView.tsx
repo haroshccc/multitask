@@ -47,6 +47,8 @@ interface CalendarDayViewProps {
   onItemDrop?: ItemDropHandler;
   /** Per-day note body — `undefined` means no note. */
   dayNote?: string;
+  /** Per-day note text color — overrides the muted default. */
+  dayNoteColor?: string | null;
   /** Click on the date digit → open the per-day note editor. */
   onDateNoteClick?: (date: Date) => void;
 }
@@ -62,6 +64,7 @@ export function CalendarDayView({
   onCreateAt,
   onItemDrop,
   dayNote,
+  dayNoteColor,
   onDateNoteClick,
 }: CalendarDayViewProps) {
   const dayStart = startOfDay(date);
@@ -215,7 +218,7 @@ export function CalendarDayView({
         >
           {date.getDate()}
         </button>
-        <DayNoteSlot body={dayNote} />
+        <DayNoteSlot body={dayNote} textColor={dayNoteColor} />
       </div>
 
       {/* All-day strip */}

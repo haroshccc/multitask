@@ -9,6 +9,8 @@ interface DayNoteSlotProps {
    * always on, and the full body is revealed in a hover popover.
    */
   variant?: "block" | "inline";
+  /** Optional CSS color for the note text — overrides the muted default. */
+  textColor?: string | null;
   className?: string;
 }
 
@@ -20,7 +22,12 @@ interface DayNoteSlotProps {
  * Visual is intentionally muted (small, ink-500) — the note is
  * metadata, the date number is what the user reads first.
  */
-export function DayNoteSlot({ body, variant = "block", className }: DayNoteSlotProps) {
+export function DayNoteSlot({
+  body,
+  variant = "block",
+  textColor,
+  className,
+}: DayNoteSlotProps) {
   const text = (body ?? "").trim();
   if (!text) return null;
   return (
@@ -31,7 +38,13 @@ export function DayNoteSlot({ body, variant = "block", className }: DayNoteSlotP
         className
       )}
     >
-      <span className="block text-[10px] text-ink-500 truncate select-none">
+      <span
+        className={cn(
+          "block text-[10px] truncate select-none",
+          !textColor && "text-ink-500"
+        )}
+        style={textColor ? { color: textColor } : undefined}
+      >
         {text}
       </span>
 

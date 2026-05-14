@@ -34,7 +34,16 @@ export function useCalendarDayNotes(from: string, to: string) {
     return m;
   }, [query.data]);
 
-  return { ...query, notesByDate: map };
+  // Per-date text color — only dates with a non-null color get an entry.
+  const colorMap = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const n of query.data ?? []) {
+      if (n.text_color) m.set(n.date, n.text_color);
+    }
+    return m;
+  }, [query.data]);
+
+  return { ...query, notesByDate: map, noteColorsByDate: colorMap };
 }
 
 /** Save (insert-or-replace) a note's body. Empty body deletes instead. */
@@ -42,7 +51,11 @@ export function useUpsertDayNote() {
   const qc = useQueryClient();
   const scope = useOrgScope();
   return useMutation({
-    mutationFn: async (input: { date: string; body: string }) => {
+    mutationFn: async (input: {
+      date: string;
+      body: string;
+      text_color?: string | null;
+    }) => {
       const { organizationId, userId } = assertOrgScope(scope);
       const trimmed = input.body.trim();
       if (trimmed.length === 0) {
@@ -54,6 +67,7 @@ export function useUpsertDayNote() {
         user_id: userId,
         date: input.date,
         body: trimmed,
+        text_color: input.text_color ?? null,
       });
     },
     onSuccess: () => {

@@ -13,8 +13,19 @@ interface DayNoteDialogProps {
   date: Date | null;
   /** Existing body for that date (or "" if none yet). */
   initialBody: string;
+  /** Existing text color for that date (or null if none). */
+  initialColor?: string | null;
   onClose: () => void;
 }
+
+const NOTE_COLOR_PRESETS = [
+  "#ef4444",
+  "#f59e0b",
+  "#10b981",
+  "#3b82f6",
+  "#8b5cf6",
+  "#ec4899",
+];
 
 /**
  * Compact editor for the per-day note. Opens when the user clicks the
@@ -24,9 +35,11 @@ interface DayNoteDialogProps {
 export function DayNoteDialog({
   date,
   initialBody,
+  initialColor = null,
   onClose,
 }: DayNoteDialogProps) {
   const [body, setBody] = useState(initialBody);
+  const [color, setColor] = useState<string | null>(initialColor);
   const [error, setError] = useState<string | null>(null);
   const upsert = useUpsertDayNote();
   const del = useDeleteDayNote();
@@ -34,9 +47,10 @@ export function DayNoteDialog({
   useEffect(() => {
     if (date) {
       setBody(initialBody);
+      setColor(initialColor);
       setError(null);
     }
-  }, [date, initialBody]);
+  }, [date, initialBody, initialColor]);
 
   if (!date) return null;
   const dateStr = date.toLocaleDateString("he-IL", {
@@ -46,7 +60,8 @@ export function DayNoteDialog({
     year: "numeric",
   });
 
-  const dirty = body.trim() !== initialBody.trim();
+  const dirty =
+    body.trim() !== initialBody.trim() || color !== initialColor;
 
   /**
    * Save / delete catch the error and surface it inline instead of
@@ -72,7 +87,11 @@ export function DayNoteDialog({
   const handleSave = async () => {
     setError(null);
     try {
-      await upsert.mutateAsync({ date: dateKey(date), body });
+      await upsert.mutateAsync({
+        date: dateKey(date),
+        body,
+        text_color: body.trim() ? color : null,
+      });
       onClose();
     } catch (e) {
       setError(friendlyError(e));
@@ -141,6 +160,55 @@ export function DayNoteDialog({
               <p className="text-[11px] text-ink-400 mt-1">
                 Ctrl/⌘+Enter לשמירה. השאר ריק כדי למחוק את ההערה.
               </p>
+
+              <div className="mt-3 flex items-center gap-2">
+                <span className="text-[11px] text-ink-500">צבע הכיתוב:</span>
+                <div className="flex items-center gap-1 flex-wrap">
+                  {NOTE_COLOR_PRESETS.map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => setColor(c)}
+                      className={cn(
+                        "w-5 h-5 rounded-full border transition-transform hover:scale-110",
+                        color === c
+                          ? "border-ink-900 ring-2 ring-offset-1 ring-ink-300"
+                          : "border-ink-200"
+                      )}
+                      style={{ backgroundColor: c }}
+                      title={c}
+                      aria-label={`צבע ${c}`}
+                    />
+                  ))}
+                  <label
+                    className="w-5 h-5 rounded-full border border-ink-200 overflow-hidden cursor-pointer relative"
+                    title="צבע מותאם אישית"
+                    style={color ? { backgroundColor: color } : undefined}
+                  >
+                    {!color && (
+                      <span className="absolute inset-0 flex items-center justify-center text-[10px] text-ink-400">
+                        +
+                      </span>
+                    )}
+                    <input
+                      type="color"
+                      value={color ?? "#6b6b80"}
+                      onChange={(e) => setColor(e.target.value)}
+                      className="absolute inset-0 opacity-0 cursor-pointer"
+                    />
+                  </label>
+                  {color && (
+                    <button
+                      type="button"
+                      onClick={() => setColor(null)}
+                      className="text-[11px] text-ink-400 hover:text-ink-700 px-0.5"
+                      title="ברירת מחדל"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              </div>
               {error && (
                 <div className="mt-2 flex items-start gap-2 p-2 rounded-md bg-warning-500/10 border border-warning-500/30 text-warning-700 text-[11px]">
                   <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />

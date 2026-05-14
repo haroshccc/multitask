@@ -69,6 +69,16 @@ export function Gantt() {
   const [zoom, setZoom] = useState<GanttZoom>("week");
   const [anchor, setAnchor] = useState<Date>(() => new Date());
   const [showCriticalOnly, setShowCriticalOnly] = useState(false);
+  /** When false, the auto-computed critical path is suppressed — only
+   *  manually-flagged (is_critical) tasks count as critical. */
+  const [autoCriticalPath, setAutoCriticalPath] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true;
+    return localStorage.getItem("multitask.gantt.autoCriticalPath") !== "false";
+  });
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem("multitask.gantt.autoCriticalPath", String(autoCriticalPath));
+  }, [autoCriticalPath]);
   const [layer, setLayer] = useState<GanttLayer>("both");
   const [filtersOpen, setFiltersOpen] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
@@ -304,11 +314,12 @@ export function Gantt() {
   );
 
   const criticalSet = useMemo(() => {
-    const autoSet = computeCriticalPath(rows, deps);
-    const merged = new Set(autoSet);
+    const merged = new Set<string>(
+      autoCriticalPath ? computeCriticalPath(rows, deps) : []
+    );
     for (const t of filteredTasks) { if ((t as any).is_critical) merged.add(t.id); }
     return merged;
-  }, [rows, deps, filteredTasks]);
+  }, [rows, deps, filteredTasks, autoCriticalPath]);
 
   const parentOf = useMemo(() => {
     const m = new Map<string, string | null>();
@@ -586,6 +597,7 @@ export function Gantt() {
           onConvertListToProject={handleConvertListToProject} onConvertProjectToList={handleConvertProjectToList}
           filtersActiveCount={filtersActiveCount} filtersOpen={filtersOpen} onToggleFilters={() => setFiltersOpen((v) => !v)}
           showCriticalOnly={showCriticalOnly} onToggleCriticalOnly={() => setShowCriticalOnly((v) => !v)}
+          autoCriticalPath={autoCriticalPath} onToggleAutoCriticalPath={() => setAutoCriticalPath((v) => !v)}
           sidebarCollapsed={sidebarCollapsed} onToggleSidebar={() => setSidebarCollapsed((v) => !v)}
           tableLayout={tableLayout} onTableLayoutChange={setTableLayout}
         />

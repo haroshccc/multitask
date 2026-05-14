@@ -506,7 +506,9 @@ export function GanttGrid({
                   ((dl.getTime() - windowStart.getTime()) / DAY_MS) * pxPerDay;
                 if (left < 0 || left > timelineWidth) return null;
                 const overdue = r.end.getTime() > dl.getTime();
-                const color = overdue ? "#ef4444" : "#f59e0b";
+                // Marker takes the row's phase color; overdue stays red as a
+                // warning. Tasks outside any phase fall back to amber.
+                const color = overdue ? "#ef4444" : r.accentColor ?? "#f59e0b";
                 return (
                   <div
                     key={r.id + "-deadline"}
@@ -527,7 +529,9 @@ export function GanttGrid({
                         insetInlineStart: -4,
                         top: ROW_HEIGHT / 2 - 4,
                         backgroundColor: color,
-                        boxShadow: "0 0 0 1px white",
+                        boxShadow: overdue
+                          ? "0 0 0 1px white, 0 0 5px 1px rgba(239,68,68,0.9)"
+                          : "0 0 0 1px white",
                       }}
                       title={`דד-ליין: ${dl.toLocaleDateString("he-IL")}${
                         overdue ? " (חריגה)" : ""

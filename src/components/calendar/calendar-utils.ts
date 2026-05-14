@@ -41,6 +41,10 @@ export interface CalendarItem {
   ownershipMode?: "mine" | "delegated" | "assigned";
   /** Whether task requires approval and is pending */
   pendingApproval?: boolean;
+  /** True when the underlying task/event repeats — either via an RRULE
+   *  (`recurrence_rule`) or via ad-hoc `extra_occurrences`. Drives the
+   *  small "repeat" glyph the views draw on the chip/block. */
+  recurring?: boolean;
 }
 
 /** Milliseconds in a minute / hour / day — tiny convenience. */
@@ -238,7 +242,74 @@ export function taskToItem(
     isPhase: !!t.is_phase,
     ownershipMode,
     pendingApproval: t.status === "pending_approval",
+    recurring: !!t.recurrence_rule || taskExtraOccurrences(t).length > 0,
   };
+}
+
+/**
+ * Parse a task's `extra_occurrences` JSONB column into a sorted Date[] —
+ * the ad-hoc standalone occurrences the user added on top of any RRULE.
+ * Invalid / non-string entries are dropped.
+ */
+export function taskExtraOccurrences(t: Task): Date[] {
+  const raw = (t as { extra_occurrences?: unknown }).extra_occurrences;
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((x): x is string => typeof x === "string")
+    .map((s) => new Date(s))
+    .filter((d) => !Number.isNaN(d.getTime()))
+    .sort((a, b) => a.getTime() - b.getTime());
+}
+
+/**
+ * Parse a task's `excluded_occurrences` JSONB column into a Set of ISO
+ * timestamp strings — the RRULE-expanded instances the user has moved
+ * away (suppressed) via a single-occurrence reschedule.
+ */
+export function taskExcludedOccurrences(t: Task): Set<string> {
+  const raw = (t as { excluded_occurrences?: unknown }).excluded_occurrences;
+  if (!Array.isArray(raw)) return new Set();
+  return new Set(raw.filter((x): x is string => typeof x === "string"));
+}
+
+/**
+ * The full set of occurrence start-times for a task inside [from, to):
+ * RRULE-expanded occurrences (if any) merged with the task's ad-hoc
+ * `extra_occurrences`, minus any `excluded_occurrences`, de-duplicated
+ * and sorted. When the task has no RRULE the base `scheduled_at` is
+ * seeded as the first occurrence so a plain task with only extra dates
+ * still shows its original slot.
+ */
+export function expandTaskOccurrences(
+  t: Task,
+  base: CalendarItem,
+  from: Date,
+  to: Date
+): Date[] {
+  let occ: Date[] = [];
+  if (t.recurrence_rule) {
+    try {
+      occ = expandRrule(t.recurrence_rule, base.start, from, to);
+    } catch {
+      occ = [];
+    }
+  } else if (base.start >= from && base.start < to) {
+    occ = [base.start];
+  }
+  // Drop instances the user moved away (single-occurrence reschedule).
+  const excluded = taskExcludedOccurrences(t);
+  if (excluded.size > 0) {
+    occ = occ.filter((d) => !excluded.has(d.toISOString()));
+  }
+  const seen = new Set(occ.map((d) => d.getTime()));
+  for (const d of taskExtraOccurrences(t)) {
+    if (d < from || d >= to) continue;
+    if (seen.has(d.getTime())) continue;
+    seen.add(d.getTime());
+    occ.push(d);
+  }
+  occ.sort((a, b) => a.getTime() - b.getTime());
+  return occ;
 }
 
 /**
@@ -303,6 +374,7 @@ export function eventToItem(
     listId: null,
     completed: false,
     source: e,
+    recurring: !!e.recurrence_rule,
   };
 }
 

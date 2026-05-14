@@ -2002,6 +2002,8 @@ export type Database = {
           duration_minutes: number | null
           estimated_hours: number | null
           external_url: string | null
+          extra_occurrences: Json
+          excluded_occurrences: Json
           goal_min_streak_periods: number | null
           goal_period: string | null
           goal_started_on: string | null
@@ -2051,6 +2053,8 @@ export type Database = {
           duration_minutes?: number | null
           estimated_hours?: number | null
           external_url?: string | null
+          extra_occurrences?: Json
+          excluded_occurrences?: Json
           goal_min_streak_periods?: number | null
           goal_period?: string | null
           goal_started_on?: string | null
@@ -2100,6 +2104,8 @@ export type Database = {
           duration_minutes?: number | null
           estimated_hours?: number | null
           external_url?: string | null
+          extra_occurrences?: Json
+          excluded_occurrences?: Json
           goal_min_streak_periods?: number | null
           goal_period?: string | null
           goal_started_on?: string | null

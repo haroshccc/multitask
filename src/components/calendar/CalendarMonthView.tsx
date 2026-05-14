@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { Repeat } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import {
   type CalendarItem,
@@ -53,6 +54,8 @@ interface CalendarMonthViewProps {
   onItemDrop?: ItemDropHandler;
   /** Lookup: per-date note body (yyyy-mm-dd → string). */
   notesByDate?: Map<string, string>;
+  /** Display-only mode — hides the per-task check-off controls. */
+  readOnly?: boolean;
 }
 
 export function CalendarMonthView({
@@ -63,6 +66,7 @@ export function CalendarMonthView({
   onCellClick,
   onItemDrop,
   notesByDate,
+  readOnly,
 }: CalendarMonthViewProps) {
   /**
    * Compute the target Date for a drop on `day`. For "move" we keep the
@@ -201,7 +205,10 @@ export function CalendarMonthView({
             bandRows > 0 ? bandRows * (BAND_HEIGHT + BAND_GAP) + BAND_GAP : 0;
 
           return (
-            <div key={weekIdx} className="relative">
+            <div
+              key={weekIdx}
+              className={cn("relative", weekIdx % 2 === 1 && "bg-ink-100/40")}
+            >
               {/* Band overlay — sits on top of the week, aligned to the
                   top of the cells. Cells get paddingTop = bandAreaHeight
                   so chips start below the bands. */}
@@ -292,6 +299,7 @@ export function CalendarMonthView({
                             item={it}
                             now={now}
                             onClick={() => onItemClick(it)}
+                            readOnly={readOnly}
                           />
                         ))}
                         {overflow > 0 && (
@@ -504,10 +512,12 @@ function MonthItemChip({
   item,
   now,
   onClick,
+  readOnly,
 }: {
   item: CalendarItem;
   now: Date;
   onClick: () => void;
+  readOnly?: boolean;
 }) {
   const { prefs } = useCalendarPrefs();
   const tz = prefs.timezone;
@@ -567,6 +577,7 @@ function MonthItemChip({
             : `${formatHour(item.start, tz)}–${formatHour(item.end, tz)}`}
         </span>
         <span className="truncate">{item.title}</span>
+        {item.recurring && <Repeat className="w-2.5 h-2.5 shrink-0 text-white/80" />}
       </div>
     );
   }
@@ -592,15 +603,17 @@ function MonthItemChip({
       }}
       title={`${itemTooltip(item)}\n${formatHour(item.start, tz)} עד ${formatHour(item.end, tz)}`}
     >
-      <TaskCheckButton
-        taskId={(item.source as { id: string }).id}
-        completed={item.completed}
-        accent={accent}
-        size="sm"
-        occurrenceStart={
-          item.id.split(":").length === 3 ? item.start : undefined
-        }
-      />
+      {!readOnly && (
+        <TaskCheckButton
+          taskId={(item.source as { id: string }).id}
+          completed={item.completed}
+          accent={accent}
+          size="sm"
+          occurrenceStart={
+            item.id.split(":").length === 3 ? item.start : undefined
+          }
+        />
+      )}
       <span className="shrink-0 text-ink-500 tabular-nums">
         {item.allDay
           ? ""
@@ -609,6 +622,7 @@ function MonthItemChip({
       <span className={cn("truncate", item.completed && "line-through")}>
         {item.title}
       </span>
+      {item.recurring && <Repeat className="w-2.5 h-2.5 shrink-0 text-ink-400" />}
       {overdue && !item.completed && (
         <span
           className="absolute -top-0.5 -end-0.5 w-1.5 h-1.5 rounded-full bg-danger-500 pointer-events-none"

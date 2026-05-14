@@ -186,6 +186,9 @@ export function TaskEditModal({
   const [scheduledAt, setScheduledAt] = useState<string | null>(null);
   const [deadlineAt, setDeadlineAt] = useState<string | null>(null);
   const [recurrenceRule, setRecurrenceRule] = useState<string | null>(null);
+  /** Ad-hoc extra occurrences — ISO datetime strings the task also recurs
+   *  on, independent of `recurrenceRule`. */
+  const [extraOccurrences, setExtraOccurrences] = useState<string[]>([]);
 
   useEffect(() => {
     if (!recurrenceRule) return;
@@ -231,6 +234,13 @@ export function TaskEditModal({
       setScheduledAt(task.scheduled_at ?? null);
       setDeadlineAt(task.deadline_at ?? null);
       setRecurrenceRule(task.recurrence_rule ?? null);
+      setExtraOccurrences(
+        Array.isArray((task as any).extra_occurrences)
+          ? ((task as any).extra_occurrences as unknown[]).filter(
+              (x): x is string => typeof x === "string"
+            )
+          : []
+      );
       setAssigneeId(task.assignee_user_id ?? null);
       setRequiresApproval(task.requires_approval ?? false);
       setDurationMinutes(task.duration_minutes ?? null);
@@ -265,6 +275,7 @@ export function TaskEditModal({
       setScheduledAt(createDraft.scheduled_at ?? null);
       setDeadlineAt(null);
       setRecurrenceRule(null);
+      setExtraOccurrences([]);
       setAssigneeId(null);
       setDurationMinutes(createDraft.duration_minutes ?? null);
       setEstimatedMinutes(
@@ -292,6 +303,14 @@ export function TaskEditModal({
     const tagsEqual =
       tags.length === (task.tags?.length ?? 0) &&
       tags.every((x, i) => x === task.tags?.[i]);
+    const taskExtra = Array.isArray((task as any).extra_occurrences)
+      ? ((task as any).extra_occurrences as unknown[]).filter(
+          (x): x is string => typeof x === "string"
+        )
+      : [];
+    const extraEqual =
+      extraOccurrences.length === taskExtra.length &&
+      extraOccurrences.every((x, i) => x === taskExtra[i]);
     return (
       (title.trim() || task.title) !== task.title ||
       description !== (task.description ?? "") ||
@@ -306,6 +325,7 @@ export function TaskEditModal({
       scheduledAt !== (task.scheduled_at ?? null) ||
       deadlineAt !== (task.deadline_at ?? null) ||
       recurrenceRule !== (task.recurrence_rule ?? null) ||
+      !extraEqual ||
       durationMinutes !== (task.duration_minutes ?? null) ||
       estimatedMinutes !== hoursToMinutes(task.estimated_hours ?? null) ||
       isPhase !== !!task.is_phase ||
@@ -340,6 +360,7 @@ export function TaskEditModal({
     scheduledAt,
     deadlineAt,
     recurrenceRule,
+    extraOccurrences,
     durationMinutes,
     estimatedMinutes,
     isPhase,
@@ -380,6 +401,9 @@ export function TaskEditModal({
           scheduled_at: scheduledAt,
           deadline_at: deadlineAt,
           recurrence_rule: recurrenceRule,
+          extra_occurrences: extraOccurrences.filter(
+            (s) => s && !Number.isNaN(new Date(s).getTime())
+          ),
           duration_minutes: durationMinutes,
           estimated_hours:
             estimatedMinutes != null ? minutesToHours(estimatedMinutes) : null,
@@ -432,6 +456,7 @@ export function TaskEditModal({
       scheduled_at: task.scheduled_at,
       deadline_at: task.deadline_at,
       recurrence_rule: task.recurrence_rule,
+      extra_occurrences: (task as any).extra_occurrences ?? [],
       duration_minutes: task.duration_minutes,
       estimated_hours: task.estimated_hours,
       is_phase: task.is_phase,
@@ -458,6 +483,7 @@ export function TaskEditModal({
       scheduled_at: scheduledAt,
       deadline_at: deadlineAt,
       recurrence_rule: recurrenceRule,
+      extra_occurrences: extraOccurrences,
       duration_minutes: durationMinutes,
       estimated_hours:
         estimatedMinutes != null ? minutesToHours(estimatedMinutes) : null,
@@ -952,6 +978,61 @@ export function TaskEditModal({
                         onChange={setRecurrenceRule}
                         anchorDate={scheduledAt ? new Date(scheduledAt) : null}
                       />
+                    </Field>
+                  </div>
+
+                  <div className="pt-2 border-t border-ink-200">
+                    <Field
+                      label="מועדים נוספים"
+                      hint="תאריכים ושעות נוספים שבהם המשימה תופיע ביומן — בנוסף לכלל החזרה ובלתי תלויים בו."
+                    >
+                      <div className="space-y-2">
+                        {extraOccurrences.length === 0 && (
+                          <p className="text-xs text-ink-400">
+                            אין מועדים נוספים.
+                          </p>
+                        )}
+                        {extraOccurrences.map((iso, idx) => (
+                          <div key={idx} className="flex items-center gap-2">
+                            <div className="flex-1 min-w-0">
+                              <DateTimePicker
+                                value={iso || null}
+                                onChange={(v) =>
+                                  setExtraOccurrences((prev) =>
+                                    prev.map((x, i) =>
+                                      i === idx ? v ?? "" : x
+                                    )
+                                  )
+                                }
+                              />
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setExtraOccurrences((prev) =>
+                                  prev.filter((_, i) => i !== idx)
+                                )
+                              }
+                              className="btn-ghost text-danger-500 text-xs shrink-0"
+                              title="הסר מועד"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setExtraOccurrences((prev) => [
+                              ...prev,
+                              new Date().toISOString(),
+                            ])
+                          }
+                          className="btn-ghost text-xs"
+                        >
+                          + הוסף מועד
+                        </button>
+                      </div>
                     </Field>
                   </div>
 

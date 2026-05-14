@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { Repeat } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import {
   type ActualStripe,
@@ -58,6 +59,8 @@ interface CalendarWeekViewProps {
   notesByDate?: Map<string, string>;
   /** Click on a column's date digit → open the per-day note editor. */
   onDateNoteClick?: (date: Date) => void;
+  /** Display-only mode — hides the per-task check-off controls. */
+  readOnly?: boolean;
 }
 
 export function CalendarWeekView({
@@ -72,6 +75,7 @@ export function CalendarWeekView({
   onItemDrop,
   notesByDate,
   onDateNoteClick,
+  readOnly,
 }: CalendarWeekViewProps) {
   const weekStart = startOfWeek(anchor);
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
@@ -365,6 +369,7 @@ export function CalendarWeekView({
               span={span}
               row={row}
               onClick={() => onItemClick(item)}
+              readOnly={readOnly}
             />
           ))}
         </div>
@@ -386,21 +391,53 @@ export function CalendarWeekView({
                 key={i}
                 className="border-s border-ink-100/60 px-0.5 py-1 flex flex-col gap-0.5 min-h-[28px]"
               >
-                {dayItems.map((item) => (
-                  <button
-                    key={item.id}
-                    onClick={() => onItemClick(item)}
-                    title={itemTooltip(item)}
-                    className={cn(
-                      "w-full text-start text-[11px] leading-tight truncate rounded px-1 py-0.5 font-medium",
-                      item.kind === "task"
-                        ? "bg-primary-100 text-primary-800 hover:bg-primary-200"
-                        : "bg-violet-100 text-violet-800 hover:bg-violet-200"
-                    )}
-                  >
-                    {item.title}
-                  </button>
-                ))}
+                {dayItems.map((item) => {
+                  const isTask = item.kind === "task";
+                  return (
+                    <div
+                      key={item.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => onItemClick(item)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          onItemClick(item);
+                        }
+                      }}
+                      title={itemTooltip(item)}
+                      className={cn(
+                        "w-full text-start text-[11px] leading-tight rounded px-1 py-0.5 font-medium cursor-pointer inline-flex items-center gap-1",
+                        isTask
+                          ? "bg-primary-100 text-primary-800 hover:bg-primary-200"
+                          : "bg-violet-100 text-violet-800 hover:bg-violet-200"
+                      )}
+                    >
+                      {isTask && !readOnly && (
+                        <TaskCheckButton
+                          taskId={(item.source as { id: string }).id}
+                          completed={item.completed}
+                          accent={item.color ?? "#6b6b80"}
+                          size="sm"
+                          occurrenceStart={
+                            item.id.split(":").length === 3 ? item.start : undefined
+                          }
+                        />
+                      )}
+                      <span
+                        className={cn(
+                          "truncate flex-1 min-w-0",
+                          item.completed && "line-through"
+                        )}
+                      >
+                        {item.title}
+                      </span>
+                      {item.recurring && (
+                        <Repeat className="w-2.5 h-2.5 shrink-0 opacity-70" />
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             ))}
           </div>
@@ -503,6 +540,7 @@ export function CalendarWeekView({
                     actuals={taskActuals}
                     onClick={() => onItemClick(item)}
                     compact
+                    readOnly={readOnly}
                   />
                 );
               })}
@@ -593,6 +631,7 @@ function MultiDayBand({
   span,
   row,
   onClick,
+  readOnly,
 }: {
   item: CalendarItem;
   now: Date;
@@ -600,6 +639,7 @@ function MultiDayBand({
   span: number;
   row: number;
   onClick: () => void;
+  readOnly?: boolean;
 }) {
   const isTask = item.kind === "task";
   const isPhase = !!item.isPhase;
@@ -669,7 +709,7 @@ function MultiDayBand({
       }}
       title={itemTooltip(item)}
     >
-      {isTask && !isPhase && (
+      {isTask && !isPhase && !readOnly && (
         <TaskCheckButton
           taskId={(item.source as { id: string }).id}
           completed={item.completed}

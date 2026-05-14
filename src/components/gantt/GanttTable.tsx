@@ -108,6 +108,16 @@ interface GanttTableProps {
   customFields?: TaskCustomField[];
   lists?: Array<{ id: string; name: string }>;
   onToggleCritical?: (taskId: string, critical: boolean) => void;
+  /** Full hierarchy (post critical-filter, pre collapse-filter). Used for
+   *  WBS numbering and rolled-up % so collapsing a phase doesn't skew them. */
+  allRows?: GanttRow[];
+  /** Collapsed parent task ids — drives the chevron state. */
+  collapsedIds?: Set<string>;
+  /** Toggle a parent row's collapsed state. */
+  onToggleCollapsed?: (taskId: string) => void;
+  /** Register the scroll container into the page-level vertical scroll-sync
+   *  group so the table stays row-aligned with the Gantt grid. */
+  registerScroll?: (el: HTMLElement) => () => void;
 }
 
 export function GanttTable({
@@ -120,7 +130,17 @@ export function GanttTable({
   customFields = [],
   lists = [],
   onToggleCritical,
+  allRows,
+  collapsedIds,
+  onToggleCollapsed,
+  registerScroll,
 }: GanttTableProps) {
+  const baseRows = allRows ?? rows;
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!registerScroll || !scrollRef.current) return;
+    return registerScroll(scrollRef.current);
+  }, [registerScroll]);
   const updateTask = useUpdateTask();
   const completeTask = useCompleteTask();
   const createDep = useCreateTaskDependency();
@@ -146,8 +166,8 @@ export function GanttTable({
     return m;
   }, [lists]);
 
-  const wbsNumbers = useMemo(() => computeWbs(rows), [rows]);
-  const percentMap = useMemo(() => computePercentMap(rows), [rows]);
+  const wbsNumbers = useMemo(() => computeWbs(baseRows), [baseRows]);
+  const percentMap = useMemo(() => computePercentMap(baseRows), [baseRows]);
 
   const visibleCustomFields = useMemo(
     () => customFields.filter((cf) => cols.isVisible(cf.id)),
@@ -170,11 +190,11 @@ export function GanttTable({
 
   const visibleTaskMap = useMemo(() => {
     const m = new Map<string, GanttRow>();
-    for (const r of rows) {
+    for (const r of baseRows) {
       if (r.kind === "task" && r.task) m.set(r.task.id, r);
     }
     return m;
-  }, [rows]);
+  }, [baseRows]);
 
   const update = (
     taskId: string,
@@ -194,10 +214,11 @@ export function GanttTable({
     <div
       className={cn(
         "card overflow-hidden flex flex-col",
-        layout === "stacked" && "max-h-[40vh]"
+        layout === "stacked" && "max-h-[40vh]",
+        layout === "side" && "max-h-[calc(100vh-200px)]"
       )}
     >
-      <div className="overflow-auto scrollbar-thin">
+      <div ref={scrollRef} className="flex-1 min-h-0 overflow-auto scrollbar-thin">
         <div role="table" className="w-full text-[12px] tabular-nums">
           <div
             role="rowgroup"
@@ -349,6 +370,8 @@ export function GanttTable({
                 wbsNumber={r.task ? wbsNumbers.get(r.task.id) : undefined}
                 percentComplete={r.task ? percentMap.get(r.task.id) : undefined}
                 listName={r.task?.task_list_id ? listNameMap.get(r.task.task_list_id) : undefined}
+                collapsedIds={collapsedIds}
+                onToggleCollapsed={onToggleCollapsed}
               />
             ))}
           </div>
@@ -396,12 +419,15 @@ interface GanttTableBodyRowProps {
   wbsNumber?: string;
   percentComplete?: number;
   listName?: string;
+  collapsedIds?: Set<string>;
+  onToggleCollapsed?: (taskId: string) => void;
 }
 
 function GanttTableBodyRow({
   row, gridTemplate, cols, criticalSet, taskDeps, visibleTaskMap, visibleCustomFields,
   onRowClick, onUpdate, onComplete, onAddDep, onRemoveDep, onUpdateDep, onToggleCritical,
   multipleListsVisible, wbsNumber, percentComplete, listName,
+  collapsedIds, onToggleCollapsed,
 }: GanttTableBodyRowProps) {
   const isTask = row.kind === "task" && !!row.task;
   const isCritical = isTask && criticalSet.has(row.task!.id);
@@ -482,6 +508,19 @@ function GanttTableBodyRow({
       </div>
 
       <div role="cell" className="px-2 py-1 flex items-center gap-2 min-w-0" style={{ paddingInlineStart: `${8 + row.depth * 16}px` }}>
+        {isTask && row.task && row.hasChildren ? (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onToggleCollapsed?.(row.task!.id); }}
+            className="shrink-0 w-4 h-4 -ms-1 flex items-center justify-center text-[10px] text-ink-400 hover:text-ink-900 hover:bg-ink-150 rounded"
+            title={collapsedIds?.has(row.task.id) ? "הרחב" : "כווץ"}
+            aria-expanded={!collapsedIds?.has(row.task.id)}
+          >
+            {collapsedIds?.has(row.task.id) ? "◂" : "▾"}
+          </button>
+        ) : (
+          <span className="shrink-0 w-4 h-4 -ms-1" aria-hidden />
+        )}
         {isTask && row.task && !isPhase ? (
           <button type="button" onClick={(e) => { e.stopPropagation(); onToggleCritical?.(row.task!.id, !isCritical); }} className="w-1.5 h-1.5 rounded-full shrink-0 hover:scale-150 transition-transform" style={{ backgroundColor: isCritical ? "#ef4444" : "#d1d5db" }} title={isCritical ? "הסר מסלול קריטי" : "סמן כקריטי"} />
         ) : (

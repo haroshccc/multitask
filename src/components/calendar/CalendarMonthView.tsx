@@ -28,6 +28,7 @@ import {
 import { useCalendarPrefs } from "@/lib/hooks/useCalendarPrefs";
 import { DayNoteSlot } from "./DayNoteSlot";
 import { TaskCheckButton } from "./TaskCheckButton";
+import { RecurringMarker } from "./RecurringMarker";
 
 /** yyyy-mm-dd in local time. */
 function monthDayKey(d: Date): string {
@@ -58,6 +59,9 @@ interface CalendarMonthViewProps {
   noteColorsByDate?: Map<string, string>;
   /** Display-only mode — hides the per-task check-off controls. */
   readOnly?: boolean;
+  /** When true, recurring task items render as a flat deadline-style marker
+   *  (repeat glyph + start time + underline) instead of a bordered chip. */
+  recurringAsMarker?: boolean;
 }
 
 export function CalendarMonthView({
@@ -70,6 +74,7 @@ export function CalendarMonthView({
   notesByDate,
   noteColorsByDate,
   readOnly,
+  recurringAsMarker,
 }: CalendarMonthViewProps) {
   /**
    * Compute the target Date for a drop on `day`. For "move" we keep the
@@ -304,6 +309,7 @@ export function CalendarMonthView({
                             now={now}
                             onClick={() => onItemClick(it)}
                             readOnly={readOnly}
+                            recurringAsMarker={recurringAsMarker}
                           />
                         ))}
                         {overflow > 0 && (
@@ -517,11 +523,13 @@ function MonthItemChip({
   now,
   onClick,
   readOnly,
+  recurringAsMarker,
 }: {
   item: CalendarItem;
   now: Date;
   onClick: () => void;
   readOnly?: boolean;
+  recurringAsMarker?: boolean;
 }) {
   const { prefs } = useCalendarPrefs();
   const tz = prefs.timezone;
@@ -530,6 +538,14 @@ function MonthItemChip({
   const overdue = isOverdueTask(item, now);
   const accent = item.color ?? (isTask ? "#6b6b80" : "#f59e0b");
   const draggable = isItemDraggable(item);
+
+  // Gantt calendar view: a recurring task renders as a flat marker —
+  // repeat glyph, start time only, title, coloured underline. No border.
+  if (recurringAsMarker && isTask && item.recurring) {
+    return (
+      <RecurringMarker item={item} accent={accent} tz={tz} onClick={onClick} />
+    );
+  }
   // Month view drops only change the date, so grabOffsetMin is irrelevant —
   // pass 0 and let the cell drop preserve the original time-of-day.
   const onDragStart = (e: React.DragEvent) => {

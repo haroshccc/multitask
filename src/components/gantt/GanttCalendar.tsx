@@ -348,6 +348,7 @@ export function GanttCalendar({
             noteColorsByDate={noteColorsByDate}
             onDateNoteClick={setEditingNoteDate}
             readOnly
+            recurringAsMarker
           />
         ) : (
           <CalendarMonthView
@@ -359,6 +360,7 @@ export function GanttCalendar({
             notesByDate={notesByDate}
             noteColorsByDate={noteColorsByDate}
             readOnly
+            recurringAsMarker
           />
         )}
       </div>

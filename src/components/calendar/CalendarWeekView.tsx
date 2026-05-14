@@ -63,6 +63,9 @@ interface CalendarWeekViewProps {
   onDateNoteClick?: (date: Date) => void;
   /** Display-only mode — hides the per-task check-off controls. */
   readOnly?: boolean;
+  /** When true, recurring task items render as a flat deadline-style marker
+   *  (repeat glyph + start time + underline) instead of a bordered block. */
+  recurringAsMarker?: boolean;
 }
 
 export function CalendarWeekView({
@@ -79,6 +82,7 @@ export function CalendarWeekView({
   noteColorsByDate,
   onDateNoteClick,
   readOnly,
+  recurringAsMarker,
 }: CalendarWeekViewProps) {
   const weekStart = startOfWeek(anchor);
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
@@ -548,6 +552,7 @@ export function CalendarWeekView({
                     onClick={() => onItemClick(item)}
                     compact
                     readOnly={readOnly}
+                    recurringAsMarker={recurringAsMarker}
                   />
                 );
               })}

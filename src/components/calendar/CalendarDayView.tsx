@@ -32,6 +32,7 @@ import { useCalendarPrefs } from "@/lib/hooks/useCalendarPrefs";
 import { DayNoteSlot } from "./DayNoteSlot";
 import { TaskCheckButton } from "./TaskCheckButton";
 import { HalfCheckIcon } from "@/components/ui/HalfCheckIcon";
+import { RecurringMarker } from "./RecurringMarker";
 
 interface CalendarDayViewProps {
   date: Date;
@@ -352,6 +353,7 @@ export function CalendarBlock({
   onClick,
   compact,
   readOnly,
+  recurringAsMarker,
 }: {
   item: CalendarItem;
   now: Date;
@@ -366,6 +368,9 @@ export function CalendarBlock({
   compact?: boolean;
   /** When true the block is display-only — no task check-off control. */
   readOnly?: boolean;
+  /** When true, a recurring task renders as a flat deadline-style marker
+   *  (repeat glyph + start time + underline) instead of a bordered block. */
+  recurringAsMarker?: boolean;
 }) {
   const { prefs } = useCalendarPrefs();
   const tz = prefs.timezone;
@@ -377,6 +382,23 @@ export function CalendarBlock({
 
   // Color: list color for both (tasks borrow from list, events either list or primary).
   const accent = item.color ?? (isTask || isDeadline ? "#6b6b80" : "#f59e0b");
+
+  // Gantt calendar view: a recurring task renders as a flat marker — no
+  // bordered block, just repeat glyph + start time + title + underline.
+  if (recurringAsMarker && isTask && item.recurring) {
+    return (
+      <div
+        className="absolute"
+        style={{
+          top: `${top}%`,
+          insetInlineStart: `calc(${leftPct}% + 2px)`,
+          width: `calc(${widthPct}% - 4px)`,
+        }}
+      >
+        <RecurringMarker item={item} accent={accent} tz={tz} onClick={onClick} />
+      </div>
+    );
+  }
 
   // Deadline marker — rendered inline rather than as a bordered block. Title
   // + hourglass icon, with a coloured underline in the list's color. Sits in

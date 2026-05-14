@@ -420,8 +420,19 @@ export function Gantt() {
   const fields: FilterField[] = useMemo(() => [
     { key: "lists", type: "multi-enum", label: "רשימה", options: lists.map((l) => ({ value: l.id, label: l.name })) },
     { key: "statuses", type: "multi-enum", label: "סטטוס", options: [{ value: "todo", label: "לעשות" }, { value: "in_progress", label: "בעבודה" }, { value: "pending_approval", label: "ממתין לאישור" }, { value: "done", label: "בוצע" }] },
+    {
+      key: "assignees",
+      type: "multi-enum",
+      label: "משויך ל",
+      options: orgMembers
+        .filter((om) => om.profile)
+        .map((om) => ({
+          value: om.membership.user_id,
+          label: om.profile!.full_name?.trim() || om.membership.user_id.slice(0, 8),
+        })),
+    },
     { key: "tags", type: "multi-text", label: "תגים" },
-  ], [lists]);
+  ], [lists, orgMembers]);
 
   const filtersActiveCount = useMemo(() => {
     let n = 0;

@@ -116,6 +116,17 @@ interface TaskEditModalProps {
 
 type Tab = "overview" | "schedule" | "history" | "edits" | "attachments";
 
+const PHASE_COLOR_PRESETS = [
+  "#6b6b80",
+  "#3b82f6",
+  "#14b8a6",
+  "#10b981",
+  "#f59e0b",
+  "#ef4444",
+  "#8b5cf6",
+  "#ec4899",
+];
+
 export function TaskEditModal({
   taskId,
   onClose,
@@ -194,6 +205,7 @@ export function TaskEditModal({
   const [assigneeId, setAssigneeId] = useState<string | null>(null);
   const [requiresApproval, setRequiresApproval] = useState<boolean>(false);
   const [isPhase, setIsPhase] = useState<boolean>(false);
+  const [accentColor, setAccentColor] = useState<string | null>(null);
 
   const [goalEnabled, setGoalEnabled] = useState<boolean>(false);
   const [goalPeriod, setGoalPeriod] = useState<"day" | "week" | "month">("week");
@@ -224,6 +236,7 @@ export function TaskEditModal({
       setDurationMinutes(task.duration_minutes ?? null);
       setEstimatedMinutes(hoursToMinutes(task.estimated_hours ?? null));
       setIsPhase(!!task.is_phase);
+      setAccentColor((task as any).accent_color ?? null);
       const taskAny = task as any;
       const persistedGoalType: "achievement" | "habit" = taskAny.goal_type ?? "habit";
       setGoalEnabled(!!task.goal_period || persistedGoalType === "achievement");
@@ -260,6 +273,7 @@ export function TaskEditModal({
           : null
       );
       setIsPhase(false);
+      setAccentColor(null);
       setGoalEnabled(createDraft.goalEnabled ?? false);
       setGoalType("habit");
       setGoalDeadline(null);
@@ -295,6 +309,7 @@ export function TaskEditModal({
       durationMinutes !== (task.duration_minutes ?? null) ||
       estimatedMinutes !== hoursToMinutes(task.estimated_hours ?? null) ||
       isPhase !== !!task.is_phase ||
+      accentColor !== ((task as any).accent_color ?? null) ||
       goalEnabled !== (!!task.goal_period || (task as any).goal_type === "achievement") ||
       goalType !== ((task as any).goal_type ?? "habit") ||
       goalDeadline !== ((task as any).goal_deadline ?? null) ||
@@ -328,6 +343,7 @@ export function TaskEditModal({
     durationMinutes,
     estimatedMinutes,
     isPhase,
+    accentColor,
     tags,
     goalEnabled,
     goalPeriod,
@@ -381,6 +397,7 @@ export function TaskEditModal({
         };
         const created = await createTask.mutateAsync({
           ...payload,
+          accent_color: accentColor,
           goal_type: goalEnabled ? goalType : null,
           goal_deadline: goalEnabled && goalType === "achievement" ? goalDeadline : null,
         } as any);
@@ -418,6 +435,7 @@ export function TaskEditModal({
       duration_minutes: task.duration_minutes,
       estimated_hours: task.estimated_hours,
       is_phase: task.is_phase,
+      accent_color: (task as any).accent_color ?? null,
       goal_period: task.goal_period,
       goal_target: task.goal_target,
       goal_min_streak_periods: task.goal_min_streak_periods,
@@ -444,6 +462,7 @@ export function TaskEditModal({
       estimated_hours:
         estimatedMinutes != null ? minutesToHours(estimatedMinutes) : null,
       is_phase: isPhase,
+      accent_color: accentColor,
       goal_period: goalEnabled && goalType === "habit" ? goalPeriod : null,
       goal_target: goalEnabled && goalType === "habit" ? goalTarget : null,
       goal_min_streak_periods: goalEnabled && goalType === "habit"
@@ -811,23 +830,73 @@ export function TaskEditModal({
                   </div>
 
                   {task && task.parent_task_id === null && (
-                    <label className="flex items-start gap-2 cursor-pointer select-none p-2 rounded-md border border-ink-200 hover:bg-ink-50">
-                      <input
-                        type="checkbox"
-                        checked={isPhase}
-                        onChange={(e) => setIsPhase(e.target.checked)}
-                        className="w-4 h-4 mt-0.5"
-                      />
-                      <div>
-                        <div className="text-sm font-medium text-ink-900">
-                          הגדר כשלב
+                    <div className="flex items-start gap-2 p-2 rounded-md border border-ink-200">
+                      <label className="flex items-start gap-2 cursor-pointer select-none flex-1 hover:bg-ink-50 rounded-md -m-1 p-1">
+                        <input
+                          type="checkbox"
+                          checked={isPhase}
+                          onChange={(e) => setIsPhase(e.target.checked)}
+                          className="w-4 h-4 mt-0.5"
+                        />
+                        <div>
+                          <div className="text-sm font-medium text-ink-900">
+                            הגדר כשלב
+                          </div>
+                          <div className="text-[11px] text-ink-500">
+                            שלב מקבץ תחתיו תתי-משימות ומופיע כרצועת-זמן רחבה
+                            ביומן וב-Gantt כשרואים את הרשימה לבדה.
+                          </div>
                         </div>
-                        <div className="text-[11px] text-ink-500">
-                          שלב מקבץ תחתיו תתי-משימות ומופיע כרצועת-זמן רחבה
-                          ביומן וב-Gantt כשרואים את הרשימה לבדה.
+                      </label>
+                      <div className="flex flex-col items-center gap-1 shrink-0">
+                        <span className="text-[10px] text-ink-500">צבע</span>
+                        <div className="flex items-center gap-1">
+                          {PHASE_COLOR_PRESETS.map((c) => (
+                            <button
+                              key={c}
+                              type="button"
+                              onClick={() => setAccentColor(c)}
+                              className={cn(
+                                "w-5 h-5 rounded-full border transition-transform hover:scale-110",
+                                accentColor === c
+                                  ? "border-ink-900 ring-2 ring-offset-1 ring-ink-300"
+                                  : "border-ink-200"
+                              )}
+                              style={{ backgroundColor: c }}
+                              title={c}
+                              aria-label={`צבע ${c}`}
+                            />
+                          ))}
+                          <label
+                            className="w-5 h-5 rounded-full border border-ink-200 overflow-hidden cursor-pointer relative"
+                            title="צבע מותאם אישית"
+                            style={accentColor ? { backgroundColor: accentColor } : undefined}
+                          >
+                            {!accentColor && (
+                              <span className="absolute inset-0 flex items-center justify-center text-[10px] text-ink-400">
+                                +
+                              </span>
+                            )}
+                            <input
+                              type="color"
+                              value={accentColor ?? "#6b6b80"}
+                              onChange={(e) => setAccentColor(e.target.value)}
+                              className="absolute inset-0 opacity-0 cursor-pointer"
+                            />
+                          </label>
+                          {accentColor && (
+                            <button
+                              type="button"
+                              onClick={() => setAccentColor(null)}
+                              className="text-[11px] text-ink-400 hover:text-ink-700 px-0.5"
+                              title="ברירת מחדל"
+                            >
+                              ✕
+                            </button>
+                          )}
                         </div>
                       </div>
-                    </label>
+                    </div>
                   )}
                   </fieldset>
                   {/* --- End more locked fields --- */}

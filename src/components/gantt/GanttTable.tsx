@@ -219,7 +219,7 @@ export function GanttTable({
       )}
     >
       <div ref={scrollRef} className="flex-1 min-h-0 overflow-auto scrollbar-thin">
-        <div role="table" className="w-full text-[12px] tabular-nums">
+        <div role="table" className="w-full min-w-max text-[12px] tabular-nums">
           <div
             role="rowgroup"
             className="sticky top-0 z-10 bg-ink-50/95 backdrop-blur-sm border-b border-ink-200"

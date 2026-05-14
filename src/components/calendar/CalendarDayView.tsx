@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Hourglass, Repeat } from "lucide-react";
+import { AlertTriangle, Repeat } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import {
   HOUR,
@@ -401,7 +401,7 @@ export function CalendarBlock({
   }
 
   // Deadline marker — rendered inline rather than as a bordered block. Title
-  // + hourglass icon, with a coloured underline in the list's color. Sits in
+  // + warning triangle icon, with a coloured underline in the list's color. Sits in
   // the time grid at the deadline timestamp, claiming a 15-minute slot. No
   // border, no background, no time-range header — visually distinct from a
   // regular task block at first glance.
@@ -433,7 +433,7 @@ export function CalendarBlock({
           <span className="truncate font-medium text-ink-900 flex-1 min-w-0">
             {item.title}
           </span>
-          <Hourglass className="w-3 h-3 text-ink-900 shrink-0" />
+          <AlertTriangle className="w-3 h-3 text-amber-500 shrink-0" />
         </div>
         {/* Underline in the list color — the only chrome we draw. */}
         <div

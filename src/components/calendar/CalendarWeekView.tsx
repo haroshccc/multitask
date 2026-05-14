@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { Repeat } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
+import { useCalendarPrefs } from "@/lib/hooks/useCalendarPrefs";
 import {
   type ActualStripe,
   type CalendarItem,
@@ -30,6 +31,7 @@ import {
   isItemDraggable,
 } from "./calendar-drag";
 import { CalendarBlock } from "./CalendarDayView";
+import { RecurringMarker } from "./RecurringMarker";
 import { DayNoteSlot } from "./DayNoteSlot";
 import { TaskCheckButton } from "./TaskCheckButton";
 
@@ -84,6 +86,7 @@ export function CalendarWeekView({
   readOnly,
   recurringAsMarker,
 }: CalendarWeekViewProps) {
+  const { prefs } = useCalendarPrefs();
   const weekStart = startOfWeek(anchor);
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
 
@@ -92,9 +95,17 @@ export function CalendarWeekView({
   // header, NOT as 24-hour blocks inside each day.
   const weekWindowStart = startOfDay(days[0]!);
   const multiDayBands = useMemo(
-    () => buildMultiDayBands(items, days),
+    () =>
+      buildMultiDayBands(
+        // Gantt calendar: recurring tasks never render as a spanning band —
+        // they show as flat markers in the hourless row / timed grid instead.
+        recurringAsMarker
+          ? items.filter((it) => !(it.kind === "task" && it.recurring))
+          : items,
+        days
+      ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [items, weekWindowStart.getTime()]
+    [items, weekWindowStart.getTime(), recurringAsMarker]
   );
 
   const multiDayItemIds = useMemo(
@@ -112,14 +123,17 @@ export function CalendarWeekView({
         return items.filter(
           (raw) =>
             !multiDayItemIds.has(raw.id) &&
-            !raw.allDay &&
+            (!raw.allDay ||
+              (!!recurringAsMarker &&
+                raw.recurring &&
+                raw.kind === "task")) &&
             isHourless(raw) &&
             raw.start >= dayStart &&
             raw.start < dayEnd
         );
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [items, weekStart.getTime(), multiDayItemIds]
+    [items, weekStart.getTime(), multiDayItemIds, recurringAsMarker]
   );
 
   const perDay = useMemo(
@@ -404,6 +418,17 @@ export function CalendarWeekView({
               >
                 {dayItems.map((item) => {
                   const isTask = item.kind === "task";
+                  if (recurringAsMarker && isTask && item.recurring) {
+                    return (
+                      <RecurringMarker
+                        key={item.id}
+                        item={item}
+                        accent={item.color ?? "#6b6b80"}
+                        tz={prefs.timezone}
+                        onClick={() => onItemClick(item)}
+                      />
+                    );
+                  }
                   return (
                     <div
                       key={item.id}

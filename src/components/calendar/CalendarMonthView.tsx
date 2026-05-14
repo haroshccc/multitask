@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Repeat, Hourglass } from "lucide-react";
+import { Repeat, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import {
   type CalendarItem,
@@ -159,7 +159,11 @@ export function CalendarMonthView({
   const singleDayByDate = useMemo(() => {
     const m = new Map<string, CalendarItem[]>();
     for (const it of items) {
-      if (isMultiDay(it)) continue;
+      // Gantt calendar: recurring tasks render as a flat marker on their
+      // start day, never as a spanning band.
+      const asMarker =
+        !!recurringAsMarker && it.kind === "task" && it.recurring;
+      if (isMultiDay(it) && !asMarker) continue;
       const k = keyOf(it.start);
       if (!m.has(k)) m.set(k, []);
       m.get(k)!.push(it);
@@ -176,13 +180,22 @@ export function CalendarMonthView({
       });
     }
     return m;
-  }, [items]);
+  }, [items, recurringAsMarker]);
 
   // Multi-day items, clipped + packed per week row.
   const multiDayPerWeek = useMemo(
     () =>
-      weeks.map((weekDays) => buildWeekBands(items, weekDays)),
-    [items, weeks]
+      weeks.map((weekDays) =>
+        buildWeekBands(
+          recurringAsMarker
+            ? items.filter(
+                (it) => !(it.kind === "task" && it.recurring)
+              )
+            : items,
+          weekDays
+        )
+      ),
+    [items, weeks, recurringAsMarker]
   );
 
   const now = new Date();
@@ -570,7 +583,7 @@ function MonthItemChip({
     }
   };
 
-  // Deadline marker — flat label + hourglass with a coloured underline,
+  // Deadline marker — flat label + warning triangle with a coloured underline,
   // no border/background. Visually distinct from a regular task chip.
   if (item.kind === "deadline") {
     return (
@@ -583,7 +596,7 @@ function MonthItemChip({
         title={`דד-ליין: ${item.title}`}
       >
         <div className="flex items-center gap-1 text-[10px]">
-          <Hourglass className="w-2.5 h-2.5 shrink-0 text-ink-700" />
+          <AlertTriangle className="w-2.5 h-2.5 shrink-0 text-amber-500" />
           <span className="truncate font-medium text-ink-900">{item.title}</span>
         </div>
         <div

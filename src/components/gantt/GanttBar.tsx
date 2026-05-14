@@ -57,6 +57,32 @@ export function GanttBar({
 
   const lastClickWasDragRef = useRef(false);
 
+  // Hover-card open/close with a small close delay. Without the delay,
+  // moving the cursor off the bar and onto the floating card crosses a
+  // tiny gap — the bar's mouseleave would unmount the card before the
+  // cursor reaches it, making the color picker unclickable.
+  const hoverTimer = useRef<number | null>(null);
+  const openHover = () => {
+    if (hoverTimer.current != null) {
+      clearTimeout(hoverTimer.current);
+      hoverTimer.current = null;
+    }
+    setHover(true);
+  };
+  const scheduleHoverClose = () => {
+    if (hoverTimer.current != null) clearTimeout(hoverTimer.current);
+    hoverTimer.current = window.setTimeout(() => {
+      setHover(false);
+      setColorPickerOpen(false);
+      hoverTimer.current = null;
+    }, 160);
+  };
+  useEffect(() => {
+    return () => {
+      if (hoverTimer.current != null) clearTimeout(hoverTimer.current);
+    };
+  }, []);
+
   const displayStart = drag?.currentStart ?? row.start;
   const displayEnd = drag?.currentEnd ?? row.end;
 
@@ -166,8 +192,8 @@ export function GanttBar({
         bottom: "100%",
         marginBottom: 6,
       }}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => { setHover(false); if (!colorPickerOpen) return; }}
+      onMouseEnter={openHover}
+      onMouseLeave={scheduleHoverClose}
     >
       <div className="flex items-start justify-between gap-2 mb-1">
         <span className="text-[11px] font-semibold text-ink-900 truncate">
@@ -282,8 +308,8 @@ export function GanttBar({
           }}
           onPointerDown={beginDrag("move")}
           onClick={handleClick}
-          onMouseEnter={() => setHover(true)}
-          onMouseLeave={() => setHover(false)}
+          onMouseEnter={openHover}
+          onMouseLeave={scheduleHoverClose}
           title={`שלב: ${row.title}`}
         >
           <div
@@ -356,8 +382,8 @@ export function GanttBar({
         }}
         onPointerDown={beginDrag("move")}
         onClick={handleClick}
-        onMouseEnter={() => setHover(true)}
-        onMouseLeave={() => setHover(false)}
+        onMouseEnter={openHover}
+        onMouseLeave={scheduleHoverClose}
         title={row.title}
       >
         <span className="truncate px-2 pointer-events-none flex items-center gap-1">

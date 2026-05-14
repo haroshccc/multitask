@@ -11,6 +11,21 @@ import { generateShades, pickShade } from "@/lib/utils/color-shades";
 export type GanttZoom = "day" | "week" | "month" | "quarter";
 export type GanttLayer = "both" | "tasks" | "events";
 
+/** Mix a hex color toward white by `amount` (0..1). Sub-tasks of a phase
+ *  render in a lighter tint of the phase color so the hierarchy reads at a
+ *  glance: solid phase bar, lighter sub-stage bars. */
+function lightenHex(hex: string, amount: number): string {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return hex;
+  const n = parseInt(m[1], 16);
+  const r = (n >> 16) & 255;
+  const g = (n >> 8) & 255;
+  const b = n & 255;
+  const mix = (c: number) => Math.round(c + (255 - c) * amount);
+  const hh = (c: number) => mix(c).toString(16).padStart(2, "0");
+  return `#${hh(r)}${hh(g)}${hh(b)}`;
+}
+
 export type GanttRowKind = "task" | "event";
 
 export interface GanttRow {
@@ -237,7 +252,11 @@ export function buildRows(
           isPhase: !!t.is_phase,
           phaseId: t.is_phase ? null : phaseId,
           childrenEnd: t.is_phase ? findSubtreeEnd(t.id) : null,
-          accentColor: inheritedAccent ?? undefined,
+          accentColor: t.is_phase
+            ? myAccent ?? undefined
+            : inheritedAccent
+            ? lightenHex(inheritedAccent, 0.4)
+            : undefined,
           unscheduled: !timing,
           ownershipMode: currentUserId
             ? t.owner_id !== currentUserId && t.assignee_user_id === currentUserId

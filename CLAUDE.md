@@ -9,6 +9,21 @@
 
 הסתכל תמיד על הפריסה האמיתית: `multitask-one.vercel.app` (branch: `main`)
 
+## 🛑 STOP-THE-WORLD: שמירת משימות (Enter / commitTitle)
+
+כל נגיעה בנתיב יצירה/שמירה של משימות **חייבת** לעצור הכל ולהקפיץ אישור מפורש מהמשתמשת **לפני** שמדחפים. עברנו כבר באג חמור שבו לחיצת Enter על משימה שכתבנו מחקה אותה (race condition בין commitTitle/updateTask לבין createTask + cleanup useEffect), והוא נשבר בעקבות שינויים שנראו "תמימים". המחיר של רגרסיה כאן הוא איבוד עבודה של המשתמשת בלי דרך לשחזר.
+
+**קבצים/אזורים רגישים:**
+- `src/components/tasks/TaskRow.tsx` — `commitTitle`, `handleKeyDown` (Enter / Cmd+Enter / Tab / Shift+Tab / Shift+Enter), `onBlur` של ה-contentEditable, ה-useEffect-ים ב-lines ~193-215 (`task.title` reset + focus).
+- `src/components/tasks/TaskColumn.tsx` — `handleCreate`, `handleEmptyCreate`, `focusTaskId` state, וה-cleanup useEffect (כרגע מנוטרל — אל תחזיר אותו בלי לוודא שאין race).
+- `src/lib/hooks/useTasks.ts` — `useCreateTask` (onSuccess invalidate), `useUpdateTask` (onMutate optimistic + onSettled invalidate), `useDeleteTask`.
+
+**הכלל:**
+1. לפני שינוי שנוגע באחד מאלה — להגיד למשתמשת ספציפית מה הולך להשתנות ולמה, ולחכות לאישור מפורש.
+2. אסור לדחוף ל-`main` שינוי שכזה בלי שהמשתמשת אישרה את הרגרסיה הזאת בפירוש.
+3. שינויי UI/CSS באותם קבצים שלא נוגעים ל-Enter/שמירה (למשל הסרת border, החלפת תווית) — בסדר לדחוף, אבל לוודא ב-diff ש-`commitTitle | handleKeyDown | createTask | deleteTask | updateTask` לא מופיעים בשורות שמשתנות.
+4. אם בכל זאת חייבים שינוי באזורים האלה — להריץ tsc, להריץ build, ולהריץ באופן ידני את הזרימה: bottom-add → Enter → inline title → Enter → blur → Enter ב-subtask (Cmd+Enter), ולוודא שאף משימה לא נעלמת ב-DB.
+
 ---
 
 ## Stack

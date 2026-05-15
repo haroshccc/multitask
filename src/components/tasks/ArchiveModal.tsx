@@ -2,7 +2,9 @@ import { X, ArchiveRestore, Clock } from "lucide-react";
 import {
   useArchivedTaskLists,
   useRestoreTaskList,
+  useArchiveTaskList,
 } from "@/lib/hooks/useTaskLists";
+import { pushUndo } from "@/lib/undo/store";
 import { format, differenceInDays } from "date-fns";
 import { he } from "date-fns/locale";
 import { ListIcon } from "./list-icons";
@@ -15,6 +17,7 @@ interface ArchiveModalProps {
 export function ArchiveModal({ onClose }: ArchiveModalProps) {
   const { data: lists = [], isLoading } = useArchivedTaskLists();
   const restore = useRestoreTaskList();
+  const archive = useArchiveTaskList();
 
   return (
     <div
@@ -88,7 +91,15 @@ export function ArchiveModal({ onClose }: ArchiveModalProps) {
                       </div>
                     </div>
                     <button
-                      onClick={() => restore.mutate(l.id)}
+                      onClick={() => {
+                        const id = l.id;
+                        restore.mutate(id);
+                        pushUndo({
+                          description: "שחזור רשימה מארכיון",
+                          undo: () => archive.mutate(id),
+                          redo: () => restore.mutate(id),
+                        });
+                      }}
                       className="btn-outline text-xs"
                       type="button"
                     >

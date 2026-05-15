@@ -26,11 +26,12 @@ import {
   TaskEditModal,
   type TaskCreateDraft,
 } from "@/components/tasks/TaskEditModal";
-import { useCreateTask } from "@/lib/hooks/useTasks";
+import { useCreateTask, useDeleteTask } from "@/lib/hooks/useTasks";
 import { useTaskLists } from "@/lib/hooks/useTaskLists";
-import { useCreateEvent } from "@/lib/hooks/useEvents";
+import { useCreateEvent, useDeleteEvent } from "@/lib/hooks/useEvents";
 import type { Recording } from "@/lib/types/domain";
 import type { RecordingAiOutput } from "@/lib/services/recordings";
+import { pushUndo } from "@/lib/undo/store";
 
 interface Props {
   recording: Recording;
@@ -106,11 +107,24 @@ export function AiInsights({ recording }: Props) {
   const onTrigger = () =>
     trigger.mutate({ recordingId: recording.id });
   const onSave = () => {
+    const prevAi = recording.ai_output;
+    const nextAi = draft as unknown as Recording["ai_output"];
     updateRecording.mutate({
       recordingId: recording.id,
-      patch: {
-        ai_output: draft as unknown as Recording["ai_output"],
-      },
+      patch: { ai_output: nextAi },
+    });
+    pushUndo({
+      description: "עריכת תובנות AI",
+      undo: () =>
+        updateRecording.mutate({
+          recordingId: recording.id,
+          patch: { ai_output: prevAi },
+        }),
+      redo: () =>
+        updateRecording.mutate({
+          recordingId: recording.id,
+          patch: { ai_output: nextAi },
+        }),
     });
   };
 
@@ -521,6 +535,7 @@ function TasksSection({
   const navigate = useNavigate();
   const { data: taskLists = [] } = useTaskLists();
   const createTask = useCreateTask();
+  const deleteTask = useDeleteTask();
   // Track which AI suggestions have already been turned into real tasks so we
   // can show "נוצרה" + the new task id instead of a stale "צור משימה".
   const [createdByIndex, setCreatedByIndex] = useState<Record<number, string>>(
@@ -589,6 +604,7 @@ function TasksSection({
     }
     setBulkState({ kind: "creating", total: targets.length, done: 0 });
     const created: Record<number, string> = {};
+    const createdIds: string[] = [];
     let done = 0;
     for (const { item, i } of targets) {
       try {
@@ -601,6 +617,7 @@ function TasksSection({
           task_list_id: bulkListId,
         });
         created[i] = t.id;
+        createdIds.push(t.id);
       } catch (err) {
         console.error("bulk create task failed:", err);
       }
@@ -615,6 +632,38 @@ function TasksSection({
       listId: bulkListId,
       listName: list?.name ?? "ברירת מחדל",
     });
+    if (createdIds.length > 0) {
+      // Snapshot the AI items + the list so redo can recreate them. Ids will
+      // differ on redo (best-effort).
+      const payloads = targets.map(({ item }) => ({
+        title: item.title,
+        description: item.due_hint
+          ? `מתוך הקלטה: ${recording.title ?? ""} · רמז דד-ליין: ${item.due_hint}`
+          : `מתוך הקלטה: ${recording.title ?? ""}`,
+        urgency: priorityToUrgency(item.priority ?? "normal"),
+        task_list_id: bulkListId,
+      }));
+      let currentIds = createdIds.slice();
+      pushUndo({
+        description: `יצירת ${createdIds.length} משימות מתובנות AI`,
+        undo: () => {
+          for (const id of currentIds) deleteTask.mutate(id);
+          currentIds = [];
+        },
+        redo: async () => {
+          const fresh: string[] = [];
+          for (const p of payloads) {
+            try {
+              const t = await createTask.mutateAsync(p);
+              fresh.push(t.id);
+            } catch (err) {
+              console.error("redo bulk create failed:", err);
+            }
+          }
+          currentIds = fresh;
+        },
+      });
+    }
   };
 
   const uncreatedCount = items.filter(
@@ -748,6 +797,7 @@ function EventsSection({
   onChange: (items: RecordingAiOutput["events"]) => void;
 }) {
   const createEvent = useCreateEvent();
+  const deleteEvent = useDeleteEvent();
   const [createdIndices, setCreatedIndices] = useState<Set<number>>(new Set());
 
   const onCreateOne = async (i: number) => {
@@ -761,14 +811,24 @@ function EventsSection({
       new Date(startsAt).getTime() + duration * 60_000
     ).toISOString();
     try {
-      await createEvent.mutateAsync({
+      const payload = {
         title: item.title,
         starts_at: startsAt,
         ends_at: endsAt,
         all_day: false,
         description: `מתוך הקלטה: ${recording.title ?? ""}`,
-      });
+      };
+      const created = await createEvent.mutateAsync(payload);
       setCreatedIndices((s) => new Set(s).add(i));
+      let currentId = created.id;
+      pushUndo({
+        description: `יצירת אירוע מתובנות AI: ${item.title}`,
+        undo: () => deleteEvent.mutate(currentId),
+        redo: async () => {
+          const again = await createEvent.mutateAsync(payload);
+          currentId = again.id;
+        },
+      });
     } catch (err) {
       console.error("create event from ai failed:", err);
     }

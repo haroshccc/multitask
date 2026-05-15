@@ -52,6 +52,7 @@ import {
   useUpdateTask,
 } from "@/lib/hooks";
 import { useCalendarPrefs } from "@/lib/hooks/useCalendarPrefs";
+import { pushUndo } from "@/lib/undo/store";
 import type { FilterConfig } from "@/lib/types/domain";
 
 // Min hour-row height. Below this the layout becomes hard to read.
@@ -391,30 +392,59 @@ export function Calendar() {
     }
     if (item.kind === "task") {
       const taskId = (item.source as { id: string }).id;
-      updateTask.mutate({
-        taskId,
-        patch: {
-          scheduled_at: newStart.toISOString(),
-          duration_minutes: Math.round(
-            (newEnd.getTime() - newStart.getTime()) / 60_000
-          ),
-        },
+      const prevScheduledAt = item.start.toISOString();
+      const prevDuration = Math.round(
+        (item.end.getTime() - item.start.getTime()) / 60_000
+      );
+      const nextPatch = {
+        scheduled_at: newStart.toISOString(),
+        duration_minutes: Math.round(
+          (newEnd.getTime() - newStart.getTime()) / 60_000
+        ),
+      };
+      updateTask.mutate({ taskId, patch: nextPatch });
+      pushUndo({
+        description: action.kind === "move" ? "תזמון משימה" : "שינוי משך משימה",
+        undo: () =>
+          updateTask.mutate({
+            taskId,
+            patch: {
+              scheduled_at: prevScheduledAt,
+              duration_minutes: prevDuration,
+            },
+          }),
+        redo: () => updateTask.mutate({ taskId, patch: nextPatch }),
       });
     } else if (item.kind === "deadline") {
       // Dragging a deadline marker → update the task's deadline_at.
       const taskId = (item.source as { id: string }).id;
-      updateTask.mutate({
-        taskId,
-        patch: { deadline_at: newStart.toISOString() },
+      const prevDeadline = item.start.toISOString();
+      const nextDeadline = newStart.toISOString();
+      updateTask.mutate({ taskId, patch: { deadline_at: nextDeadline } });
+      pushUndo({
+        description: "שינוי דד-ליין",
+        undo: () =>
+          updateTask.mutate({ taskId, patch: { deadline_at: prevDeadline } }),
+        redo: () =>
+          updateTask.mutate({ taskId, patch: { deadline_at: nextDeadline } }),
       });
     } else {
       const eventId = (item.source as { id: string }).id;
-      updateEvent.mutate({
-        eventId,
-        patch: {
-          starts_at: newStart.toISOString(),
-          ends_at: newEnd.toISOString(),
-        },
+      const prevStarts = item.start.toISOString();
+      const prevEnds = item.end.toISOString();
+      const nextPatch = {
+        starts_at: newStart.toISOString(),
+        ends_at: newEnd.toISOString(),
+      };
+      updateEvent.mutate({ eventId, patch: nextPatch });
+      pushUndo({
+        description: action.kind === "move" ? "תזמון אירוע" : "שינוי משך אירוע",
+        undo: () =>
+          updateEvent.mutate({
+            eventId,
+            patch: { starts_at: prevStarts, ends_at: prevEnds },
+          }),
+        redo: () => updateEvent.mutate({ eventId, patch: nextPatch }),
       });
     }
   };

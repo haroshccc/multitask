@@ -7,6 +7,7 @@ import {
   useDeleteDayNote,
 } from "@/lib/hooks/useCalendarDayNotes";
 import { dateKey } from "@/lib/services/calendar-day-notes";
+import { pushUndo } from "@/lib/undo/store";
 
 interface DayNoteDialogProps {
   /** Date the user clicked. Modal closed when null. */
@@ -86,11 +87,27 @@ export function DayNoteDialog({
 
   const handleSave = async () => {
     setError(null);
+    const dkey = dateKey(date);
+    const prevBody = initialBody;
+    const prevColor = initialColor ?? null;
+    const nextBody = body;
+    const nextColor = body.trim() ? color : null;
     try {
       await upsert.mutateAsync({
-        date: dateKey(date),
-        body,
-        text_color: body.trim() ? color : null,
+        date: dkey,
+        body: nextBody,
+        text_color: nextColor,
+      });
+      pushUndo({
+        description: prevBody.trim()
+          ? nextBody.trim()
+            ? "עדכון הערה יומית"
+            : "מחיקת הערה יומית"
+          : "הוספת הערה יומית",
+        undo: () =>
+          upsert.mutate({ date: dkey, body: prevBody, text_color: prevColor }),
+        redo: () =>
+          upsert.mutate({ date: dkey, body: nextBody, text_color: nextColor }),
       });
       onClose();
     } catch (e) {
@@ -99,8 +116,23 @@ export function DayNoteDialog({
   };
   const handleDelete = async () => {
     setError(null);
+    const dkey = dateKey(date);
+    const prevBody = initialBody;
+    const prevColor = initialColor ?? null;
     try {
-      await del.mutateAsync(dateKey(date));
+      await del.mutateAsync(dkey);
+      if (prevBody.trim()) {
+        pushUndo({
+          description: "מחיקת הערה יומית",
+          undo: () =>
+            upsert.mutate({
+              date: dkey,
+              body: prevBody,
+              text_color: prevColor,
+            }),
+          redo: () => del.mutate(dkey),
+        });
+      }
       onClose();
     } catch (e) {
       setError(friendlyError(e));

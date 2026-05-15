@@ -26,6 +26,7 @@ import { RrulePicker } from "./RrulePicker";
 import { ThoughtEditModal } from "@/components/thoughts/ThoughtEditModal";
 import { UnsavedChangesGuard } from "@/components/ui/UnsavedChangesGuard";
 import { EventCalendarEditDialog } from "./EventCalendarEditDialog";
+import { pushUndo } from "@/lib/undo/store";
 
 /**
  * Event edit modal — SPEC §16. Three tabs: details / participants / recurrence.
@@ -199,11 +200,41 @@ export function EventEditModal({
       color: color,
     };
     try {
-      if (isEdit && eventId) {
+      if (isEdit && eventId && existing) {
+        const prevPatch = {
+          title: existing.title,
+          description: existing.description,
+          location: existing.location,
+          video_call_url: existing.video_call_url,
+          all_day: existing.all_day,
+          starts_at: existing.starts_at,
+          ends_at: existing.ends_at,
+          recurrence_rule: existing.recurrence_rule,
+          source_thought_id: existing.source_thought_id,
+          calendar_id: existing.calendar_id ?? null,
+          color: existing.color ?? null,
+        };
         await updateEvent.mutateAsync({ eventId, patch: payload });
+        pushUndo({
+          description: "עריכת אירוע",
+          undo: () => updateEvent.mutate({ eventId, patch: prevPatch }),
+          redo: () => updateEvent.mutate({ eventId, patch: payload }),
+        });
       } else {
         const created = await createEvent.mutateAsync(payload);
         onCreated?.(created.id);
+        // After undo+redo, the recreated event has a new id. Keep the
+        // latest id in a closure so chained undo/redo still target the
+        // right row.
+        let currentId = created.id;
+        pushUndo({
+          description: "יצירת אירוע",
+          undo: () => deleteEvent.mutate(currentId),
+          redo: async () => {
+            const again = await createEvent.mutateAsync(payload);
+            currentId = again.id;
+          },
+        });
       }
       onClose();
       return true;
@@ -241,7 +272,36 @@ export function EventEditModal({
 
   const del = async () => {
     if (!eventId) return;
-    await deleteEvent.mutateAsync(eventId);
+    // Snapshot the full event so undo can recreate it. The recreated
+    // event gets a new id; keep the id mutable so redo→undo still target
+    // the same row.
+    const snapshot = existing
+      ? {
+          title: existing.title,
+          description: existing.description,
+          location: existing.location,
+          video_call_url: existing.video_call_url,
+          all_day: existing.all_day,
+          starts_at: existing.starts_at,
+          ends_at: existing.ends_at,
+          recurrence_rule: existing.recurrence_rule,
+          source_thought_id: existing.source_thought_id,
+          calendar_id: existing.calendar_id ?? null,
+          color: existing.color ?? null,
+        }
+      : null;
+    let currentId = eventId;
+    await deleteEvent.mutateAsync(currentId);
+    if (snapshot) {
+      pushUndo({
+        description: "מחיקת אירוע",
+        undo: async () => {
+          const restored = await createEvent.mutateAsync(snapshot);
+          currentId = restored.id;
+        },
+        redo: () => deleteEvent.mutate(currentId),
+      });
+    }
     onClose();
   };
 

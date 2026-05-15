@@ -11,6 +11,7 @@ import {
 } from "@/lib/hooks";
 import type { EventCalendar } from "@/lib/types/domain";
 import { LIST_ICON_PRESETS, ListIcon } from "@/components/tasks/list-icons";
+import { pushUndo } from "@/lib/undo/store";
 
 const COLOR_PRESETS = [
   "#ef4444", "#f97316", "#f59e0b", "#eab308", "#dc2626", "#b45309",
@@ -87,17 +88,42 @@ export function EventCalendarEditDialog({
     try {
       let calendarId = calendar?.id;
       if (isEdit && calendar) {
+        const prevPatch = {
+          name: calendar.name,
+          color: calendar.color,
+          emoji: calendar.emoji,
+        };
+        const nextPatch = { name: name.trim(), color, emoji };
         await update.mutateAsync({
           calendarId: calendar.id,
-          patch: { name: name.trim(), color, emoji },
+          patch: nextPatch,
+        });
+        pushUndo({
+          description: "עריכת יומן אירועים",
+          undo: () =>
+            update.mutate({ calendarId: calendar.id, patch: prevPatch }),
+          redo: () =>
+            update.mutate({ calendarId: calendar.id, patch: nextPatch }),
         });
       } else {
-        const created = await create.mutateAsync({
+        const payload = {
           name: name.trim(),
           color,
           emoji: emoji ?? undefined,
-        });
+        };
+        const created = await create.mutateAsync(payload);
         calendarId = created.id;
+        // ID changes on re-create — track the latest so chained undo/redo
+        // keeps pointing at the live row.
+        let currentId = created.id;
+        pushUndo({
+          description: "יצירת יומן אירועים",
+          undo: () => archive.mutate(currentId),
+          redo: async () => {
+            const again = await create.mutateAsync(payload);
+            currentId = again.id;
+          },
+        });
       }
       if (calendarId) {
         // Apply / clear the link if it changed.
@@ -106,6 +132,20 @@ export function EventCalendarEditDialog({
           await linkToList.mutateAsync({
             calendarId,
             taskListId: linkedTaskListId,
+          });
+          const linkCalendarId = calendarId;
+          pushUndo({
+            description: "קישור יומן לרשימה",
+            undo: () =>
+              linkToList.mutate({
+                calendarId: linkCalendarId,
+                taskListId: previousLink,
+              }),
+            redo: () =>
+              linkToList.mutate({
+                calendarId: linkCalendarId,
+                taskListId: linkedTaskListId,
+              }),
           });
         }
         onSaved?.(calendarId);

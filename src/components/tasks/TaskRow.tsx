@@ -825,13 +825,32 @@ export function TaskRow({
               user && task.approver_user_id === user.id
                 ? (e) => {
                     e.stopPropagation();
+                    const prevPatch = {
+                      status: task.status,
+                      approved_at: task.approved_at,
+                      completed_at: task.completed_at,
+                    };
+                    const nextPatch = {
+                      status: "done",
+                      approved_at: new Date().toISOString(),
+                      completed_at: new Date().toISOString(),
+                    };
                     updateTask.mutate({
                       taskId: task.id,
-                      patch: {
-                        status: "done",
-                        approved_at: new Date().toISOString(),
-                        completed_at: new Date().toISOString(),
-                      },
+                      patch: nextPatch,
+                    });
+                    pushUndo({
+                      description: "אישור משימה",
+                      undo: () =>
+                        updateTask.mutate({
+                          taskId: task.id,
+                          patch: prevPatch,
+                        }),
+                      redo: () =>
+                        updateTask.mutate({
+                          taskId: task.id,
+                          patch: nextPatch,
+                        }),
                     });
                   }
                 : undefined

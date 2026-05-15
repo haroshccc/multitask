@@ -219,18 +219,12 @@ export function TaskRow({
     const html = el
       ? (el.textContent ?? "").replace(/ /g, " ").trim()
       : draft.trim();
-    // Empty input — leave the task alone. Historically we auto-deleted
-    // the task here when its DB title was also empty, but that meant
-    // pressing Enter on a freshly-created (still empty) task discarded
-    // the task instead of just creating a sibling, which users read as
-    // "Enter deleted my task". Empty titles are valid; cleanup is the
-    // user's call via the explicit delete action.
     if (!html) {
-      if (task.title) {
-        if (el) el.innerHTML = task.title;
-        setDraft(task.title);
-      } else if (draft !== "") {
-        setDraft("");
+      if (!task.title) {
+        deleteTaskM.mutate(task.id);
+      } else {
+        if (el) el.innerHTML = task.title ?? "";
+        setDraft(task.title ?? "");
       }
       return;
     }

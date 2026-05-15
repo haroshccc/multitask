@@ -258,7 +258,7 @@ export function AppShell() {
           <button
             onClick={() => useUndoStore.getState().undo()}
             disabled={!canUndo}
-            className="hidden md:inline-flex p-2 rounded-xl hover:bg-ink-100 disabled:opacity-30 disabled:cursor-not-allowed"
+            className="inline-flex p-2 rounded-xl hover:bg-ink-100 disabled:opacity-30 disabled:cursor-not-allowed"
             aria-label="בטל"
             title="בטל (Ctrl+Z)"
           >
@@ -267,7 +267,7 @@ export function AppShell() {
           <button
             onClick={() => useUndoStore.getState().redo()}
             disabled={!canRedo}
-            className="hidden md:inline-flex p-2 rounded-xl hover:bg-ink-100 disabled:opacity-30 disabled:cursor-not-allowed"
+            className="inline-flex p-2 rounded-xl hover:bg-ink-100 disabled:opacity-30 disabled:cursor-not-allowed"
             aria-label="בצע מחדש"
             title="בצע מחדש (Ctrl+Y)"
           >

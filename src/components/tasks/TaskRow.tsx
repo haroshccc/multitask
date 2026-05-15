@@ -217,7 +217,7 @@ export function TaskRow({
   const commitTitle = () => {
     const el = inputRef.current;
     const html = el
-      ? el.innerHTML.replace(/<br\s*\/?>/gi, "").trim()
+      ? (el.textContent ?? "").replace(/ /g, " ").trim()
       : draft.trim();
     if (!html) {
       if (!task.title) {

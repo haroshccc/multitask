@@ -133,19 +133,15 @@ export function TaskRow({
   const stopTimer = useStopTimer();
   const { data: activeTimer } = useActiveTimer();
 
-  // Resolve the counterparty name for the assignment badge. For a task I
-  // own and delegated, the counterparty is the assignee. For a task I was
-  // assigned, it's the owner. useOrgMembers is cached per-org so the
-  // many-rows pattern doesn't fan out into N queries.
+  // Assignee-name pill. Renders whenever the task has any assignee at
+  // all — including self-assignment, since on a shared list it's useful
+  // for everyone (including the assignee themselves) to see who is
+  // responsible. useOrgMembers is cached per-org so the many-rows
+  // pattern doesn't fan out into N queries.
   const { data: orgMembers = [] } = useOrgMembers();
-  const counterpartyUserId =
-    taskOwnershipMode === "delegated"
-      ? task.assignee_user_id ?? null
-      : taskOwnershipMode === "assigned"
-      ? task.owner_id ?? null
-      : null;
-  const counterpartyName = counterpartyUserId
-    ? orgMembers.find((m) => m.membership.user_id === counterpartyUserId)
+  const assigneeUserId = task.assignee_user_id ?? null;
+  const assigneeName = assigneeUserId
+    ? orgMembers.find((m) => m.membership.user_id === assigneeUserId)
         ?.profile?.full_name ?? null
     : null;
 
@@ -851,16 +847,12 @@ export function TaskRow({
           )}
         </div>
 
-        {display.assignee && taskOwnershipMode !== "mine" && counterpartyName && (
+        {display.assignee && assigneeName && (
           <span
             className="shrink-0 text-[10px] text-ink-600 font-medium leading-none px-1.5 py-0.5 rounded-full bg-ink-100"
-            title={
-              taskOwnershipMode === "delegated"
-                ? `הואצלה אל: ${counterpartyName}`
-                : `הואצלה אליי על-ידי: ${counterpartyName}`
-            }
+            title={`אחראי: ${assigneeName}`}
           >
-            {counterpartyName}
+            {assigneeName}
           </span>
         )}
         {task.status === "pending_approval" && (

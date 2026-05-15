@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { MoreHorizontal, Archive, ArchiveRestore } from "lucide-react";
 import { useArchiveProject, useRestoreProject } from "@/lib/hooks/useProjects";
 import type { Project, ProjectPricingMode } from "@/lib/types/domain";
+import { pushUndo } from "@/lib/undo/store";
 
 interface Props {
   project: Project;
@@ -46,13 +47,25 @@ export function ProjectCard({ project }: Props) {
   const onArchive = (e: React.MouseEvent) => {
     stop(e);
     setMenuOpen(false);
-    archive.mutate(project.id);
+    const id = project.id;
+    archive.mutate(id);
+    pushUndo({
+      description: "ארכוב פרויקט",
+      undo: () => restore.mutate(id),
+      redo: () => archive.mutate(id),
+    });
   };
 
   const onRestore = (e: React.MouseEvent) => {
     stop(e);
     setMenuOpen(false);
-    restore.mutate(project.id);
+    const id = project.id;
+    restore.mutate(id);
+    pushUndo({
+      description: "שחזור פרויקט",
+      undo: () => archive.mutate(id),
+      redo: () => restore.mutate(id),
+    });
   };
 
   const accent = project.color ?? "#a8a8bc";

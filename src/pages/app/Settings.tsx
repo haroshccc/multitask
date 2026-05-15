@@ -26,6 +26,7 @@ import {
   useUpdateMemberRole,
 } from "@/lib/hooks/useOrganizations";
 import type { OrgType } from "@/lib/services/organizations";
+import { pushUndo } from "@/lib/undo/store";
 
 type Tab = "profile" | "organization" | "sharing" | "notifications" | "backup";
 
@@ -163,14 +164,30 @@ function OrgTab() {
   // ---- Handlers ----
 
   const handleSaveName = async () => {
-    if (!activeOrganizationId || !orgName.trim()) return;
-    await updateOrg.mutateAsync({ orgId: activeOrganizationId, updates: { name: orgName.trim() } });
+    if (!activeOrganizationId || !orgName.trim() || !org) return;
+    const orgId = activeOrganizationId;
+    const prevName = org.name;
+    const nextName = orgName.trim();
+    await updateOrg.mutateAsync({ orgId, updates: { name: nextName } });
+    pushUndo({
+      description: "שינוי שם קבוצה",
+      undo: () => updateOrg.mutate({ orgId, updates: { name: prevName } }),
+      redo: () => updateOrg.mutate({ orgId, updates: { name: nextName } }),
+    });
     setEditingName(false);
   };
 
   const handleTypeChange = async (t: OrgType) => {
-    if (!activeOrganizationId) return;
-    await updateOrg.mutateAsync({ orgId: activeOrganizationId, updates: { org_type: t } });
+    if (!activeOrganizationId || !org) return;
+    const orgId = activeOrganizationId;
+    const prevType = org.org_type as OrgType;
+    await updateOrg.mutateAsync({ orgId, updates: { org_type: t } });
+    pushUndo({
+      description: "שינוי סוג קבוצה",
+      undo: () =>
+        updateOrg.mutate({ orgId, updates: { org_type: prevType } }),
+      redo: () => updateOrg.mutate({ orgId, updates: { org_type: t } }),
+    });
   };
 
   const handleCreateOrg = async (e: React.FormEvent) => {
@@ -434,7 +451,20 @@ function OrgTab() {
                         <select
                           value={m.membership.role}
                           disabled={updateRole.isPending}
-                          onChange={e => updateRole.mutate({ orgId: activeOrganizationId!, userId: m.membership.user_id, role: e.target.value as "owner"|"admin"|"member" })}
+                          onChange={e => {
+                            const orgId = activeOrganizationId!;
+                            const userId = m.membership.user_id;
+                            const prevRole = m.membership.role as "owner"|"admin"|"member";
+                            const nextRole = e.target.value as "owner"|"admin"|"member";
+                            updateRole.mutate({ orgId, userId, role: nextRole });
+                            pushUndo({
+                              description: "שינוי תפקיד חבר",
+                              undo: () =>
+                                updateRole.mutate({ orgId, userId, role: prevRole }),
+                              redo: () =>
+                                updateRole.mutate({ orgId, userId, role: nextRole }),
+                            });
+                          }}
                           className="text-xs border border-ink-200 rounded-lg px-2 py-1 bg-white text-ink-700 disabled:opacity-50"
                         >
                           {["owner","admin","member"].map(r => (

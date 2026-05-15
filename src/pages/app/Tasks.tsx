@@ -46,6 +46,7 @@ import {
   useListVisibility,
   useSetListVisibility,
   useCreateTaskList,
+  useArchiveTaskList,
   useMyTaskStatuses,
   useMaxVisibleColumns,
   useRowDisplayPrefs,
@@ -63,6 +64,7 @@ export function Tasks() {
   const { data: visibility } = useListVisibility("tasks");
   const setListVisibility = useSetListVisibility();
   const createTaskList = useCreateTaskList();
+  const archiveTaskList = useArchiveTaskList();
   const moveToList = useMoveTaskToList();
   const setParent = useSetTaskParent();
   const reorderTasks = useReorderTasks();
@@ -113,7 +115,17 @@ export function Tasks() {
     const name = newListName.trim();
     if (!name) return;
     setNewListDialogOpen(false);
-    await createTaskList.mutateAsync({ name, kind: "custom" });
+    const payload = { name, kind: "custom" as const };
+    const created = await createTaskList.mutateAsync(payload);
+    let currentId = created.id;
+    pushUndo({
+      description: "יצירת רשימת משימות",
+      undo: () => archiveTaskList.mutate(currentId),
+      redo: async () => {
+        const again = await createTaskList.mutateAsync(payload);
+        currentId = again.id;
+      },
+    });
   };
 
   /** Move a list one slot in the visible order. The on-screen order is

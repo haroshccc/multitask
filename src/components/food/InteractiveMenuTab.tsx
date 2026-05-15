@@ -25,6 +25,7 @@ import {
 } from "@/lib/types/domain";
 import type { MealWithIngredients } from "@/lib/services/food";
 import { computeMealNutrition, round1 } from "@/lib/food/nutrition";
+import { pushUndo } from "@/lib/undo/store";
 
 // =============================================================================
 // "Wolt-like" interactive menu — pick which meals you want for which day(s)
@@ -272,27 +273,71 @@ export function InteractiveMenuTab() {
   // --- Save ---------------------------------------------------------------
   const handleSave = async () => {
     if (!me?.userId || saving) return;
+    const uid = me.userId;
     setSaving(true);
     setSaveError(null);
+    // Snapshot every cell we're about to overwrite so we can undo.
+    const changes: Array<{
+      date: string;
+      mealTime: (typeof MEAL_TIME_KEYS)[number];
+      prevIds: string[];
+      nextIds: string[];
+    }> = [];
     try {
-      // For each (date, mealTime) combination in the visible range we
-      // call replaceMealPlanDayCell — which deletes any existing rows
-      // and inserts the new ones, so the operation is idempotent and
-      // also clears slots that the user emptied.
       for (const date of dates) {
         for (const mt of MEAL_TIME_KEYS) {
           const key = effectivePerDay ? slotKey(date, mt) : slotKey("*", mt);
-          const ids = Array.from(selection.get(key) ?? []);
+          const nextIds = Array.from(selection.get(key) ?? []);
+          const prevIds = existingDays
+            .filter(
+              (r) =>
+                r.date === date &&
+                r.user_id === uid &&
+                r.meal_time === mt
+            )
+            .map((r) => r.meal_id);
+          if (
+            prevIds.length === nextIds.length &&
+            prevIds.every((id, i) => id === nextIds[i])
+          ) {
+            continue; // unchanged
+          }
+          changes.push({ date, mealTime: mt, prevIds, nextIds });
           await replaceCell.mutateAsync({
-            userId: me.userId,
+            userId: uid,
             date,
             mealTime: mt,
-            mealIds: ids,
+            mealIds: nextIds,
           });
         }
       }
       setDirty(false);
       setSavedAt(Date.now());
+      if (changes.length > 0) {
+        pushUndo({
+          description: `שמירת תפריט (${changes.length} שינויים)`,
+          undo: async () => {
+            for (const c of changes) {
+              await replaceCell.mutateAsync({
+                userId: uid,
+                date: c.date,
+                mealTime: c.mealTime,
+                mealIds: c.prevIds,
+              });
+            }
+          },
+          redo: async () => {
+            for (const c of changes) {
+              await replaceCell.mutateAsync({
+                userId: uid,
+                date: c.date,
+                mealTime: c.mealTime,
+                mealIds: c.nextIds,
+              });
+            }
+          },
+        });
+      }
     } catch (e) {
       setSaveError((e as Error).message);
     } finally {

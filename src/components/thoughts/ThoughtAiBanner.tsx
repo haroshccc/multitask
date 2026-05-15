@@ -19,9 +19,15 @@ import {
 import { cn } from "@/lib/utils/cn";
 import type { Thought } from "@/lib/types/domain";
 import { useTasks } from "@/lib/hooks/useTasks";
-import { useCreateProject, useProjects } from "@/lib/hooks/useProjects";
+import {
+  useCreateProject,
+  useProjects,
+  useArchiveProject,
+} from "@/lib/hooks/useProjects";
+import { pushUndo } from "@/lib/undo/store";
 import {
   useAssignThoughtToList,
+  useUnassignThoughtFromList,
   useRecordThoughtProcessing,
   useThoughtLists,
   useCreateThoughtList,
@@ -92,8 +98,10 @@ export function ThoughtAiBanner({
   // lists the user typically dumps similar tasks into).
   const { data: recentTasks = [] } = useTasks({});
   const createProject = useCreateProject();
+  const archiveProject = useArchiveProject();
   const createThoughtList = useCreateThoughtList();
   const assignThoughtToList = useAssignThoughtToList();
+  const unassignThoughtFromList = useUnassignThoughtFromList();
   const recordProcessing = useRecordThoughtProcessing();
   const [showProjectPicker, setShowProjectPicker] = useState(false);
   // After picking a project, ask the user whether to also create a
@@ -175,27 +183,52 @@ export function ThoughtAiBanner({
       // Projects have no edit modal yet — keep the immediate-create flow
       // and show the chip as applied right away. (TODO when ProjectEditModal
       // ships: same deferred-create pattern as tasks/events.)
-      const p = await createProject.mutateAsync({
+      const projectPayload = {
         name: action.payload.name,
         description: action.payload.description ?? null,
-      });
+      };
+      const p = await createProject.mutateAsync(projectPayload);
       record(actionIndex, "project", p.id, p.name);
+      let currentId = p.id;
+      pushUndo({
+        description: `יצירת פרויקט: ${p.name}`,
+        undo: () => archiveProject.mutate(currentId),
+        redo: async () => {
+          const again = await createProject.mutateAsync(projectPayload);
+          currentId = again.id;
+        },
+      });
       onOpenProject?.(p.id);
       return;
     }
 
     if (action.kind === "assign_list") {
+      const listId = action.payload.list_id;
+      const listName = action.payload.list_name;
       await assignThoughtToList.mutateAsync({
         thoughtId: thought.id,
-        listId: action.payload.list_id,
+        listId,
       });
       record(
         actionIndex,
         "task",
-        action.payload.list_id,
-        `רשימה: ${action.payload.list_name}`,
+        listId,
+        `רשימה: ${listName}`,
         false
       );
+      pushUndo({
+        description: `שיוך מחשבה ל${listName}`,
+        undo: () =>
+          unassignThoughtFromList.mutate({
+            thoughtId: thought.id,
+            listId,
+          }),
+        redo: () =>
+          assignThoughtToList.mutate({
+            thoughtId: thought.id,
+            listId,
+          }),
+      });
       return;
     }
 
@@ -221,6 +254,13 @@ export function ThoughtAiBanner({
     // Use a synthetic index that won't collide with `plan.actions` indices.
     const syntheticIdx = -1 - Object.keys(applied).length;
     record(syntheticIdx, "task", listId, `רשימת מחשבות: ${listName}`, false);
+    pushUndo({
+      description: `שיוך מחשבה ל${listName}`,
+      undo: () =>
+        unassignThoughtFromList.mutate({ thoughtId: thought.id, listId }),
+      redo: () =>
+        assignThoughtToList.mutate({ thoughtId: thought.id, listId }),
+    });
   };
 
   /**
@@ -266,9 +306,23 @@ export function ThoughtAiBanner({
     }
 
     if (bucket) {
+      const listId = bucket.id;
       await assignThoughtToList.mutateAsync({
         thoughtId: thought.id,
-        listId: bucket.id,
+        listId,
+      });
+      pushUndo({
+        description: `קישור מחשבה לפרויקט: ${projectName}`,
+        undo: () =>
+          unassignThoughtFromList.mutate({
+            thoughtId: thought.id,
+            listId,
+          }),
+        redo: () =>
+          assignThoughtToList.mutate({
+            thoughtId: thought.id,
+            listId,
+          }),
       });
     }
     const syntheticIdx = -2000 - Object.keys(applied).length;
@@ -343,11 +397,21 @@ export function ThoughtAiBanner({
     }
     if (kind === "project") {
       // No project edit modal — keep the immediate-create flow.
-      const p = await createProject.mutateAsync({
+      const projectPayload = {
         name: title,
         description: text || null,
-      });
+      };
+      const p = await createProject.mutateAsync(projectPayload);
       record(idx, "project", p.id, p.name, false);
+      let currentId = p.id;
+      pushUndo({
+        description: `יצירת פרויקט: ${p.name}`,
+        undo: () => archiveProject.mutate(currentId),
+        redo: async () => {
+          const again = await createProject.mutateAsync(projectPayload);
+          currentId = again.id;
+        },
+      });
       onOpenProject?.(p.id);
     }
   };

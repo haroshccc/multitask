@@ -7,6 +7,7 @@ import {
 } from "@/lib/hooks/useFood";
 import { MealCellPicker } from "./MealCellPicker";
 import { useFoodPeople, PersonAvatar } from "@/lib/food/people";
+import { pushUndo } from "@/lib/undo/store";
 import {
   DAY_OF_WEEK_KEYS,
   DAY_OF_WEEK_LABELS,
@@ -67,11 +68,30 @@ export function WeeklyMenuTab() {
     mealIds: string[]
   ) => {
     if (!effectiveUserId) return;
+    const uid = effectiveUserId;
+    const prevIds = cellMap.get(`${day}:${mealTime}`) ?? [];
     replaceCell.mutate({
-      userId: effectiveUserId,
+      userId: uid,
       dayOfWeek: day,
       mealTime,
       mealIds,
+    });
+    pushUndo({
+      description: "עדכון תפריט שבועי",
+      undo: () =>
+        replaceCell.mutate({
+          userId: uid,
+          dayOfWeek: day,
+          mealTime,
+          mealIds: prevIds,
+        }),
+      redo: () =>
+        replaceCell.mutate({
+          userId: uid,
+          dayOfWeek: day,
+          mealTime,
+          mealIds,
+        }),
     });
   };
 

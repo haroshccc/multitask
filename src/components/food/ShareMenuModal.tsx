@@ -8,6 +8,7 @@ import {
 import { useOrgScope } from "@/lib/hooks/useOrgScope";
 import { useOrgMembers } from "@/lib/hooks/useOrgMembers";
 import { useOrganization } from "@/lib/hooks/useOrganizations";
+import { pushUndo } from "@/lib/undo/store";
 
 interface ShareMenuModalProps {
   open: boolean;
@@ -58,18 +59,40 @@ export function ShareMenuModal({ open, onClose }: ShareMenuModalProps) {
   if (!open) return null;
 
   const handleToggleOutgoing = async (otherUserId: string) => {
+    if (!scope.userId) return;
+    const sharerId = scope.userId;
     if (outgoing.has(otherUserId)) {
       await deleteShare.mutateAsync({
-        sharerUserId: scope.userId!,
+        sharerUserId: sharerId,
         sharedWithUserId: otherUserId,
+      });
+      pushUndo({
+        description: "ביטול שיתוף תפריט",
+        undo: () => createShare.mutate(otherUserId),
+        redo: () =>
+          deleteShare.mutate({
+            sharerUserId: sharerId,
+            sharedWithUserId: otherUserId,
+          }),
       });
     } else {
       await createShare.mutateAsync(otherUserId);
+      pushUndo({
+        description: "שיתוף תפריט",
+        undo: () =>
+          deleteShare.mutate({
+            sharerUserId: sharerId,
+            sharedWithUserId: otherUserId,
+          }),
+        redo: () => createShare.mutate(otherUserId),
+      });
     }
   };
 
   const handleLeaveIncoming = async (sharerUserId: string) => {
     if (!scope.userId) return;
+    // No undo — recreating an INCOMING share would require acting on behalf
+    // of the other user, which isn't supported by createMealPlanShare.
     await deleteShare.mutateAsync({
       sharerUserId,
       sharedWithUserId: scope.userId,

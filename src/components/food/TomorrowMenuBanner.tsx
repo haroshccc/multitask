@@ -15,6 +15,7 @@ import {
 } from "@/lib/hooks/useFood";
 import { MealCellPicker } from "./MealCellPicker";
 import { useFoodPeople, PersonAvatar, type FoodPerson } from "@/lib/food/people";
+import { pushUndo } from "@/lib/undo/store";
 import {
   MEAL_TIME_KEYS,
   MEAL_TIME_LABELS,
@@ -115,13 +116,32 @@ export function TomorrowMenuBanner() {
     });
   };
 
+  const getPrevMealIds = (
+    date: string,
+    userId: string,
+    mealTime: MealTimeKey
+  ): string[] =>
+    allDayRows
+      .filter(
+        (r) => r.date === date && r.user_id === userId && r.meal_time === mealTime
+      )
+      .map((r) => r.meal_id);
+
   const handleSlotChange = (
     date: string,
     userId: string,
     mealTime: MealTimeKey,
     mealIds: string[]
   ) => {
+    const prevIds = getPrevMealIds(date, userId, mealTime);
     replaceDayCell.mutate({ userId, date, mealTime, mealIds });
+    pushUndo({
+      description: "עדכון תפריט יומי",
+      undo: () =>
+        replaceDayCell.mutate({ userId, date, mealTime, mealIds: prevIds }),
+      redo: () =>
+        replaceDayCell.mutate({ userId, date, mealTime, mealIds }),
+    });
   };
 
   const handleResetToTemplate = (
@@ -129,7 +149,15 @@ export function TomorrowMenuBanner() {
     userId: string,
     mealTime: MealTimeKey
   ) => {
+    const prevIds = getPrevMealIds(date, userId, mealTime);
     replaceDayCell.mutate({ userId, date, mealTime, mealIds: [] });
+    pushUndo({
+      description: "איפוס תא תפריט",
+      undo: () =>
+        replaceDayCell.mutate({ userId, date, mealTime, mealIds: prevIds }),
+      redo: () =>
+        replaceDayCell.mutate({ userId, date, mealTime, mealIds: [] }),
+    });
   };
 
   if (datesWithPlan.length === 0) return null;

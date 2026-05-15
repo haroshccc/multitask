@@ -22,6 +22,8 @@ import {
   type MealTimeKey,
 } from "@/lib/types/domain";
 import { computeMealNutrition, round1 } from "@/lib/food/nutrition";
+import { useDeleteMeal } from "@/lib/hooks/useFood";
+import { pushUndo } from "@/lib/undo/store";
 
 interface MealEditModalProps {
   open: boolean;
@@ -73,6 +75,7 @@ export function MealEditModal({ open, onClose, meal }: MealEditModalProps) {
   const { data: ingredients = [] } = useIngredients();
   const createMeal = useCreateMeal();
   const updateMeal = useUpdateMeal();
+  const deleteMeal = useDeleteMeal();
   const replaceRows = useReplaceMealIngredients();
 
   const ingredientsById = useMemo(
@@ -215,32 +218,62 @@ export function MealEditModal({ open, onClose, meal }: MealEditModalProps) {
           quantity: Number(r.quantity) || 0,
           sort_order: i,
         }));
+      const mealPayload = {
+        name: name.trim(),
+        category_id: categoryId,
+        meal_times: mealTimes,
+        notes: notes.trim() || null,
+        servings: Number(servings) || 1,
+        image_url: imageUrl,
+      };
       let mealId: string;
       if (meal) {
-        await updateMeal.mutateAsync({
-          id: meal.id,
-          patch: {
-            name: name.trim(),
-            category_id: categoryId,
-            meal_times: mealTimes,
-            notes: notes.trim() || null,
-            servings: Number(servings) || 1,
-            image_url: imageUrl,
+        const prevPatch = {
+          name: meal.name,
+          category_id: meal.category_id,
+          meal_times: meal.meal_times,
+          notes: meal.notes,
+          servings: meal.servings,
+          image_url: meal.image_url,
+        };
+        const prevRows = meal.ingredients.map((mi, i) => ({
+          ingredient_id: mi.ingredient_id,
+          unit_id: mi.unit_id,
+          quantity: mi.quantity,
+          sort_order: mi.sort_order ?? i,
+        }));
+        await updateMeal.mutateAsync({ id: meal.id, patch: mealPayload });
+        mealId = meal.id;
+        await replaceRows.mutateAsync({ mealId, rows: validRows });
+        pushUndo({
+          description: `עריכת מנה: ${mealPayload.name}`,
+          undo: async () => {
+            await updateMeal.mutateAsync({ id: meal.id, patch: prevPatch });
+            await replaceRows.mutateAsync({ mealId: meal.id, rows: prevRows });
+          },
+          redo: async () => {
+            await updateMeal.mutateAsync({ id: meal.id, patch: mealPayload });
+            await replaceRows.mutateAsync({ mealId: meal.id, rows: validRows });
           },
         });
-        mealId = meal.id;
       } else {
-        const created = await createMeal.mutateAsync({
-          name: name.trim(),
-          category_id: categoryId,
-          meal_times: mealTimes,
-          notes: notes.trim() || null,
-          servings: Number(servings) || 1,
-          image_url: imageUrl,
-        });
+        const created = await createMeal.mutateAsync(mealPayload);
         mealId = created.id;
+        await replaceRows.mutateAsync({ mealId, rows: validRows });
+        let currentId = created.id;
+        pushUndo({
+          description: `יצירת מנה: ${mealPayload.name}`,
+          undo: () => deleteMeal.mutate(currentId),
+          redo: async () => {
+            const again = await createMeal.mutateAsync(mealPayload);
+            currentId = again.id;
+            await replaceRows.mutateAsync({
+              mealId: again.id,
+              rows: validRows,
+            });
+          },
+        });
       }
-      await replaceRows.mutateAsync({ mealId, rows: validRows });
       onClose();
     } finally {
       setSaving(false);

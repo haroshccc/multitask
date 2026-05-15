@@ -1,6 +1,15 @@
 import { useState, useMemo, useRef } from "react";
 import { Plus, Pencil, Trash2, AlertCircle, PanelRightOpen, PanelRightClose, Camera } from "lucide-react";
-import { useMeals, useDeleteMeal, useMealCategories, useIngredients, useUpdateMeal } from "@/lib/hooks/useFood";
+import {
+  useMeals,
+  useDeleteMeal,
+  useMealCategories,
+  useIngredients,
+  useUpdateMeal,
+  useCreateMeal,
+  useReplaceMealIngredients,
+} from "@/lib/hooks/useFood";
+import { pushUndo } from "@/lib/undo/store";
 import { MealEditModal } from "./MealEditModal";
 import { IngredientsTab } from "./IngredientsTab";
 import { uploadMealImage, type MealWithIngredients } from "@/lib/services/food";
@@ -25,6 +34,8 @@ export function MealsTab({
   const { data: categories = [] } = useMealCategories();
   const { data: ingredients = [] } = useIngredients();
   const deleteMeal = useDeleteMeal();
+  const createMeal = useCreateMeal();
+  const replaceIngredients = useReplaceMealIngredients();
 
   const updateMeal = useUpdateMeal();
   const scope = useOrgScope();
@@ -40,9 +51,18 @@ export function MealsTab({
     const file = e.target.files?.[0];
     if (!file || !uploadingMealId || !scope.organizationId) return;
     e.target.value = "";
+    const mealId = uploadingMealId;
+    const prevUrl = meals.find((m) => m.id === mealId)?.image_url ?? null;
     try {
       const url = await uploadMealImage(scope.organizationId, file);
-      await updateMeal.mutateAsync({ id: uploadingMealId, patch: { image_url: url } });
+      await updateMeal.mutateAsync({ id: mealId, patch: { image_url: url } });
+      pushUndo({
+        description: "החלפת תמונת מנה",
+        undo: () =>
+          updateMeal.mutate({ id: mealId, patch: { image_url: prevUrl } }),
+        redo: () =>
+          updateMeal.mutate({ id: mealId, patch: { image_url: url } }),
+      });
     } catch {
       // silent
     } finally {
@@ -86,9 +106,36 @@ export function MealsTab({
   };
 
   const confirmDelete = async (m: MealWithIngredients) => {
-    if (confirm(`למחוק את "${m.name}"?`)) {
-      await deleteMeal.mutateAsync(m.id);
-    }
+    if (!confirm(`למחוק את "${m.name}"?`)) return;
+    const snapshot = {
+      name: m.name,
+      category_id: m.category_id,
+      meal_times: m.meal_times,
+      image_url: m.image_url,
+      notes: m.notes,
+    };
+    const ingredientRows = m.ingredients.map((mi, i) => ({
+      ingredient_id: mi.ingredient_id,
+      unit_id: mi.unit_id,
+      quantity: mi.quantity,
+      sort_order: mi.sort_order ?? i,
+    }));
+    let currentId = m.id;
+    await deleteMeal.mutateAsync(currentId);
+    pushUndo({
+      description: `מחיקת מנה: ${m.name}`,
+      undo: async () => {
+        const recreated = await createMeal.mutateAsync(snapshot);
+        currentId = recreated.id;
+        if (ingredientRows.length > 0) {
+          await replaceIngredients.mutateAsync({
+            mealId: recreated.id,
+            rows: ingredientRows,
+          });
+        }
+      },
+      redo: () => deleteMeal.mutate(currentId),
+    });
   };
 
   return (

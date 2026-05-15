@@ -214,7 +214,14 @@ export function TaskRow({
     }
   }, [focusTaskId, task.id]);
 
-  const commitTitle = () => {
+  // Returns a promise that resolves when the title save (if any) has
+  // hit the server. Callers that immediately spawn a sibling/subtask
+  // (Enter / Cmd+Enter) MUST await this so the new createTask's
+  // invalidate-allTasks refetch reads the persisted title rather than
+  // the pre-update server state — the latter clobbers the optimistic
+  // patch and the row appears blank, which then trips the empty-title
+  // sweep.
+  const commitTitle = async (): Promise<void> => {
     const el = inputRef.current;
     const html = el
       ? (el.textContent ?? "").replace(/ /g, " ").trim()
@@ -234,7 +241,7 @@ export function TaskRow({
     }
     const prevTitle = task.title;
     setDraft(html);
-    updateTask.mutate({ taskId: task.id, patch: { title: html } });
+    await updateTask.mutateAsync({ taskId: task.id, patch: { title: html } });
     pushUndo({
       description: "שינוי כותרת",
       undo: () =>
@@ -279,7 +286,12 @@ export function TaskRow({
 
     if (mod && e.code === "Enter") {
       e.preventDefault();
-      commitTitle();
+      // Serialize: persist this row's title BEFORE spawning the subtask.
+      // Otherwise the new createTask invalidates allTasks and its refetch
+      // can read the server before our title PATCH lands, clobbering the
+      // optimistic title with the prior (often empty) value — which then
+      // looks to the user like the row vanished on Enter.
+      await commitTitle();
       await handleAddSubtask();
       return;
     }
@@ -298,7 +310,7 @@ export function TaskRow({
 
     if (e.key === "Enter" && e.shiftKey && !mod) {
       e.preventDefault();
-      commitTitle();
+      await commitTitle();
       setDescFocused(true);
       setTimeout(() => descRef.current?.focus(), 0);
       return;
@@ -306,7 +318,9 @@ export function TaskRow({
 
     if (e.key === "Enter" && !e.shiftKey && !mod) {
       e.preventDefault();
-      commitTitle();
+      // Same ordering rationale as the Cmd+Enter branch above — see
+      // commitTitle's docstring.
+      await commitTitle();
       const payload = {
         title: "",
         task_list_id: listId ?? null,
@@ -326,7 +340,7 @@ export function TaskRow({
     if (e.key === "Tab" && !e.shiftKey) {
       if (!prevSiblingId) return;
       e.preventDefault();
-      commitTitle();
+      await commitTitle();
       const prevParent = task.parent_task_id;
       setParent.mutate({ taskId: task.id, parentId: prevSiblingId });
       pushUndo({
@@ -339,7 +353,7 @@ export function TaskRow({
     if (e.key === "Tab" && e.shiftKey) {
       if (!parentTaskId) return;
       e.preventDefault();
-      commitTitle();
+      await commitTitle();
       const prevParent = task.parent_task_id;
       setParent.mutate({ taskId: task.id, parentId: grandparentTaskId });
       pushUndo({

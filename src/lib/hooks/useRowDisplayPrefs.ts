@@ -71,7 +71,7 @@ export const ROW_DISPLAY_FIELDS: {
   {
     key: "assignee",
     label: "אחראי / משותפים",
-    description: "אווטאר של מי שאחראי למשימה",
+    description: "שם המשתמש שאצלו או שהאצלת לו את המשימה",
   },
   {
     key: "alarm",

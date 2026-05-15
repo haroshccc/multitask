@@ -38,6 +38,7 @@ import {
 import { useTimeUnit, formatSeconds } from "@/lib/hooks/useTimeUnit";
 import { useMyTaskStatuses } from "@/lib/hooks/useUserTaskStatuses";
 import type { RowDisplayPrefs } from "@/lib/hooks/useRowDisplayPrefs";
+import { useOrgMembers } from "@/lib/hooks/useOrgMembers";
 import { pushUndo } from "@/lib/undo/store";
 import {
   isRecurring as isTaskRecurring,
@@ -131,6 +132,22 @@ export function TaskRow({
   const startTimer = useStartTimer();
   const stopTimer = useStopTimer();
   const { data: activeTimer } = useActiveTimer();
+
+  // Resolve the counterparty name for the assignment badge. For a task I
+  // own and delegated, the counterparty is the assignee. For a task I was
+  // assigned, it's the owner. useOrgMembers is cached per-org so the
+  // many-rows pattern doesn't fan out into N queries.
+  const { data: orgMembers = [] } = useOrgMembers();
+  const counterpartyUserId =
+    taskOwnershipMode === "delegated"
+      ? task.assignee_user_id ?? null
+      : taskOwnershipMode === "assigned"
+      ? task.owner_id ?? null
+      : null;
+  const counterpartyName = counterpartyUserId
+    ? orgMembers.find((m) => m.membership.user_id === counterpartyUserId)
+        ?.profile?.full_name ?? null
+    : null;
 
   const [draft, setDraft] = useState(task.title);
   const [descDraft, setDescDraft] = useState(() => stripDescHtml(task.description ?? ""));
@@ -612,8 +629,6 @@ export function TaskRow({
         ref={setDragRef}
         className={cn(
           "group relative flex items-start gap-1.5 rounded-md transition-colors px-1.5 py-1 hover:bg-ink-50",
-          taskOwnershipMode === "assigned" && !isSelected && "border border-dotted border-rose-300 bg-rose-50/60",
-          taskOwnershipMode === "delegated" && !isSelected && "border border-dashed border-rose-300 bg-rose-50/40",
           isDragging && "opacity-40",
           isOverNest && "bg-primary-50 ring-1 ring-primary-300",
           isSelected && "bg-primary-50/60 ring-1 ring-primary-300",
@@ -836,11 +851,17 @@ export function TaskRow({
           )}
         </div>
 
-        {taskOwnershipMode === "assigned" && (
-          <span className="shrink-0 text-[9px] text-ink-500 font-medium leading-none">הוצאל</span>
-        )}
-        {taskOwnershipMode === "delegated" && (
-          <span className="shrink-0 text-[9px] text-ink-500 font-medium leading-none">האצלתי</span>
+        {display.assignee && taskOwnershipMode !== "mine" && counterpartyName && (
+          <span
+            className="shrink-0 text-[10px] text-ink-600 font-medium leading-none px-1.5 py-0.5 rounded-full bg-ink-100"
+            title={
+              taskOwnershipMode === "delegated"
+                ? `הואצלה אל: ${counterpartyName}`
+                : `הואצלה אליי על-ידי: ${counterpartyName}`
+            }
+          >
+            {counterpartyName}
+          </span>
         )}
         {task.status === "pending_approval" && (
           <HalfCheckIcon

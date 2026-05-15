@@ -214,6 +214,39 @@ export function TaskRow({
     if (!descFocused) setDescDraft(stripDescHtml(task.description ?? ""));
   }, [task.description, descFocused]);
 
+  // Close the inline description (collapse back to the read-only preview)
+  // when the user mouses down anywhere outside its textarea, or presses
+  // Escape. The textarea's own onBlur already handles native focus moves,
+  // but a click on a non-focusable element (e.g. another row's description
+  // preview div) doesn't always shift focus in every browser — without
+  // this listener two or more description editors stay open at once,
+  // which is what users were hitting. Belt + braces: also wired to a
+  // global Esc so a "stuck open" editor without focus can still be
+  // dismissed.
+  useEffect(() => {
+    if (!descFocused) return;
+    const onMouseDown = (e: MouseEvent) => {
+      const el = descRef.current;
+      if (!el) return;
+      if (el.contains(e.target as Node)) return;
+      setDescFocused(false);
+      commitDescription();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setDescDraft(stripDescHtml(task.description ?? ""));
+        setDescFocused(false);
+      }
+    };
+    document.addEventListener("mousedown", onMouseDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onMouseDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [descFocused]);
+
   useEffect(() => {
     if (focusTaskId === task.id) {
       const el = inputRef.current;
@@ -272,22 +305,6 @@ export function TaskRow({
       redo: () =>
         updateTask.mutate({ taskId: task.id, patch: { title: html } }),
     });
-  };
-
-  const insertListPrefix = (type: "ordered" | "bullet" | "dash") => {
-    const el = descRef.current;
-    if (!el) return;
-    const prefix = type === "ordered" ? "1. " : type === "bullet" ? "• " : "— ";
-    const start = el.selectionStart ?? 0;
-    const text = descDraft;
-    const lineStart = text.lastIndexOf("\n", start - 1) + 1;
-    const newText = text.slice(0, lineStart) + prefix + text.slice(lineStart);
-    setDescDraft(newText);
-    setTimeout(() => {
-      el.selectionStart = start + prefix.length;
-      el.selectionEnd = start + prefix.length;
-      el.focus();
-    }, 0);
   };
 
   const commitDescription = () => {
@@ -789,49 +806,25 @@ export function TaskRow({
           {/* Inline description — only shown when there is content or when focused */}
           {(!!task.description || descFocused) && (
             descFocused ? (
-              <>
-                {!isReadOnly && !isWriteOnly && !isAssigned && (
-                  <div className="flex items-center gap-1 mt-0.5">
-                    <button
-                      type="button"
-                      onMouseDown={(e) => { e.preventDefault(); insertListPrefix("ordered"); }}
-                      title="מספור"
-                      className="px-1.5 py-0.5 text-[10px] font-mono text-ink-500 hover:bg-ink-100 rounded"
-                    >1.</button>
-                    <button
-                      type="button"
-                      onMouseDown={(e) => { e.preventDefault(); insertListPrefix("bullet"); }}
-                      title="נקודות"
-                      className="px-1.5 py-0.5 text-[10px] text-ink-500 hover:bg-ink-100 rounded"
-                    >•</button>
-                    <button
-                      type="button"
-                      onMouseDown={(e) => { e.preventDefault(); insertListPrefix("dash"); }}
-                      title="מקף"
-                      className="px-1.5 py-0.5 text-[10px] text-ink-500 hover:bg-ink-100 rounded"
-                    >—</button>
-                  </div>
-                )}
-                <textarea
-                  ref={descRef}
-                  value={descDraft}
-                  onChange={(e) => setDescDraft(e.target.value)}
-                  onBlur={() => {
+              <textarea
+                ref={descRef}
+                value={descDraft}
+                onChange={(e) => setDescDraft(e.target.value)}
+                onBlur={() => {
+                  setDescFocused(false);
+                  commitDescription();
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    setDescDraft(stripDescHtml(task.description ?? ""));
                     setDescFocused(false);
-                    commitDescription();
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Escape") {
-                      setDescDraft(stripDescHtml(task.description ?? ""));
-                      setDescFocused(false);
-                      inputRef.current?.focus();
-                    }
-                  }}
-                  placeholder="פירוט..."
-                  rows={2}
-                  className="w-full bg-transparent border-0 outline-none text-xs text-ink-500 py-0.5 resize-none leading-relaxed"
-                />
-              </>
+                    inputRef.current?.focus();
+                  }
+                }}
+                placeholder="פירוט..."
+                rows={7}
+                className="w-full bg-transparent border-0 outline-none text-xs text-ink-500 py-0.5 resize-y leading-relaxed"
+              />
             ) : (
               <div
                 className="text-xs text-ink-400 leading-relaxed line-clamp-2 py-0.5 cursor-text [&_*]:leading-relaxed"

@@ -2,10 +2,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, ChevronDown, Eye, EyeOff, MoreHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { useListVisibility, useSetListVisibility } from "@/lib/hooks/useListVisibility";
-import { useTaskLists } from "@/lib/hooks/useTaskLists";
-import { useThoughtLists } from "@/lib/hooks/useThoughtLists";
+import { useTaskLists, useArchiveTaskList } from "@/lib/hooks/useTaskLists";
+import { useThoughtLists, useArchiveThoughtList } from "@/lib/hooks/useThoughtLists";
 import { useCreateTaskList } from "@/lib/hooks/useTaskLists";
 import { useCreateThoughtList } from "@/lib/hooks/useThoughtLists";
+import { pushUndo } from "@/lib/undo/store";
 import { ListIcon } from "@/components/tasks/list-icons";
 import type { DashboardScreen, TaskList, ThoughtList } from "@/lib/types/domain";
 
@@ -39,6 +40,8 @@ export function ListsBanner({ screenKey, kind, className, extra }: ListsBannerPr
   const setVisibility = useSetListVisibility();
   const createTaskList = useCreateTaskList();
   const createThoughtList = useCreateThoughtList();
+  const archiveTaskList = useArchiveTaskList();
+  const archiveThoughtList = useArchiveThoughtList();
 
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
@@ -81,18 +84,47 @@ export function ListsBanner({ screenKey, kind, className, extra }: ListsBannerPr
 
   const toggle = (listId: string) => {
     const isHidden = hiddenSet.has(listId);
+    const prev = hiddenIds;
     const next = isHidden
       ? hiddenIds.filter((id) => id !== listId)
       : [...hiddenIds, listId];
     setVisibility.mutate({ screenKey, hiddenListIds: next });
+    pushUndo({
+      description: isHidden ? "הצגת רשימה" : "הסתרת רשימה",
+      undo: () =>
+        setVisibility.mutate({ screenKey, hiddenListIds: prev }),
+      redo: () =>
+        setVisibility.mutate({ screenKey, hiddenListIds: next }),
+    });
   };
 
   const handleCreate = async () => {
     if (!newName.trim()) return;
+    const trimmed = newName.trim();
     if (kind === "task") {
-      await createTaskList.mutateAsync({ name: newName.trim(), kind: "custom" });
+      const payload = { name: trimmed, kind: "custom" as const };
+      const created = await createTaskList.mutateAsync(payload);
+      let currentId = created.id;
+      pushUndo({
+        description: "יצירת רשימת משימות",
+        undo: () => archiveTaskList.mutate(currentId),
+        redo: async () => {
+          const again = await createTaskList.mutateAsync(payload);
+          currentId = again.id;
+        },
+      });
     } else {
-      await createThoughtList.mutateAsync({ name: newName.trim() });
+      const payload = { name: trimmed };
+      const created = await createThoughtList.mutateAsync(payload);
+      let currentId = created.id;
+      pushUndo({
+        description: "יצירת רשימת מחשבות",
+        undo: () => archiveThoughtList.mutate(currentId),
+        redo: async () => {
+          const again = await createThoughtList.mutateAsync(payload);
+          currentId = again.id;
+        },
+      });
     }
     setNewName("");
     setCreating(false);

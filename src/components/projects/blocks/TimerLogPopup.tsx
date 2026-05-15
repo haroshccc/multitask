@@ -7,6 +7,7 @@ import {
   useDeleteTimeEntry,
 } from "@/lib/hooks";
 import type { Task, TimeEntry } from "@/lib/types/domain";
+import { pushUndo } from "@/lib/undo/store";
 
 /**
  * Modal popup that lists every time_entries row for a task and lets the user
@@ -41,18 +42,29 @@ export function TimerLogPopup({
   const handleAdd = () => {
     const now = new Date();
     const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
-    create.mutate(
-      {
-        task_id: task.id,
-        started_at: oneHourAgo.toISOString(),
-        ended_at: now.toISOString(),
+    const payload = {
+      task_id: task.id,
+      started_at: oneHourAgo.toISOString(),
+      ended_at: now.toISOString(),
+    };
+    create.mutate(payload, {
+      onSuccess: (entry) => {
+        setEditingId(entry.id);
+        let currentId = entry.id;
+        pushUndo({
+          description: "הוספת רשומת זמן",
+          undo: () =>
+            del.mutate({ entryId: currentId, taskId: task.id }),
+          redo: () => {
+            create.mutate(payload, {
+              onSuccess: (again) => {
+                currentId = again.id;
+              },
+            });
+          },
+        });
       },
-      {
-        // Open the new entry in edit mode immediately so the user fills in
-        // the actual times (default = "1 hour ago to now" is just a stub).
-        onSuccess: (entry) => setEditingId(entry.id),
-      }
-    );
+    });
   };
 
   return (
@@ -103,14 +115,53 @@ export function TimerLogPopup({
                     onStartEdit={() => setEditingId(entry.id)}
                     onCancelEdit={() => setEditingId(null)}
                     onSave={(patch) => {
+                      const prevPatch = {
+                        started_at: entry.started_at,
+                        ended_at: entry.ended_at,
+                        note: entry.note,
+                      };
                       update.mutate(
                         { entryId: entry.id, taskId: task.id, patch },
                         { onSuccess: () => setEditingId(null) }
                       );
+                      pushUndo({
+                        description: "עריכת רשומת זמן",
+                        undo: () =>
+                          update.mutate({
+                            entryId: entry.id,
+                            taskId: task.id,
+                            patch: prevPatch,
+                          }),
+                        redo: () =>
+                          update.mutate({
+                            entryId: entry.id,
+                            taskId: task.id,
+                            patch,
+                          }),
+                      });
                     }}
                     onDelete={() => {
-                      if (confirm("למחוק את הרשומה?"))
-                        del.mutate({ entryId: entry.id, taskId: task.id });
+                      if (!confirm("למחוק את הרשומה?")) return;
+                      const snapshot = {
+                        task_id: task.id,
+                        started_at: entry.started_at,
+                        ended_at: entry.ended_at,
+                        note: entry.note,
+                      };
+                      let currentId = entry.id;
+                      del.mutate({ entryId: currentId, taskId: task.id });
+                      pushUndo({
+                        description: "מחיקת רשומת זמן",
+                        undo: () => {
+                          create.mutate(snapshot, {
+                            onSuccess: (e2) => {
+                              currentId = e2.id;
+                            },
+                          });
+                        },
+                        redo: () =>
+                          del.mutate({ entryId: currentId, taskId: task.id }),
+                      });
                     }}
                   />
                 </li>

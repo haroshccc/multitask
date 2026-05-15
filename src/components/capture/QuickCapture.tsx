@@ -12,9 +12,10 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { useNavigate } from "react-router-dom";
-import { useCreateThought } from "@/lib/hooks/useThoughts";
+import { useCreateThought, useArchiveThought } from "@/lib/hooks/useThoughts";
 import { useCreateRecording, useTriggerRecordingProcessing } from "@/lib/hooks/useRecordings";
-import { useCreateTask } from "@/lib/hooks/useTasks";
+import { useCreateTask, useDeleteTask } from "@/lib/hooks/useTasks";
+import { pushUndo } from "@/lib/undo/store";
 import { useFileUpload } from "@/lib/hooks/useFileUpload";
 import { useOrgScope } from "@/lib/hooks/useOrgScope";
 import { useUserThoughtPreferences } from "@/lib/hooks/useUserThoughtPreferences";
@@ -35,7 +36,9 @@ export function QuickCapture({ open, onClose }: QuickCaptureProps) {
   const navigate = useNavigate();
   const scope = useOrgScope();
   const createThought = useCreateThought();
+  const archiveThought = useArchiveThought();
   const createRecording = useCreateRecording();
+  const deleteTask = useDeleteTask();
   const triggerRecording = useTriggerRecordingProcessing();
   const createTask = useCreateTask();
   const upload = useFileUpload();
@@ -96,9 +99,19 @@ export function QuickCapture({ open, onClose }: QuickCaptureProps) {
     setSaving(true);
     setError(null);
     try {
-      await createThought.mutateAsync({
-        source: "app_text",
+      const payload = {
+        source: "app_text" as const,
         text_content: text.trim(),
+      };
+      const created = await createThought.mutateAsync(payload);
+      let currentId = created.id;
+      pushUndo({
+        description: "יצירת מחשבה",
+        undo: () => archiveThought.mutate(currentId),
+        redo: async () => {
+          const again = await createThought.mutateAsync(payload);
+          currentId = again.id;
+        },
       });
       setText("");
       onClose();
@@ -237,12 +250,22 @@ export function QuickCapture({ open, onClose }: QuickCaptureProps) {
                     label="משימה חדשה"
                     onClick={async () => {
                       try {
-                        const t = await createTask.mutateAsync({
+                        const payload = {
                           title: "",
                           task_list_id: null,
                           parent_task_id: null,
                           status: "todo",
                           urgency: 0,
+                        };
+                        const t = await createTask.mutateAsync(payload);
+                        let currentId = t.id;
+                        pushUndo({
+                          description: "יצירת משימה",
+                          undo: () => deleteTask.mutate(currentId),
+                          redo: async () => {
+                            const again = await createTask.mutateAsync(payload);
+                            currentId = again.id;
+                          },
                         });
                         onClose();
                         navigate(`/app/tasks?edit=${t.id}`);

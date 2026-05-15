@@ -38,6 +38,7 @@ import { ThoughtListEditDialog } from "@/components/thoughts/ThoughtListEditDial
 import { TaskEditModal } from "@/components/tasks/TaskEditModal";
 import { EventEditModal } from "@/components/calendar/EventEditModal";
 import { mockProvider } from "@/lib/ai/thought-suggestions";
+import { pushUndo } from "@/lib/undo/store";
 
 const VIEW_KEY = "multitask:thoughts:view";
 const SORT_KEY = "multitask:thoughts:sort";
@@ -331,9 +332,23 @@ export function Thoughts() {
           layout={layout}
           onLayoutChange={setLayout}
           autoTranscribeRecordedThoughts={autoTranscribeRecordedThoughts}
-          onAutoTranscribeChange={(next) =>
-            updateThoughtPrefs.mutate({ auto_transcribe_recorded_thoughts: next })
-          }
+          onAutoTranscribeChange={(next) => {
+            const prev = autoTranscribeRecordedThoughts;
+            updateThoughtPrefs.mutate({
+              auto_transcribe_recorded_thoughts: next,
+            });
+            pushUndo({
+              description: "שינוי תמלול אוטומטי",
+              undo: () =>
+                updateThoughtPrefs.mutate({
+                  auto_transcribe_recorded_thoughts: prev,
+                }),
+              redo: () =>
+                updateThoughtPrefs.mutate({
+                  auto_transcribe_recorded_thoughts: next,
+                }),
+            });
+          }}
           onOpenAiPrompts={() => setAiPromptsOpen(true)}
         />
 

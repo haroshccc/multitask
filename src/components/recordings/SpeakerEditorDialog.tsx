@@ -9,6 +9,7 @@ import {
   useRecordingAudioUrl,
 } from "@/lib/hooks/useRecordings";
 import type { Recording } from "@/lib/types/domain";
+import { pushUndo } from "@/lib/undo/store";
 
 interface Props {
   recording: Recording;
@@ -74,15 +75,43 @@ export function SpeakerEditorDialog({ recording, open, onClose }: Props) {
   }, [open, indices, speakers]);
 
   const onSave = async () => {
+    const changes: Array<{ idx: number; prev: string; next: string }> = [];
     for (const idx of indices) {
       const label = drafts[idx]?.trim();
       const existing = speakers.find((s) => s.speaker_index === idx);
-      if (!label && !existing?.label) continue; // no-op
-      if (label === (existing?.label ?? "")) continue; // unchanged
+      const prev = existing?.label ?? "";
+      const next = label ?? "";
+      if (!next && !prev) continue; // no-op
+      if (next === prev) continue; // unchanged
+      changes.push({ idx, prev, next });
       await upsert.mutateAsync({
         recordingId: recording.id,
         speakerIndex: idx,
-        label: label ?? "",
+        label: next,
+      });
+    }
+    if (changes.length > 0) {
+      const recordingId = recording.id;
+      pushUndo({
+        description: "עריכת דוברים",
+        undo: async () => {
+          for (const c of changes) {
+            await upsert.mutateAsync({
+              recordingId,
+              speakerIndex: c.idx,
+              label: c.prev,
+            });
+          }
+        },
+        redo: async () => {
+          for (const c of changes) {
+            await upsert.mutateAsync({
+              recordingId,
+              speakerIndex: c.idx,
+              label: c.next,
+            });
+          }
+        },
       });
     }
     onClose();

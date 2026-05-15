@@ -21,6 +21,7 @@ import {
   useExtractQuestions,
 } from "@/lib/hooks";
 import type { Question, Task, Recording } from "@/lib/types/domain";
+import { pushUndo } from "@/lib/undo/store";
 
 /**
  * Questions panel — the spec MD's "qNotepads" surface, simplified to one flat
@@ -66,10 +67,26 @@ export function QuestionsBlock({ scopeId }: { scopeId?: string | null }) {
 
   const handleAdd = () => {
     if (!projectId || !draft.trim()) return;
-    create.mutate(
-      { project_id: projectId, text: draft.trim() },
-      { onSuccess: () => setDraft("") }
-    );
+    const payload = { project_id: projectId, text: draft.trim() };
+    create.mutate(payload, {
+      onSuccess: (q) => {
+        setDraft("");
+        let currentId = q.id;
+        const pid = projectId;
+        pushUndo({
+          description: "הוספת שאלה",
+          undo: () =>
+            remove.mutate({ questionId: currentId, projectId: pid }),
+          redo: () => {
+            create.mutate(payload, {
+              onSuccess: (again) => {
+                currentId = again.id;
+              },
+            });
+          },
+        });
+      },
+    });
   };
 
   const handleExtract = (recording: Recording) => {
@@ -190,26 +207,76 @@ export function QuestionsBlock({ scopeId }: { scopeId?: string | null }) {
                     key={q.id}
                     question={q}
                     tasks={tasks}
-                    onAnswer={(text) =>
+                    onAnswer={(text) => {
                       answer.mutate({
                         questionId: q.id,
                         projectId: q.project_id,
                         answer: text,
-                      })
-                    }
-                    onLinkTask={(taskId) =>
+                      });
+                      pushUndo({
+                        description: "מענה לשאלה",
+                        undo: () =>
+                          reopen.mutate({
+                            questionId: q.id,
+                            projectId: q.project_id,
+                          }),
+                        redo: () =>
+                          answer.mutate({
+                            questionId: q.id,
+                            projectId: q.project_id,
+                            answer: text,
+                          }),
+                      });
+                    }}
+                    onLinkTask={(taskId) => {
+                      const prevTaskId = q.task_id;
                       update.mutate({
                         questionId: q.id,
                         projectId: q.project_id,
                         patch: { task_id: taskId },
-                      })
-                    }
-                    onDelete={() =>
+                      });
+                      pushUndo({
+                        description: "קישור שאלה למשימה",
+                        undo: () =>
+                          update.mutate({
+                            questionId: q.id,
+                            projectId: q.project_id,
+                            patch: { task_id: prevTaskId },
+                          }),
+                        redo: () =>
+                          update.mutate({
+                            questionId: q.id,
+                            projectId: q.project_id,
+                            patch: { task_id: taskId },
+                          }),
+                      });
+                    }}
+                    onDelete={() => {
+                      const snapshot = {
+                        project_id: q.project_id,
+                        text: q.text,
+                      };
+                      let currentId = q.id;
                       remove.mutate({
-                        questionId: q.id,
+                        questionId: currentId,
                         projectId: q.project_id,
-                      })
-                    }
+                      });
+                      pushUndo({
+                        description: "מחיקת שאלה",
+                        undo: () => {
+                          create.mutate(snapshot, {
+                            onSuccess: (again) => {
+                              currentId = again.id;
+                            },
+                          });
+                        },
+                        redo: () =>
+                          remove.mutate({
+                            questionId: currentId,
+                            projectId: q.project_id,
+                          }),
+                      });
+                    }}
                   />
                 ))}
               </Section>
@@ -225,25 +292,76 @@ export function QuestionsBlock({ scopeId }: { scopeId?: string | null }) {
                     key={q.id}
                     question={q}
                     tasks={tasks}
-                    onLinkTask={(taskId) =>
+                    onLinkTask={(taskId) => {
+                      const prevTaskId = q.task_id;
                       update.mutate({
                         questionId: q.id,
                         projectId: q.project_id,
                         patch: { task_id: taskId },
-                      })
-                    }
-                    onReopen={() =>
+                      });
+                      pushUndo({
+                        description: "קישור שאלה למשימה",
+                        undo: () =>
+                          update.mutate({
+                            questionId: q.id,
+                            projectId: q.project_id,
+                            patch: { task_id: prevTaskId },
+                          }),
+                        redo: () =>
+                          update.mutate({
+                            questionId: q.id,
+                            projectId: q.project_id,
+                            patch: { task_id: taskId },
+                          }),
+                      });
+                    }}
+                    onReopen={() => {
+                      const prevAnswer = q.answer_text;
                       reopen.mutate({
                         questionId: q.id,
                         projectId: q.project_id,
-                      })
-                    }
-                    onDelete={() =>
+                      });
+                      pushUndo({
+                        description: "פתיחה מחדש של שאלה",
+                        undo: () =>
+                          answer.mutate({
+                            questionId: q.id,
+                            projectId: q.project_id,
+                            answer: prevAnswer ?? "",
+                          }),
+                        redo: () =>
+                          reopen.mutate({
+                            questionId: q.id,
+                            projectId: q.project_id,
+                          }),
+                      });
+                    }}
+                    onDelete={() => {
+                      const snapshot = {
+                        project_id: q.project_id,
+                        text: q.text,
+                      };
+                      let currentId = q.id;
                       remove.mutate({
-                        questionId: q.id,
+                        questionId: currentId,
                         projectId: q.project_id,
-                      })
-                    }
+                      });
+                      pushUndo({
+                        description: "מחיקת שאלה",
+                        undo: () => {
+                          create.mutate(snapshot, {
+                            onSuccess: (again) => {
+                              currentId = again.id;
+                            },
+                          });
+                        },
+                        redo: () =>
+                          remove.mutate({
+                            questionId: currentId,
+                            projectId: q.project_id,
+                          }),
+                      });
+                    }}
                   />
                 ))}
               </Section>

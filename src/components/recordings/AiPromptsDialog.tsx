@@ -12,6 +12,7 @@ import {
   type RecordingAiPromptKey,
   type RecordingAiPromptOverrides,
 } from "@/lib/ai/recording-prompts";
+import { pushUndo } from "@/lib/undo/store";
 
 interface Props {
   open: boolean;
@@ -32,9 +33,22 @@ export function AiPromptsDialog({ open, onClose }: Props) {
   }, [open, prefs?.recording_ai_prompts]);
 
   const onSave = () => {
+    const prev = prefs?.recording_ai_prompts ?? {};
+    const next = stripEmpty(draft);
     update.mutate(
-      { recording_ai_prompts: stripEmpty(draft) },
-      { onSuccess: () => onClose() }
+      { recording_ai_prompts: next },
+      {
+        onSuccess: () => {
+          pushUndo({
+            description: "עדכון הנחיות AI",
+            undo: () =>
+              update.mutate({ recording_ai_prompts: prev }),
+            redo: () =>
+              update.mutate({ recording_ai_prompts: next }),
+          });
+          onClose();
+        },
+      }
     );
   };
 

@@ -9,6 +9,7 @@ import {
 } from "@/lib/hooks/useTaskLists";
 import { useAuth } from "@/lib/auth/AuthContext";
 import type { TaskList } from "@/lib/types/domain";
+import { pushUndo } from "@/lib/undo/store";
 
 interface ShareListModalProps {
   list: TaskList;
@@ -75,18 +76,24 @@ export function ShareListModal({ list, onClose }: ShareListModalProps) {
                 isSelf={isSelf}
                 currentPermission={currentPerm ?? null}
                 onToggle={(next) => {
-                  if (next === null) {
-                    removeShare.mutate({
-                      listId: list.id,
-                      userId: membership.user_id,
-                    });
-                  } else {
-                    setShare.mutate({
-                      listId: list.id,
-                      userId: membership.user_id,
-                      permission: next,
-                    });
-                  }
+                  const prev = currentPerm ?? null;
+                  const userId = membership.user_id;
+                  const listId = list.id;
+                  const apply = (perm: typeof next) => {
+                    if (perm === null) {
+                      removeShare.mutate({ listId, userId });
+                    } else {
+                      setShare.mutate({ listId, userId, permission: perm });
+                    }
+                  };
+                  apply(next);
+                  pushUndo({
+                    description: next === null
+                      ? "ביטול שיתוף רשימה"
+                      : "שיתוף רשימה",
+                    undo: () => apply(prev),
+                    redo: () => apply(next),
+                  });
                 }}
               />
             );

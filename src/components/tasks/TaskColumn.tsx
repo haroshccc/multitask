@@ -139,9 +139,24 @@ export function TaskColumn({
   // Auto-delete any tasks with an empty title (abandoned creates, or ones
   // that slipped through before the onBlur fix). Skip the task currently
   // being created/focused so we don't delete it mid-type.
+  //
+  // Why the setTimeout: pressing Enter on a row to create a new sibling
+  // produces TWO independent state changes in quick succession — the new
+  // task lands in the React Query cache (via setQueryData in
+  // useCreateTask.onSuccess), and only after that does the handler call
+  // onRequestFocus(newTask.id) to update focusTaskId. If both don't
+  // batch into a single render, this effect runs once with the new
+  // task in `roots` but `focusTaskId` still on the previous row — sees
+  // the new empty task as "abandoned" and deletes it immediately.
+  // Deferring the sweep to the next macrotask lets the focusTaskId
+  // update flush first; the cleanup function cancels the pending timer
+  // when focusTaskId arrives, so only the final-state sweep runs.
   useEffect(() => {
-    const emptyIds = collectEmptyTaskIds(roots, focusTaskId);
-    for (const id of emptyIds) deleteTaskM.mutate(id);
+    const t = setTimeout(() => {
+      const emptyIds = collectEmptyTaskIds(roots, focusTaskId);
+      for (const id of emptyIds) deleteTaskM.mutate(id);
+    }, 0);
+    return () => clearTimeout(t);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roots, focusTaskId]);
 

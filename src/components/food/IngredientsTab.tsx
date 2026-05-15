@@ -5,9 +5,12 @@ import {
   useIngredients,
   useIngredientCategories,
   useDeleteIngredient,
+  useCreateIngredient,
+  useCreateIngredientUnit,
 } from "@/lib/hooks/useFood";
 import { IngredientEditModal } from "./IngredientEditModal";
 import type { IngredientWithUnits } from "@/lib/services/food";
+import { pushUndo } from "@/lib/undo/store";
 
 interface IngredientsTabProps {
   /** Compact mode trims the toolbar / column count for use as a side panel. */
@@ -18,6 +21,8 @@ export function IngredientsTab({ compact = false }: IngredientsTabProps) {
   const { data: ingredients = [], isLoading } = useIngredients();
   const { data: categories = [] } = useIngredientCategories();
   const deleteIngredient = useDeleteIngredient();
+  const createIngredient = useCreateIngredient();
+  const createUnit = useCreateIngredientUnit();
 
   const [editing, setEditing] = useState<IngredientWithUnits | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
@@ -51,9 +56,38 @@ export function IngredientsTab({ compact = false }: IngredientsTabProps) {
   };
 
   const confirmDelete = async (i: IngredientWithUnits) => {
-    if (confirm(`למחוק את "${i.name}"?`)) {
-      await deleteIngredient.mutateAsync(i.id);
-    }
+    if (!confirm(`למחוק את "${i.name}"?`)) return;
+    const ingredientSnapshot = {
+      name: i.name,
+      category_id: i.category_id,
+      calories: i.calories,
+      protein_g: i.protein_g,
+      fat_g: i.fat_g,
+      carbs_g: i.carbs_g,
+      base_quantity: i.base_quantity,
+      base_unit: i.base_unit,
+      notes: i.notes,
+      is_complete: i.is_complete,
+    };
+    const unitSnapshots = i.units.map((u) => ({
+      name: u.name,
+      grams_per_unit: u.grams_per_unit,
+      is_default: u.is_default,
+      sort_order: u.sort_order,
+    }));
+    let currentId = i.id;
+    await deleteIngredient.mutateAsync(currentId);
+    pushUndo({
+      description: `מחיקת מצרך: ${i.name}`,
+      undo: async () => {
+        const recreated = await createIngredient.mutateAsync(ingredientSnapshot);
+        currentId = recreated.id;
+        for (const u of unitSnapshots) {
+          await createUnit.mutateAsync({ ingredient_id: recreated.id, ...u });
+        }
+      },
+      redo: () => deleteIngredient.mutate(currentId),
+    });
   };
 
   return (

@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { MoreHorizontal, Archive, ArchiveRestore } from "lucide-react";
 import { useArchiveProject, useRestoreProject } from "@/lib/hooks/useProjects";
 import type { Project, ProjectPricingMode } from "@/lib/types/domain";
+import { pushUndo } from "@/lib/undo/store";
 
 interface Props {
   projects: Project[];
@@ -148,7 +149,13 @@ function ProjectRow({
                   type="button"
                   onClick={() => {
                     setMenuOpen(false);
-                    restore.mutate(project.id);
+                    const id = project.id;
+                    restore.mutate(id);
+                    pushUndo({
+                      description: "שחזור פרויקט",
+                      undo: () => archive.mutate(id),
+                      redo: () => restore.mutate(id),
+                    });
                   }}
                   className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-start text-ink-700 hover:bg-ink-50"
                 >
@@ -160,7 +167,13 @@ function ProjectRow({
                   type="button"
                   onClick={() => {
                     setMenuOpen(false);
-                    archive.mutate(project.id);
+                    const id = project.id;
+                    archive.mutate(id);
+                    pushUndo({
+                      description: "ארכוב פרויקט",
+                      undo: () => restore.mutate(id),
+                      redo: () => archive.mutate(id),
+                    });
                   }}
                   className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-start text-ink-700 hover:bg-ink-50"
                 >

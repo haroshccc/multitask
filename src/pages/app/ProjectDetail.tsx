@@ -30,6 +30,7 @@ import { CalendarBlock } from "@/components/projects/blocks/CalendarBlock";
 import { StatsBlock } from "@/components/projects/blocks/StatsBlock";
 import { PricingBlock } from "@/components/projects/ProjectBlocks";
 import { cn } from "@/lib/utils/cn";
+import { pushUndo } from "@/lib/undo/store";
 
 const STATUS_LABEL: Record<string, string> = {
   active: "פעיל",
@@ -93,7 +94,15 @@ function ProjectDetailLoaded({
           {project.is_archived ? (
             <button
               type="button"
-              onClick={() => restore.mutate(project.id)}
+              onClick={() => {
+                const id = project.id;
+                restore.mutate(id);
+                pushUndo({
+                  description: "שחזור פרויקט",
+                  undo: () => archive.mutate(id),
+                  redo: () => restore.mutate(id),
+                });
+              }}
               disabled={restore.isPending}
               className="btn-ghost text-sm flex items-center gap-1.5"
             >
@@ -103,7 +112,15 @@ function ProjectDetailLoaded({
           ) : (
             <button
               type="button"
-              onClick={() => archive.mutate(project.id)}
+              onClick={() => {
+                const id = project.id;
+                archive.mutate(id);
+                pushUndo({
+                  description: "ארכוב פרויקט",
+                  undo: () => restore.mutate(id),
+                  redo: () => archive.mutate(id),
+                });
+              }}
               disabled={archive.isPending}
               className="btn-ghost text-sm flex items-center gap-1.5"
             >

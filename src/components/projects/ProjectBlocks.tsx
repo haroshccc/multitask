@@ -11,6 +11,7 @@ import {
 } from "@/lib/hooks/useProjects";
 import { useTasksByProject } from "@/lib/hooks";
 import type { ProjectExpense } from "@/lib/types/domain";
+import { pushUndo } from "@/lib/undo/store";
 import { Trash2 } from "lucide-react";
 import { TasksBlock } from "@/components/projects/blocks/TasksBlock";
 import { TemplatesBlock } from "@/components/projects/blocks/TemplatesBlock";
@@ -204,22 +205,69 @@ function ExpensesSection({ projectId }: { projectId: string }) {
         </span>
       </div>
       <ul className="space-y-1">
-        {expenses.map((e) => (
-          <ExpenseRow
-            key={e.id}
-            expense={e}
-            onSave={(patch) =>
-              update.mutate({ expenseId: e.id, projectId, patch })
-            }
-            onDelete={() => del.mutate({ expenseId: e.id, projectId })}
-          />
-        ))}
+        {expenses.map((e) => {
+          const prev = { label: e.label, amount_cents: e.amount_cents };
+          return (
+            <ExpenseRow
+              key={e.id}
+              expense={e}
+              onSave={(patch) => {
+                update.mutate({ expenseId: e.id, projectId, patch });
+                pushUndo({
+                  description: "עריכת הוצאה",
+                  undo: () =>
+                    update.mutate({
+                      expenseId: e.id,
+                      projectId,
+                      patch: prev,
+                    }),
+                  redo: () =>
+                    update.mutate({ expenseId: e.id, projectId, patch }),
+                });
+              }}
+              onDelete={() => {
+                const snapshot = {
+                  label: e.label,
+                  amount_cents: e.amount_cents,
+                };
+                let currentId = e.id;
+                del.mutate({ expenseId: currentId, projectId });
+                pushUndo({
+                  description: "מחיקת הוצאה",
+                  undo: async () => {
+                    const created = await create.mutateAsync({
+                      project_id: projectId,
+                      ...snapshot,
+                    });
+                    currentId = created.id;
+                  },
+                  redo: () =>
+                    del.mutate({ expenseId: currentId, projectId }),
+                });
+              }}
+            />
+          );
+        })}
       </ul>
       <button
         type="button"
-        onClick={() =>
-          create.mutate({ project_id: projectId, label: "", amount_cents: 0 })
-        }
+        onClick={async () => {
+          const payload = {
+            project_id: projectId,
+            label: "",
+            amount_cents: 0,
+          };
+          const created = await create.mutateAsync(payload);
+          let currentId = created.id;
+          pushUndo({
+            description: "הוספת הוצאה",
+            undo: () => del.mutate({ expenseId: currentId, projectId }),
+            redo: async () => {
+              const again = await create.mutateAsync(payload);
+              currentId = again.id;
+            },
+          });
+        }}
         disabled={create.isPending}
         className="mt-1 text-[11px] text-primary-600 hover:text-primary-700 disabled:opacity-50"
       >

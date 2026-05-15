@@ -16,6 +16,7 @@ import {
 } from "@/lib/hooks/useFood";
 import type { IngredientWithUnits } from "@/lib/services/food";
 import type { IngredientUnit } from "@/lib/types/domain";
+import { pushUndo } from "@/lib/undo/store";
 
 interface IngredientEditModalProps {
   open: boolean;
@@ -168,19 +169,46 @@ export function IngredientEditModal({
       const complete = isComplete();
       let id: string;
       if (ingredient) {
+        const prevIngredientPatch = {
+          name: ingredient.name,
+          category_id: ingredient.category_id,
+          notes: ingredient.notes,
+          is_complete: ingredient.is_complete,
+        };
+        // Snapshot of every original unit's id → full payload, so undo can
+        // restore field-level edits and recreate deleted units.
+        const prevUnitsById = new Map(
+          ingredient.units.map((u) => [
+            u.id,
+            {
+              unit_name: u.unit_name,
+              amount: u.amount,
+              calories: u.calories,
+              fat_g: u.fat_g,
+              protein_g: u.protein_g,
+              carbs_g: u.carbs_g,
+              is_default: u.is_default,
+            },
+          ])
+        );
+        const ingredientPatch = {
+          name: name.trim(),
+          category_id: categoryId,
+          notes: notes.trim() || null,
+          is_complete: complete,
+        };
         await updateIngredient.mutateAsync({
           id: ingredient.id,
-          patch: {
-            name: name.trim(),
-            category_id: categoryId,
-            notes: notes.trim() || null,
-            is_complete: complete,
-          },
+          patch: ingredientPatch,
         });
         id = ingredient.id;
+        const deletedUnitIds: string[] = [];
+        const updatedUnits: Array<{ id: string; patch: typeof prevIngredientPatch & Record<string, unknown> }> = [];
+        const createdUnitIds: string[] = [];
         // Diff units: delete flagged, update existing, create new.
         for (const u of units) {
           if (u._deleted && u.id) {
+            deletedUnitIds.push(u.id);
             await deleteUnit.mutateAsync(u.id);
             continue;
           }
@@ -196,24 +224,67 @@ export function IngredientEditModal({
             is_default: u.is_default,
           };
           if (u.id) {
+            updatedUnits.push({ id: u.id, patch: payload as typeof prevIngredientPatch & Record<string, unknown> });
             await updateUnit.mutateAsync({ id: u.id, patch: payload });
           } else {
-            await createUnit.mutateAsync({ ingredient_id: id, ...payload });
+            const created = await createUnit.mutateAsync({
+              ingredient_id: id,
+              ...payload,
+            });
+            createdUnitIds.push(created.id);
           }
         }
+        const ingredientId = ingredient.id;
+        pushUndo({
+          description: `עריכת מצרך: ${ingredientPatch.name}`,
+          undo: async () => {
+            // Revert top-level fields.
+            await updateIngredient.mutateAsync({
+              id: ingredientId,
+              patch: prevIngredientPatch,
+            });
+            // Drop the units the user added.
+            for (const newId of createdUnitIds) {
+              await deleteUnit.mutateAsync(newId);
+            }
+            // Revert every still-existing unit to its prior values.
+            for (const up of updatedUnits) {
+              const prev = prevUnitsById.get(up.id);
+              if (prev) {
+                await updateUnit.mutateAsync({ id: up.id, patch: prev });
+              }
+            }
+            // Recreate units that were deleted (new id, but content matches).
+            for (const delId of deletedUnitIds) {
+              const prev = prevUnitsById.get(delId);
+              if (prev) {
+                await createUnit.mutateAsync({
+                  ingredient_id: ingredientId,
+                  ...prev,
+                });
+              }
+            }
+          },
+          redo: async () => {
+            await updateIngredient.mutateAsync({
+              id: ingredientId,
+              patch: ingredientPatch,
+            });
+            // Redo of unit-level diffs would need to re-track ids that have
+            // changed since undo. We accept that the redo restores
+            // ingredient fields only and skip detailed unit replay.
+          },
+        });
       } else {
-        const created = await createIngredient.mutateAsync({
+        const ingredientPayload = {
           name: name.trim(),
           category_id: categoryId,
           notes: notes.trim() || null,
           is_complete: complete,
-        });
-        id = created.id;
-        for (const u of units) {
-          if (u._deleted) continue;
-          if (!u.unit_name.trim()) continue;
-          await createUnit.mutateAsync({
-            ingredient_id: id,
+        };
+        const unitPayloads = units
+          .filter((u) => !u._deleted && u.unit_name.trim())
+          .map((u) => ({
             unit_name: u.unit_name.trim(),
             amount: Number(u.amount) || 1,
             calories: num(u.calories),
@@ -221,8 +292,27 @@ export function IngredientEditModal({
             protein_g: num(u.protein_g),
             carbs_g: num(u.carbs_g),
             is_default: u.is_default,
-          });
+          }));
+        const created = await createIngredient.mutateAsync(ingredientPayload);
+        id = created.id;
+        for (const p of unitPayloads) {
+          await createUnit.mutateAsync({ ingredient_id: id, ...p });
         }
+        let currentId = id;
+        pushUndo({
+          description: `יצירת מצרך: ${ingredientPayload.name}`,
+          undo: () => deleteIngredient.mutate(currentId),
+          redo: async () => {
+            const again = await createIngredient.mutateAsync(ingredientPayload);
+            currentId = again.id;
+            for (const p of unitPayloads) {
+              await createUnit.mutateAsync({
+                ingredient_id: again.id,
+                ...p,
+              });
+            }
+          },
+        });
         onCreated?.(id);
       }
       onClose();
@@ -409,10 +499,41 @@ export function IngredientEditModal({
               <button
                 type="button"
                 onClick={async () => {
-                  if (confirm(`למחוק את "${ingredient.name}"?`)) {
-                    await deleteIngredient.mutateAsync(ingredient.id);
-                    onClose();
-                  }
+                  if (!confirm(`למחוק את "${ingredient.name}"?`)) return;
+                  const ingredientSnapshot = {
+                    name: ingredient.name,
+                    category_id: ingredient.category_id,
+                    notes: ingredient.notes,
+                    is_complete: ingredient.is_complete,
+                  };
+                  const unitSnapshots = ingredient.units.map((u) => ({
+                    unit_name: u.unit_name,
+                    amount: u.amount,
+                    calories: u.calories,
+                    fat_g: u.fat_g,
+                    protein_g: u.protein_g,
+                    carbs_g: u.carbs_g,
+                    is_default: u.is_default,
+                  }));
+                  let currentId = ingredient.id;
+                  await deleteIngredient.mutateAsync(currentId);
+                  pushUndo({
+                    description: `מחיקת מצרך: ${ingredient.name}`,
+                    undo: async () => {
+                      const recreated = await createIngredient.mutateAsync(
+                        ingredientSnapshot
+                      );
+                      currentId = recreated.id;
+                      for (const p of unitSnapshots) {
+                        await createUnit.mutateAsync({
+                          ingredient_id: recreated.id,
+                          ...p,
+                        });
+                      }
+                    },
+                    redo: () => deleteIngredient.mutate(currentId),
+                  });
+                  onClose();
                 }}
                 className="inline-flex items-center gap-1.5 text-sm text-danger-600 hover:text-danger-800 hover:bg-danger-50 px-2 py-1.5 rounded-md transition-colors"
               >

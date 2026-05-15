@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, FolderPlus } from "lucide-react";
-import { useCreateProject } from "@/lib/hooks/useProjects";
+import { useCreateProject, useArchiveProject } from "@/lib/hooks/useProjects";
 import type { ProjectPricingMode } from "@/lib/types/domain";
+import { pushUndo } from "@/lib/undo/store";
 import { LIST_ICON_PRESETS, ListIcon } from "@/components/tasks/list-icons";
 import { cn } from "@/lib/utils/cn";
 
@@ -39,6 +40,7 @@ const COLOR_PALETTE = [
 
 export function CreateProjectDialog({ open, onClose, onCreated }: Props) {
   const create = useCreateProject();
+  const archive = useArchiveProject();
   const [name, setName] = useState("");
   const [pricingMode, setPricingMode] = useState<ProjectPricingMode>("hourly");
   const [emoji, setEmoji] = useState("");
@@ -57,7 +59,7 @@ export function CreateProjectDialog({ open, onClose, onCreated }: Props) {
   const submit = async () => {
     const trimmed = name.trim();
     if (!trimmed) return;
-    const project = await create.mutateAsync({
+    const payload = {
       name: trimmed,
       pricing_mode: pricingMode,
       emoji: emoji.trim() || null,
@@ -65,8 +67,18 @@ export function CreateProjectDialog({ open, onClose, onCreated }: Props) {
       vat_percentage: 18,
       currency: "ILS",
       profit_percentage: 20,
-      spare_mode: "percent",
+      spare_mode: "percent" as const,
       spare_value: 10,
+    };
+    const project = await create.mutateAsync(payload);
+    let currentId = project.id;
+    pushUndo({
+      description: `יצירת פרויקט: ${trimmed}`,
+      undo: () => archive.mutate(currentId),
+      redo: async () => {
+        const again = await create.mutateAsync(payload);
+        currentId = again.id;
+      },
     });
     onCreated?.(project.id);
     onClose();

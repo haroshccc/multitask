@@ -1,6 +1,7 @@
 import { Check } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { useCompleteTask, useToggleOccurrence } from "@/lib/hooks/useTasks";
+import { pushUndo } from "@/lib/undo/store";
 
 interface TaskCheckButtonProps {
   taskId: string;
@@ -51,15 +52,38 @@ export function TaskCheckButton({
     <button
       onClick={(e) => {
         e.stopPropagation();
+        const wasCompleted = completed;
         if (occurrenceStart) {
           toggleOccurrence.mutate({
             taskId,
             occurrenceStart,
-            next: !completed,
+            next: !wasCompleted,
+          });
+          pushUndo({
+            description: wasCompleted ? "ביטול סימון מופע" : "סימון מופע",
+            undo: () =>
+              toggleOccurrence.mutate({
+                taskId,
+                occurrenceStart,
+                next: wasCompleted,
+              }),
+            redo: () =>
+              toggleOccurrence.mutate({
+                taskId,
+                occurrenceStart,
+                next: !wasCompleted,
+              }),
           });
           return;
         }
-        completeTask.mutate({ taskId, completed: !completed });
+        completeTask.mutate({ taskId, completed: !wasCompleted });
+        pushUndo({
+          description: wasCompleted ? "ביטול סימון משימה" : "סימון משימה",
+          undo: () =>
+            completeTask.mutate({ taskId, completed: wasCompleted }),
+          redo: () =>
+            completeTask.mutate({ taskId, completed: !wasCompleted }),
+        });
       }}
       className={cn(
         "shrink-0 inline-flex items-center justify-center transition-colors",

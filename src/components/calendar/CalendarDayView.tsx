@@ -8,6 +8,7 @@ import {
   type CalendarItem,
   clipItem,
   formatHour,
+  isHourless,
   isMultiDay,
   isOverdueTask,
   isPast,
@@ -79,8 +80,10 @@ export function CalendarDayView({
     for (const raw of items) {
       // Multi-day items (all-day OR timed items that cross midnight) collapse
       // into the all-day band above the timed grid. This keeps 24h-stretched
-      // blocks out of the per-hour area.
-      if (raw.allDay || isMultiDay(raw)) {
+      // blocks out of the per-hour area. Hourless tasks (midnight = "no
+      // specific time") join the same band so they're visible regardless
+      // of the timed-grid's hourStart range.
+      if (raw.allDay || isMultiDay(raw) || isHourless(raw)) {
         // Only include on this day if the range covers it.
         if (raw.start < dayEnd && raw.end > dayStart) allDay.push(raw);
         continue;

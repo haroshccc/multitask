@@ -25,6 +25,12 @@ interface DateTimePickerProps {
   disabled?: boolean;
   /** When true, time pickers are hidden and the picker is date-only */
   dateOnly?: boolean;
+  /** When true, the popover exposes a "ללא שעה" toggle that strips the
+   *  time portion (sets HH:mm to 00:00). The trigger display then hides
+   *  the time suffix when the value is at midnight. Use this on fields
+   *  where "no specific time" is a meaningful, supported state — e.g.
+   *  a task's `scheduled_at` (renders as an hourless / all-day item). */
+  allowNoTime?: boolean;
 }
 
 const WEEKDAY_LABELS = ["א", "ב", "ג", "ד", "ה", "ו", "ש"];
@@ -36,6 +42,7 @@ export function DateTimePicker({
   className,
   disabled,
   dateOnly,
+  allowNoTime,
 }: DateTimePickerProps) {
   const [open, setOpen] = useState(false);
   const anchorRef = useRef<HTMLButtonElement>(null);
@@ -85,20 +92,49 @@ export function DateTimePicker({
     };
   }, [open]);
 
+  // "Hourless" — only meaningful when `allowNoTime` is on. Treat 00:00 as
+  // "no specific time" so the display drops the time suffix instead of
+  // showing the misleading "00:00".
+  const isHourless =
+    !!allowNoTime &&
+    !!current &&
+    current.getHours() === 0 &&
+    current.getMinutes() === 0;
+
   const display = useMemo(() => {
     if (!current) return "";
-    return dateOnly
-      ? format(current, "dd/MM/yyyy")
-      : format(current, "dd/MM/yyyy · HH:mm");
-  }, [current, dateOnly]);
+    if (dateOnly || isHourless) {
+      return format(current, "dd/MM/yyyy");
+    }
+    return format(current, "dd/MM/yyyy · HH:mm");
+  }, [current, dateOnly, isHourless]);
 
   const setDateKeepTime = (day: Date) => {
     const next = new Date(day);
     if (current) {
       next.setHours(current.getHours(), current.getMinutes(), 0, 0);
+    } else if (allowNoTime) {
+      // When "no time" is a first-class option, default a fresh date pick
+      // to midnight instead of 09:00 — the user can still type a time in
+      // the time input below, or click "הוסף שעה" / "ללא שעה".
+      next.setHours(0, 0, 0, 0);
     } else {
       next.setHours(9, 0, 0, 0);
     }
+    onChange(next.toISOString());
+  };
+
+  const setHourless = () => {
+    const base = current ?? new Date();
+    const next = new Date(base);
+    next.setHours(0, 0, 0, 0);
+    onChange(next.toISOString());
+  };
+
+  const setDefaultTime = () => {
+    const base = current ?? new Date();
+    const next = new Date(base);
+    next.setHours(9, 0, 0, 0);
     onChange(next.toISOString());
   };
 
@@ -232,7 +268,7 @@ export function DateTimePicker({
                 on iOS / Android / desktop, matching the one used by the
                 Timer-entry manual fields and avoiding the tall scroll columns
                 that squeezed the popover on mobile. */}
-            {!dateOnly && (
+            {!dateOnly && !isHourless && (
               <div className="flex items-center gap-2 p-3 bg-ink-50 border-t sm:border-t-0 sm:border-s border-ink-200">
                 <Clock className="w-4 h-4 text-ink-500 shrink-0" />
                 <input
@@ -257,10 +293,23 @@ export function DateTimePicker({
                 />
               </div>
             )}
+            {!dateOnly && isHourless && (
+              <div className="flex items-center gap-2 p-3 bg-ink-50 border-t sm:border-t-0 sm:border-s border-ink-200">
+                <Clock className="w-4 h-4 text-ink-400 shrink-0" />
+                <span className="flex-1 text-sm text-ink-500">ללא שעה</span>
+                <button
+                  type="button"
+                  onClick={setDefaultTime}
+                  className="text-xs font-medium text-primary-700 hover:bg-primary-50 px-2 py-1 rounded-md"
+                >
+                  הוסף שעה
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Footer */}
-          <div className="flex items-center justify-between px-3 py-2 border-t border-ink-200 bg-white">
+          <div className="flex items-center justify-between gap-2 px-3 py-2 border-t border-ink-200 bg-white">
             <button
               type="button"
               onClick={clear}
@@ -268,13 +317,25 @@ export function DateTimePicker({
             >
               ניקוי
             </button>
-            <button
-              type="button"
-              onClick={chooseToday}
-              className="text-xs font-medium text-primary-700 hover:bg-primary-50 px-2 py-1 rounded-md"
-            >
-              היום
-            </button>
+            <div className="inline-flex items-center gap-1">
+              {allowNoTime && !isHourless && current && (
+                <button
+                  type="button"
+                  onClick={setHourless}
+                  className="text-xs font-medium text-ink-700 hover:bg-ink-100 px-2 py-1 rounded-md"
+                  title="קבע את המשימה ליום זה ללא שעה ספציפית"
+                >
+                  ללא שעה
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={chooseToday}
+                className="text-xs font-medium text-primary-700 hover:bg-primary-50 px-2 py-1 rounded-md"
+              >
+                היום
+              </button>
+            </div>
           </div>
           </PortalPopover>,
           document.body

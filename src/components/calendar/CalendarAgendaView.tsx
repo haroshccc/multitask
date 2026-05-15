@@ -253,6 +253,8 @@ function AgendaRow({
         <div className="w-14 shrink-0 text-[11px] text-ink-500 tabular-nums leading-tight">
           {item.allDay ? (
             <span className="font-medium">כל היום</span>
+          ) : isHourless(item) ? (
+            <span className="font-medium">ללא שעה</span>
           ) : (
             <>
               <div>{formatHour(item.start, tz)}</div>

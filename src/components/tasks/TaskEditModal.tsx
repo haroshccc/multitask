@@ -948,6 +948,7 @@ export function TaskEditModal({
                       <DateTimePicker
                         value={scheduledAt}
                         onChange={setScheduledAt}
+                        allowNoTime
                       />
                     </Field>
                     <Field label="משך">
@@ -1009,6 +1010,7 @@ export function TaskEditModal({
                                     )
                                   )
                                 }
+                                allowNoTime
                               />
                             </div>
                             <button

@@ -766,7 +766,7 @@ function MonthItemChip({
         title={`${itemTooltip(item)}\n${formatHour(item.start, tz)} עד ${formatHour(item.end, tz)}`}
       >
         <span className="shrink-0 text-white/85 font-normal tabular-nums">
-          {item.allDay
+          {isHourless(item)
             ? ""
             : `${formatHour(item.start, tz)}–${formatHour(item.end, tz)}`}
         </span>
@@ -809,7 +809,7 @@ function MonthItemChip({
         />
       )}
       <span className="shrink-0 text-ink-500 tabular-nums">
-        {item.allDay
+        {isHourless(item)
           ? ""
           : `${formatHour(item.start, tz)}–${formatHour(item.end, tz)}`}
       </span>

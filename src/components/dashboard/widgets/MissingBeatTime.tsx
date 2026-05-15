@@ -2,8 +2,10 @@ import { useMemo, useState } from "react";
 import { Check, Clock, X } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { useTasks, useUpdateTask } from "@/lib/hooks/useTasks";
+import { pushUndo } from "@/lib/undo/store";
 import {
   useCreateManualTimeEntry,
+  useDeleteTimeEntry,
   useTimeEntriesByRange,
 } from "@/lib/hooks/useTimer";
 import { computeGoalStats } from "@/lib/goals/computation";
@@ -107,6 +109,7 @@ export function MissingBeatTime() {
 function BeatRowItem({ row }: { row: BeatRow }) {
   const { task, beatAt, defaultMinutes } = row;
   const createEntry = useCreateManualTimeEntry();
+  const deleteEntry = useDeleteTimeEntry();
   const updateTask = useUpdateTask();
   const [minutes, setMinutes] = useState<string>(String(defaultMinutes));
   const [busy, setBusy] = useState(false);
@@ -117,16 +120,25 @@ function BeatRowItem({ row }: { row: BeatRow }) {
     if (m <= 0) return;
     setBusy(true);
     try {
-      // Anchor the synthetic entry at 12:00 on the beat's local day so it
-      // sorts predictably alongside other entries for that day.
       const start = new Date(beatAt);
       start.setHours(12, 0, 0, 0);
       const end = new Date(start.getTime() + m * 60_000);
-      await createEntry.mutateAsync({
+      const payload = {
         task_id: task.id,
         started_at: start.toISOString(),
         ended_at: end.toISOString(),
         note: "מילוי בדיעבד מהדשבורד",
+      };
+      const created = await createEntry.mutateAsync(payload);
+      let currentId = created.id;
+      pushUndo({
+        description: "מילוי פעימה בדיעבד",
+        undo: () =>
+          deleteEntry.mutate({ entryId: currentId, taskId: task.id }),
+        redo: async () => {
+          const again = await createEntry.mutateAsync(payload);
+          currentId = again.id;
+        },
       });
       setDone("saved");
     } finally {
@@ -137,9 +149,23 @@ function BeatRowItem({ row }: { row: BeatRow }) {
   const handleMute = async () => {
     setBusy(true);
     try {
+      const prev = task.goal_track_time;
       await updateTask.mutateAsync({
         taskId: task.id,
         patch: { goal_track_time: false },
+      });
+      pushUndo({
+        description: "השתקת מעקב זמן למשימה",
+        undo: () =>
+          updateTask.mutate({
+            taskId: task.id,
+            patch: { goal_track_time: prev },
+          }),
+        redo: () =>
+          updateTask.mutate({
+            taskId: task.id,
+            patch: { goal_track_time: false },
+          }),
       });
       setDone("muted");
     } finally {

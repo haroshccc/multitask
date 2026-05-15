@@ -99,10 +99,24 @@ export function Tasks() {
 
   const toggleListVisibility = (listId: string) => {
     const current = visibility?.hidden_list_ids ?? [];
-    const next = current.includes(listId)
+    const wasHidden = current.includes(listId);
+    const next = wasHidden
       ? current.filter((id) => id !== listId)
       : [...current, listId];
     setListVisibility.mutate({ screenKey: "tasks", hiddenListIds: next });
+    pushUndo({
+      description: wasHidden ? "הצגת רשימה" : "הסתרת רשימה",
+      undo: () =>
+        setListVisibility.mutate({
+          screenKey: "tasks",
+          hiddenListIds: current,
+        }),
+      redo: () =>
+        setListVisibility.mutate({
+          screenKey: "tasks",
+          hiddenListIds: next,
+        }),
+    });
   };
 
   const handleCreateList = () => {

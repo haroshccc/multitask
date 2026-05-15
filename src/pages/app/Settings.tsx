@@ -399,9 +399,27 @@ function OrgTab() {
                       checked={org?.food_shared ?? false}
                       onChange={async (e) => {
                         if (!activeOrganizationId) return;
+                        const orgId = activeOrganizationId;
+                        const prev = org?.food_shared ?? false;
+                        const next = e.target.checked;
                         await updateOrg.mutateAsync({
-                          orgId: activeOrganizationId,
-                          updates: { food_shared: e.target.checked },
+                          orgId,
+                          updates: { food_shared: next },
+                        });
+                        pushUndo({
+                          description: next
+                            ? "הפעלת שיתוף מזון"
+                            : "ביטול שיתוף מזון",
+                          undo: () =>
+                            updateOrg.mutate({
+                              orgId,
+                              updates: { food_shared: prev },
+                            }),
+                          redo: () =>
+                            updateOrg.mutate({
+                              orgId,
+                              updates: { food_shared: next },
+                            }),
                         });
                       }}
                     />

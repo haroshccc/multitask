@@ -1,5 +1,6 @@
-import { useMemo } from "react";
-import { Repeat, AlertTriangle } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
+import { Repeat, AlertTriangle, X } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import {
   type CalendarItem,
@@ -76,6 +77,25 @@ export function CalendarMonthView({
   readOnly,
   recurringAsMarker,
 }: CalendarMonthViewProps) {
+  // "+ עוד N" popover — opens with the full list of single-day items for that
+  // day so the user can reach the overflow without losing the cell's context.
+  // Previously this button called `onDayClick`, which opened the per-day note
+  // editor instead of the events list.
+  const [moreDay, setMoreDay] = useState<Date | null>(null);
+  const [moreAnchor, setMoreAnchor] = useState<DOMRect | null>(null);
+  const closeMore = () => {
+    setMoreDay(null);
+    setMoreAnchor(null);
+  };
+  useEffect(() => {
+    if (!moreDay) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeMore();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [moreDay]);
+
   /**
    * Compute the target Date for a drop on `day`. For "move" we keep the
    * item's original time-of-day; for resize-end/start we copy the time
@@ -327,9 +347,16 @@ export function CalendarMonthView({
                         ))}
                         {overflow > 0 && (
                           <button
-                            onClick={() => onDayClick(day)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setMoreAnchor(
+                                e.currentTarget.getBoundingClientRect()
+                              );
+                              setMoreDay(day);
+                            }}
                             className="w-full text-start text-[10px] text-ink-500 hover:text-primary-600 px-1.5"
                             type="button"
+                            title={`הצג עוד ${overflow}`}
                           >
                             + עוד {overflow}
                           </button>
@@ -343,7 +370,117 @@ export function CalendarMonthView({
           );
         })}
       </div>
+
+      {moreDay && moreAnchor && typeof document !== "undefined" &&
+        createPortal(
+          <MoreItemsPopover
+            day={moreDay}
+            anchorRect={moreAnchor}
+            items={singleDayByDate.get(keyOf(moreDay)) ?? []}
+            onItemClick={(it) => {
+              closeMore();
+              onItemClick(it);
+            }}
+            onClose={closeMore}
+            now={new Date()}
+            readOnly={readOnly}
+            recurringAsMarker={recurringAsMarker}
+          />,
+          document.body
+        )}
     </div>
+  );
+}
+
+function MoreItemsPopover({
+  day,
+  anchorRect,
+  items,
+  onItemClick,
+  onClose,
+  now,
+  readOnly,
+  recurringAsMarker,
+}: {
+  day: Date;
+  anchorRect: DOMRect;
+  items: CalendarItem[];
+  onItemClick: (it: CalendarItem) => void;
+  onClose: () => void;
+  now: Date;
+  readOnly?: boolean;
+  recurringAsMarker?: boolean;
+}) {
+  const vw = typeof window !== "undefined" ? window.innerWidth : 1024;
+  const vh = typeof window !== "undefined" ? window.innerHeight : 768;
+  const width = Math.min(300, vw - 16);
+  const maxHeight = Math.min(420, vh - 32);
+
+  // Prefer opening below the click; flip up if there's not enough room.
+  const preferBelow =
+    anchorRect.bottom + maxHeight + 8 <= vh ||
+    anchorRect.top < maxHeight + 8;
+  const top = preferBelow
+    ? Math.min(anchorRect.bottom + 4, vh - maxHeight - 8)
+    : Math.max(8, anchorRect.top - maxHeight - 4);
+
+  // Horizontal: align to the start of the cell button, clamp to viewport.
+  const rawLeft = anchorRect.left;
+  const left = Math.max(8, Math.min(rawLeft, vw - width - 8));
+
+  const title = day.toLocaleDateString("he-IL", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  });
+
+  return (
+    <>
+      <div
+        className="fixed inset-0 z-[999]"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+      <div
+        role="dialog"
+        aria-label={`אירועים: ${title}`}
+        style={{
+          position: "fixed",
+          top,
+          left,
+          width,
+          maxHeight,
+          zIndex: 1000,
+        }}
+        className="card overflow-hidden bg-white shadow-lift flex flex-col"
+      >
+        <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-ink-200 bg-ink-50/60">
+          <span className="text-xs font-semibold text-ink-800 truncate">
+            {title}
+          </span>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-0.5 rounded-md text-ink-500 hover:bg-ink-100 hover:text-ink-800"
+            aria-label="סגור"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+        <div className="overflow-auto scrollbar-thin p-1.5 space-y-1">
+          {items.map((it) => (
+            <MonthItemChip
+              key={it.id}
+              item={it}
+              now={now}
+              onClick={() => onItemClick(it)}
+              readOnly={readOnly}
+              recurringAsMarker={recurringAsMarker}
+            />
+          ))}
+        </div>
+      </div>
+    </>
   );
 }
 

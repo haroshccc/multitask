@@ -40,11 +40,26 @@ import { ShareListModal } from "./ShareListModal";
 import { LIST_ICON_PRESETS, ListIcon } from "./list-icons";
 
 /** Walk the task tree and collect IDs of tasks with no title, skipping
- *  the currently-focused task (which may be mid-creation). */
+ *  the currently-focused task (which may be mid-creation) and any task
+ *  created within the last few seconds (the Enter flow creates an empty
+ *  task and then asynchronously sets focusTaskId; the empty-task render
+ *  can land in a paint where focusTaskId is still on the previous row,
+ *  so the age guard prevents the sweep from killing the just-spawned
+ *  row during that microscopic window). */
+const NEW_TASK_GRACE_MS = 5000;
+
 function collectEmptyTaskIds(nodes: TaskTreeNode[], skipId: string | null): string[] {
   const result: string[] = [];
+  const now = Date.now();
   for (const n of nodes) {
-    if (!n.task.title && n.task.id !== skipId) result.push(n.task.id);
+    if (!n.task.title && n.task.id !== skipId) {
+      const created = n.task.created_at
+        ? new Date(n.task.created_at).getTime()
+        : 0;
+      if (now - created > NEW_TASK_GRACE_MS) {
+        result.push(n.task.id);
+      }
+    }
     result.push(...collectEmptyTaskIds(n.children, skipId));
   }
   return result;

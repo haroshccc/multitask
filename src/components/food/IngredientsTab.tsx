@@ -60,18 +60,16 @@ export function IngredientsTab({ compact = false }: IngredientsTabProps) {
     const ingredientSnapshot = {
       name: i.name,
       category_id: i.category_id,
-      calories: i.calories,
-      protein_g: i.protein_g,
-      fat_g: i.fat_g,
-      carbs_g: i.carbs_g,
-      base_quantity: i.base_quantity,
-      base_unit: i.base_unit,
       notes: i.notes,
       is_complete: i.is_complete,
     };
     const unitSnapshots = i.units.map((u) => ({
-      name: u.name,
-      grams_per_unit: u.grams_per_unit,
+      unit_name: u.unit_name,
+      amount: u.amount,
+      calories: u.calories,
+      protein_g: u.protein_g,
+      fat_g: u.fat_g,
+      carbs_g: u.carbs_g,
       is_default: u.is_default,
       sort_order: u.sort_order,
     }));

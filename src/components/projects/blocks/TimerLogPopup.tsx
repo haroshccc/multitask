@@ -142,26 +142,28 @@ export function TimerLogPopup({
                     }}
                     onDelete={() => {
                       if (!confirm("למחוק את הרשומה?")) return;
-                      const snapshot = {
-                        task_id: task.id,
-                        started_at: entry.started_at,
-                        ended_at: entry.ended_at,
-                        note: entry.note,
-                      };
                       let currentId = entry.id;
                       del.mutate({ entryId: currentId, taskId: task.id });
-                      pushUndo({
-                        description: "מחיקת רשומת זמן",
-                        undo: () => {
-                          create.mutate(snapshot, {
-                            onSuccess: (e2) => {
-                              currentId = e2.id;
-                            },
-                          });
-                        },
-                        redo: () =>
-                          del.mutate({ entryId: currentId, taskId: task.id }),
-                      });
+                      if (entry.ended_at) {
+                        const snapshot = {
+                          task_id: task.id,
+                          started_at: entry.started_at,
+                          ended_at: entry.ended_at,
+                          note: entry.note,
+                        };
+                        pushUndo({
+                          description: "מחיקת רשומת זמן",
+                          undo: () => {
+                            create.mutate(snapshot, {
+                              onSuccess: (e2) => {
+                                currentId = e2.id;
+                              },
+                            });
+                          },
+                          redo: () =>
+                            del.mutate({ entryId: currentId, taskId: task.id }),
+                        });
+                      }
                     }}
                   />
                 </li>

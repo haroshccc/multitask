@@ -202,8 +202,17 @@ export function IngredientEditModal({
           patch: ingredientPatch,
         });
         id = ingredient.id;
+        type UnitPayload = {
+          unit_name: string;
+          amount: number;
+          calories: number | null;
+          fat_g: number | null;
+          protein_g: number | null;
+          carbs_g: number | null;
+          is_default: boolean;
+        };
         const deletedUnitIds: string[] = [];
-        const updatedUnits: Array<{ id: string; patch: typeof prevIngredientPatch & Record<string, unknown> }> = [];
+        const updatedUnits: Array<{ id: string; patch: UnitPayload }> = [];
         const createdUnitIds: string[] = [];
         // Diff units: delete flagged, update existing, create new.
         for (const u of units) {
@@ -224,7 +233,7 @@ export function IngredientEditModal({
             is_default: u.is_default,
           };
           if (u.id) {
-            updatedUnits.push({ id: u.id, patch: payload as typeof prevIngredientPatch & Record<string, unknown> });
+            updatedUnits.push({ id: u.id, patch: payload });
             await updateUnit.mutateAsync({ id: u.id, patch: payload });
           } else {
             const created = await createUnit.mutateAsync({

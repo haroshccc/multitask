@@ -316,7 +316,7 @@ export function QuestionsBlock({ scopeId }: { scopeId?: string | null }) {
                       });
                     }}
                     onReopen={() => {
-                      const prevAnswer = q.answer_text;
+                      const prevAnswer = q.answer;
                       reopen.mutate({
                         questionId: q.id,
                         projectId: q.project_id,

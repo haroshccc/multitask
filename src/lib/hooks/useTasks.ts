@@ -68,9 +68,25 @@ export function useCreateTask() {
         owner_id: userId,
       });
     },
-    onSuccess: () => {
+    onSuccess: (newTask) => {
+      // Append the new task to every cached allTasks list directly instead
+      // of invalidating + refetching. The refetch path races with an
+      // in-flight updateTask mutation on a sibling row: pressing Enter to
+      // create a new task FIRST calls updateTask.mutate() on the row being
+      // committed (optimistically setting its title), then awaits this
+      // create. If we invalidate here, the resulting refetch reads from
+      // the server BEFORE the updateTask PATCH has hit the DB and clobbers
+      // the optimistic title back to its prior value (often "") — at
+      // which point TaskColumn's empty-title cleanup deletes the row. The
+      // user-visible symptom is "I typed a title, pressed Enter, and the
+      // task vanished". Optimistic append keeps the cache consistent
+      // without any read-from-server round trip.
+      qc.setQueryData<Task>(queryKeys.task(newTask.id), newTask);
       if (scope.organizationId) {
-        qc.invalidateQueries({ queryKey: queryFamilies.allTasks(scope.organizationId) });
+        qc.setQueriesData<Task[]>(
+          { queryKey: queryFamilies.allTasks(scope.organizationId) },
+          (old) => (old ? [...old, newTask] : [newTask])
+        );
       }
     },
   });

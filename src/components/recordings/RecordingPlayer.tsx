@@ -30,6 +30,8 @@ import { TranscriptEditor } from "@/components/recordings/TranscriptEditor";
 import { MergeRecordingsDialog } from "@/components/recordings/MergeRecordingsDialog";
 import { AiInsights } from "@/components/recordings/AiInsights";
 import type { Recording } from "@/lib/types/domain";
+import { patchWithUndo } from "@/lib/undo/helpers";
+import { pushUndo } from "@/lib/undo/store";
 
 interface Props {
   recording: Recording;
@@ -292,10 +294,25 @@ function EditableTitle({ recording }: { recording: Recording }) {
       setEditing(false);
       return;
     }
+    const prevTitle = recording.title;
+    const nextTitle = next || null;
     update.mutate(
-      { recordingId: recording.id, patch: { title: next || null } },
+      { recordingId: recording.id, patch: { title: nextTitle } },
       { onSettled: () => setEditing(false) }
     );
+    pushUndo({
+      description: "שינוי כותרת הקלטה",
+      undo: () =>
+        update.mutate({
+          recordingId: recording.id,
+          patch: { title: prevTitle },
+        }),
+      redo: () =>
+        update.mutate({
+          recordingId: recording.id,
+          patch: { title: nextTitle },
+        }),
+    });
   };
 
   if (!editing) {
@@ -519,7 +536,13 @@ function ProjectLinkMeta({ recording }: { recording: Recording }) {
       options={projects}
       renderOption={(p) => <span className="truncate">{p.name}</span>}
       onChange={(id) =>
-        update.mutate({ recordingId: recording.id, patch: { project_id: id } })
+        patchWithUndo({
+          description: "שיוך הקלטה לפרויקט",
+          record: recording,
+          patch: { project_id: id },
+          apply: (patch) =>
+            update.mutate({ recordingId: recording.id, patch }),
+        })
       }
       createLabel="פרויקט חדש"
       onCreate={async (name) => {
@@ -548,9 +571,12 @@ function EventCalendarLinkMeta({ recording }: { recording: Recording }) {
         </span>
       )}
       onChange={(id) =>
-        update.mutate({
-          recordingId: recording.id,
+        patchWithUndo({
+          description: "שיוך הקלטה ליומן",
+          record: recording,
           patch: { event_calendar_id: id },
+          apply: (patch) =>
+            update.mutate({ recordingId: recording.id, patch }),
         })
       }
       createLabel="יומן חדש"
@@ -579,9 +605,12 @@ function TaskListLinkMeta({ recording }: { recording: Recording }) {
         </span>
       )}
       onChange={(id) =>
-        update.mutate({
-          recordingId: recording.id,
+        patchWithUndo({
+          description: "שיוך הקלטה לרשימת משימות",
+          record: recording,
           patch: { task_list_id: id },
+          apply: (patch) =>
+            update.mutate({ recordingId: recording.id, patch }),
         })
       }
       createLabel="רשימת משימות חדשה"
@@ -629,8 +658,20 @@ function RecordingListsLinkMeta({ recording }: { recording: Recording }) {
     const owned = assignments.some((a) => a.list_id === id);
     if (owned) {
       unassign.mutate({ recordingId: recording.id, listId: id });
+      pushUndo({
+        description: "הסרת הקלטה מרשימה",
+        undo: () => assign.mutate({ recordingId: recording.id, listId: id }),
+        redo: () =>
+          unassign.mutate({ recordingId: recording.id, listId: id }),
+      });
     } else {
       assign.mutate({ recordingId: recording.id, listId: id });
+      pushUndo({
+        description: "הוספת הקלטה לרשימה",
+        undo: () =>
+          unassign.mutate({ recordingId: recording.id, listId: id }),
+        redo: () => assign.mutate({ recordingId: recording.id, listId: id }),
+      });
     }
   };
 
@@ -753,7 +794,12 @@ function SourceMeta({ recording }: { recording: Recording }) {
   const commitCustom = () => {
     const next = customDraft.trim();
     if (next === (recording.source_custom ?? "")) return;
-    update.mutate({ recordingId: recording.id, patch: { source_custom: next || null } });
+    patchWithUndo({
+      description: "שינוי מקור הקלטה",
+      record: recording,
+      patch: { source_custom: next || null },
+      apply: (patch) => update.mutate({ recordingId: recording.id, patch }),
+    });
   };
 
   return (
@@ -763,7 +809,13 @@ function SourceMeta({ recording }: { recording: Recording }) {
         value={recording.source}
         onChange={(e) => {
           const src = e.target.value as Recording["source"];
-          update.mutate({ recordingId: recording.id, patch: { source: src } });
+          patchWithUndo({
+            description: "שינוי סוג מקור",
+            record: recording,
+            patch: { source: src },
+            apply: (patch) =>
+              update.mutate({ recordingId: recording.id, patch }),
+          });
         }}
         disabled={update.isPending}
         className="bg-transparent text-xs text-ink-800 w-full outline-none cursor-pointer hover:text-primary-700 disabled:cursor-wait"
@@ -798,7 +850,12 @@ function StatusMeta({ recording }: { recording: Recording }) {
   const update = useUpdateRecording();
   const onChange = (next: Recording["status"]) => {
     if (next === recording.status) return;
-    update.mutate({ recordingId: recording.id, patch: { status: next } });
+    patchWithUndo({
+      description: "שינוי סטטוס הקלטה",
+      record: recording,
+      patch: { status: next },
+      apply: (patch) => update.mutate({ recordingId: recording.id, patch }),
+    });
   };
   return (
     <div className="rounded-md bg-ink-50 px-2.5 py-2">

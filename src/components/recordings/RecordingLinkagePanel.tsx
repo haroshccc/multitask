@@ -25,6 +25,8 @@ import {
   useCreateRecordingList,
 } from "@/lib/hooks/useRecordingLists";
 import type { Recording } from "@/lib/types/domain";
+import { patchWithUndo } from "@/lib/undo/helpers";
+import { pushUndo } from "@/lib/undo/store";
 
 interface Props {
   recording: Recording;
@@ -62,9 +64,17 @@ export function RecordingLinkagePanel({ recording }: Props) {
     field: "project_id" | "task_list_id" | "event_calendar_id",
     value: string | null
   ) => {
-    updateRecording.mutate({
-      recordingId: recording.id,
-      patch: { [field]: value },
+    const labels = {
+      project_id: "שיוך הקלטה לפרויקט",
+      task_list_id: "שיוך הקלטה לרשימת משימות",
+      event_calendar_id: "שיוך הקלטה ליומן",
+    } as const;
+    patchWithUndo({
+      description: labels[field],
+      record: recording,
+      patch: { [field]: value } as Pick<Recording, typeof field>,
+      apply: (patch) =>
+        updateRecording.mutate({ recordingId: recording.id, patch }),
     });
   };
 
@@ -134,12 +144,26 @@ export function RecordingLinkagePanel({ recording }: Props) {
         availableLists={recordingLists.filter(
           (l) => !myLists.some((m) => m.id === l.id)
         )}
-        onAssign={(listId) =>
-          assignList.mutate({ recordingId: recording.id, listId })
-        }
-        onUnassign={(listId) =>
-          unassignList.mutate({ recordingId: recording.id, listId })
-        }
+        onAssign={(listId) => {
+          assignList.mutate({ recordingId: recording.id, listId });
+          pushUndo({
+            description: "הוספת הקלטה לרשימה",
+            undo: () =>
+              unassignList.mutate({ recordingId: recording.id, listId }),
+            redo: () =>
+              assignList.mutate({ recordingId: recording.id, listId }),
+          });
+        }}
+        onUnassign={(listId) => {
+          unassignList.mutate({ recordingId: recording.id, listId });
+          pushUndo({
+            description: "הסרת הקלטה מרשימה",
+            undo: () =>
+              assignList.mutate({ recordingId: recording.id, listId }),
+            redo: () =>
+              unassignList.mutate({ recordingId: recording.id, listId }),
+          });
+        }}
         onCreate={async (name) => {
           const list = await createList.mutateAsync({ name, sort_order: 0 });
           await assignList.mutateAsync({

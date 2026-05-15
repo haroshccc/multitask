@@ -212,9 +212,26 @@ export function useTriggerAiProcessing() {
 }
 
 export function useAskRecordingFreeText() {
+  const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ recordingId, question }: { recordingId: string; question: string }) =>
       service.askRecordingFreeText(recordingId, question),
+    onSuccess: (_data, { recordingId }) => {
+      // Refresh the cached recording so the persisted free_text_qa array
+      // the edge function just appended is picked up by the UI.
+      qc.invalidateQueries({ queryKey: queryKeys.recording(recordingId) });
+    },
+  });
+}
+
+export function useClearRecordingFreeTextHistory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (recordingId: string) =>
+      service.clearRecordingFreeTextHistory(recordingId),
+    onSuccess: (_data, recordingId) => {
+      qc.invalidateQueries({ queryKey: queryKeys.recording(recordingId) });
+    },
   });
 }
 

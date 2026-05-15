@@ -349,10 +349,21 @@ export async function triggerAiProcessing(
   return json.recording;
 }
 
+export interface FreeTextQaEntry {
+  question: string;
+  answer: string;
+  created_at: string;
+}
+
+export interface FreeTextAskResult {
+  response: string;
+  history: FreeTextQaEntry[];
+}
+
 export async function askRecordingFreeText(
   recordingId: string,
   question: string
-): Promise<string> {
+): Promise<FreeTextAskResult> {
   const { data: session } = await supabase.auth.getSession();
   const jwt = session.session?.access_token;
   if (!jwt) throw new Error("not_authenticated");
@@ -369,8 +380,25 @@ export async function askRecordingFreeText(
     const detail = await res.text().catch(() => "");
     throw new Error(`ask_${res.status}: ${detail.slice(0, 500)}`);
   }
-  const json = (await res.json()) as { response?: string };
-  return json.response ?? "";
+  const json = (await res.json()) as {
+    response?: string;
+    history?: FreeTextQaEntry[];
+  };
+  return {
+    response: json.response ?? "",
+    history: Array.isArray(json.history) ? json.history : [],
+  };
+}
+
+/** Clear the persisted free-text Q&A history for a recording. */
+export async function clearRecordingFreeTextHistory(
+  recordingId: string
+): Promise<void> {
+  const { error } = await (supabase as any)
+    .from("recordings")
+    .update({ free_text_qa: [] })
+    .eq("id", recordingId);
+  if (error) throw error;
 }
 
 // Speakers -----------------------------------------------------------------

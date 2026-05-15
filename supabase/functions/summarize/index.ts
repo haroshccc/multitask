@@ -325,16 +325,37 @@ async function summarizeHandler(
     );
   }
 
-  // Free-text Q&A mode: answer a single question without running the full
-  // structured analysis or writing anything to the DB.
+  // Free-text Q&A mode: answer a single question and append the (question,
+  // answer, created_at) tuple to recordings.free_text_qa so the user can
+  // review the full chat history later. We do NOT touch ai_output / status
+  // here — this is a side conversation, not a re-run of the structured
+  // analysis.
   if (body.free_text?.trim()) {
+    const question = body.free_text.trim();
     try {
       const response = await callClaudeFreeText({
         title: recording.title,
         transcript_text: recording.transcript_text,
-        question: body.free_text.trim(),
+        question,
       });
-      return jsonResponse({ response }, { origin });
+      // Append to the array atomically via an `update` that reads + writes
+      // the JSONB column. Concurrent appends from the same recording would
+      // race, but the UI is single-user-per-recording so this is fine.
+      const { data: cur } = await ctx.serviceClient
+        .from("recordings")
+        .select("free_text_qa")
+        .eq("id", recording.id)
+        .maybeSingle();
+      const prev = Array.isArray(cur?.free_text_qa) ? cur.free_text_qa : [];
+      const next = [
+        ...prev,
+        { question, answer: response, created_at: new Date().toISOString() },
+      ];
+      await ctx.serviceClient
+        .from("recordings")
+        .update({ free_text_qa: next })
+        .eq("id", recording.id);
+      return jsonResponse({ response, history: next }, { origin });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       return jsonResponse({ error: "free_text_failed", message: msg }, { status: 502, origin });

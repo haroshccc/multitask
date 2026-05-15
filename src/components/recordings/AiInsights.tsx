@@ -15,12 +15,14 @@ import {
   Save,
   FileText,
   AlignLeft,
+  Trash2,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import {
   useTriggerAiProcessing,
   useUpdateRecording,
   useAskRecordingFreeText,
+  useClearRecordingFreeTextHistory,
 } from "@/lib/hooks/useRecordings";
 import {
   TaskEditModal,
@@ -30,7 +32,10 @@ import { useCreateTask, useDeleteTask } from "@/lib/hooks/useTasks";
 import { useTaskLists } from "@/lib/hooks/useTaskLists";
 import { useCreateEvent, useDeleteEvent } from "@/lib/hooks/useEvents";
 import type { Recording } from "@/lib/types/domain";
-import type { RecordingAiOutput } from "@/lib/services/recordings";
+import type {
+  RecordingAiOutput,
+  FreeTextQaEntry,
+} from "@/lib/services/recordings";
 import { pushUndo } from "@/lib/undo/store";
 
 interface Props {
@@ -943,22 +948,39 @@ function EventsSection({
 
 function FreeTextSection({ recording }: { recording: Recording }) {
   const ask = useAskRecordingFreeText();
+  const clearHistory = useClearRecordingFreeTextHistory();
   const [text, setText] = useState("");
-  const [response, setResponse] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [confirmClear, setConfirmClear] = useState(false);
+
+  // The persisted Q&A history lives on the recording row itself, so any
+  // refresh / tab switch comes back to the same chat. The edge function
+  // appends to this array on each successful ask.
+  const history: FreeTextQaEntry[] = Array.isArray(
+    (recording as unknown as { free_text_qa?: FreeTextQaEntry[] }).free_text_qa
+  )
+    ? ((recording as unknown as { free_text_qa: FreeTextQaEntry[] })
+        .free_text_qa)
+    : [];
 
   const onAsk = async () => {
     if (!text.trim()) return;
     setError(null);
-    setResponse(null);
+    const question = text.trim();
     try {
-      const res = await ask.mutateAsync({
-        recordingId: recording.id,
-        question: text.trim(),
-      });
-      setResponse(res);
+      await ask.mutateAsync({ recordingId: recording.id, question });
+      setText("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "שגיאה בעיבוד הבקשה");
+    }
+  };
+
+  const onClear = async () => {
+    try {
+      await clearHistory.mutateAsync(recording.id);
+      setConfirmClear(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "שגיאה במחיקת ההיסטוריה");
     }
   };
 
@@ -966,11 +988,76 @@ function FreeTextSection({ recording }: { recording: Recording }) {
     <Pane
       icon={<Sparkles className="w-3.5 h-3.5 text-primary-600" />}
       label="שאלה חופשית"
+      actions={
+        history.length > 0 ? (
+          confirmClear ? (
+            <div className="inline-flex items-center gap-1">
+              <button
+                type="button"
+                onClick={onClear}
+                disabled={clearHistory.isPending}
+                className="text-[10px] text-danger-600 hover:bg-danger-50 px-1.5 py-0.5 rounded inline-flex items-center gap-1"
+              >
+                {clearHistory.isPending ? (
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                ) : (
+                  <Trash2 className="w-3 h-3" />
+                )}
+                מחקי הכל
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmClear(false)}
+                className="text-[10px] text-ink-500 hover:bg-ink-100 px-1.5 py-0.5 rounded"
+              >
+                בטלי
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setConfirmClear(true)}
+              className="text-[10px] text-ink-500 hover:text-danger-600 hover:bg-ink-100 px-1.5 py-0.5 rounded inline-flex items-center gap-1"
+              title="מחק את כל ההיסטוריה"
+            >
+              <Trash2 className="w-3 h-3" />
+              נקי היסטוריה
+            </button>
+          )
+        ) : undefined
+      }
     >
       <p className="text-[11px] text-ink-500 leading-relaxed">
         שאלי כל שאלה על ההקלטה — לדוגמה: &quot;מה הוחלט לגבי X?&quot; או
-        &quot;תסכם רק את נושא Y&quot;.
+        &quot;תסכם רק את נושא Y&quot;. ההיסטוריה נשמרת על ההקלטה ולא תיעלם
+        ברענון.
       </p>
+
+      {history.length > 0 && (
+        <div className="space-y-2">
+          {history.map((entry, i) => (
+            <div
+              key={`${entry.created_at}-${i}`}
+              className="rounded-md border border-ink-200 bg-white overflow-hidden"
+            >
+              <div
+                className="px-3 py-2 bg-ink-50/80 border-b border-ink-200 text-[11px] font-medium text-ink-700 whitespace-pre-wrap leading-relaxed"
+                dir="auto"
+              >
+                <span className="text-ink-400 me-1">שאלה:</span>
+                {entry.question}
+              </div>
+              <div
+                className="px-3 py-2.5 text-sm text-ink-800 whitespace-pre-wrap leading-relaxed"
+                dir="auto"
+              >
+                {entry.answer}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="flex items-start gap-2">
         <textarea
           value={text}
@@ -998,21 +1085,14 @@ function FreeTextSection({ recording }: { recording: Recording }) {
           ) : (
             <Sparkles className="w-3 h-3" />
           )}
-          עבד בקשה
+          {history.length > 0 ? "שאלי עוד" : "עבד בקשה"}
         </button>
       </div>
+
       {error && (
         <div className="rounded-md border border-danger-200 bg-danger-50 px-3 py-2 text-xs text-danger-700 inline-flex items-start gap-1.5">
           <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
           {error}
-        </div>
-      )}
-      {response && (
-        <div
-          className="rounded-md border border-ink-200 bg-white px-3 py-2.5 text-sm text-ink-800 whitespace-pre-wrap leading-relaxed"
-          dir="auto"
-        >
-          {response}
         </div>
       )}
     </Pane>

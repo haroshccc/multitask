@@ -39,16 +39,12 @@ import { TaskRow, type TaskTreeNode } from "./TaskRow";
 import { ShareListModal } from "./ShareListModal";
 import { LIST_ICON_PRESETS, ListIcon } from "./list-icons";
 
-/** Walk the task tree and collect IDs of tasks with no title, skipping
- *  the currently-focused task (which may be mid-creation). */
-function collectEmptyTaskIds(nodes: TaskTreeNode[], skipId: string | null): string[] {
-  const result: string[] = [];
-  for (const n of nodes) {
-    if (!n.task.title && n.task.id !== skipId) result.push(n.task.id);
-    result.push(...collectEmptyTaskIds(n.children, skipId));
-  }
-  return result;
-}
+// Empty-title cleanup was removed: the auto-delete sweep used to discard
+// tasks whose title became blank (other than the focused one), but in
+// practice that meant pressing Enter to create a sibling, then clicking
+// elsewhere, deleted the still-blank previous task — feels like "Enter
+// deleted my task". Empty titles are valid; the user can remove them
+// explicitly.
 
 interface TaskColumnProps {
   /** null = the "unassigned" pinned column */
@@ -135,15 +131,6 @@ export function TaskColumn({
   useEffect(() => {
     setNameDraft(list?.name ?? "");
   }, [list?.name]);
-
-  // Auto-delete any tasks with an empty title (abandoned creates, or ones
-  // that slipped through before the onBlur fix). Skip the task currently
-  // being created/focused so we don't delete it mid-type.
-  useEffect(() => {
-    const emptyIds = collectEmptyTaskIds(roots, focusTaskId);
-    for (const id of emptyIds) deleteTaskM.mutate(id);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [roots, focusTaskId]);
 
   const incompleteRoots = roots.filter((n) => !n.task.completed_at);
   const completedRoots = roots.filter((n) => !!n.task.completed_at);

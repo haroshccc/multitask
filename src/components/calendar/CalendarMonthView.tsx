@@ -278,7 +278,7 @@ export function CalendarMonthView({
                   const today = isSameDay(day, now);
                   const past = isPastDay(day, now);
                   const singleItems = singleDayByDate.get(keyOf(day)) ?? [];
-                  const cap = 3;
+                  const cap = 6;
                   const visible = singleItems.slice(0, cap);
                   const overflow = singleItems.length - visible.length;
                   return (

@@ -39,7 +39,6 @@ import { useTimeUnit, formatSeconds } from "@/lib/hooks/useTimeUnit";
 import { useMyTaskStatuses } from "@/lib/hooks/useUserTaskStatuses";
 import type { RowDisplayPrefs } from "@/lib/hooks/useRowDisplayPrefs";
 import { useOrgMembers } from "@/lib/hooks/useOrgMembers";
-import { useCollapsedTasksStore } from "@/lib/tasks/collapsed-store";
 import { pushUndo } from "@/lib/undo/store";
 import {
   isRecurring as isTaskRecurring,
@@ -151,11 +150,7 @@ export function TaskRow({
   const [descFocused, setDescFocused] = useState(false);
   const [titleFocused, setTitleFocused] = useState(false);
   const descRef = useRef<HTMLTextAreaElement>(null);
-  // Expand/collapse is sourced from a localStorage-backed Zustand store
-  // so a refresh restores whichever subtrees the user had folded shut.
-  const collapsed = useCollapsedTasksStore((s) => s.collapsed.has(task.id));
-  const toggleCollapsed = useCollapsedTasksStore((s) => s.toggle);
-  const expandCollapsed = useCollapsedTasksStore((s) => s.expand);
+  const [collapsed, setCollapsed] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState<{
     top: number;
@@ -583,7 +578,7 @@ export function TaskRow({
       undo: () => deleteTaskM.mutate(newTask.id),
       redo: () => createTask.mutate(payload),
     });
-    expandCollapsed(task.id);
+    setCollapsed(false);
     onRequestFocus(newTask.id);
   };
 
@@ -726,7 +721,7 @@ export function TaskRow({
 
         {children.length > 0 ? (
           <button
-            onClick={() => toggleCollapsed(task.id)}
+            onClick={() => setCollapsed((v) => !v)}
             className="shrink-0 text-ink-400 hover:text-ink-700 pt-1"
             aria-label={collapsed ? "הרחב" : "כווץ"}
             type="button"

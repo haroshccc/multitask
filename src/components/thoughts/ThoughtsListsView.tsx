@@ -18,6 +18,7 @@ import {
 } from "@/lib/hooks";
 import { ListIcon } from "@/components/tasks/list-icons";
 import { ThoughtCard } from "./ThoughtCard";
+import { pushUndo } from "@/lib/undo/store";
 
 interface ThoughtsListsViewProps {
   thoughts: Thought[];
@@ -113,18 +114,48 @@ export function ThoughtsListsView({
     if (targetListId === "__unassigned__") {
       // Drag to "unassigned" → drop the source-list membership.
       if (sourceListId && sourceListId !== "__unassigned__") {
-        unassignFromList.mutate({ thoughtId, listId: sourceListId });
+        const srcId = sourceListId;
+        unassignFromList.mutate({ thoughtId, listId: srcId });
+        pushUndo({
+          description: "הסרת מחשבה מרשימה",
+          undo: () => assignToList.mutate({ thoughtId, listId: srcId }),
+          redo: () => unassignFromList.mutate({ thoughtId, listId: srcId }),
+        });
       }
       return;
     }
 
     // Drag to a real list → unassign source (if any), then assign target.
-    if (sourceListId && sourceListId !== "__unassigned__") {
-      unassignFromList.mutate({ thoughtId, listId: sourceListId });
-    }
+    const srcId =
+      sourceListId && sourceListId !== "__unassigned__" ? sourceListId : null;
     const assigned = assignmentsByThought.get(thoughtId) ?? [];
-    if (!assigned.some((l) => l.id === targetListId)) {
+    const willAssign = !assigned.some((l) => l.id === targetListId);
+    if (srcId) {
+      unassignFromList.mutate({ thoughtId, listId: srcId });
+    }
+    if (willAssign) {
       assignToList.mutate({ thoughtId, listId: targetListId });
+    }
+    if (srcId || willAssign) {
+      pushUndo({
+        description: "העברת מחשבה בין רשימות",
+        undo: () => {
+          if (willAssign) {
+            unassignFromList.mutate({ thoughtId, listId: targetListId });
+          }
+          if (srcId) {
+            assignToList.mutate({ thoughtId, listId: srcId });
+          }
+        },
+        redo: () => {
+          if (srcId) {
+            unassignFromList.mutate({ thoughtId, listId: srcId });
+          }
+          if (willAssign) {
+            assignToList.mutate({ thoughtId, listId: targetListId });
+          }
+        },
+      });
     }
     return;
   };

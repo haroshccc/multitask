@@ -21,6 +21,7 @@ import {
   useRestoreThought,
 } from "@/lib/hooks";
 import { ThoughtAiBanner } from "./ThoughtAiBanner";
+import { pushUndo } from "@/lib/undo/store";
 
 interface ThoughtCardProps {
   thought: Thought;
@@ -113,9 +114,22 @@ export function ThoughtCard({
             <ListChip
               key={l.id}
               list={l}
-              onRemove={() =>
-                unassignFromList.mutate({ thoughtId: thought.id, listId: l.id })
-              }
+              onRemove={() => {
+                unassignFromList.mutate({ thoughtId: thought.id, listId: l.id });
+                pushUndo({
+                  description: "הסרת מחשבה מרשימה",
+                  undo: () =>
+                    assignToList.mutate({
+                      thoughtId: thought.id,
+                      listId: l.id,
+                    }),
+                  redo: () =>
+                    unassignFromList.mutate({
+                      thoughtId: thought.id,
+                      listId: l.id,
+                    }),
+                });
+              }}
             />
           ))}
           {archived && (
@@ -150,6 +164,11 @@ export function ThoughtCard({
                   onClick={() => {
                     setMoreOpen(false);
                     archive.mutate(thought.id);
+                    pushUndo({
+                      description: "העברת מחשבה לארכיון",
+                      undo: () => restore.mutate(thought.id),
+                      redo: () => archive.mutate(thought.id),
+                    });
                   }}
                 >
                   העבר לארכיון
@@ -159,6 +178,11 @@ export function ThoughtCard({
                   onClick={() => {
                     setMoreOpen(false);
                     restore.mutate(thought.id);
+                    pushUndo({
+                      description: "שחזור מחשבה מארכיון",
+                      undo: () => archive.mutate(thought.id),
+                      redo: () => restore.mutate(thought.id),
+                    });
                   }}
                 >
                   <RotateCcw className="w-3 h-3 inline me-1" />
@@ -227,10 +251,32 @@ export function ThoughtCard({
               <button
                 disabled={!hasAssignments}
                 onClick={() => {
-                  for (const l of assignedLists) {
+                  const removed = assignedLists.slice();
+                  for (const l of removed) {
                     unassignFromList.mutate({
                       thoughtId: thought.id,
                       listId: l.id,
+                    });
+                  }
+                  if (removed.length > 0) {
+                    pushUndo({
+                      description: "ביטול שיוך מחשבה",
+                      undo: () => {
+                        for (const l of removed) {
+                          assignToList.mutate({
+                            thoughtId: thought.id,
+                            listId: l.id,
+                          });
+                        }
+                      },
+                      redo: () => {
+                        for (const l of removed) {
+                          unassignFromList.mutate({
+                            thoughtId: thought.id,
+                            listId: l.id,
+                          });
+                        }
+                      },
                     });
                   }
                   setAssignMenuOpen(false);
@@ -261,6 +307,19 @@ export function ThoughtCard({
                         assignToList.mutate({
                           thoughtId: thought.id,
                           listId: l.id,
+                        });
+                        pushUndo({
+                          description: `שיוך מחשבה ל${l.name}`,
+                          undo: () =>
+                            unassignFromList.mutate({
+                              thoughtId: thought.id,
+                              listId: l.id,
+                            }),
+                          redo: () =>
+                            assignToList.mutate({
+                              thoughtId: thought.id,
+                              listId: l.id,
+                            }),
                         });
                         setAssignMenuOpen(false);
                       }}
@@ -301,12 +360,26 @@ export function ThoughtCard({
         </button>
 
         <button
-          onClick={() =>
+          onClick={() => {
+            const wasProcessed = processed;
             markProcessed.mutate({
               thoughtId: thought.id,
-              processed: !processed,
-            })
-          }
+              processed: !wasProcessed,
+            });
+            pushUndo({
+              description: wasProcessed ? "ביטול סימון כמעובד" : "סימון כמעובד",
+              undo: () =>
+                markProcessed.mutate({
+                  thoughtId: thought.id,
+                  processed: wasProcessed,
+                }),
+              redo: () =>
+                markProcessed.mutate({
+                  thoughtId: thought.id,
+                  processed: !wasProcessed,
+                }),
+            });
+          }}
           className={cn(
             "inline-flex items-center gap-1 text-xs font-medium rounded px-2 py-1 ms-auto",
             processed

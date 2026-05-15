@@ -9,6 +9,7 @@ import {
 } from "@/lib/hooks";
 import type { ThoughtList } from "@/lib/types/domain";
 import { LIST_ICON_PRESETS, ListIcon } from "@/components/tasks/list-icons";
+import { pushUndo } from "@/lib/undo/store";
 
 /**
  * Color palette tuned to feel a notch *cooler / more muted* than the task-list
@@ -71,15 +72,38 @@ export function ThoughtListEditDialog({
   const handleSave = async () => {
     if (!canSave) return;
     if (isEdit && list) {
+      const prevPatch = {
+        name: list.name,
+        color: list.color,
+        emoji: list.emoji,
+      };
+      const nextPatch = { name: name.trim(), color, emoji };
       await updateList.mutateAsync({
         listId: list.id,
-        patch: { name: name.trim(), color, emoji },
+        patch: nextPatch,
+      });
+      pushUndo({
+        description: "עריכת רשימת מחשבות",
+        undo: () =>
+          updateList.mutate({ listId: list.id, patch: prevPatch }),
+        redo: () =>
+          updateList.mutate({ listId: list.id, patch: nextPatch }),
       });
     } else {
-      await createList.mutateAsync({
+      const payload = {
         name: name.trim(),
         color,
         emoji: emoji ?? undefined,
+      };
+      const created = await createList.mutateAsync(payload);
+      let currentId = created.id;
+      pushUndo({
+        description: "יצירת רשימת מחשבות",
+        undo: () => archiveList.mutate(currentId),
+        redo: async () => {
+          const again = await createList.mutateAsync(payload);
+          currentId = again.id;
+        },
       });
     }
     onClose();
@@ -88,6 +112,9 @@ export function ThoughtListEditDialog({
   const handleArchive = async () => {
     if (!list) return;
     await archiveList.mutateAsync(list.id);
+    // No undo: archiveThoughtList is a one-way operation in this surface.
+    // (No restore-list mutation exists yet.) Action stack stays consistent
+    // because we simply don't push.
     onClose();
   };
 

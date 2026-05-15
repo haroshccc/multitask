@@ -39,6 +39,7 @@ import { ListIcon } from "@/components/tasks/list-icons";
 import { AudioPlayer } from "@/components/recordings/AudioPlayer";
 import { UnsavedChangesGuard } from "@/components/ui/UnsavedChangesGuard";
 import { ThoughtAiBanner } from "./ThoughtAiBanner";
+import { pushUndo } from "@/lib/undo/store";
 import { mockProvider } from "@/lib/ai/thought-suggestions";
 
 interface ThoughtEditModalProps {
@@ -179,14 +180,23 @@ export function ThoughtEditModal({
 
   const saveDraft = async (): Promise<boolean> => {
     if (!thought || !dirty) return true;
+    const prevPatch = {
+      ai_generated_title: thought.ai_generated_title,
+      text_content: thought.text_content,
+      tags: thought.tags,
+    };
+    const nextPatch = {
+      ai_generated_title: title || null,
+      text_content: text || null,
+      tags,
+    };
+    const thoughtId = thought.id;
     try {
-      await updateThought.mutateAsync({
-        thoughtId: thought.id,
-        patch: {
-          ai_generated_title: title || null,
-          text_content: text || null,
-          tags,
-        },
+      await updateThought.mutateAsync({ thoughtId, patch: nextPatch });
+      pushUndo({
+        description: "עריכת מחשבה",
+        undo: () => updateThought.mutate({ thoughtId, patch: prevPatch }),
+        redo: () => updateThought.mutate({ thoughtId, patch: nextPatch }),
       });
       return true;
     } catch {

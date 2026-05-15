@@ -227,11 +227,21 @@ export function TaskRow({
       ? (el.textContent ?? "").replace(/ /g, " ").trim()
       : draft.trim();
     if (!html) {
-      if (!task.title) {
-        deleteTaskM.mutate(task.id);
-      } else {
-        if (el) el.innerHTML = task.title ?? "";
-        setDraft(task.title ?? "");
+      // The input was empty when we committed. NEVER delete here — a
+      // mid-keystroke optimistic refetch / focus shuffle can flush
+      // the DOM read at exactly the wrong moment and yield html=""
+      // for a row the user just typed into; deleting on that signal
+      // is what users were seeing as "Enter ate my task". If the
+      // DB title is non-empty, restore the displayed content from it
+      // so the row stays consistent; otherwise just leave the row
+      // alone. TaskColumn's cleanup effect (with its age guard) is
+      // the single, authoritative path for removing genuinely
+      // abandoned blank rows.
+      if (task.title) {
+        if (el) el.innerHTML = task.title;
+        setDraft(task.title);
+      } else if (draft !== "") {
+        setDraft("");
       }
       return;
     }

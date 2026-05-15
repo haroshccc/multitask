@@ -6,6 +6,7 @@ import {
   FolderInput,
   Trash2,
   AlertCircle,
+  UserPlus,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import {
@@ -15,6 +16,13 @@ import {
   useMoveTaskToList,
 } from "@/lib/hooks/useTasks";
 import { useTaskLists } from "@/lib/hooks/useTaskLists";
+import {
+  useAddTaskAssignee,
+} from "@/lib/hooks/useTaskAssignees";
+import { useSetTaskShare } from "@/lib/hooks/useTaskShares";
+import { useUserOrganizations } from "@/lib/hooks/useOrganizations";
+import { useOrgMembersForOrg } from "@/lib/hooks/useOrgMembers";
+import { useAuth } from "@/lib/auth/AuthContext";
 import { useTaskSelectionStore } from "@/lib/selection/store";
 import { pushUndo } from "@/lib/undo/store";
 import type { Task } from "@/lib/types/domain";
@@ -37,19 +45,38 @@ export function BulkActionsToolbar({ allTasks }: BulkActionsToolbarProps) {
   const completeTask = useCompleteTask();
   const deleteTask = useDeleteTask();
   const moveToList = useMoveTaskToList();
+  const addAssignee = useAddTaskAssignee();
+  const setShare = useSetTaskShare();
+  const { user, activeOrganizationId } = useAuth();
+  const { data: allOrgs = [] } = useUserOrganizations();
   const { data: taskLists = [] } = useTaskLists();
 
   const [urgencyOpen, setUrgencyOpen] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [scheduleDraft, setScheduleDraft] = useState("");
   const [listOpen, setListOpen] = useState(false);
+  const [delegateOpen, setDelegateOpen] = useState(false);
+  const [delegateOrgId, setDelegateOrgId] = useState<string | null>(null);
+  const [delegateSelectedUsers, setDelegateSelectedUsers] = useState<
+    Set<string>
+  >(new Set());
   const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const effectiveDelegateOrgId =
+    delegateOrgId ?? activeOrganizationId ?? allOrgs[0]?.id ?? null;
+  const { data: delegateOrgMembers = [] } = useOrgMembersForOrg(
+    effectiveDelegateOrgId
+  );
 
   const count = selected.size;
   if (count === 0) return null;
 
   const ids = Array.from(selected);
   const selectedTasks = allTasks.filter((t) => selected.has(t.id));
+
+  const hasOtherSelected = Array.from(delegateSelectedUsers).some(
+    (uid) => uid !== user?.id
+  );
 
   // Snapshot helper: returns a map of id → previous value for the given
   // field so undo can put each task back exactly where it was.
@@ -162,6 +189,73 @@ export function BulkActionsToolbar({ allTasks }: BulkActionsToolbarProps) {
       },
     });
     clear();
+  };
+
+  const applyDelegate = () => {
+    if (delegateSelectedUsers.size === 0 || !effectiveDelegateOrgId) return;
+    const uidList = Array.from(delegateSelectedUsers);
+    const firstUid = uidList[0]!;
+
+    // Snapshot primary assignee per task — the only piece undo-able locally.
+    // Assignee rows and shares we add are upserts; "undo" of them would
+    // require knowing which were already present, which isn't loaded here.
+    // The user can remove assignees per-task via the row edit modal.
+    const prevPrimary = snapshot("assignee_user_id");
+
+    for (const task of selectedTasks) {
+      for (const uid of uidList) {
+        addAssignee.mutate({
+          taskId: task.id,
+          userId: uid,
+          orgId: effectiveDelegateOrgId,
+        });
+        if (uid !== user?.id) {
+          // Mirrors TaskEditModal.handleAddAssignee: a non-self assignee
+          // gets an automatic write share so the assignee can actually
+          // open and update the task.
+          setShare.mutate({
+            orgId: effectiveDelegateOrgId,
+            taskId: task.id,
+            userId: uid,
+            permission: "write",
+          });
+        }
+      }
+      // Mirror primary assignee on `tasks.assignee_user_id` only when the
+      // task had no primary yet — preserves any pre-existing primary so a
+      // bulk-add doesn't silently overwrite an intentional assignment.
+      if (!task.assignee_user_id) {
+        updateTask.mutate({
+          taskId: task.id,
+          patch: { assignee_user_id: firstUid },
+        });
+      }
+    }
+
+    pushUndo({
+      description: `האצלה (${count})`,
+      undo: () => {
+        for (const [id, p] of prevPrimary) {
+          updateTask.mutate({
+            taskId: id,
+            patch: { assignee_user_id: (p as string | null) ?? null },
+          });
+        }
+      },
+      redo: () => {
+        for (const task of selectedTasks) {
+          if (!task.assignee_user_id) {
+            updateTask.mutate({
+              taskId: task.id,
+              patch: { assignee_user_id: firstUid },
+            });
+          }
+        }
+      },
+    });
+
+    setDelegateOpen(false);
+    setDelegateSelectedUsers(new Set());
   };
 
   const applyDelete = () => {
@@ -318,6 +412,100 @@ export function BulkActionsToolbar({ allTasks }: BulkActionsToolbarProps) {
                     {l.name}
                   </button>
                 ))}
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Delegate */}
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setDelegateOpen((v) => !v)}
+            className="px-2 py-1 rounded-md hover:bg-white/10 text-xs inline-flex items-center gap-1"
+            title="האצלה"
+          >
+            <UserPlus className="w-3.5 h-3.5" />
+            האצלה
+          </button>
+          {delegateOpen && (
+            <>
+              <div
+                className="fixed inset-0 z-30"
+                onClick={() => setDelegateOpen(false)}
+              />
+              <div className="absolute bottom-full mb-1 start-0 z-40 bg-white text-ink-900 border border-ink-200 rounded-xl shadow-lift p-3 w-72 space-y-2">
+                {allOrgs.length > 1 && (
+                  <select
+                    value={effectiveDelegateOrgId ?? ""}
+                    onChange={(e) => setDelegateOrgId(e.target.value)}
+                    className="field text-sm w-full"
+                  >
+                    {allOrgs.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                <div className="flex flex-col gap-0.5 max-h-44 overflow-auto rounded-lg border border-ink-200 p-1.5">
+                  {delegateOrgMembers.length === 0 && (
+                    <p className="text-xs text-ink-400 px-1.5 py-1">
+                      אין חברי ארגון להאצלה.
+                    </p>
+                  )}
+                  {delegateOrgMembers.map((m) => {
+                    const uid = m.membership.user_id;
+                    const isSelf = uid === user?.id;
+                    const checked = delegateSelectedUsers.has(uid);
+                    const name = m.profile?.full_name ?? uid;
+                    return (
+                      <label
+                        key={uid}
+                        className="flex items-center gap-2 px-1.5 py-1 rounded-md hover:bg-ink-50 cursor-pointer text-sm select-none"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(e) => {
+                            setDelegateSelectedUsers((prev) => {
+                              const next = new Set(prev);
+                              if (e.target.checked) next.add(uid);
+                              else next.delete(uid);
+                              return next;
+                            });
+                          }}
+                          className="w-4 h-4 rounded accent-primary-500"
+                        />
+                        <span className="truncate">
+                          {name}
+                          {isSelf && (
+                            <span className="text-ink-400"> (אני)</span>
+                          )}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+                {hasOtherSelected && (
+                  <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 leading-snug">
+                    ⚠️ האצלה למשתמשים אחרים משתפת איתם את המשימה — הם יוכלו לראות
+                    ולערוך אותה.
+                  </p>
+                )}
+                <div className="flex items-center justify-end pt-1">
+                  <button
+                    type="button"
+                    onClick={applyDelegate}
+                    disabled={
+                      delegateSelectedUsers.size === 0 ||
+                      !effectiveDelegateOrgId
+                    }
+                    className="btn-primary text-xs disabled:opacity-50"
+                  >
+                    החל ל-{count}
+                  </button>
+                </div>
               </div>
             </>
           )}

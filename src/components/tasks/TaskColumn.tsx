@@ -39,32 +39,6 @@ import { TaskRow, type TaskTreeNode } from "./TaskRow";
 import { ShareListModal } from "./ShareListModal";
 import { LIST_ICON_PRESETS, ListIcon } from "./list-icons";
 
-/** Walk the task tree and collect IDs of tasks with no title, skipping
- *  the currently-focused task (which may be mid-creation) and any task
- *  created within the last few seconds (the Enter flow creates an empty
- *  task and then asynchronously sets focusTaskId; the empty-task render
- *  can land in a paint where focusTaskId is still on the previous row,
- *  so the age guard prevents the sweep from killing the just-spawned
- *  row during that microscopic window). */
-const NEW_TASK_GRACE_MS = 5000;
-
-function collectEmptyTaskIds(nodes: TaskTreeNode[], skipId: string | null): string[] {
-  const result: string[] = [];
-  const now = Date.now();
-  for (const n of nodes) {
-    if (!n.task.title && n.task.id !== skipId) {
-      const created = n.task.created_at
-        ? new Date(n.task.created_at).getTime()
-        : 0;
-      if (now - created > NEW_TASK_GRACE_MS) {
-        result.push(n.task.id);
-      }
-    }
-    result.push(...collectEmptyTaskIds(n.children, skipId));
-  }
-  return result;
-}
-
 interface TaskColumnProps {
   /** null = the "unassigned" pinned column */
   list: TaskList | null;
@@ -151,29 +125,13 @@ export function TaskColumn({
     setNameDraft(list?.name ?? "");
   }, [list?.name]);
 
-  // Auto-delete any tasks with an empty title (abandoned creates, or ones
-  // that slipped through before the onBlur fix). Skip the task currently
-  // being created/focused so we don't delete it mid-type.
-  //
-  // Why the setTimeout: pressing Enter on a row to create a new sibling
-  // produces TWO independent state changes in quick succession — the new
-  // task lands in the React Query cache (via setQueryData in
-  // useCreateTask.onSuccess), and only after that does the handler call
-  // onRequestFocus(newTask.id) to update focusTaskId. If both don't
-  // batch into a single render, this effect runs once with the new
-  // task in `roots` but `focusTaskId` still on the previous row — sees
-  // the new empty task as "abandoned" and deletes it immediately.
-  // Deferring the sweep to the next macrotask lets the focusTaskId
-  // update flush first; the cleanup function cancels the pending timer
-  // when focusTaskId arrives, so only the final-state sweep runs.
-  useEffect(() => {
-    const t = setTimeout(() => {
-      const emptyIds = collectEmptyTaskIds(roots, focusTaskId);
-      for (const id of emptyIds) deleteTaskM.mutate(id);
-    }, 0);
-    return () => clearTimeout(t);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [roots, focusTaskId]);
+  // Auto-cleanup of blank-title tasks is disabled. Every variant we
+  // tried (immediate sweep, deferred sweep, age-guarded sweep) raced
+  // with the create + commit + focus flow on Enter and managed to delete
+  // a row the user had just typed into. With it off the only paths to
+  // delete a task are explicit user actions (row menu, bulk toolbar),
+  // which is a deliberate trade — abandoned blank rows can accumulate
+  // but typed work never vanishes.
 
   const incompleteRoots = roots.filter((n) => !n.task.completed_at);
   const completedRoots = roots.filter((n) => !!n.task.completed_at);

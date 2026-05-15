@@ -51,16 +51,31 @@ interface DragState {
 
 let current: DragState | null = null;
 
+/**
+ * `data-cal-dragging` on `<body>` while a calendar drag is in flight. CSS
+ * (see index.css) uses this to mark all `[data-cal-band]` overlays as
+ * `pointer-events: none` during a drag, so a drop on top of another band
+ * passes through to the day cell beneath and isn't silently swallowed by
+ * the band element itself (which has no drop handler).
+ */
+function setDraggingFlag(on: boolean): void {
+  if (typeof document === "undefined") return;
+  if (on) document.body.setAttribute("data-cal-dragging", "true");
+  else document.body.removeAttribute("data-cal-dragging");
+}
+
 export function beginDrag(
   item: CalendarItem,
   grabOffsetMin: number,
   mode: DragMode = "move"
 ): void {
   current = { item, mode, grabOffsetMin };
+  setDraggingFlag(true);
 }
 
 export function endDrag(): void {
   current = null;
+  setDraggingFlag(false);
   emitHover(null);
 }
 

@@ -521,6 +521,7 @@ export function CalendarBlock({
     <div
       role="button"
       tabIndex={0}
+      data-cal-band
       onClick={(e) => {
         e.stopPropagation();
         onClick();

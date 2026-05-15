@@ -587,6 +587,7 @@ function MonthBand({
     <div
       role="button"
       tabIndex={0}
+      data-cal-band
       onClick={onClick}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
@@ -607,7 +608,7 @@ function MonthBand({
       }}
       onDragEnd={() => endDrag()}
       className={cn(
-        "absolute rounded-sm px-1.5 text-[10px] font-medium border-[1.5px] truncate text-start pointer-events-auto",
+        "absolute rounded-sm px-1.5 text-[10px] font-medium border-[1.5px] truncate text-start pointer-events-auto group/band",
         past && "opacity-60",
         item.completed && "line-through opacity-55",
         isPhase && "font-bold uppercase",
@@ -660,7 +661,12 @@ function BandResizeHandle({
       onDragEnd={() => endDrag()}
       onClick={(e) => e.stopPropagation()}
       className={cn(
-        "absolute top-0 bottom-0 w-1.5 cursor-ew-resize opacity-0 hover:opacity-100 transition-opacity bg-white/80 rounded-sm",
+        // Wide enough to grab comfortably (was w-1.5 = 6px; now 10px).
+        // Hidden at rest, half-visible whenever the parent band is hovered
+        // (so the resize affordance is discoverable without first finding
+        // the 10px strip), and fully visible on direct hover.
+        "absolute top-0 bottom-0 w-2.5 cursor-ew-resize transition-opacity rounded-sm bg-white/80",
+        "opacity-0 group-hover/band:opacity-60 hover:!opacity-100",
         edge === "start" ? "start-0" : "end-0"
       )}
       title={edge === "start" ? "גרור כדי לשנות התחלה" : "גרור כדי לשנות סיום"}
@@ -749,6 +755,7 @@ function MonthItemChip({
       <div
         role="button"
         tabIndex={0}
+        data-cal-band
         onClick={onClick}
         onKeyDown={handleKeyDown}
         draggable={draggable}
@@ -780,6 +787,7 @@ function MonthItemChip({
     <div
       role="button"
       tabIndex={0}
+      data-cal-band
       onClick={onClick}
       onKeyDown={handleKeyDown}
       draggable={draggable}

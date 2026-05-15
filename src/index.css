@@ -134,6 +134,15 @@
     @apply bg-ink-300 rounded-full;
   }
 
+  /* Calendar multi-day bands: while a drag is in flight (see
+     calendar-drag.ts) the bands stop catching pointer events so dropping
+     on top of another band — or anywhere inside the band overlay strip —
+     falls through to the day cell beneath, which is the real drop target.
+     Without this, dropping on a visible band silently fails. */
+  body[data-cal-dragging="true"] [data-cal-band] {
+    pointer-events: none;
+  }
+
   /* Block-style slider — RTL-aware track fill via inline gradient.
      The .block-slider element is given `background: linear-gradient(...)` per
      instance so the filled portion matches its current value. */

@@ -1617,9 +1617,11 @@ function formatError(err: unknown): string {
 }
 
 function priorityToUrgency(p: "low" | "normal" | "high"): number {
-  if (p === "low") return 25;
-  if (p === "high") return 75;
-  return 50;
+  // tasks.urgency is a 0–3 scale (ללא/נמוכה/בינונית/גבוהה) with a DB check
+  // constraint (0 ≤ urgency ≤ 5). Map AI priority to that scale.
+  if (p === "low") return 1;
+  if (p === "high") return 3;
+  return 2;
 }
 
 function isoToLocalInput(iso: string | null): string {

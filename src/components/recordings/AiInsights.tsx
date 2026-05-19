@@ -630,7 +630,7 @@ function TasksSection({
         created[i] = t.id;
         createdIds.push(t.id);
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
+        const msg = formatError(err);
         console.error("bulk create task failed:", err);
         errorMessages.push(`"${item.title.slice(0, 60)}" — ${msg}`);
       }
@@ -892,7 +892,7 @@ function EventsSection({
         },
       });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = formatError(err);
       console.error("create event from ai failed:", err);
       setErrorByIndex((prev) => ({ ...prev, [i]: msg }));
     }
@@ -1590,6 +1590,30 @@ function TaskRow({
       </div>
     </div>
   );
+}
+
+function formatError(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (err && typeof err === "object") {
+    const e = err as {
+      message?: unknown;
+      code?: unknown;
+      details?: unknown;
+      hint?: unknown;
+    };
+    const parts: string[] = [];
+    if (typeof e.message === "string" && e.message.trim()) parts.push(e.message);
+    if (typeof e.code === "string" && e.code.trim()) parts.push(`(${e.code})`);
+    if (typeof e.details === "string" && e.details.trim()) parts.push(`— ${e.details}`);
+    if (typeof e.hint === "string" && e.hint.trim()) parts.push(`hint: ${e.hint}`);
+    if (parts.length > 0) return parts.join(" ");
+    try {
+      return JSON.stringify(err);
+    } catch {
+      return String(err);
+    }
+  }
+  return String(err);
 }
 
 function priorityToUrgency(p: "low" | "normal" | "high"): number {

@@ -296,7 +296,12 @@ async function summarizeHandler(
 ): Promise<Response> {
   const origin = req.headers.get("origin");
   const body = (await req.json().catch(() => null)) as
-    | { recording_id?: string; custom_prompt?: string; free_text?: string }
+    | {
+        recording_id?: string;
+        custom_prompt?: string;
+        free_text?: string;
+        clear_free_text?: boolean;
+      }
     | null;
   if (!body?.recording_id) {
     return jsonResponse(
@@ -325,20 +330,62 @@ async function summarizeHandler(
     );
   }
 
-  // Free-text Q&A mode: answer a single question without running the full
-  // structured analysis or writing anything to the DB.
+  // Free-text Q&A mode: answer one question and persist (question, answer,
+  // created_at) to `recordings.free_text_qa` so the full history survives tab
+  // switches, modal closes, and page reloads.
   if (body.free_text?.trim()) {
+    const question = body.free_text.trim();
     try {
       const response = await callClaudeFreeText({
         title: recording.title,
         transcript_text: recording.transcript_text,
-        question: body.free_text.trim(),
+        question,
       });
-      return jsonResponse({ response }, { origin });
+      const { data: existing } = await ctx.serviceClient
+        .from("recordings")
+        .select("free_text_qa")
+        .eq("id", recording.id)
+        .maybeSingle();
+      const prior = Array.isArray(
+        (existing as { free_text_qa?: unknown } | null)?.free_text_qa
+      )
+        ? ((existing as { free_text_qa: unknown[] }).free_text_qa as Array<{
+            question: string;
+            answer: string;
+            created_at: string;
+          }>)
+        : [];
+      const history = [
+        ...prior,
+        { question, answer: response, created_at: new Date().toISOString() },
+      ];
+      const { error: updErr } = await ctx.serviceClient
+        .from("recordings")
+        .update({ free_text_qa: history })
+        .eq("id", recording.id);
+      if (updErr) {
+        console.error("free_text_persist_failed", updErr);
+      }
+      return jsonResponse({ response, history }, { origin });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       return jsonResponse({ error: "free_text_failed", message: msg }, { status: 502, origin });
     }
+  }
+
+  // Clear free-text Q&A history (no Claude call).
+  if (body.clear_free_text === true) {
+    const { error: updErr } = await ctx.serviceClient
+      .from("recordings")
+      .update({ free_text_qa: [] })
+      .eq("id", recording.id);
+    if (updErr) {
+      return jsonResponse(
+        { error: "clear_failed", message: updErr.message },
+        { status: 500, origin }
+      );
+    }
+    return jsonResponse({ history: [] }, { origin });
   }
 
   // Pull speaker labels — passing them to Claude tightens task attribution.

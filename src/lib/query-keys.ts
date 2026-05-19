@@ -57,6 +57,8 @@ export const queryKeys = {
   recordingLists: (orgId: string) => ["recording-lists", orgId] as const,
   recordingListAssignments: (recordingId: string) =>
     ["recording", recordingId, "lists"] as const,
+  recordingFreeTextHistory: (recordingId: string) =>
+    ["recording", recordingId, "free-text-qa"] as const,
 
   // Thoughts
   thoughts: (orgId: string, filters?: Record<string, unknown>) =>

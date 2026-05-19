@@ -15,12 +15,15 @@ import {
   Save,
   FileText,
   AlignLeft,
+  Trash2,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import {
   useTriggerAiProcessing,
   useUpdateRecording,
   useAskRecordingFreeText,
+  useClearRecordingFreeTextHistory,
+  useRecordingFreeTextHistory,
 } from "@/lib/hooks/useRecordings";
 import {
   TaskEditModal,
@@ -558,7 +561,14 @@ function TasksSection({
     | { kind: "idle" }
     | { kind: "pick" }
     | { kind: "creating"; total: number; done: number }
-    | { kind: "done"; created: number; listId: string | null; listName: string }
+    | {
+        kind: "done";
+        created: number;
+        failed: number;
+        listId: string | null;
+        listName: string;
+        errorMessages: string[];
+      }
   >({ kind: "idle" });
   const [bulkListId, setBulkListId] = useState<string | null>(null);
 
@@ -605,6 +615,7 @@ function TasksSection({
     setBulkState({ kind: "creating", total: targets.length, done: 0 });
     const created: Record<number, string> = {};
     const createdIds: string[] = [];
+    const errorMessages: string[] = [];
     let done = 0;
     for (const { item, i } of targets) {
       try {
@@ -619,7 +630,9 @@ function TasksSection({
         created[i] = t.id;
         createdIds.push(t.id);
       } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
         console.error("bulk create task failed:", err);
+        errorMessages.push(`"${item.title.slice(0, 60)}" — ${msg}`);
       }
       done += 1;
       setBulkState({ kind: "creating", total: targets.length, done });
@@ -629,8 +642,10 @@ function TasksSection({
     setBulkState({
       kind: "done",
       created: Object.keys(created).length,
+      failed: errorMessages.length,
       listId: bulkListId,
       listName: list?.name ?? "ברירת מחדל",
+      errorMessages,
     });
     if (createdIds.length > 0) {
       // Snapshot the AI items + the list so redo can recreate them. Ids will
@@ -734,19 +749,59 @@ function TasksSection({
       )}
 
       {bulkState.kind === "done" && (
-        <div className="rounded-md border border-success-300 bg-success-50 px-3 py-2 space-y-1.5">
-          <div className="text-xs text-success-800 inline-flex items-center gap-1.5">
-            <Check className="w-3.5 h-3.5" />
-            נוצרו {bulkState.created} משימות חדשות ברשימה "{bulkState.listName}".
+        <div
+          className={cn(
+            "rounded-md border px-3 py-2 space-y-1.5",
+            bulkState.failed === 0
+              ? "border-success-300 bg-success-50"
+              : bulkState.created === 0
+              ? "border-danger-300 bg-danger-50"
+              : "border-amber-300 bg-amber-50"
+          )}
+        >
+          <div
+            className={cn(
+              "text-xs inline-flex items-center gap-1.5",
+              bulkState.failed === 0
+                ? "text-success-800"
+                : bulkState.created === 0
+                ? "text-danger-800"
+                : "text-amber-800"
+            )}
+          >
+            {bulkState.failed === 0 ? (
+              <Check className="w-3.5 h-3.5" />
+            ) : (
+              <AlertCircle className="w-3.5 h-3.5" />
+            )}
+            {bulkState.created > 0 && (
+              <span>
+                נוצרו {bulkState.created} משימות חדשות ברשימה "{bulkState.listName}".
+              </span>
+            )}
+            {bulkState.failed > 0 && (
+              <span>{bulkState.failed} משימות נכשלו.</span>
+            )}
           </div>
+          {bulkState.errorMessages.length > 0 && (
+            <ul className="text-[11px] text-danger-700 list-disc ps-4 space-y-0.5 max-h-32 overflow-y-auto">
+              {bulkState.errorMessages.map((m, idx) => (
+                <li key={idx} className="break-words">
+                  {m}
+                </li>
+              ))}
+            </ul>
+          )}
           <div className="flex items-center gap-2 flex-wrap">
-            <button
-              type="button"
-              onClick={() => navigate("/app/tasks")}
-              className="btn-primary !py-1 !px-2 !text-[11px] inline-flex items-center gap-1"
-            >
-              פתחי מסך משימות לעריכה מלאה
-            </button>
+            {bulkState.created > 0 && (
+              <button
+                type="button"
+                onClick={() => navigate("/app/tasks")}
+                className="btn-primary !py-1 !px-2 !text-[11px] inline-flex items-center gap-1"
+              >
+                פתחי מסך משימות לעריכה מלאה
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setBulkState({ kind: "idle" })}
@@ -799,6 +854,7 @@ function EventsSection({
   const createEvent = useCreateEvent();
   const deleteEvent = useDeleteEvent();
   const [createdIndices, setCreatedIndices] = useState<Set<number>>(new Set());
+  const [errorByIndex, setErrorByIndex] = useState<Record<number, string>>({});
 
   const onCreateOne = async (i: number) => {
     const item = items[i];
@@ -820,6 +876,12 @@ function EventsSection({
       };
       const created = await createEvent.mutateAsync(payload);
       setCreatedIndices((s) => new Set(s).add(i));
+      setErrorByIndex((prev) => {
+        if (!(i in prev)) return prev;
+        const next = { ...prev };
+        delete next[i];
+        return next;
+      });
       let currentId = created.id;
       pushUndo({
         description: `יצירת אירוע מתובנות AI: ${item.title}`,
@@ -830,7 +892,9 @@ function EventsSection({
         },
       });
     } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
       console.error("create event from ai failed:", err);
+      setErrorByIndex((prev) => ({ ...prev, [i]: msg }));
     }
   };
 
@@ -933,6 +997,12 @@ function EventsSection({
                   </ActionBtn>
                 </div>
               </div>
+              {errorByIndex[i] && (
+                <div className="rounded-md border border-danger-200 bg-danger-50 px-2 py-1 text-[11px] text-danger-700 inline-flex items-start gap-1.5">
+                  <AlertCircle className="w-3 h-3 mt-0.5 shrink-0" />
+                  <span className="break-words">{errorByIndex[i]}</span>
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -943,22 +1013,32 @@ function EventsSection({
 
 function FreeTextSection({ recording }: { recording: Recording }) {
   const ask = useAskRecordingFreeText();
+  const clearHistory = useClearRecordingFreeTextHistory();
+  const { data: history = [] } = useRecordingFreeTextHistory(recording.id);
   const [text, setText] = useState("");
-  const [response, setResponse] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [confirmingClear, setConfirmingClear] = useState(false);
 
   const onAsk = async () => {
     if (!text.trim()) return;
     setError(null);
-    setResponse(null);
     try {
-      const res = await ask.mutateAsync({
+      await ask.mutateAsync({
         recordingId: recording.id,
         question: text.trim(),
       });
-      setResponse(res);
+      setText("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "שגיאה בעיבוד הבקשה");
+    }
+  };
+
+  const onClear = async () => {
+    try {
+      await clearHistory.mutateAsync(recording.id);
+      setConfirmingClear(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "שגיאה בניקוי היסטוריה");
     }
   };
 
@@ -966,11 +1046,64 @@ function FreeTextSection({ recording }: { recording: Recording }) {
     <Pane
       icon={<Sparkles className="w-3.5 h-3.5 text-primary-600" />}
       label="שאלה חופשית"
+      actions={
+        history.length > 0 ? (
+          confirmingClear ? (
+            <div className="inline-flex items-center gap-1">
+              <button
+                type="button"
+                onClick={onClear}
+                disabled={clearHistory.isPending}
+                className="btn-primary !py-0.5 !px-1.5 !text-[11px] bg-danger-600 hover:bg-danger-700"
+              >
+                ניקוי
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmingClear(false)}
+                className="btn-outline !py-0.5 !px-1.5 !text-[11px]"
+              >
+                ביטול
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setConfirmingClear(true)}
+              className="inline-flex items-center gap-1 text-[11px] text-ink-500 hover:text-danger-700"
+              title="נקי את היסטוריית השאלות והתשובות"
+            >
+              <Trash2 className="w-3 h-3" />
+              נקי היסטוריה
+            </button>
+          )
+        ) : null
+      }
     >
       <p className="text-[11px] text-ink-500 leading-relaxed">
         שאלי כל שאלה על ההקלטה — לדוגמה: &quot;מה הוחלט לגבי X?&quot; או
-        &quot;תסכם רק את נושא Y&quot;.
+        &quot;תסכם רק את נושא Y&quot;. כל השאלות והתשובות נשמרות כאן.
       </p>
+      {history.length > 0 && (
+        <div className="space-y-2 max-h-[420px] overflow-y-auto pe-1">
+          {history.map((qa, idx) => (
+            <div key={idx} className="rounded-md border border-ink-200 bg-white">
+              <div className="border-b border-ink-100 px-3 py-1.5 text-xs text-ink-600 inline-flex items-start gap-1.5 w-full">
+                <span className="font-semibold text-ink-700 shrink-0">שאלה:</span>
+                <span className="whitespace-pre-wrap break-words" dir="auto">
+                  {qa.question}
+                </span>
+              </div>
+              <div
+                className="px-3 py-2 text-sm text-ink-800 whitespace-pre-wrap leading-relaxed"
+                dir="auto"
+              >
+                {qa.answer}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
       <div className="flex items-start gap-2">
         <textarea
           value={text}
@@ -1005,14 +1138,6 @@ function FreeTextSection({ recording }: { recording: Recording }) {
         <div className="rounded-md border border-danger-200 bg-danger-50 px-3 py-2 text-xs text-danger-700 inline-flex items-start gap-1.5">
           <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
           {error}
-        </div>
-      )}
-      {response && (
-        <div
-          className="rounded-md border border-ink-200 bg-white px-3 py-2.5 text-sm text-ink-800 whitespace-pre-wrap leading-relaxed"
-          dir="auto"
-        >
-          {response}
         </div>
       )}
     </Pane>

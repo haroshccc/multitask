@@ -349,10 +349,16 @@ export async function triggerAiProcessing(
   return json.recording;
 }
 
+export interface FreeTextQaEntry {
+  question: string;
+  answer: string;
+  created_at: string;
+}
+
 export async function askRecordingFreeText(
   recordingId: string,
   question: string
-): Promise<string> {
+): Promise<{ response: string; history: FreeTextQaEntry[] }> {
   const { data: session } = await supabase.auth.getSession();
   const jwt = session.session?.access_token;
   if (!jwt) throw new Error("not_authenticated");
@@ -369,8 +375,58 @@ export async function askRecordingFreeText(
     const detail = await res.text().catch(() => "");
     throw new Error(`ask_${res.status}: ${detail.slice(0, 500)}`);
   }
-  const json = (await res.json()) as { response?: string };
-  return json.response ?? "";
+  const json = (await res.json()) as {
+    response?: string;
+    history?: FreeTextQaEntry[];
+  };
+  return {
+    response: json.response ?? "",
+    history: Array.isArray(json.history) ? json.history : [],
+  };
+}
+
+export async function clearRecordingFreeTextHistory(
+  recordingId: string
+): Promise<void> {
+  const { data: session } = await supabase.auth.getSession();
+  const jwt = session.session?.access_token;
+  if (!jwt) throw new Error("not_authenticated");
+  const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/summarize`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${jwt}`,
+    },
+    body: JSON.stringify({ recording_id: recordingId, clear_free_text: true }),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`clear_${res.status}: ${detail.slice(0, 500)}`);
+  }
+}
+
+/** Read the persisted free-text Q&A history for a recording. */
+export async function getRecordingFreeTextHistory(
+  recordingId: string
+): Promise<FreeTextQaEntry[]> {
+  const db = supabase as unknown as {
+    from: (t: string) => {
+      select: (s: string) => {
+        eq: (
+          c: string,
+          v: string
+        ) => { maybeSingle: () => Promise<{ data: { free_text_qa?: unknown } | null }> };
+      };
+    };
+  };
+  const { data } = await db
+    .from("recordings")
+    .select("free_text_qa")
+    .eq("id", recordingId)
+    .maybeSingle();
+  const raw = data?.free_text_qa;
+  return Array.isArray(raw) ? (raw as FreeTextQaEntry[]) : [];
 }
 
 // Speakers -----------------------------------------------------------------

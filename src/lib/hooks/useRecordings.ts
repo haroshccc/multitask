@@ -212,9 +212,38 @@ export function useTriggerAiProcessing() {
 }
 
 export function useAskRecordingFreeText() {
+  const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ recordingId, question }: { recordingId: string; question: string }) =>
       service.askRecordingFreeText(recordingId, question),
+    onSuccess: (_data, { recordingId }) => {
+      qc.invalidateQueries({ queryKey: queryKeys.recording(recordingId) });
+      qc.invalidateQueries({
+        queryKey: queryKeys.recordingFreeTextHistory(recordingId),
+      });
+    },
+  });
+}
+
+export function useClearRecordingFreeTextHistory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (recordingId: string) =>
+      service.clearRecordingFreeTextHistory(recordingId),
+    onSuccess: (_data, recordingId) => {
+      qc.invalidateQueries({ queryKey: queryKeys.recording(recordingId) });
+      qc.invalidateQueries({
+        queryKey: queryKeys.recordingFreeTextHistory(recordingId),
+      });
+    },
+  });
+}
+
+export function useRecordingFreeTextHistory(recordingId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.recordingFreeTextHistory(recordingId ?? ""),
+    queryFn: () => service.getRecordingFreeTextHistory(recordingId!),
+    enabled: !!recordingId,
   });
 }
 

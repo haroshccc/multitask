@@ -55,6 +55,8 @@ interface CalendarWeekViewProps {
   hourEnd: number;
   hourHeight: number;
   onItemClick: (item: CalendarItem) => void;
+  /** Right-click a task block/band → open the actions menu at the cursor. */
+  onItemContextMenu?: (item: CalendarItem, x: number, y: number) => void;
   onCreateAt: (start: Date) => void;
   /** Reposition or resize by drag. */
   onItemDrop?: ItemDropHandler;
@@ -79,6 +81,7 @@ export function CalendarWeekView({
   hourEnd,
   hourHeight,
   onItemClick,
+  onItemContextMenu,
   onCreateAt,
   onItemDrop,
   notesByDate,
@@ -401,6 +404,11 @@ export function CalendarWeekView({
               span={span}
               row={row}
               onClick={() => onItemClick(item)}
+              onContextMenu={
+                onItemContextMenu
+                  ? (x, y) => onItemContextMenu(item, x, y)
+                  : undefined
+              }
               onItemDrop={onItemDrop}
               readOnly={readOnly}
             />
@@ -586,6 +594,11 @@ export function CalendarWeekView({
                     widthPct={widthPct}
                     actuals={taskActuals}
                     onClick={() => onItemClick(item)}
+                    onContextMenu={
+                      onItemContextMenu
+                        ? (x, y) => onItemContextMenu(item, x, y)
+                        : undefined
+                    }
                     onItemDrop={onItemDrop}
                     compact
                     readOnly={readOnly}
@@ -680,6 +693,7 @@ function MultiDayBand({
   span,
   row,
   onClick,
+  onContextMenu,
   onItemDrop,
   readOnly,
 }: {
@@ -689,6 +703,8 @@ function MultiDayBand({
   span: number;
   row: number;
   onClick: () => void;
+  /** Right-click → page actions menu at the cursor (viewport coords). */
+  onContextMenu?: (x: number, y: number) => void;
   /** Touch/pen move support — applies a "move" drop. Mouse uses native DnD. */
   onItemDrop?: ItemDropHandler;
   readOnly?: boolean;
@@ -748,6 +764,15 @@ function MultiDayBand({
         }
         onClick();
       }}
+      onContextMenu={
+        onContextMenu
+          ? (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onContextMenu(e.clientX, e.clientY);
+            }
+          : undefined
+      }
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();

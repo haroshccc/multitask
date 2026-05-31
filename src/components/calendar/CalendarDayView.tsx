@@ -44,6 +44,8 @@ interface CalendarDayViewProps {
   hourEnd: number;
   hourHeight: number;
   onItemClick: (item: CalendarItem) => void;
+  /** Right-click a task block → open the actions menu at the cursor. */
+  onItemContextMenu?: (item: CalendarItem, x: number, y: number) => void;
   onCreateAt: (start: Date) => void;
   /** Reposition or resize an item by drag-drop. The page is responsible
    *  for translating the action into the right entity patch. */
@@ -64,6 +66,7 @@ export function CalendarDayView({
   hourEnd,
   hourHeight,
   onItemClick,
+  onItemContextMenu,
   onCreateAt,
   onItemDrop,
   dayNote,
@@ -319,6 +322,11 @@ export function CalendarDayView({
                 widthPct={widthPct}
                 actuals={taskActuals}
                 onClick={() => onItemClick(item)}
+                onContextMenu={
+                  onItemContextMenu
+                    ? (x, y) => onItemContextMenu(item, x, y)
+                    : undefined
+                }
                 onItemDrop={onItemDrop}
               />
             );
@@ -359,6 +367,7 @@ export function CalendarBlock({
   widthPct,
   actuals,
   onClick,
+  onContextMenu,
   onItemDrop,
   compact,
   readOnly,
@@ -374,6 +383,8 @@ export function CalendarBlock({
    *  to the same coordinate system as `top`/`height`. */
   actuals?: { topPct: number; heightPct: number }[];
   onClick: () => void;
+  /** Right-click → page actions menu at the cursor (viewport coords). */
+  onContextMenu?: (x: number, y: number) => void;
   /** Touch/pen move support — applies a "move" drop. Mouse uses native DnD. */
   onItemDrop?: ItemDropHandler;
   compact?: boolean;
@@ -555,6 +566,15 @@ export function CalendarBlock({
         }
         onClick();
       }}
+      onContextMenu={
+        onContextMenu
+          ? (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onContextMenu(e.clientX, e.clientY);
+            }
+          : undefined
+      }
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();

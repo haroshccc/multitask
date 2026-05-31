@@ -22,18 +22,22 @@ export function TaskSchedulingPanel({
   tasks,
   taskLists,
   hiddenListIds,
-  onToggleList,
   onItemDrop,
+  onOpenTask,
+  onContextMenu,
   onClose,
 }: {
   tasks: Task[];
   taskLists: TaskList[];
   /** Lists hidden from the calendar — the panel mirrors the SAME visibility,
-   *  so it always shows exactly the lists the calendar shows. */
+   *  so it shows exactly the lists currently displayed on the calendar.
+   *  Visibility is changed from the calendar's "רשימות" toolbar control. */
   hiddenListIds: Set<string>;
-  /** Toggle a list's calendar visibility (shared with the toolbar control). */
-  onToggleList: (listId: string) => void;
   onItemDrop: ItemDropHandler;
+  /** Double-click a task → open it for editing. */
+  onOpenTask: (taskId: string) => void;
+  /** Right-click a task → open the actions menu at the cursor. */
+  onContextMenu: (task: Task, x: number, y: number) => void;
   onClose: () => void;
 }) {
   // Schedulable tasks: open (not completed) and not phases (phases are
@@ -67,37 +71,8 @@ export function TaskSchedulingPanel({
         </button>
       </header>
 
-      {/* List picker — toggle which lists' tasks are shown. */}
-      <div className="px-3 py-2 border-b border-ink-200 flex flex-wrap gap-1.5">
-        {taskLists.length === 0 && (
-          <span className="text-xs text-ink-400">אין רשימות</span>
-        )}
-        {taskLists.map((l) => {
-          const active = !hiddenListIds.has(l.id);
-          return (
-            <button
-              key={l.id}
-              type="button"
-              onClick={() => onToggleList(l.id)}
-              aria-pressed={active}
-              className={cn(
-                "inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium border transition-colors",
-                active
-                  ? "bg-ink-900 text-white border-ink-900"
-                  : "bg-white text-ink-600 border-ink-200 hover:bg-ink-50"
-              )}
-            >
-              <span
-                className="w-2 h-2 rounded-full shrink-0"
-                style={{ backgroundColor: l.color ?? "#6b6b80" }}
-              />
-              {l.name}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Stacked task lists. */}
+      {/* Stacked task lists — only the lists currently visible on the
+          calendar (kept in sync via the toolbar's "רשימות" control). */}
       <div className="flex-1 overflow-y-auto px-2 py-2 space-y-3">
         {visibleLists.length === 0 ? (
           <p className="text-xs text-ink-400 text-center py-6">
@@ -131,6 +106,8 @@ export function TaskSchedulingPanel({
                         task={t}
                         listColor={list.color ?? null}
                         onItemDrop={onItemDrop}
+                        onOpenTask={onOpenTask}
+                        onContextMenu={onContextMenu}
                       />
                     ))}
                   </div>
@@ -177,10 +154,14 @@ function PanelTaskItem({
   task,
   listColor,
   onItemDrop,
+  onOpenTask,
+  onContextMenu,
 }: {
   task: Task;
   listColor: string | null;
   onItemDrop: ItemDropHandler;
+  onOpenTask: (taskId: string) => void;
+  onContextMenu: (task: Task, x: number, y: number) => void;
 }) {
   const draft = useMemo(
     () => buildDraftItem(task, listColor),
@@ -201,6 +182,11 @@ function PanelTaskItem({
         }
       }}
       onDragEnd={() => endDrag()}
+      onDoubleClick={() => onOpenTask(task.id)}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        onContextMenu(task, e.clientX, e.clientY);
+      }}
       onPointerDown={(e) => {
         if (e.pointerType === "mouse") return;
         startPointerMove(draft, e, 0, { onItemDrop });

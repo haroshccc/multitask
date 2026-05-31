@@ -19,6 +19,7 @@ import { DayNoteDialog } from "@/components/calendar/DayNoteDialog";
 import { EventCalendarEditDialog } from "@/components/calendar/EventCalendarEditDialog";
 import { DragHoverPill } from "@/components/calendar/DragHoverPill";
 import { TaskSchedulingPanel } from "@/components/calendar/TaskSchedulingPanel";
+import { TaskActionsMenu } from "@/components/calendar/TaskActionsMenu";
 import type { DropAction } from "@/components/calendar/calendar-drag";
 import { cn } from "@/lib/utils/cn";
 import { CalendarRange } from "lucide-react";
@@ -56,7 +57,7 @@ import {
 } from "@/lib/hooks";
 import { useCalendarPrefs } from "@/lib/hooks/useCalendarPrefs";
 import { pushUndo } from "@/lib/undo/store";
-import type { FilterConfig } from "@/lib/types/domain";
+import type { FilterConfig, Task } from "@/lib/types/domain";
 
 // Min hour-row height. Below this the layout becomes hard to read.
 // Mobile mins are intentionally larger than desktop: the page is allowed
@@ -82,6 +83,12 @@ export function Calendar() {
   const [statsOpen, setStatsOpen] = useState(false);
   // Scheduling mode: a side panel of list tasks the user drags onto the grid.
   const [scheduling, setScheduling] = useState(false);
+  // Right-click actions menu for a task (panel or grid).
+  const [taskMenu, setTaskMenu] = useState<{
+    task: Task;
+    x: number;
+    y: number;
+  } | null>(null);
   const [newListDialogOpen, setNewListDialogOpen] = useState(false);
   const [newListName, setNewListName] = useState("");
 
@@ -365,6 +372,18 @@ export function Calendar() {
     else setEditingEventId((item.source as { id: string }).id);
   };
 
+  const handleItemContextMenu = (
+    item: CalendarItem,
+    x: number,
+    y: number
+  ) => {
+    // Right-click actions are task-only (unschedule / duplicate / duration /
+    // delete). Events keep the browser's default menu.
+    if (item.kind === "task" || item.kind === "deadline") {
+      setTaskMenu({ task: item.source as Task, x, y });
+    }
+  };
+
   const updateTask = useUpdateTask();
   const updateEvent = useUpdateEvent();
 
@@ -555,6 +574,14 @@ export function Calendar() {
   return (
     <ScreenScaffold title="יומן" subtitle="">
       <DragHoverPill />
+      {taskMenu && (
+        <TaskActionsMenu
+          task={taskMenu.task}
+          x={taskMenu.x}
+          y={taskMenu.y}
+          onClose={() => setTaskMenu(null)}
+        />
+      )}
       <div className="space-y-2">
         <CalendarChrome
           view={view}
@@ -627,8 +654,9 @@ export function Calendar() {
               tasks={tasks}
               taskLists={lists}
               hiddenListIds={hiddenLists}
-              onToggleList={toggleListVisibility}
               onItemDrop={handleItemDrop}
+              onOpenTask={(id) => setEditingTaskId(id)}
+              onContextMenu={(task, x, y) => setTaskMenu({ task, x, y })}
               onClose={() => setScheduling(false)}
             />
           )}
@@ -642,6 +670,7 @@ export function Calendar() {
             hourEnd={effectiveRange.hourEnd}
             hourHeight={dynamicHourHeightDay}
             onItemClick={handleItemClick}
+            onItemContextMenu={handleItemContextMenu}
             onCreateAt={handleCreateAt}
             onItemDrop={handleItemDrop}
             dayNote={notesByDate.get(dateKey(anchor))}
@@ -658,6 +687,7 @@ export function Calendar() {
             hourEnd={effectiveRange.hourEnd}
             hourHeight={dynamicHourHeightWeek}
             onItemClick={handleItemClick}
+            onItemContextMenu={handleItemContextMenu}
             onCreateAt={handleCreateAt}
             onItemDrop={handleItemDrop}
             notesByDate={notesByDate}

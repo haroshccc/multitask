@@ -65,6 +65,9 @@ interface FocusContextValue {
   reminderNextTask: Task | null;
   // alert actions
   startFromAlert: () => void;
+  /** Start a focus session for an arbitrary task (e.g. from the row menu),
+   *  including before its scheduled time. */
+  startSession: (task: Task) => void;
   dismissAlert: () => void;
   minimizeAlert: () => void;
   restoreAlert: () => void;
@@ -438,9 +441,33 @@ export function FocusSessionProvider({ children }: { children: React.ReactNode }
       if (!activeTimer && sessionTaskId) {
         startTimer.mutate({ taskId: sessionTaskId });
       }
+      // Grow the calendar block by the extension so the planned slot reflects
+      // the extra committed time. We only ever grow — never shrink — so a task
+      // finished early keeps its original block (the actual-time overlay shows
+      // the shorter worked span inside it).
+      if (sessionTaskId) {
+        const t = taskById.get(sessionTaskId);
+        if (t) {
+          const curMin = t.duration_minutes ?? prefs.defaultDurationMin;
+          updateTask.mutate({
+            taskId: sessionTaskId,
+            patch: { duration_minutes: curMin + minutes },
+          });
+        }
+      }
       checkConflict(newEndsAt);
     },
-    [sessionStatus, endsAt, activeTimer, sessionTaskId, startTimer, checkConflict]
+    [
+      sessionStatus,
+      endsAt,
+      activeTimer,
+      sessionTaskId,
+      startTimer,
+      checkConflict,
+      taskById,
+      updateTask,
+      prefs.defaultDurationMin,
+    ]
   );
 
   const resolveConflictShorten = useCallback(() => {
@@ -601,6 +628,7 @@ export function FocusSessionProvider({ children }: { children: React.ReactNode }
     reminder,
     reminderNextTask,
     startFromAlert,
+    startSession: beginSession,
     dismissAlert,
     minimizeAlert,
     restoreAlert,

@@ -15,6 +15,8 @@ import {
   ChevronLeft,
   Repeat2,
   Target,
+  Move,
+  Timer,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import {
@@ -56,6 +58,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { PlanVsActualBar } from "@/components/tasks/PlanVsActualBar";
+import { useFocusSession } from "@/components/focus/FocusSessionProvider";
 import { useAuth } from "@/lib/auth/AuthContext";
 import { HalfCheckIcon } from "@/components/ui/HalfCheckIcon";
 import type { Task } from "@/lib/types/domain";
@@ -543,6 +546,30 @@ export function TaskRow({
     duplicateTree.mutate({
       sourceTaskId: task.id,
       targetListId: targetListId ?? undefined,
+    });
+    closeMenu();
+  };
+
+  const handleMoveToList = (targetListId: string | null) => {
+    const prevListId = task.task_list_id ?? null;
+    if (targetListId === prevListId) {
+      closeMenu();
+      return;
+    }
+    const apply = () =>
+      updateTask.mutate({
+        taskId: task.id,
+        patch: { task_list_id: targetListId },
+      });
+    apply();
+    pushUndo({
+      description: "העברת משימה לרשימה",
+      undo: () =>
+        updateTask.mutate({
+          taskId: task.id,
+          patch: { task_list_id: prevListId },
+        }),
+      redo: apply,
     });
     closeMenu();
   };

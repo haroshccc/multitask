@@ -150,6 +150,9 @@ export function TaskRow({
   const [descFocused, setDescFocused] = useState(false);
   const [titleFocused, setTitleFocused] = useState(false);
   const descRef = useRef<HTMLTextAreaElement>(null);
+  // Holds the latest commitDescription so the outside-click listener (whose
+  // closure is pinned when the editor opens) always saves the current draft.
+  const commitDescriptionRef = useRef<() => void>(() => {});
   const [collapsed, setCollapsed] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState<{
@@ -229,8 +232,10 @@ export function TaskRow({
       const el = descRef.current;
       if (!el) return;
       if (el.contains(e.target as Node)) return;
+      // Commit the *current* draft before tearing the editor down — using the
+      // stale closure here would no-op (empty draft) and silently drop edits.
+      commitDescriptionRef.current();
       setDescFocused(false);
-      commitDescription();
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
@@ -320,6 +325,7 @@ export function TaskRow({
       redo: () => updateTask.mutate({ taskId: task.id, patch: { description: htmlContent || null } }),
     });
   };
+  commitDescriptionRef.current = commitDescription;
 
   const handleKeyDown = async (e: React.KeyboardEvent<HTMLDivElement>) => {
     const mod = e.metaKey || e.ctrlKey;

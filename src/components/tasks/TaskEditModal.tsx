@@ -1087,7 +1087,7 @@ export function TaskEditModal({
                 </div>
               )}
 
-              {tab === "history" && task && (
+              {tab === "history" && (
                 <div className="space-y-4">
                   <Field label="הערכת שעות (לתכנון)">
                     <DurationInput
@@ -1097,7 +1097,14 @@ export function TaskEditModal({
                       ariaLabel="הערכת שעות"
                     />
                   </Field>
-                  <TimeEntriesTab task={task} />
+                  {task ? (
+                    <TimeEntriesTab task={task} />
+                  ) : (
+                    <p className="text-xs text-ink-400">
+                      מעקב זמן בפועל (סטופר / הזנה ידנית) יהיה זמין אחרי
+                      שמירת המשימה.
+                    </p>
+                  )}
                 </div>
               )}
 

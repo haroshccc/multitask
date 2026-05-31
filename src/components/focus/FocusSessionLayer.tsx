@@ -5,6 +5,7 @@ import {
   Bell,
   CalendarClock,
   Check,
+  Clock,
   Pause,
   Play,
   Scissors,
@@ -111,6 +112,22 @@ export function FocusSessionLayer() {
           onShorten={f.resolveConflictShorten}
           onPush={f.resolveConflictPush}
           onDismiss={f.dismissConflict}
+        />
+      )}
+
+      {f.latePrompt && (
+        <LateStartModal
+          lateMin={f.latePrompt.lateMin}
+          onPush={f.resolveLatePush}
+          onCheckEnd={f.resolveLateCheckEnd}
+        />
+      )}
+
+      {f.reminder && (
+        <ReminderBanner
+          title={f.reminderNextTask?.title || "המשימה הבאה"}
+          minutesLeft={f.reminder.minutesLeft}
+          onDismiss={f.dismissReminder}
         />
       )}
     </>
@@ -354,6 +371,93 @@ function ConflictBanner({
           <CalendarClock className="w-3.5 h-3.5" /> דחה הכל קדימה
         </button>
       </div>
+    </div>
+  );
+}
+
+function LateStartModal({
+  lateMin,
+  onPush,
+  onCheckEnd,
+}: {
+  lateMin: number;
+  onPush: (makeDefault: boolean) => void;
+  onCheckEnd: (makeDefault: boolean) => void;
+}) {
+  const [makeDefault, setMakeDefault] = useState(false);
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4">
+      <div className="card w-full max-w-sm p-5 shadow-lift">
+        <div className="flex items-center gap-2 mb-1">
+          <AlarmClock className="w-5 h-5 text-amber-500" />
+          <h2 className="text-base font-bold text-ink-900">התחלת באיחור</h2>
+        </div>
+        <p className="text-sm text-ink-700 mb-4">
+          התחלת באיחור של כ-{lateMin} דק׳. לדחות כבר עכשיו את שאר הלו״ז קדימה,
+          או לבדוק איתך רק כשתתקרבי לסוף הזמן?
+        </p>
+        <label className="flex items-center gap-2 mb-4 text-xs text-ink-600 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={makeDefault}
+            onChange={(e) => setMakeDefault(e.target.checked)}
+          />
+          הפוך את הבחירה לברירת מחדל (אפשר לשנות בהגדרות)
+        </label>
+        <div className="flex items-center justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => onCheckEnd(makeDefault)}
+            className="btn-ghost text-sm"
+          >
+            בדוק רק בסוף
+          </button>
+          <button
+            type="button"
+            onClick={() => onPush(makeDefault)}
+            className="btn-primary text-sm inline-flex items-center gap-1"
+          >
+            <CalendarClock className="w-4 h-4" /> דחה את הלו״ז קדימה
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+function ReminderBanner({
+  title,
+  minutesLeft,
+  onDismiss,
+}: {
+  title: string;
+  minutesLeft: number;
+  onDismiss: () => void;
+}) {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className={cn(
+        "fixed z-[60] top-4 left-1/2 -translate-x-1/2 card !p-2.5 shadow-lift",
+        "w-[min(24rem,calc(100vw-2rem))] flex items-center gap-2",
+        "border-primary-300 bg-gradient-to-l from-primary-50 to-white"
+      )}
+    >
+      <Clock className="w-4 h-4 text-primary-600 shrink-0" />
+      <div className="flex-1 min-w-0 text-sm text-ink-800">
+        בעוד כ-{minutesLeft} דק׳ מתחילה{" "}
+        <span className="font-semibold">{title}</span>
+      </div>
+      <button
+        type="button"
+        onClick={onDismiss}
+        className="shrink-0 w-6 h-6 rounded-full hover:bg-ink-100 flex items-center justify-center text-ink-500"
+        title="סגור"
+      >
+        <X className="w-3.5 h-3.5" />
+      </button>
     </div>
   );
 }

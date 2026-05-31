@@ -27,7 +27,7 @@ import {
 } from "@/lib/hooks/useOrganizations";
 import type { OrgType } from "@/lib/services/organizations";
 import { pushUndo } from "@/lib/undo/store";
-import { useFocusPrefs } from "@/lib/hooks/useFocusPrefs";
+import { useFocusPrefs, type FocusPrefs } from "@/lib/hooks/useFocusPrefs";
 import {
   ensureNotificationPermission,
   notificationsSupported,
@@ -1257,7 +1257,81 @@ function NotificationSettingsTab() {
             onChange={(v) => setPrefs({ lateCatchMin: v })}
           />
         </SettingRow>
+
+        <SettingRow
+          title="תזכורת לפני המשימה הבאה"
+          desc="כמה זמן מראש להזכיר בזמן סשן פעיל"
+        >
+          <Segmented
+            value={prefs.nextTaskReminderMin}
+            options={[
+              { value: 0, label: "כבוי" },
+              { value: 5, label: "5 דק׳" },
+              { value: 15, label: "15 דק׳" },
+              { value: 30, label: "30 דק׳" },
+            ]}
+            onChange={(v) => setPrefs({ nextTaskReminderMin: v })}
+          />
+        </SettingRow>
       </section>
+
+      <section
+        className={cn(
+          "card p-4 space-y-3 transition-opacity",
+          !prefs.enabled && "opacity-50 pointer-events-none"
+        )}
+      >
+        <h2 className="font-semibold text-ink-900 text-sm">התחלה באיחור</h2>
+        <p className="text-xs text-ink-500">
+          כשמתחילים משימה אחרי הזמן שנקבע לה — מה לעשות עם שאר הלו״ז של היום.
+        </p>
+        <SettingRow title="התנהגות">
+          <select
+            className="field !w-auto text-sm"
+            value={prefs.lateStartBehavior}
+            onChange={(e) =>
+              setPrefs({
+                lateStartBehavior: e.target
+                  .value as FocusPrefs["lateStartBehavior"],
+              })
+            }
+          >
+            <option value="ask">שאל אותי כל פעם</option>
+            <option value="reschedule">דחה את הלו״ז אוטומטית</option>
+            <option value="check-near-end">בדוק רק לקראת הסוף</option>
+          </select>
+        </SettingRow>
+      </section>
+    </div>
+  );
+}
+
+function Segmented<T extends number>({
+  value,
+  options,
+  onChange,
+}: {
+  value: T;
+  options: { value: T; label: string }[];
+  onChange: (v: T) => void;
+}) {
+  return (
+    <div className="inline-flex items-center rounded-lg border border-ink-200 overflow-hidden shrink-0">
+      {options.map((o) => (
+        <button
+          key={o.value}
+          type="button"
+          onClick={() => onChange(o.value)}
+          className={cn(
+            "px-2.5 py-1 text-xs transition-colors",
+            value === o.value
+              ? "bg-primary-600 text-white"
+              : "text-ink-700 hover:bg-ink-100"
+          )}
+        >
+          {o.label}
+        </button>
+      ))}
     </div>
   );
 }

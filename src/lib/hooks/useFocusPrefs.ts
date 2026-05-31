@@ -24,6 +24,14 @@ export interface FocusPrefs {
   defaultDurationMin: number;
   /** Still alert if the start time passed at most this many minutes ago. */
   lateCatchMin: number;
+  /** What to do when a task is started after its scheduled time:
+   *  - "ask": prompt each time (push the schedule now / check near the end)
+   *  - "reschedule": silently push the rest of the day forward
+   *  - "check-near-end": do nothing now, rely on the next-task reminder */
+  lateStartBehavior: "ask" | "reschedule" | "check-near-end";
+  /** Minutes before the next scheduled task to remind during a session.
+   *  0 = no reminder. */
+  nextTaskReminderMin: number;
 }
 
 const STORAGE_KEY = "multitask:focus-prefs";
@@ -34,7 +42,15 @@ const DEFAULT_PREFS: FocusPrefs = {
   sound: true,
   defaultDurationMin: 15,
   lateCatchMin: 15,
+  lateStartBehavior: "ask",
+  nextTaskReminderMin: 15,
 };
+
+const LATE_BEHAVIORS = new Set<FocusPrefs["lateStartBehavior"]>([
+  "ask",
+  "reschedule",
+  "check-near-end",
+]);
 
 function clampInt(v: unknown, min: number, max: number, fallback: number): number {
   const n = typeof v === "number" ? v : Number(v);
@@ -54,6 +70,11 @@ function readFromStorage(): FocusPrefs {
       sound: p.sound ?? DEFAULT_PREFS.sound,
       defaultDurationMin: clampInt(p.defaultDurationMin, 1, 600, DEFAULT_PREFS.defaultDurationMin),
       lateCatchMin: clampInt(p.lateCatchMin, 0, 240, DEFAULT_PREFS.lateCatchMin),
+      lateStartBehavior:
+        p.lateStartBehavior && LATE_BEHAVIORS.has(p.lateStartBehavior)
+          ? p.lateStartBehavior
+          : DEFAULT_PREFS.lateStartBehavior,
+      nextTaskReminderMin: clampInt(p.nextTaskReminderMin, 0, 240, DEFAULT_PREFS.nextTaskReminderMin),
     };
   } catch {
     return DEFAULT_PREFS;
@@ -107,6 +128,9 @@ export function useFocusPrefs() {
     const merged: FocusPrefs = { ...cachedSnapshot, ...patch };
     merged.defaultDurationMin = clampInt(merged.defaultDurationMin, 1, 600, DEFAULT_PREFS.defaultDurationMin);
     merged.lateCatchMin = clampInt(merged.lateCatchMin, 0, 240, DEFAULT_PREFS.lateCatchMin);
+    merged.nextTaskReminderMin = clampInt(merged.nextTaskReminderMin, 0, 240, DEFAULT_PREFS.nextTaskReminderMin);
+    if (!LATE_BEHAVIORS.has(merged.lateStartBehavior))
+      merged.lateStartBehavior = DEFAULT_PREFS.lateStartBehavior;
     if (typeof window !== "undefined") {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
     }

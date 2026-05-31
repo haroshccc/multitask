@@ -42,6 +42,16 @@ interface ConflictInfo {
   newEndsAt: number;
 }
 
+interface LatePromptInfo {
+  taskId: string;
+  lateMin: number;
+}
+
+interface ReminderInfo {
+  nextTaskId: string;
+  minutesLeft: number;
+}
+
 interface FocusContextValue {
   status: Status;
   alertTask: Task | null;
@@ -50,6 +60,9 @@ interface FocusContextValue {
   remainingMs: number;
   conflict: ConflictInfo | null;
   conflictNextTask: Task | null;
+  latePrompt: LatePromptInfo | null;
+  reminder: ReminderInfo | null;
+  reminderNextTask: Task | null;
   // alert actions
   startFromAlert: () => void;
   dismissAlert: () => void;
@@ -65,6 +78,11 @@ interface FocusContextValue {
   resolveConflictShorten: () => void;
   resolveConflictPush: () => void;
   dismissConflict: () => void;
+  // late-start prompt actions
+  resolveLatePush: (makeDefault: boolean) => void;
+  resolveLateCheckEnd: (makeDefault: boolean) => void;
+  // next-task reminder
+  dismissReminder: () => void;
 }
 
 const FocusContext = createContext<FocusContextValue | null>(null);
@@ -102,7 +120,7 @@ const durationMinOf = (t: Task, fallbackMin: number) =>
 export function FocusSessionProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const userId = user?.id ?? null;
-  const { prefs } = useFocusPrefs();
+  const { prefs, setPrefs } = useFocusPrefs();
   const { data: tasks = [] } = useTasks();
   const { data: visibility } = useListVisibility("calendar");
   const hiddenLists = useMemo(
@@ -124,8 +142,11 @@ export function FocusSessionProvider({ children }: { children: React.ReactNode }
   >(null);
   const [pausedRemainingMs, setPausedRemainingMs] = useState(0);
   const [conflict, setConflict] = useState<ConflictInfo | null>(null);
+  const [latePrompt, setLatePrompt] = useState<LatePromptInfo | null>(null);
+  const [reminder, setReminder] = useState<ReminderInfo | null>(null);
 
   const handledRef = useRef<Set<string>>(loadAlerted());
+  const remindedRef = useRef<Set<string>>(new Set());
   const restoredRef = useRef(false);
   const chimedTimeupRef = useRef(false);
 
@@ -262,6 +283,46 @@ export function FocusSessionProvider({ children }: { children: React.ReactNode }
       : 0;
 
   // ---- actions ----
+
+  // Push every later visible scheduled task today forward by `shiftMin`.
+  const shiftSchedule = useCallback(
+    (shiftMin: number, fromTs: number, excludeId: string) => {
+      if (shiftMin <= 0) return;
+      const dayEnd = new Date();
+      dayEnd.setHours(23, 59, 59, 999);
+      const toShift = tasks.filter(
+        (t) =>
+          t.id !== excludeId &&
+          t.scheduled_at &&
+          !t.completed_at &&
+          !t.is_phase &&
+          !(t.task_list_id && hiddenLists.has(t.task_list_id)) &&
+          new Date(t.scheduled_at).getTime() > fromTs &&
+          new Date(t.scheduled_at).getTime() <= dayEnd.getTime()
+      );
+      if (toShift.length === 0) return;
+      const snapshots = toShift.map((t) => ({ id: t.id, scheduled_at: t.scheduled_at! }));
+      const apply = () => {
+        for (const s of snapshots) {
+          const shifted = new Date(
+            new Date(s.scheduled_at).getTime() + shiftMin * 60_000
+          ).toISOString();
+          updateTask.mutate({ taskId: s.id, patch: { scheduled_at: shifted } });
+        }
+      };
+      apply();
+      pushUndo({
+        description: `דחיית ${snapshots.length} משימות ב-${shiftMin} דק׳`,
+        undo: () => {
+          for (const s of snapshots)
+            updateTask.mutate({ taskId: s.id, patch: { scheduled_at: s.scheduled_at } });
+        },
+        redo: apply,
+      });
+    },
+    [tasks, hiddenLists, updateTask]
+  );
+
   const beginSession = useCallback(
     (task: Task) => {
       primeChime();
@@ -273,8 +334,20 @@ export function FocusSessionProvider({ children }: { children: React.ReactNode }
       setSessionStatus("running");
       setAlertTaskId(null);
       setAlertMinimized(false);
+      setReminder(null);
+      // Late start? (started after the scheduled time.)
+      const startTs = task.scheduled_at ? new Date(task.scheduled_at).getTime() : null;
+      const lateMin = startTs != null ? Math.floor((now - startTs) / 60_000) : 0;
+      if (startTs != null && lateMin >= 1) {
+        if (prefs.lateStartBehavior === "reschedule") {
+          shiftSchedule(lateMin, startTs, task.id);
+        } else if (prefs.lateStartBehavior === "ask") {
+          setLatePrompt({ taskId: task.id, lateMin });
+        }
+        // "check-near-end" → do nothing; the next-task reminder handles it.
+      }
     },
-    [startTimer, prefs.defaultDurationMin]
+    [startTimer, prefs.defaultDurationMin, prefs.lateStartBehavior, shiftSchedule]
   );
 
   const startFromAlert = useCallback(() => {
@@ -308,6 +381,9 @@ export function FocusSessionProvider({ children }: { children: React.ReactNode }
     setSessionStatus(null);
     setPausedRemainingMs(0);
     setConflict(null);
+    setLatePrompt(null);
+    setReminder(null);
+    remindedRef.current.clear();
   }, []);
 
   const finishSession = useCallback(() => {
@@ -446,6 +522,73 @@ export function FocusSessionProvider({ children }: { children: React.ReactNode }
 
   const dismissConflict = useCallback(() => setConflict(null), []);
 
+  const resolveLatePush = useCallback(
+    (makeDefault: boolean) => {
+      if (!latePrompt) return;
+      const task = taskById.get(latePrompt.taskId);
+      const fromTs = task?.scheduled_at
+        ? new Date(task.scheduled_at).getTime()
+        : Date.now();
+      shiftSchedule(latePrompt.lateMin, fromTs, latePrompt.taskId);
+      if (makeDefault) setPrefs({ lateStartBehavior: "reschedule" });
+      setLatePrompt(null);
+    },
+    [latePrompt, taskById, shiftSchedule, setPrefs]
+  );
+
+  const resolveLateCheckEnd = useCallback(
+    (makeDefault: boolean) => {
+      if (makeDefault) setPrefs({ lateStartBehavior: "check-near-end" });
+      setLatePrompt(null);
+    },
+    [setPrefs]
+  );
+
+  const dismissReminder = useCallback(() => setReminder(null), []);
+
+  // Next-task reminder: while a session is running, warn `nextTaskReminderMin`
+  // minutes before the next visible scheduled task begins.
+  useEffect(() => {
+    if (sessionStatus !== "running" && sessionStatus !== "timeup") return;
+    const lead = prefs.nextTaskReminderMin;
+    if (lead <= 0) return;
+    const upcoming = tasks
+      .filter(
+        (t) =>
+          t.id !== sessionTaskId &&
+          t.scheduled_at &&
+          !t.completed_at &&
+          !t.is_phase &&
+          !(t.task_list_id && hiddenLists.has(t.task_list_id))
+      )
+      .map((t) => ({ t, start: new Date(t.scheduled_at!).getTime() }))
+      .filter(({ start }) => start > nowMs)
+      .sort((a, b) => a.start - b.start)[0];
+    if (!upcoming) return;
+    const msLeft = upcoming.start - nowMs;
+    if (msLeft > lead * 60_000) return;
+    const key = occKey(upcoming.t);
+    if (remindedRef.current.has(key)) return;
+    remindedRef.current.add(key);
+    setReminder({
+      nextTaskId: upcoming.t.id,
+      minutesLeft: Math.max(1, Math.round(msLeft / 60_000)),
+    });
+    if (prefs.sound) playPleasantChime();
+    if (prefs.systemNotifications) {
+      systemNotify(
+        "המשימה הבאה מתקרבת",
+        `בעוד כ-${Math.max(1, Math.round(msLeft / 60_000))} דק׳: ${
+          upcoming.t.title || "ללא כותרת"
+        }`
+      );
+    }
+  }, [nowMs, sessionStatus, tasks, sessionTaskId, hiddenLists, prefs]);
+
+  const reminderNextTask = reminder
+    ? taskById.get(reminder.nextTaskId) ?? null
+    : null;
+
   const value: FocusContextValue = {
     status,
     alertTask,
@@ -454,6 +597,9 @@ export function FocusSessionProvider({ children }: { children: React.ReactNode }
     remainingMs,
     conflict,
     conflictNextTask,
+    latePrompt,
+    reminder,
+    reminderNextTask,
     startFromAlert,
     dismissAlert,
     minimizeAlert,
@@ -466,6 +612,9 @@ export function FocusSessionProvider({ children }: { children: React.ReactNode }
     resolveConflictShorten,
     resolveConflictPush,
     dismissConflict,
+    resolveLatePush,
+    resolveLateCheckEnd,
+    dismissReminder,
   };
 
   return <FocusContext.Provider value={value}>{children}</FocusContext.Provider>;

@@ -287,11 +287,15 @@ export function CalendarWeekView({
       labelStart = date;
       labelEnd = new Date(date.getTime() + dur);
     }
-    emitHover({
-      x: e.clientX,
-      y: e.clientY,
-      label: `${shortDate(labelStart)} עד ${shortDate(labelEnd)}`,
-    });
+    // All-day end is stored exclusive (start of the day AFTER the last day),
+    // so the inclusive last day shown to the user is one day earlier.
+    const displayEnd = new Date(labelEnd);
+    if (drag.item.allDay) displayEnd.setDate(displayEnd.getDate() - 1);
+    const label =
+      shortDate(labelStart) === shortDate(displayEnd)
+        ? shortDate(labelStart)
+        : `${shortDate(labelStart)} עד ${shortDate(displayEnd)}`;
+    emitHover({ x: e.clientX, y: e.clientY, label });
   };
 
   const percentFor = (date: Date, dayStart: Date) => {

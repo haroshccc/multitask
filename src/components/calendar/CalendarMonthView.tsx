@@ -153,11 +153,15 @@ export function CalendarMonthView({
     }
     const fmt = (d: Date) =>
       d.toLocaleDateString("he-IL", { day: "numeric", month: "numeric" });
-    emitHover({
-      x: e.clientX,
-      y: e.clientY,
-      label: `${fmt(labelStart)} עד ${fmt(labelEnd)}`,
-    });
+    // All-day end is stored exclusive (start of the day AFTER the last day),
+    // so the inclusive last day is one day earlier. Timed items keep their end.
+    const displayEnd = new Date(labelEnd);
+    if (drag.item.allDay) displayEnd.setDate(displayEnd.getDate() - 1);
+    const label =
+      fmt(labelStart) === fmt(displayEnd)
+        ? fmt(labelStart)
+        : `${fmt(labelStart)} עד ${fmt(displayEnd)}`;
+    emitHover({ x: e.clientX, y: e.clientY, label });
   };
   const monthStart = startOfMonth(anchor);
   const monthEnd = endOfMonth(anchor);

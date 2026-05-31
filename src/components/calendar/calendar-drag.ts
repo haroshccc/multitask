@@ -208,7 +208,14 @@ export function formatDragHoverLabel(
   const range = `${startLabel} ← ${endLabel}`;
   const dur = formatDurationCompact(newDurMin);
   if (drag.mode === "move") {
-    return `${range} · ${dur}`;
+    // A move keeps the duration, so the total is noise. Surface the shift
+    // itself: original range ← new range. (Only timed items reach this — the
+    // grid drop handlers bail on all-day, which has its own date-range label.)
+    const origRange = `${formatHourMinute(drag.item.start)}–${formatHourMinute(
+      drag.item.end
+    )}`;
+    const newRange = `${startLabel}–${endLabel}`;
+    return `${origRange} ← ${newRange}`;
   }
   // Resize — surface the delta. Positive = extended, negative = trimmed.
   const deltaMin = newDurMin - oldDurMin;
@@ -312,10 +319,15 @@ function allDayDateAtPoint(clientX: number, clientY: number): Date | null {
 }
 
 function moveHoverLabel(item: CalendarItem, date: Date): string {
-  if (item.allDay) {
-    return date.toLocaleDateString("he-IL", { weekday: "short", day: "numeric", month: "numeric" });
-  }
   const dur = item.end.getTime() - item.start.getTime();
+  if (item.allDay) {
+    // End is stored exclusive → inclusive last day is one earlier.
+    const inclusiveEnd = new Date(date.getTime() + dur);
+    inclusiveEnd.setDate(inclusiveEnd.getDate() - 1);
+    const f = (d: Date) =>
+      d.toLocaleDateString("he-IL", { day: "numeric", month: "numeric" });
+    return f(date) === f(inclusiveEnd) ? f(date) : `${f(date)} עד ${f(inclusiveEnd)}`;
+  }
   return formatDragHoverLabel({ item, mode: "move" }, date, new Date(date.getTime() + dur));
 }
 

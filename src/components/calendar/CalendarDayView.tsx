@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import { AlertTriangle, Repeat } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import {
@@ -28,6 +28,7 @@ import {
   formatDragHoverLabel,
   getDrag,
   isItemDraggable,
+  startPointerMove,
 } from "./calendar-drag";
 import { useCalendarPrefs } from "@/lib/hooks/useCalendarPrefs";
 import { DayNoteSlot } from "./DayNoteSlot";
@@ -256,6 +257,9 @@ export function CalendarDayView({
         <div
           className="relative flex-1 cursor-pointer"
           style={{ height: gridHeight }}
+          data-cal-daycol="1"
+          data-window-start={windowStart}
+          data-hour-height={hourHeight}
           onClick={handleGridClick}
           onDragOver={handleColumnDragOver}
           onDrop={handleColumnDrop}
@@ -315,6 +319,7 @@ export function CalendarDayView({
                 widthPct={widthPct}
                 actuals={taskActuals}
                 onClick={() => onItemClick(item)}
+                onItemDrop={onItemDrop}
               />
             );
           })}
@@ -354,6 +359,7 @@ export function CalendarBlock({
   widthPct,
   actuals,
   onClick,
+  onItemDrop,
   compact,
   readOnly,
   recurringAsMarker,
@@ -368,6 +374,8 @@ export function CalendarBlock({
    *  to the same coordinate system as `top`/`height`. */
   actuals?: { topPct: number; heightPct: number }[];
   onClick: () => void;
+  /** Touch/pen move support — applies a "move" drop. Mouse uses native DnD. */
+  onItemDrop?: ItemDropHandler;
   compact?: boolean;
   /** When true the block is display-only — no task check-off control. */
   readOnly?: boolean;
@@ -377,6 +385,10 @@ export function CalendarBlock({
 }) {
   const { prefs } = useCalendarPrefs();
   const tz = prefs.timezone;
+  // Set while a touch/pen move gesture is in flight so the click fired on
+  // release (which would open the edit dialog) is swallowed. A plain tap
+  // never sets it, so tapping still opens the editor.
+  const touchDragRef = useRef(false);
   const isTask = item.kind === "task";
   const isDeadline = item.kind === "deadline";
   const past = isPast(item, now);
@@ -522,8 +534,25 @@ export function CalendarBlock({
       role="button"
       tabIndex={0}
       data-cal-band
+      onPointerDown={(e) => {
+        if (!draggable || e.pointerType === "mouse" || !onItemDrop) return;
+        // Touch/pen MOVE only — grab offset keeps the block from jumping.
+        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+        const grabRatio = (e.clientY - rect.top) / Math.max(rect.height, 1);
+        const grabOffsetMin = grabRatio * durationMin(item);
+        startPointerMove(item, e, grabOffsetMin, {
+          onItemDrop,
+          onDragRecognised: () => {
+            touchDragRef.current = true;
+          },
+        });
+      }}
       onClick={(e) => {
         e.stopPropagation();
+        if (touchDragRef.current) {
+          touchDragRef.current = false;
+          return;
+        }
         onClick();
       }}
       onKeyDown={(e) => {
@@ -580,6 +609,9 @@ export function CalendarBlock({
         height: `${Math.max(height, 1.5)}%`,
         insetInlineStart: `calc(${leftPct}% + 2px)`,
         width: `calc(${widthPct}% - 4px)`,
+        // Touch/pen: claim the gesture for our manual move drag instead of
+        // letting the browser scroll. Mouse uses native DnD (unaffected).
+        touchAction: draggable ? "none" : undefined,
         border: `1.5px ${
           isTask && item.ownershipMode === "delegated"
             ? "dashed"

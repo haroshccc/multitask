@@ -21,6 +21,7 @@
  * Drop targets are responsible for applying the mode correctly when calling
  * the page's `onItemDrop` callback. They get the mode via `getDrag()`.
  */
+import type { PointerEvent as ReactPointerEvent } from "react";
 import type { CalendarItem } from "./calendar-utils";
 import { MIN } from "./calendar-utils";
 
@@ -247,4 +248,152 @@ export function subscribeHover(fn: (info: HoverInfo | null) => void): () => void
 
 export function emitHover(info: HoverInfo | null): void {
   hoverListeners.forEach((l) => l(info));
+}
+
+// ----------------------------------------------------------------------------
+// Touch / pen MOVE support.
+//
+// The calendar's primary drag is HTML5-native, which only works with a mouse.
+// For touch and pen we run a manual pointer-drag that reuses the same drag
+// state (beginDrag/endDrag) and the page's onItemDrop. The target time is
+// resolved from whichever timed day-column sits under the pointer — every
+// such column is tagged `data-cal-daycol` and carries `data-window-start`
+// (ms of the column's first visible hour) + `data-hour-height` (px per hour),
+// which is all we need to convert a viewport Y back into a snapped time.
+//
+// Resize is intentionally NOT offered on touch — move only (per product
+// decision); resizing stays mouse-only via the native band/edge handles.
+// ----------------------------------------------------------------------------
+
+/** Movement (px) before a press is treated as a drag rather than a tap. */
+const POINTER_MOVE_THRESHOLD = 6;
+
+export interface PointerMoveOptions {
+  onItemDrop: ItemDropHandler;
+  /** Fired once the press is recognised as a drag, so the host can suppress
+   *  the click that would otherwise open the edit dialog on release. */
+  onDragRecognised?: () => void;
+}
+
+function dayColDateAtPoint(
+  clientX: number,
+  clientY: number,
+  grabOffsetMin: number
+): Date | null {
+  if (typeof document === "undefined") return null;
+  const col = document
+    .elementFromPoint(clientX, clientY)
+    ?.closest<HTMLElement>("[data-cal-daycol]");
+  if (!col) return null;
+  const windowStart = Number(col.dataset.windowStart);
+  const hourHeight = Number(col.dataset.hourHeight);
+  if (!Number.isFinite(windowStart) || !Number.isFinite(hourHeight) || hourHeight <= 0)
+    return null;
+  const rect = col.getBoundingClientRect();
+  const y = clientY - rect.top;
+  const minutesFromWindowStart = (y / hourHeight) * 60 - grabOffsetMin;
+  const snapped = Math.round(minutesFromWindowStart / 15) * 15;
+  return new Date(windowStart + snapped * MIN);
+}
+
+/** All-day move: resolve the day-cell ([data-cal-alldaycol]) under the
+ *  pointer and return that day at midnight (whole-day semantics). */
+function allDayDateAtPoint(clientX: number, clientY: number): Date | null {
+  if (typeof document === "undefined") return null;
+  const cell = document
+    .elementFromPoint(clientX, clientY)
+    ?.closest<HTMLElement>("[data-cal-alldaycol]");
+  if (!cell) return null;
+  const dayStart = Number(cell.dataset.dayStart);
+  if (!Number.isFinite(dayStart)) return null;
+  const d = new Date(dayStart);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function moveHoverLabel(item: CalendarItem, date: Date): string {
+  if (item.allDay) {
+    return date.toLocaleDateString("he-IL", { weekday: "short", day: "numeric", month: "numeric" });
+  }
+  const dur = item.end.getTime() - item.start.getTime();
+  return formatDragHoverLabel({ item, mode: "move" }, date, new Date(date.getTime() + dur));
+}
+
+/**
+ * Begin a touch/pen move gesture on a calendar item. No-op for mouse (native
+ * DnD owns that) and non-draggable items. Timed items resolve to a snapped
+ * time in the day-column under the pointer; all-day items resolve to the day
+ * under the pointer. Call from the item's onPointerDown.
+ */
+export function startPointerMove(
+  item: CalendarItem,
+  e: ReactPointerEvent,
+  grabOffsetMin: number,
+  opts: PointerMoveOptions
+): void {
+  if (e.pointerType === "mouse") return;
+  if (!isItemDraggable(item)) return;
+  if (typeof window === "undefined") return;
+
+  const resolve = (x: number, y: number): Date | null =>
+    item.allDay ? allDayDateAtPoint(x, y) : dayColDateAtPoint(x, y, grabOffsetMin);
+
+  const pointerId = e.pointerId;
+  const startX = e.clientX;
+  const startY = e.clientY;
+  const target = e.currentTarget as HTMLElement;
+  let active = false;
+  let lastDate: Date | null = null;
+
+  const onMove = (ev: PointerEvent) => {
+    if (ev.pointerId !== pointerId) return;
+    if (!active) {
+      if (Math.hypot(ev.clientX - startX, ev.clientY - startY) < POINTER_MOVE_THRESHOLD)
+        return;
+      active = true;
+      beginDrag(item, grabOffsetMin, "move");
+      opts.onDragRecognised?.();
+    }
+    ev.preventDefault();
+    const date = resolve(ev.clientX, ev.clientY);
+    if (date) {
+      lastDate = date;
+      emitHover({ x: ev.clientX, y: ev.clientY, label: moveHoverLabel(item, date) });
+    }
+  };
+
+  const cleanup = () => {
+    window.removeEventListener("pointermove", onMove);
+    window.removeEventListener("pointerup", onUp);
+    window.removeEventListener("pointercancel", onCancel);
+    try {
+      target.releasePointerCapture(pointerId);
+    } catch {
+      /* noop */
+    }
+  };
+
+  const onUp = (ev: PointerEvent) => {
+    if (ev.pointerId !== pointerId) return;
+    cleanup();
+    if (active) {
+      if (lastDate) opts.onItemDrop(item, { kind: "move", date: lastDate });
+      endDrag();
+    }
+  };
+
+  const onCancel = (ev: PointerEvent) => {
+    if (ev.pointerId !== pointerId) return;
+    cleanup();
+    if (active) endDrag();
+  };
+
+  try {
+    target.setPointerCapture(pointerId);
+  } catch {
+    /* noop */
+  }
+  window.addEventListener("pointermove", onMove, { passive: false });
+  window.addEventListener("pointerup", onUp);
+  window.addEventListener("pointercancel", onCancel);
 }

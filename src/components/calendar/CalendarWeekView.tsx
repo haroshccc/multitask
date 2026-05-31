@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import { Repeat } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { useCalendarPrefs } from "@/lib/hooks/useCalendarPrefs";
@@ -29,6 +29,7 @@ import {
   formatDragHoverLabel,
   getDrag,
   isItemDraggable,
+  startPointerMove,
 } from "./calendar-drag";
 import { CalendarBlock } from "./CalendarDayView";
 import { RecurringMarker } from "./RecurringMarker";
@@ -379,6 +380,8 @@ export function CalendarWeekView({
             {perDay.map(({ day }) => (
               <div
                 key={day.toISOString() + "-allday-drop"}
+                data-cal-alldaycol="1"
+                data-day-start={day.getTime()}
                 onDragOver={(e) => handleAllDayCellDragOver(day, e)}
                 onDrop={(e) => handleAllDayCellDrop(day, e)}
                 className="border-s border-ink-100/60"
@@ -394,6 +397,7 @@ export function CalendarWeekView({
               span={span}
               row={row}
               onClick={() => onItemClick(item)}
+              onItemDrop={onItemDrop}
               readOnly={readOnly}
             />
           ))}
@@ -518,6 +522,9 @@ export function CalendarWeekView({
                 "relative border-s border-ink-200 cursor-pointer",
                 past && !today && "bg-ink-100/30"
               )}
+              data-cal-daycol="1"
+              data-window-start={windowStart}
+              data-hour-height={hourHeight}
               onClick={(e) => handleColClick(dayStart, e)}
               onDragOver={(e) => handleColDragOver(dayStart, e)}
               onDrop={(e) => handleColDrop(dayStart, e)}
@@ -575,6 +582,7 @@ export function CalendarWeekView({
                     widthPct={widthPct}
                     actuals={taskActuals}
                     onClick={() => onItemClick(item)}
+                    onItemDrop={onItemDrop}
                     compact
                     readOnly={readOnly}
                     recurringAsMarker={recurringAsMarker}
@@ -668,6 +676,7 @@ function MultiDayBand({
   span,
   row,
   onClick,
+  onItemDrop,
   readOnly,
 }: {
   item: CalendarItem;
@@ -676,8 +685,14 @@ function MultiDayBand({
   span: number;
   row: number;
   onClick: () => void;
+  /** Touch/pen move support — applies a "move" drop. Mouse uses native DnD. */
+  onItemDrop?: ItemDropHandler;
   readOnly?: boolean;
 }) {
+  // Set while a touch/pen move gesture is in flight so the release click
+  // (which would open the edit dialog) is swallowed; a plain tap never sets
+  // it, so tapping still opens the editor.
+  const touchDragRef = useRef(false);
   const isTask = item.kind === "task";
   const isPhase = !!item.isPhase;
   const past = isPast(item, now);
@@ -712,7 +727,23 @@ function MultiDayBand({
       role="button"
       tabIndex={0}
       data-cal-band
-      onClick={onClick}
+      onPointerDown={(e) => {
+        if (!draggable || e.pointerType === "mouse" || !onItemDrop) return;
+        // Touch/pen MOVE only — all-day bands move between days.
+        startPointerMove(item, e, 0, {
+          onItemDrop,
+          onDragRecognised: () => {
+            touchDragRef.current = true;
+          },
+        });
+      }}
+      onClick={() => {
+        if (touchDragRef.current) {
+          touchDragRef.current = false;
+          return;
+        }
+        onClick();
+      }}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
@@ -743,6 +774,8 @@ function MultiDayBand({
         insetInlineStart: left,
         width,
         height: 22,
+        // Touch/pen: claim the gesture for our manual move instead of scroll.
+        touchAction: draggable ? "none" : undefined,
         ...(isPhase ? phaseStyle : isTask ? taskStyle : eventStyle),
       }}
       title={itemTooltip(item)}

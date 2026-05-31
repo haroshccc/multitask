@@ -208,6 +208,11 @@ export function formatDragHoverLabel(
   const range = `${startLabel} ← ${endLabel}`;
   const dur = formatDurationCompact(newDurMin);
   if (drag.mode === "move") {
+    // Scheduling a task out of the panel has no "original" time — just show
+    // where it will land (a single time when it has no duration).
+    if (drag.item.isUnscheduledDraft) {
+      return startLabel === endLabel ? startLabel : `${startLabel}–${endLabel}`;
+    }
     // A move keeps the duration, so the total is noise. Surface the shift
     // itself: original range ← new range. (Only timed items reach this — the
     // grid drop handlers bail on all-day, which has its own date-range label.)

@@ -18,7 +18,10 @@ import { EventEditModal } from "@/components/calendar/EventEditModal";
 import { DayNoteDialog } from "@/components/calendar/DayNoteDialog";
 import { EventCalendarEditDialog } from "@/components/calendar/EventCalendarEditDialog";
 import { DragHoverPill } from "@/components/calendar/DragHoverPill";
+import { TaskSchedulingPanel } from "@/components/calendar/TaskSchedulingPanel";
 import type { DropAction } from "@/components/calendar/calendar-drag";
+import { cn } from "@/lib/utils/cn";
+import { CalendarRange } from "lucide-react";
 import {
   useCalendarDayNotes,
 } from "@/lib/hooks/useCalendarDayNotes";
@@ -77,6 +80,9 @@ export function Calendar() {
   const [layer, setLayer] = useState<LayerMode>("both");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [statsOpen, setStatsOpen] = useState(false);
+  // Scheduling mode: a side panel of list tasks the user drags onto the grid.
+  const [scheduling, setScheduling] = useState(false);
+  const [scheduleListIds, setScheduleListIds] = useState<string[]>([]);
   const [newListDialogOpen, setNewListDialogOpen] = useState(false);
   const [newListName, setNewListName] = useState("");
 
@@ -390,6 +396,23 @@ export function Calendar() {
         newStart = new Date(newEnd.getTime() - 15 * 60_000);
       }
     }
+    if (item.kind === "task" && item.isUnscheduledDraft) {
+      // Scheduling a task out of the panel: set its start to the drop time and
+      // keep its real duration (null stays null — "no duration", per spec).
+      const src = item.source as { id: string; duration_minutes: number | null };
+      const nextPatch = {
+        scheduled_at: newStart.toISOString(),
+        duration_minutes: src.duration_minutes ?? null,
+      };
+      updateTask.mutate({ taskId: src.id, patch: nextPatch });
+      pushUndo({
+        description: "שיבוץ משימה",
+        undo: () =>
+          updateTask.mutate({ taskId: src.id, patch: { scheduled_at: null } }),
+        redo: () => updateTask.mutate({ taskId: src.id, patch: nextPatch }),
+      });
+      return;
+    }
     if (item.kind === "task") {
       const taskId = (item.source as { id: string }).id;
       const prevScheduledAt = item.start.toISOString();
@@ -584,6 +607,33 @@ export function Calendar() {
           />
         )}
 
+        <div className="flex items-center justify-end pt-1">
+          <button
+            type="button"
+            onClick={() => setScheduling((v) => !v)}
+            className={cn(
+              "btn-ghost text-sm inline-flex items-center gap-1.5",
+              scheduling && "bg-ink-100 text-ink-900"
+            )}
+            title="גררי משימות מרשימות אל היומן"
+          >
+            <CalendarRange className="w-4 h-4" />
+            {scheduling ? "סגרי מצב שיבוץ" : "מצב שיבוץ משימות"}
+          </button>
+        </div>
+
+        <div className="flex items-start gap-3">
+          {scheduling && (
+            <TaskSchedulingPanel
+              tasks={tasks}
+              taskLists={lists}
+              selectedListIds={scheduleListIds}
+              onSelectedListIdsChange={setScheduleListIds}
+              onItemDrop={handleItemDrop}
+              onClose={() => setScheduling(false)}
+            />
+          )}
+          <div className="flex-1 min-w-0">
         {view === "day" && (
           <CalendarDayView
             date={anchor}
@@ -638,6 +688,8 @@ export function Calendar() {
             onDateNoteClick={setEditingNoteDate}
           />
         )}
+          </div>
+        </div>
       </div>
 
       {/* Edit-existing-task modal */}

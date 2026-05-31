@@ -45,6 +45,10 @@ export interface CalendarItem {
    *  (`recurrence_rule`) or via ad-hoc `extra_occurrences`. Drives the
    *  small "repeat" glyph the views draw on the chip/block. */
   recurring?: boolean;
+  /** Set on synthetic items dragged out of the scheduling panel (a task with
+   *  no scheduled_at yet). On drop the page schedules the task rather than
+   *  moving an existing block, preserving its real duration (or none). */
+  isUnscheduledDraft?: boolean;
 }
 
 /** Milliseconds in a minute / hour / day — tiny convenience. */

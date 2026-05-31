@@ -135,6 +135,7 @@ export function TaskRow({
   const startTimer = useStartTimer();
   const stopTimer = useStopTimer();
   const { data: activeTimer } = useActiveTimer();
+  const { startSession } = useFocusSession();
 
   // Assignee-name pill. Renders whenever the task has any assignee at
   // all — including self-assignment, since on a shared list it's useful
@@ -164,6 +165,7 @@ export function TaskRow({
     left?: number;
   } | null>(null);
   const [duplicateToListOpen, setDuplicateToListOpen] = useState(false);
+  const [moveToListOpen, setMoveToListOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const inputRef = useRef<HTMLDivElement>(null);
   const menuTriggerRef = useRef<HTMLButtonElement>(null);
@@ -187,6 +189,27 @@ export function TaskRow({
   const closeMenu = () => {
     setMenuOpen(false);
     setDuplicateToListOpen(false);
+    setMoveToListOpen(false);
+  };
+
+  // Open the same actions menu from a right-click, positioned at the cursor.
+  // Skip when the click lands on editable content (title / inputs / links) so
+  // the native browser menu (copy/paste) still works while editing.
+  const openMenuAt = (e: React.MouseEvent) => {
+    if (isReadOnly) return;
+    const target = e.target as HTMLElement;
+    if (target.closest('[contenteditable="true"], input, textarea, a')) return;
+    e.preventDefault();
+    const vw = window.innerWidth;
+    const isRtl =
+      typeof document !== "undefined" &&
+      document.documentElement.dir === "rtl";
+    if (isRtl) {
+      setMenuPos({ top: e.clientY, right: Math.max(8, vw - e.clientX) });
+    } else {
+      setMenuPos({ top: e.clientY, left: Math.max(8, e.clientX) });
+    }
+    setMenuOpen(true);
   };
 
   useEffect(() => {
@@ -673,6 +696,7 @@ export function TaskRow({
     <>
       <div
         ref={setDragRef}
+        onContextMenu={openMenuAt}
         className={cn(
           "group relative flex items-start gap-1.5 rounded-md transition-colors px-1.5 py-1 hover:bg-ink-50",
           isDragging && "opacity-40",
@@ -1184,6 +1208,17 @@ export function TaskRow({
                 className="fixed w-64 md:w-56 bg-white border border-ink-200 rounded-xl shadow-lift z-[61] py-1 text-sm max-h-[80vh] overflow-y-auto"
                 style={{ top: menuPos.top, right: menuPos.right, left: menuPos.left }}
               >
+                {!isPhase && (
+                  <>
+                    <MenuBtn
+                      icon={<Timer className="w-3.5 h-3.5" />}
+                      onClick={() => { startSession(task); closeMenu(); }}
+                    >
+                      התחל לעבוד עכשיו
+                    </MenuBtn>
+                    <div className="h-px bg-ink-100 my-1" />
+                  </>
+                )}
                 {(isAssigned || isWriteOnly) ? (
                   <div className="md:hidden">
                     <MenuBtn
@@ -1393,6 +1428,48 @@ export function TaskRow({
                         type="button"
                         onClick={() => handleDuplicateToList(l.id)}
                         className="w-full flex items-center gap-2 px-5 py-1.5 text-ink-700 hover:bg-ink-100 text-start text-[13px]"
+                      >
+                        {l.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setMoveToListOpen((v) => !v)}
+                  className="w-full flex items-center justify-between gap-2 px-3 py-1.5 text-ink-700 hover:bg-ink-100 text-start"
+                >
+                  <span className="inline-flex items-center gap-2">
+                    <Move className="w-3.5 h-3.5" />
+                    העבר לרשימה
+                  </span>
+                  <ChevronLeft className="w-3 h-3 text-ink-400" />
+                </button>
+                {moveToListOpen && (
+                  <div className="max-h-52 overflow-y-auto border-t border-ink-100 mt-0.5">
+                    <button
+                      type="button"
+                      onClick={() => handleMoveToList(null)}
+                      className={cn(
+                        "w-full flex items-center gap-2 px-5 py-1.5 hover:bg-ink-100 text-start text-[13px]",
+                        (task.task_list_id ?? null) === null
+                          ? "text-ink-900 font-medium"
+                          : "text-ink-700"
+                      )}
+                    >
+                      לא משויכת
+                    </button>
+                    {taskLists.map((l) => (
+                      <button
+                        key={l.id}
+                        type="button"
+                        onClick={() => handleMoveToList(l.id)}
+                        className={cn(
+                          "w-full flex items-center gap-2 px-5 py-1.5 hover:bg-ink-100 text-start text-[13px]",
+                          l.id === task.task_list_id
+                            ? "text-ink-900 font-medium"
+                            : "text-ink-700"
+                        )}
                       >
                         {l.name}
                       </button>

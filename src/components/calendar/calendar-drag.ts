@@ -64,17 +64,47 @@ function setDraggingFlag(on: boolean): void {
   else document.body.removeAttribute("data-cal-dragging");
 }
 
+/**
+ * The draggable source element itself carries `data-cal-band`. If we flip
+ * the flag (→ `pointer-events: none` on every band) *synchronously* inside
+ * the `dragstart` handler, Chrome re-hit-tests the pointer, finds the source
+ * no longer interactive, ABORTS the just-started drag, and degrades the
+ * gesture to a click — which opened the edit dialog instead of moving the
+ * item. Deferring by one frame lets the native drag fully establish first;
+ * flipping the bands a tick later still lets drops fall through bands that
+ * sit between the cursor and the real (cell) drop target.
+ */
+let dragFlagRaf: number | null = null;
+
+function cancelScheduledFlag(): void {
+  if (dragFlagRaf != null && typeof cancelAnimationFrame !== "undefined") {
+    cancelAnimationFrame(dragFlagRaf);
+  }
+  dragFlagRaf = null;
+}
+
 export function beginDrag(
   item: CalendarItem,
   grabOffsetMin: number,
   mode: DragMode = "move"
 ): void {
   current = { item, mode, grabOffsetMin };
-  setDraggingFlag(true);
+  cancelScheduledFlag();
+  if (typeof requestAnimationFrame === "undefined") {
+    setDraggingFlag(true);
+    return;
+  }
+  dragFlagRaf = requestAnimationFrame(() => {
+    dragFlagRaf = null;
+    // Only arm the flag if the drag is still in flight (endDrag may have
+    // already run for a very short gesture).
+    if (current) setDraggingFlag(true);
+  });
 }
 
 export function endDrag(): void {
   current = null;
+  cancelScheduledFlag();
   setDraggingFlag(false);
   emitHover(null);
 }

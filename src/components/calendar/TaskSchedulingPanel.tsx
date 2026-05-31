@@ -21,15 +21,18 @@ import {
 export function TaskSchedulingPanel({
   tasks,
   taskLists,
-  selectedListIds,
-  onSelectedListIdsChange,
+  hiddenListIds,
+  onToggleList,
   onItemDrop,
   onClose,
 }: {
   tasks: Task[];
   taskLists: TaskList[];
-  selectedListIds: string[];
-  onSelectedListIdsChange: (ids: string[]) => void;
+  /** Lists hidden from the calendar — the panel mirrors the SAME visibility,
+   *  so it always shows exactly the lists the calendar shows. */
+  hiddenListIds: Set<string>;
+  /** Toggle a list's calendar visibility (shared with the toolbar control). */
+  onToggleList: (listId: string) => void;
   onItemDrop: ItemDropHandler;
   onClose: () => void;
 }) {
@@ -47,12 +50,8 @@ export function TaskSchedulingPanel({
     return m;
   }, [tasks]);
 
-  const toggleList = (id: string) =>
-    onSelectedListIdsChange(
-      selectedListIds.includes(id)
-        ? selectedListIds.filter((x) => x !== id)
-        : [...selectedListIds, id]
-    );
+  // Visible (= not hidden from the calendar) lists, in list order.
+  const visibleLists = taskLists.filter((l) => !hiddenListIds.has(l.id));
 
   return (
     <aside className="w-72 shrink-0 card overflow-hidden flex flex-col max-h-[calc(100vh-220px)]">
@@ -74,12 +73,12 @@ export function TaskSchedulingPanel({
           <span className="text-xs text-ink-400">אין רשימות</span>
         )}
         {taskLists.map((l) => {
-          const active = selectedListIds.includes(l.id);
+          const active = !hiddenListIds.has(l.id);
           return (
             <button
               key={l.id}
               type="button"
-              onClick={() => toggleList(l.id)}
+              onClick={() => onToggleList(l.id)}
               aria-pressed={active}
               className={cn(
                 "inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium border transition-colors",
@@ -100,17 +99,16 @@ export function TaskSchedulingPanel({
 
       {/* Stacked task lists. */}
       <div className="flex-1 overflow-y-auto px-2 py-2 space-y-3">
-        {selectedListIds.length === 0 ? (
+        {visibleLists.length === 0 ? (
           <p className="text-xs text-ink-400 text-center py-6">
-            בחרי רשימה אחת או יותר כדי לגרור ממנה משימות אל היומן.
+            כל הרשימות מוסתרות מהיומן. הציגי רשימה (למעלה או בסרגל היומן) כדי
+            לגרור ממנה משימות.
           </p>
         ) : (
-          selectedListIds.map((listId) => {
-            const list = taskLists.find((l) => l.id === listId);
-            if (!list) return null;
-            const listTasks = tasksByList.get(listId) ?? [];
+          visibleLists.map((list) => {
+            const listTasks = tasksByList.get(list.id) ?? [];
             return (
-              <section key={listId}>
+              <section key={list.id}>
                 <h4 className="flex items-center gap-1.5 px-1 mb-1 text-[11px] font-semibold text-ink-500">
                   <span
                     className="w-2 h-2 rounded-full shrink-0"

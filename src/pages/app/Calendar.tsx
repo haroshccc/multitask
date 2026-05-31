@@ -82,7 +82,6 @@ export function Calendar() {
   const [statsOpen, setStatsOpen] = useState(false);
   // Scheduling mode: a side panel of list tasks the user drags onto the grid.
   const [scheduling, setScheduling] = useState(false);
-  const [scheduleListIds, setScheduleListIds] = useState<string[]>([]);
   const [newListDialogOpen, setNewListDialogOpen] = useState(false);
   const [newListName, setNewListName] = useState("");
 
@@ -627,8 +626,8 @@ export function Calendar() {
             <TaskSchedulingPanel
               tasks={tasks}
               taskLists={lists}
-              selectedListIds={scheduleListIds}
-              onSelectedListIdsChange={setScheduleListIds}
+              hiddenListIds={hiddenLists}
+              onToggleList={toggleListVisibility}
               onItemDrop={handleItemDrop}
               onClose={() => setScheduling(false)}
             />

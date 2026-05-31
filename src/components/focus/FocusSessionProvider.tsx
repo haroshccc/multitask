@@ -1,0 +1,466 @@
+import {
+  createContext,
+  useContext,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { useAuth } from "@/lib/auth/AuthContext";
+import {
+  useActiveTimer,
+  useStartTimer,
+  useStopTimer,
+} from "@/lib/hooks/useTimer";
+import { useTasks, useUpdateTask } from "@/lib/hooks";
+import { useListVisibility } from "@/lib/hooks/useListVisibility";
+import type { Task } from "@/lib/types/domain";
+import { pushUndo } from "@/lib/undo/store";
+import { playPleasantChime, primeChime } from "@/lib/focus/chime";
+import {
+  ensureNotificationPermission,
+  systemNotify,
+} from "@/lib/focus/notify";
+
+const DEFAULT_DURATION_MIN = 15; // matches the calendar block's no-duration default
+const LATE_WINDOW_MS = 15 * 60_000; // still alert if the start passed ≤15 min ago
+const ALERTED_KEY = "multitask.focus.alerted";
+const SESSION_KEY = "multitask.focus.session";
+
+type Status = "idle" | "alerting" | "running" | "paused" | "timeup";
+
+interface PersistedSession {
+  taskId: string;
+  endsAt: number; // epoch ms
+  status: "running" | "paused" | "timeup";
+  pausedRemainingMs?: number;
+}
+
+interface ConflictInfo {
+  nextTaskId: string;
+  overlapMin: number;
+  newEndsAt: number;
+}
+
+interface FocusContextValue {
+  status: Status;
+  alertTask: Task | null;
+  alertMinimized: boolean;
+  sessionTask: Task | null;
+  remainingMs: number;
+  conflict: ConflictInfo | null;
+  conflictNextTask: Task | null;
+  // alert actions
+  startFromAlert: () => void;
+  dismissAlert: () => void;
+  minimizeAlert: () => void;
+  restoreAlert: () => void;
+  // session actions
+  pauseSession: () => void;
+  resumeSession: () => void;
+  finishSession: () => void;
+  closeSession: () => void;
+  extend: (minutes: number) => void;
+  // conflict actions
+  resolveConflictShorten: () => void;
+  resolveConflictPush: () => void;
+  dismissConflict: () => void;
+}
+
+const FocusContext = createContext<FocusContextValue | null>(null);
+
+export function useFocusSession(): FocusContextValue {
+  const ctx = useContext(FocusContext);
+  if (!ctx) throw new Error("useFocusSession must be used within FocusSessionProvider");
+  return ctx;
+}
+
+function loadAlerted(): Set<string> {
+  try {
+    const raw = localStorage.getItem(ALERTED_KEY);
+    if (raw) return new Set(JSON.parse(raw) as string[]);
+  } catch {
+    /* ignore */
+  }
+  return new Set();
+}
+
+function loadSession(): PersistedSession | null {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    if (raw) return JSON.parse(raw) as PersistedSession;
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+const occKey = (t: Task) => `${t.id}@${t.scheduled_at ?? ""}`;
+const durationMinOf = (t: Task) => t.duration_minutes ?? DEFAULT_DURATION_MIN;
+
+export function FocusSessionProvider({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  const userId = user?.id ?? null;
+  const { data: tasks = [] } = useTasks();
+  const { data: visibility } = useListVisibility("calendar");
+  const hiddenLists = useMemo(
+    () => new Set(visibility?.hidden_list_ids ?? []),
+    [visibility]
+  );
+  const { data: activeTimer } = useActiveTimer();
+  const startTimer = useStartTimer();
+  const stopTimer = useStopTimer();
+  const updateTask = useUpdateTask();
+
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const [alertTaskId, setAlertTaskId] = useState<string | null>(null);
+  const [alertMinimized, setAlertMinimized] = useState(false);
+  const [sessionTaskId, setSessionTaskId] = useState<string | null>(null);
+  const [endsAt, setEndsAt] = useState<number | null>(null);
+  const [sessionStatus, setSessionStatus] = useState<
+    "running" | "paused" | "timeup" | null
+  >(null);
+  const [pausedRemainingMs, setPausedRemainingMs] = useState(0);
+  const [conflict, setConflict] = useState<ConflictInfo | null>(null);
+
+  const handledRef = useRef<Set<string>>(loadAlerted());
+  const restoredRef = useRef(false);
+  const chimedTimeupRef = useRef(false);
+
+  const taskById = useMemo(() => {
+    const m = new Map<string, Task>();
+    for (const t of tasks) m.set(t.id, t);
+    return m;
+  }, [tasks]);
+
+  // 1-second clock driving the countdown + due-task scan.
+  useEffect(() => {
+    const id = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  // Persist session essentials.
+  useEffect(() => {
+    if (!sessionTaskId || !sessionStatus || endsAt == null) {
+      try {
+        localStorage.removeItem(SESSION_KEY);
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
+    const data: PersistedSession = {
+      taskId: sessionTaskId,
+      endsAt,
+      status: sessionStatus,
+      pausedRemainingMs,
+    };
+    try {
+      localStorage.setItem(SESSION_KEY, JSON.stringify(data));
+    } catch {
+      /* ignore */
+    }
+  }, [sessionTaskId, sessionStatus, endsAt, pausedRemainingMs]);
+
+  const persistAlerted = useCallback(() => {
+    try {
+      localStorage.setItem(
+        ALERTED_KEY,
+        JSON.stringify([...handledRef.current].slice(-200))
+      );
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  // Restore a persisted session once tasks are available.
+  useEffect(() => {
+    if (restoredRef.current) return;
+    if (tasks.length === 0) return;
+    restoredRef.current = true;
+    const s = loadSession();
+    if (!s || !taskById.has(s.taskId)) return;
+    setSessionTaskId(s.taskId);
+    setEndsAt(s.endsAt);
+    if (s.status === "paused") {
+      setPausedRemainingMs(s.pausedRemainingMs ?? 0);
+      setSessionStatus("paused");
+    } else if (Date.now() >= s.endsAt) {
+      setSessionStatus("timeup");
+    } else {
+      setSessionStatus("running");
+    }
+  }, [tasks.length, taskById]);
+
+  const status: Status = sessionStatus
+    ? sessionStatus
+    : alertTaskId
+    ? "alerting"
+    : "idle";
+
+  // Due-task watcher — only when fully idle (no alert, no session).
+  useEffect(() => {
+    if (status !== "idle" || !userId) return;
+    for (const t of tasks) {
+      if (!t.scheduled_at || t.completed_at || t.is_phase) continue;
+      const mine = t.owner_id === userId || t.assignee_user_id === userId;
+      if (!mine) continue;
+      const start = new Date(t.scheduled_at).getTime();
+      if (nowMs < start) continue;
+      if (nowMs - start > LATE_WINDOW_MS) continue; // too late
+      const key = occKey(t);
+      if (handledRef.current.has(key)) continue;
+      handledRef.current.add(key);
+      persistAlerted();
+      setAlertTaskId(t.id);
+      setAlertMinimized(false);
+      void ensureNotificationPermission().then(() => {
+        systemNotify("הגיע הזמן להתחיל משימה", t.title || "ללא כותרת");
+      });
+      playPleasantChime();
+      break;
+    }
+  }, [nowMs, status, tasks, userId, persistAlerted]);
+
+  // Timeup detection.
+  useEffect(() => {
+    if (sessionStatus !== "running" || endsAt == null) return;
+    if (nowMs >= endsAt) {
+      setSessionStatus("timeup");
+    }
+  }, [nowMs, sessionStatus, endsAt]);
+
+  // Fire the chime + notification once when entering timeup.
+  useEffect(() => {
+    if (sessionStatus === "timeup" && !chimedTimeupRef.current) {
+      chimedTimeupRef.current = true;
+      playPleasantChime();
+      const t = sessionTaskId ? taskById.get(sessionTaskId) : null;
+      systemNotify("נגמר הזמן", t?.title ? `סיימת את "${t.title}"?` : "סיימת?");
+    }
+    if (sessionStatus !== "timeup") chimedTimeupRef.current = false;
+  }, [sessionStatus, sessionTaskId, taskById]);
+
+  const alertTask = alertTaskId ? taskById.get(alertTaskId) ?? null : null;
+  const sessionTask = sessionTaskId ? taskById.get(sessionTaskId) ?? null : null;
+  const conflictNextTask = conflict
+    ? taskById.get(conflict.nextTaskId) ?? null
+    : null;
+
+  const remainingMs =
+    sessionStatus === "paused"
+      ? pausedRemainingMs
+      : endsAt != null
+      ? Math.max(0, endsAt - nowMs)
+      : 0;
+
+  // ---- actions ----
+  const beginSession = useCallback(
+    (task: Task) => {
+      primeChime();
+      void ensureNotificationPermission();
+      startTimer.mutate({ taskId: task.id });
+      const now = Date.now();
+      setSessionTaskId(task.id);
+      setEndsAt(now + durationMinOf(task) * 60_000);
+      setSessionStatus("running");
+      setAlertTaskId(null);
+      setAlertMinimized(false);
+    },
+    [startTimer]
+  );
+
+  const startFromAlert = useCallback(() => {
+    if (alertTask) beginSession(alertTask);
+  }, [alertTask, beginSession]);
+
+  const dismissAlert = useCallback(() => {
+    setAlertTaskId(null);
+    setAlertMinimized(false);
+  }, []);
+
+  const minimizeAlert = useCallback(() => setAlertMinimized(true), []);
+  const restoreAlert = useCallback(() => setAlertMinimized(false), []);
+
+  const pauseSession = useCallback(() => {
+    stopTimer.mutate();
+    setPausedRemainingMs(endsAt != null ? Math.max(0, endsAt - Date.now()) : 0);
+    setSessionStatus("paused");
+  }, [stopTimer, endsAt]);
+
+  const resumeSession = useCallback(() => {
+    if (!sessionTaskId) return;
+    startTimer.mutate({ taskId: sessionTaskId });
+    setEndsAt(Date.now() + pausedRemainingMs);
+    setSessionStatus("running");
+  }, [sessionTaskId, pausedRemainingMs, startTimer]);
+
+  const clearSession = useCallback(() => {
+    setSessionTaskId(null);
+    setEndsAt(null);
+    setSessionStatus(null);
+    setPausedRemainingMs(0);
+    setConflict(null);
+  }, []);
+
+  const finishSession = useCallback(() => {
+    stopTimer.mutate();
+    clearSession();
+  }, [stopTimer, clearSession]);
+
+  // X on the paused banner — the timer is already stopped.
+  const closeSession = useCallback(() => {
+    if (sessionStatus !== "paused") stopTimer.mutate();
+    clearSession();
+  }, [sessionStatus, stopTimer, clearSession]);
+
+  const checkConflict = useCallback(
+    (newEndsAt: number) => {
+      if (!sessionTaskId) return;
+      const now = Date.now();
+      // Visible (calendar) scheduled tasks that would overlap the extension.
+      const candidates = tasks
+        .filter(
+          (t) =>
+            t.id !== sessionTaskId &&
+            t.scheduled_at &&
+            !t.completed_at &&
+            !t.is_phase &&
+            !(t.task_list_id && hiddenLists.has(t.task_list_id))
+        )
+        .map((t) => ({ t, start: new Date(t.scheduled_at!).getTime() }))
+        .filter(({ start }) => start >= now && start < newEndsAt)
+        .sort((a, b) => a.start - b.start);
+      const first = candidates[0];
+      if (!first) {
+        setConflict(null);
+        return;
+      }
+      setConflict({
+        nextTaskId: first.t.id,
+        overlapMin: Math.ceil((newEndsAt - first.start) / 60_000),
+        newEndsAt,
+      });
+    },
+    [sessionTaskId, tasks, hiddenLists]
+  );
+
+  const extend = useCallback(
+    (minutes: number) => {
+      const base = sessionStatus === "timeup" ? Date.now() : endsAt ?? Date.now();
+      const newEndsAt = base + minutes * 60_000;
+      setEndsAt(newEndsAt);
+      setSessionStatus("running");
+      // Make sure the forward stopwatch is still running.
+      if (!activeTimer && sessionTaskId) {
+        startTimer.mutate({ taskId: sessionTaskId });
+      }
+      checkConflict(newEndsAt);
+    },
+    [sessionStatus, endsAt, activeTimer, sessionTaskId, startTimer, checkConflict]
+  );
+
+  const resolveConflictShorten = useCallback(() => {
+    if (!conflict) return;
+    const next = taskById.get(conflict.nextTaskId);
+    if (!next || !next.scheduled_at) {
+      setConflict(null);
+      return;
+    }
+    const origStart = new Date(next.scheduled_at).getTime();
+    const origEnd = origStart + durationMinOf(next) * 60_000;
+    const newStartIso = new Date(conflict.newEndsAt).toISOString();
+    const newDur = Math.max(5, Math.round((origEnd - conflict.newEndsAt) / 60_000));
+    const prev = {
+      scheduled_at: next.scheduled_at,
+      duration_minutes: next.duration_minutes,
+    };
+    const patch = { scheduled_at: newStartIso, duration_minutes: newDur };
+    updateTask.mutate({ taskId: next.id, patch });
+    pushUndo({
+      description: "קיצור המשימה הבאה",
+      undo: () => updateTask.mutate({ taskId: next.id, patch: prev }),
+      redo: () => updateTask.mutate({ taskId: next.id, patch }),
+    });
+    setConflict(null);
+  }, [conflict, taskById, updateTask]);
+
+  const resolveConflictPush = useCallback(() => {
+    if (!conflict) return;
+    const shiftMin = conflict.overlapMin;
+    const fromTs = new Date(
+      taskById.get(conflict.nextTaskId)?.scheduled_at ?? Date.now()
+    ).getTime();
+    // Push the conflicting task and every later visible scheduled task today.
+    const dayEnd = new Date();
+    dayEnd.setHours(23, 59, 59, 999);
+    const toShift = tasks.filter(
+      (t) =>
+        t.id !== conflict.nextTaskId &&
+        t.scheduled_at &&
+        !t.completed_at &&
+        !t.is_phase &&
+        !(t.task_list_id && hiddenLists.has(t.task_list_id)) &&
+        new Date(t.scheduled_at).getTime() > fromTs &&
+        new Date(t.scheduled_at).getTime() <= dayEnd.getTime()
+    );
+    const next = taskById.get(conflict.nextTaskId);
+    const all = next ? [next, ...toShift] : toShift;
+    const snapshots = all.map((t) => ({
+      id: t.id,
+      scheduled_at: t.scheduled_at!,
+    }));
+    for (const t of all) {
+      const shifted = new Date(
+        new Date(t.scheduled_at!).getTime() + shiftMin * 60_000
+      ).toISOString();
+      updateTask.mutate({ taskId: t.id, patch: { scheduled_at: shifted } });
+    }
+    pushUndo({
+      description: `דחיית ${all.length} משימות`,
+      undo: () => {
+        for (const s of snapshots)
+          updateTask.mutate({
+            taskId: s.id,
+            patch: { scheduled_at: s.scheduled_at },
+          });
+      },
+      redo: () => {
+        for (const t of all) {
+          const shifted = new Date(
+            new Date(t.scheduled_at!).getTime() + shiftMin * 60_000
+          ).toISOString();
+          updateTask.mutate({ taskId: t.id, patch: { scheduled_at: shifted } });
+        }
+      },
+    });
+    setConflict(null);
+  }, [conflict, tasks, taskById, hiddenLists, updateTask]);
+
+  const dismissConflict = useCallback(() => setConflict(null), []);
+
+  const value: FocusContextValue = {
+    status,
+    alertTask,
+    alertMinimized,
+    sessionTask,
+    remainingMs,
+    conflict,
+    conflictNextTask,
+    startFromAlert,
+    dismissAlert,
+    minimizeAlert,
+    restoreAlert,
+    pauseSession,
+    resumeSession,
+    finishSession,
+    closeSession,
+    extend,
+    resolveConflictShorten,
+    resolveConflictPush,
+    dismissConflict,
+  };
+
+  return <FocusContext.Provider value={value}>{children}</FocusContext.Provider>;
+}

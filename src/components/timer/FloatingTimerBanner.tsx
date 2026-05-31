@@ -8,6 +8,7 @@ import {
 import { useTask } from "@/lib/hooks/useTasks";
 import { useTaskList } from "@/lib/hooks/useTaskLists";
 import { ListIcon } from "@/components/tasks/list-icons";
+import { useFocusSession } from "@/components/focus/FocusSessionProvider";
 import { cn } from "@/lib/utils/cn";
 
 const POS_KEY = "multitask.timer-banner.pos";
@@ -128,7 +129,11 @@ export function FloatingTimerBanner() {
 
   const start = useStartTimer();
   const stop = useStopTimer();
+  const focus = useFocusSession();
 
+  // While a focus session owns the timer, its own banner is shown instead.
+  if (focus.status === "running" || focus.status === "paused" || focus.status === "timeup")
+    return null;
   if (!stickyTaskId || dismissed) return null;
 
   const isRunning = !!activeEntry;

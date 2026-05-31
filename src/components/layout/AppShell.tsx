@@ -32,6 +32,8 @@ import { AnimatedFab } from "@/components/capture/AnimatedFab";
 import { GlobalSearchPalette } from "@/components/search/GlobalSearchPalette";
 import { Logo } from "@/components/brand/Logo";
 import { FloatingTimerBanner } from "@/components/timer/FloatingTimerBanner";
+import { FocusSessionProvider } from "@/components/focus/FocusSessionProvider";
+import { FocusSessionLayer } from "@/components/focus/FocusSessionLayer";
 import { PendingInviteBanner } from "@/components/org/PendingInviteBanner";
 import { KeyboardShortcutsPanel } from "@/components/ui/KeyboardShortcutsPanel";
 import { ToastRegion } from "@/components/ui/Toast";
@@ -216,6 +218,7 @@ export function AppShell() {
   };
 
   return (
+    <FocusSessionProvider>
     <div className="h-screen bg-ink-50 flex flex-col overflow-hidden">
       {/* Top bar — not sticky; lives in fixed-height flex row so it never scrolls */}
       <header className="shrink-0 z-30 bg-white border-b border-ink-200">
@@ -491,6 +494,8 @@ export function AppShell() {
       <ToastRegion />
 
       <FloatingTimerBanner />
+      <FocusSessionLayer />
     </div>
+    </FocusSessionProvider>
   );
 }

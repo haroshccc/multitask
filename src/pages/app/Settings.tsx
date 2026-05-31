@@ -27,6 +27,12 @@ import {
 } from "@/lib/hooks/useOrganizations";
 import type { OrgType } from "@/lib/services/organizations";
 import { pushUndo } from "@/lib/undo/store";
+import { useFocusPrefs } from "@/lib/hooks/useFocusPrefs";
+import {
+  ensureNotificationPermission,
+  notificationsSupported,
+} from "@/lib/focus/notify";
+import { playPleasantChime } from "@/lib/focus/chime";
 
 type Tab = "profile" | "organization" | "sharing" | "notifications" | "backup";
 
@@ -60,7 +66,7 @@ const ROLE_LABELS: Record<string, string> = {
 
 // ---------------------------------------------------------------------------
 
-const COMING_SOON_TABS: Tab[] = ["notifications"];
+const COMING_SOON_TABS: Tab[] = [];
 
 export function Settings() {
   const [tab, setTab] = useState<Tab>("organization");
@@ -104,7 +110,7 @@ export function Settings() {
           {tab === "profile"       && <ProfileTab />}
           {tab === "organization"  && <OrgTab />}
           {tab === "sharing"       && <SharingTab />}
-          {tab === "notifications" && <Placeholder text="התראות — בקרוב" />}
+          {tab === "notifications" && <NotificationSettingsTab />}
           {tab === "backup"        && <BackupRestoreSection />}
         </div>
       </div>
@@ -1074,6 +1080,223 @@ function ProfileTab() {
 
 // ---------------------------------------------------------------------------
 
-function Placeholder({ text }: { text: string }) {
-  return <div className="card p-6 text-center text-sm text-ink-500">{text}</div>;
+// ---------------------------------------------------------------------------
+// Notifications tab — focus-session alert preferences
+// ---------------------------------------------------------------------------
+
+function Toggle({
+  checked,
+  onChange,
+  disabled,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className={cn("relative shrink-0", disabled && "opacity-50 cursor-not-allowed")}
+    >
+      <div
+        className={cn(
+          "w-10 h-6 rounded-full transition-colors",
+          checked ? "bg-primary-600" : "bg-ink-300"
+        )}
+      />
+      <div
+        className={cn(
+          "absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform",
+          checked ? "translate-x-5" : "translate-x-1"
+        )}
+      />
+    </button>
+  );
+}
+
+function SettingRow({
+  title,
+  desc,
+  children,
+}: {
+  title: string;
+  desc?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 py-1">
+      <div className="min-w-0">
+        <div className="text-sm text-ink-800">{title}</div>
+        {desc && <div className="text-xs text-ink-500">{desc}</div>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function NotificationSettingsTab() {
+  const { prefs, setPrefs } = useFocusPrefs();
+  const [permission, setPermission] = useState<NotificationPermission | "unsupported">(
+    notificationsSupported() ? Notification.permission : "unsupported"
+  );
+
+  const requestPermission = async () => {
+    const ok = await ensureNotificationPermission();
+    setPermission(notificationsSupported() ? Notification.permission : "unsupported");
+    if (ok) setPrefs({ systemNotifications: true });
+  };
+
+  return (
+    <div className="space-y-4">
+      <section className="card p-4 space-y-3">
+        <div>
+          <h2 className="font-semibold text-ink-900 text-sm">התראות פוקוס</h2>
+          <p className="text-xs text-ink-500">
+            התראה כשמשימה משובצת מגיעה לזמן ההתחלה, עם ספירת זמן וסטופר עבודה.
+          </p>
+        </div>
+
+        <SettingRow
+          title="הפעלת התראות"
+          desc={prefs.enabled ? "ההתראות פעילות" : "כל ההתראות מבוטלות"}
+        >
+          <Toggle
+            checked={prefs.enabled}
+            onChange={(v) => setPrefs({ enabled: v })}
+          />
+        </SettingRow>
+      </section>
+
+      <section
+        className={cn(
+          "card p-4 space-y-3 transition-opacity",
+          !prefs.enabled && "opacity-50 pointer-events-none"
+        )}
+      >
+        <h2 className="font-semibold text-ink-900 text-sm">אופן ההתראה</h2>
+
+        <SettingRow title="צליל" desc="צליל עדין בהתראה ובסיום הזמן">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => playPleasantChime()}
+              className="btn-ghost text-xs px-2 py-1 border border-ink-200"
+            >
+              נגן
+            </button>
+            <Toggle checked={prefs.sound} onChange={(v) => setPrefs({ sound: v })} />
+          </div>
+        </SettingRow>
+
+        <SettingRow
+          title="התראת מערכת"
+          desc={
+            permission === "unsupported"
+              ? "הדפדפן לא תומך בהתראות מערכת"
+              : permission === "denied"
+              ? "ההרשאה נחסמה — יש לאשר בהגדרות הדפדפן"
+              : permission === "granted"
+              ? "התראות מערכת מאושרות"
+              : "נדרש אישור הרשאה"
+          }
+        >
+          {permission === "default" ? (
+            <button
+              type="button"
+              onClick={requestPermission}
+              className="btn-primary text-xs px-2.5 py-1"
+            >
+              אשר
+            </button>
+          ) : (
+            <Toggle
+              checked={prefs.systemNotifications && permission === "granted"}
+              disabled={permission !== "granted"}
+              onChange={(v) => setPrefs({ systemNotifications: v })}
+            />
+          )}
+        </SettingRow>
+      </section>
+
+      <section
+        className={cn(
+          "card p-4 space-y-3 transition-opacity",
+          !prefs.enabled && "opacity-50 pointer-events-none"
+        )}
+      >
+        <h2 className="font-semibold text-ink-900 text-sm">תזמון</h2>
+
+        <SettingRow
+          title="משך ברירת מחדל"
+          desc="אורך הספירה למשימה ללא משך מוגדר"
+        >
+          <NumberStepper
+            value={prefs.defaultDurationMin}
+            min={1}
+            max={600}
+            step={5}
+            suffix="דק׳"
+            onChange={(v) => setPrefs({ defaultDurationMin: v })}
+          />
+        </SettingRow>
+
+        <SettingRow
+          title="חלון לכידת איחור"
+          desc="עדיין להתריע אם זמן ההתחלה עבר לא מזמן"
+        >
+          <NumberStepper
+            value={prefs.lateCatchMin}
+            min={0}
+            max={240}
+            step={5}
+            suffix="דק׳"
+            onChange={(v) => setPrefs({ lateCatchMin: v })}
+          />
+        </SettingRow>
+      </section>
+    </div>
+  );
+}
+
+function NumberStepper({
+  value,
+  min,
+  max,
+  step,
+  suffix,
+  onChange,
+}: {
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  suffix?: string;
+  onChange: (v: number) => void;
+}) {
+  const clamp = (v: number) => Math.max(min, Math.min(max, v));
+  return (
+    <div className="inline-flex items-center gap-2 shrink-0">
+      <button
+        type="button"
+        onClick={() => onChange(clamp(value - step))}
+        className="w-8 py-1.5 flex items-center justify-center rounded-lg border border-ink-200 hover:bg-ink-100 text-ink-700"
+      >
+        −
+      </button>
+      <span className="text-sm text-ink-800 tabular-nums min-w-[3.5rem] text-center">
+        {value} {suffix}
+      </span>
+      <button
+        type="button"
+        onClick={() => onChange(clamp(value + step))}
+        className="w-8 py-1.5 flex items-center justify-center rounded-lg border border-ink-200 hover:bg-ink-100 text-ink-700"
+      >
+        +
+      </button>
+    </div>
+  );
 }

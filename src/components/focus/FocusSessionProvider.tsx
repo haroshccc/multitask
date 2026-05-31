@@ -15,6 +15,7 @@ import {
 } from "@/lib/hooks/useTimer";
 import { useTasks, useUpdateTask } from "@/lib/hooks";
 import { useListVisibility } from "@/lib/hooks/useListVisibility";
+import { useFocusPrefs } from "@/lib/hooks/useFocusPrefs";
 import type { Task } from "@/lib/types/domain";
 import { pushUndo } from "@/lib/undo/store";
 import { playPleasantChime, primeChime } from "@/lib/focus/chime";
@@ -23,8 +24,6 @@ import {
   systemNotify,
 } from "@/lib/focus/notify";
 
-const DEFAULT_DURATION_MIN = 15; // matches the calendar block's no-duration default
-const LATE_WINDOW_MS = 15 * 60_000; // still alert if the start passed ≤15 min ago
 const ALERTED_KEY = "multitask.focus.alerted";
 const SESSION_KEY = "multitask.focus.session";
 
@@ -97,11 +96,13 @@ function loadSession(): PersistedSession | null {
 }
 
 const occKey = (t: Task) => `${t.id}@${t.scheduled_at ?? ""}`;
-const durationMinOf = (t: Task) => t.duration_minutes ?? DEFAULT_DURATION_MIN;
+const durationMinOf = (t: Task, fallbackMin: number) =>
+  t.duration_minutes ?? fallbackMin;
 
 export function FocusSessionProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const userId = user?.id ?? null;
+  const { prefs } = useFocusPrefs();
   const { data: tasks = [] } = useTasks();
   const { data: visibility } = useListVisibility("calendar");
   const hiddenLists = useMemo(
@@ -201,27 +202,30 @@ export function FocusSessionProvider({ children }: { children: React.ReactNode }
 
   // Due-task watcher — only when fully idle (no alert, no session).
   useEffect(() => {
-    if (status !== "idle" || !userId) return;
+    if (!prefs.enabled || status !== "idle" || !userId) return;
+    const lateWindowMs = prefs.lateCatchMin * 60_000;
     for (const t of tasks) {
       if (!t.scheduled_at || t.completed_at || t.is_phase) continue;
       const mine = t.owner_id === userId || t.assignee_user_id === userId;
       if (!mine) continue;
       const start = new Date(t.scheduled_at).getTime();
       if (nowMs < start) continue;
-      if (nowMs - start > LATE_WINDOW_MS) continue; // too late
+      if (nowMs - start > lateWindowMs) continue; // too late
       const key = occKey(t);
       if (handledRef.current.has(key)) continue;
       handledRef.current.add(key);
       persistAlerted();
       setAlertTaskId(t.id);
       setAlertMinimized(false);
-      void ensureNotificationPermission().then(() => {
-        systemNotify("הגיע הזמן להתחיל משימה", t.title || "ללא כותרת");
-      });
-      playPleasantChime();
+      if (prefs.systemNotifications) {
+        void ensureNotificationPermission().then(() => {
+          systemNotify("הגיע הזמן להתחיל משימה", t.title || "ללא כותרת");
+        });
+      }
+      if (prefs.sound) playPleasantChime();
       break;
     }
-  }, [nowMs, status, tasks, userId, persistAlerted]);
+  }, [nowMs, status, tasks, userId, persistAlerted, prefs]);
 
   // Timeup detection.
   useEffect(() => {
@@ -235,12 +239,14 @@ export function FocusSessionProvider({ children }: { children: React.ReactNode }
   useEffect(() => {
     if (sessionStatus === "timeup" && !chimedTimeupRef.current) {
       chimedTimeupRef.current = true;
-      playPleasantChime();
-      const t = sessionTaskId ? taskById.get(sessionTaskId) : null;
-      systemNotify("נגמר הזמן", t?.title ? `סיימת את "${t.title}"?` : "סיימת?");
+      if (prefs.sound) playPleasantChime();
+      if (prefs.systemNotifications) {
+        const t = sessionTaskId ? taskById.get(sessionTaskId) : null;
+        systemNotify("נגמר הזמן", t?.title ? `סיימת את "${t.title}"?` : "סיימת?");
+      }
     }
     if (sessionStatus !== "timeup") chimedTimeupRef.current = false;
-  }, [sessionStatus, sessionTaskId, taskById]);
+  }, [sessionStatus, sessionTaskId, taskById, prefs]);
 
   const alertTask = alertTaskId ? taskById.get(alertTaskId) ?? null : null;
   const sessionTask = sessionTaskId ? taskById.get(sessionTaskId) ?? null : null;
@@ -263,12 +269,12 @@ export function FocusSessionProvider({ children }: { children: React.ReactNode }
       startTimer.mutate({ taskId: task.id });
       const now = Date.now();
       setSessionTaskId(task.id);
-      setEndsAt(now + durationMinOf(task) * 60_000);
+      setEndsAt(now + durationMinOf(task, prefs.defaultDurationMin) * 60_000);
       setSessionStatus("running");
       setAlertTaskId(null);
       setAlertMinimized(false);
     },
-    [startTimer]
+    [startTimer, prefs.defaultDurationMin]
   );
 
   const startFromAlert = useCallback(() => {
@@ -369,7 +375,7 @@ export function FocusSessionProvider({ children }: { children: React.ReactNode }
       return;
     }
     const origStart = new Date(next.scheduled_at).getTime();
-    const origEnd = origStart + durationMinOf(next) * 60_000;
+    const origEnd = origStart + durationMinOf(next, prefs.defaultDurationMin) * 60_000;
     const newStartIso = new Date(conflict.newEndsAt).toISOString();
     const newDur = Math.max(5, Math.round((origEnd - conflict.newEndsAt) / 60_000));
     const prev = {
@@ -384,7 +390,7 @@ export function FocusSessionProvider({ children }: { children: React.ReactNode }
       redo: () => updateTask.mutate({ taskId: next.id, patch }),
     });
     setConflict(null);
-  }, [conflict, taskById, updateTask]);
+  }, [conflict, taskById, updateTask, prefs.defaultDurationMin]);
 
   const resolveConflictPush = useCallback(() => {
     if (!conflict) return;

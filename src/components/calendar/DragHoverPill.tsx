@@ -35,12 +35,15 @@ export function DragHoverPill() {
           className="bg-primary-500 shadow-sm"
         />
       )}
-      {/* Floating time-range pill below the cursor. */}
+      {/* Floating time-range pill below-and-LEFT of the cursor, so a
+          right-handed user's hand doesn't cover it on touch. translateX(-100%)
+          anchors the pill's right edge just left of the pointer. */}
       <div
         style={{
           position: "fixed",
-          left: info.x + 14,
+          left: info.x - 14,
           top: info.y + 14,
+          transform: "translateX(-100%)",
           zIndex: 9999,
           pointerEvents: "none",
         }}

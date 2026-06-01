@@ -331,16 +331,15 @@ function SessionBanner({
               </button>
             ))}
           </div>
-          {overrunMin >= 1 && (
-            <button
-              type="button"
-              onClick={onPushByOverrun}
-              className="w-full btn-ghost text-xs px-2.5 py-1 border border-amber-300 text-amber-700 inline-flex items-center justify-center gap-1"
-            >
-              <CalendarClock className="w-3.5 h-3.5" />
-              דחה הכל בכמות החריגה (+{overrunMin} דק׳)
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={onPushByOverrun}
+            className="w-full btn-ghost text-xs px-2.5 py-1 border border-amber-300 text-amber-700 inline-flex items-center justify-center gap-1"
+          >
+            <CalendarClock className="w-3.5 h-3.5" />
+            דחה הכל בכמות החריגה
+            {overrunMin >= 1 ? ` (+${overrunMin} דק׳)` : ""}
+          </button>
           {overrunArmed && (
             <div className="text-[11px] text-amber-700 leading-snug">
               דחפתי את שאר הלו״ז קדימה. בלחיצה על "סיימתי" המשימה תתארך

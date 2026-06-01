@@ -79,6 +79,14 @@ interface FocusContextValue {
   finishSession: () => void;
   closeSession: () => void;
   extend: (minutes: number) => void;
+  /** Live overrun (ms past the planned end) while the session is in timeup. */
+  overrunMs: number;
+  /** True once the user chose "push by overrun" — finish will absorb the
+   *  remaining difference too. */
+  overrunArmed: boolean;
+  /** Absorb the current overrun into the task block + push the rest of the day
+   *  forward by that amount, keep working, and arm the finish follow-up. */
+  pushByOverrun: () => void;
   // conflict actions
   resolveConflictShorten: () => void;
   resolveConflictPush: () => void;
@@ -150,6 +158,7 @@ export function FocusSessionProvider({ children }: { children: React.ReactNode }
   const [pausedRemainingMs, setPausedRemainingMs] = useState(0);
   const [conflict, setConflict] = useState<ConflictInfo | null>(null);
   const [latePrompt, setLatePrompt] = useState<LatePromptInfo | null>(null);
+  const [overrunArmed, setOverrunArmed] = useState(false);
   const [reminder, setReminder] = useState<ReminderInfo | null>(null);
   const [endWarning, setEndWarning] = useState<{ minutesLeft: number } | null>(
     null
@@ -324,6 +333,9 @@ export function FocusSessionProvider({ children }: { children: React.ReactNode }
       ? Math.max(0, endsAt - nowMs)
       : 0;
 
+  // How far past the planned end we are right now (0 until time is up).
+  const overrunMs = endsAt != null ? Math.max(0, nowMs - endsAt) : 0;
+
   // ---- actions ----
 
   // Push every later visible scheduled task today forward by `shiftMin`.
@@ -377,6 +389,7 @@ export function FocusSessionProvider({ children }: { children: React.ReactNode }
       setAlertTaskId(null);
       setAlertMinimized(false);
       setReminder(null);
+      setOverrunArmed(false);
       // Late start? (started after the scheduled time.)
       const startTs = task.scheduled_at ? new Date(task.scheduled_at).getTime() : null;
       const lateMin = startTs != null ? Math.floor((now - startTs) / 60_000) : 0;
@@ -426,13 +439,54 @@ export function FocusSessionProvider({ children }: { children: React.ReactNode }
     setLatePrompt(null);
     setReminder(null);
     setEndWarning(null);
+    setOverrunArmed(false);
     remindedRef.current.clear();
   }, []);
 
+  // Grow the current task's block by however far past `endsAt` we are now, and
+  // shove every later scheduled task today forward by the same amount. Returns
+  // the overrun applied (0 when there's none). Does NOT reset `endsAt`.
+  const absorbOverrunNow = useCallback(() => {
+    if (endsAt == null || !sessionTaskId) return 0;
+    const now = Date.now();
+    if (now <= endsAt) return 0;
+    const overrunMin = Math.max(1, Math.ceil((now - endsAt) / 60_000));
+    const t = taskById.get(sessionTaskId);
+    if (t) {
+      const curMin = t.duration_minutes ?? prefs.defaultDurationMin;
+      updateTask.mutate({
+        taskId: sessionTaskId,
+        patch: { duration_minutes: curMin + overrunMin },
+      });
+    }
+    shiftSchedule(overrunMin, endsAt, sessionTaskId);
+    return overrunMin;
+  }, [
+    endsAt,
+    sessionTaskId,
+    taskById,
+    updateTask,
+    prefs.defaultDurationMin,
+    shiftSchedule,
+  ]);
+
   const finishSession = useCallback(() => {
+    // If the user armed "push by overrun", absorb the remaining difference that
+    // accrued since the last push before finishing. `endsAt` was reset to the
+    // last push moment, so this only counts the new diff — no double-pushing.
+    if (overrunArmed) absorbOverrunNow();
+    setOverrunArmed(false);
     stopTimer.mutate();
     clearSession();
-  }, [stopTimer, clearSession]);
+  }, [overrunArmed, absorbOverrunNow, stopTimer, clearSession]);
+
+  const pushByOverrun = useCallback(() => {
+    if (absorbOverrunNow() <= 0) return;
+    // Re-anchor the window to now so the next push / finish measures only the
+    // additional overrun from here on.
+    setEndsAt(Date.now());
+    setOverrunArmed(true);
+  }, [absorbOverrunNow]);
 
   // X on the paused banner — the timer is already stopped.
   const closeSession = useCallback(() => {
@@ -680,6 +734,9 @@ export function FocusSessionProvider({ children }: { children: React.ReactNode }
     finishSession,
     closeSession,
     extend,
+    overrunMs,
+    overrunArmed,
+    pushByOverrun,
     resolveConflictShorten,
     resolveConflictPush,
     dismissConflict,

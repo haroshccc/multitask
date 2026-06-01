@@ -102,6 +102,9 @@ export function FocusSessionLayer() {
           onFinish={f.finishSession}
           onClose={f.closeSession}
           onExtend={f.extend}
+          overrunMs={f.overrunMs}
+          overrunArmed={f.overrunArmed}
+          onPushByOverrun={f.pushByOverrun}
         />
       )}
 
@@ -212,6 +215,9 @@ function SessionBanner({
   onFinish,
   onClose,
   onExtend,
+  overrunMs,
+  overrunArmed,
+  onPushByOverrun,
 }: {
   title: string;
   status: "running" | "paused" | "timeup";
@@ -222,8 +228,12 @@ function SessionBanner({
   onFinish: () => void;
   onClose: () => void;
   onExtend: (minutes: number) => void;
+  overrunMs: number;
+  overrunArmed: boolean;
+  onPushByOverrun: () => void;
 }) {
   const isTimeup = status === "timeup";
+  const overrunMin = Math.floor(overrunMs / 60_000);
   const isPaused = status === "paused";
   return (
     <div
@@ -321,6 +331,22 @@ function SessionBanner({
               </button>
             ))}
           </div>
+          {overrunMin >= 1 && (
+            <button
+              type="button"
+              onClick={onPushByOverrun}
+              className="w-full btn-ghost text-xs px-2.5 py-1 border border-amber-300 text-amber-700 inline-flex items-center justify-center gap-1"
+            >
+              <CalendarClock className="w-3.5 h-3.5" />
+              דחה הכל בכמות החריגה (+{overrunMin} דק׳)
+            </button>
+          )}
+          {overrunArmed && (
+            <div className="text-[11px] text-amber-700 leading-snug">
+              דחפתי את שאר הלו״ז קדימה. בלחיצה על "סיימתי" המשימה תתארך
+              שוב בהפרש שנצבר מאז.
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -1,12 +1,13 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { CalendarX, Clock, Copy, Trash2 } from "lucide-react";
+import { CalendarX, Clock, Copy, FolderInput, Trash2, Check } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import type { Task } from "@/lib/types/domain";
 import {
   useDeleteTask,
   useDuplicateTask,
   useRestoreTasks,
+  useTaskLists,
   useUpdateTask,
 } from "@/lib/hooks";
 import { fetchTaskSubtree } from "@/lib/services/tasks";
@@ -34,10 +35,12 @@ export function TaskActionsMenu({
   const duplicate = useDuplicateTask();
   const deleteTask = useDeleteTask();
   const restore = useRestoreTasks();
+  const { data: taskLists = [] } = useTaskLists();
 
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ left: x, top: y });
   const [durationMode, setDurationMode] = useState(false);
+  const [listMode, setListMode] = useState(false);
   const [durationMin, setDurationMin] = useState<number | null>(
     task.duration_minutes ?? null
   );
@@ -55,7 +58,7 @@ export function TaskActionsMenu({
     if (top + r.height > window.innerHeight - 8)
       top = Math.max(8, window.innerHeight - 8 - r.height);
     setPos({ left, top });
-  }, [x, y, durationMode]);
+  }, [x, y, durationMode, listMode]);
 
   useEffect(() => {
     const onDown = (e: MouseEvent) => {
@@ -101,6 +104,23 @@ export function TaskActionsMenu({
           taskId: task.id,
           patch: { duration_minutes: prev },
         }),
+      redo: () => updateTask.mutate({ taskId: task.id, patch }),
+    });
+    onClose();
+  };
+
+  const changeList = (listId: string | null) => {
+    if (listId === task.task_list_id) {
+      onClose();
+      return;
+    }
+    const prev = task.task_list_id;
+    const patch = { task_list_id: listId };
+    updateTask.mutate({ taskId: task.id, patch });
+    pushUndo({
+      description: "שינוי שיוך לרשימה",
+      undo: () =>
+        updateTask.mutate({ taskId: task.id, patch: { task_list_id: prev } }),
       redo: () => updateTask.mutate({ taskId: task.id, patch }),
     });
     onClose();
@@ -156,8 +176,34 @@ export function TaskActionsMenu({
             </button>
           </div>
         </div>
+      ) : listMode ? (
+        <div className="py-1 max-h-72 overflow-y-auto min-w-[200px]">
+          <div className="px-3 py-1 text-xs text-ink-500">שיוך לרשימה</div>
+          {taskLists.map((list) => (
+            <button
+              key={list.id}
+              type="button"
+              onClick={() => changeList(list.id)}
+              className="w-full flex items-center gap-2 px-3 py-1.5 text-start hover:bg-ink-100 text-ink-700"
+            >
+              <span
+                className="w-2.5 h-2.5 rounded-full shrink-0"
+                style={{ backgroundColor: list.color || "#94a3b8" }}
+              />
+              <span className="flex-1 min-w-0 truncate">{list.name}</span>
+              {list.id === task.task_list_id && (
+                <Check className="w-3.5 h-3.5 shrink-0 text-primary-600" />
+              )}
+            </button>
+          ))}
+        </div>
       ) : (
         <>
+          <MenuItem
+            icon={FolderInput}
+            label="שינוי שיוך לרשימה"
+            onClick={() => setListMode(true)}
+          />
           <MenuItem
             icon={CalendarX}
             label="ביטול שיבוץ ביומן"

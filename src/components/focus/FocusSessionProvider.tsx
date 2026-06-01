@@ -63,6 +63,8 @@ interface FocusContextValue {
   latePrompt: LatePromptInfo | null;
   reminder: ReminderInfo | null;
   reminderNextTask: Task | null;
+  /** Set when the running session is within `endWarningMin` of its end. */
+  endWarning: { minutesLeft: number } | null;
   // alert actions
   startFromAlert: () => void;
   /** Start a focus session for an arbitrary task (e.g. from the row menu),
@@ -86,6 +88,8 @@ interface FocusContextValue {
   resolveLateCheckEnd: (makeDefault: boolean) => void;
   // next-task reminder
   dismissReminder: () => void;
+  // end-of-time warning
+  dismissEndWarning: () => void;
 }
 
 const FocusContext = createContext<FocusContextValue | null>(null);
@@ -147,11 +151,18 @@ export function FocusSessionProvider({ children }: { children: React.ReactNode }
   const [conflict, setConflict] = useState<ConflictInfo | null>(null);
   const [latePrompt, setLatePrompt] = useState<LatePromptInfo | null>(null);
   const [reminder, setReminder] = useState<ReminderInfo | null>(null);
+  const [endWarning, setEndWarning] = useState<{ minutesLeft: number } | null>(
+    null
+  );
 
   const handledRef = useRef<Set<string>>(loadAlerted());
   const remindedRef = useRef<Set<string>>(new Set());
   const restoredRef = useRef(false);
   const chimedTimeupRef = useRef(false);
+  // True once the end-warning has fired for the current countdown window, so
+  // it doesn't re-fire every tick. Reset whenever endsAt changes (extend /
+  // resume) or the session clears.
+  const endWarnedRef = useRef(false);
 
   const taskById = useMemo(() => {
     const m = new Map<string, Task>();
@@ -258,6 +269,34 @@ export function FocusSessionProvider({ children }: { children: React.ReactNode }
       setSessionStatus("timeup");
     }
   }, [nowMs, sessionStatus, endsAt]);
+
+  // A fresh countdown window (new endsAt from start / resume / extend) re-arms
+  // the end-warning and clears any showing one.
+  useEffect(() => {
+    endWarnedRef.current = false;
+    setEndWarning(null);
+  }, [endsAt]);
+
+  // End-of-time warning: while running, fire once when the countdown drops to
+  // `endWarningMin` minutes (or less) remaining, but before time is actually up.
+  useEffect(() => {
+    if (sessionStatus !== "running" || endsAt == null) return;
+    const lead = prefs.endWarningMin;
+    if (lead <= 0 || endWarnedRef.current) return;
+    const msLeft = endsAt - nowMs;
+    if (msLeft <= 0 || msLeft > lead * 60_000) return;
+    endWarnedRef.current = true;
+    const minutesLeft = Math.max(1, Math.round(msLeft / 60_000));
+    setEndWarning({ minutesLeft });
+    if (prefs.sound) playPleasantChime();
+    if (prefs.systemNotifications) {
+      const t = sessionTaskId ? taskById.get(sessionTaskId) : null;
+      systemNotify(
+        "הזמן עומד להיגמר",
+        `נותרו כ-${minutesLeft} דק׳${t?.title ? ` ל"${t.title}"` : ""}`
+      );
+    }
+  }, [nowMs, sessionStatus, endsAt, sessionTaskId, taskById, prefs]);
 
   // Fire the chime + notification once when entering timeup.
   useEffect(() => {
@@ -386,6 +425,7 @@ export function FocusSessionProvider({ children }: { children: React.ReactNode }
     setConflict(null);
     setLatePrompt(null);
     setReminder(null);
+    setEndWarning(null);
     remindedRef.current.clear();
   }, []);
 
@@ -573,6 +613,8 @@ export function FocusSessionProvider({ children }: { children: React.ReactNode }
 
   const dismissReminder = useCallback(() => setReminder(null), []);
 
+  const dismissEndWarning = useCallback(() => setEndWarning(null), []);
+
   // Next-task reminder: while a session is running, warn `nextTaskReminderMin`
   // minutes before the next visible scheduled task begins.
   useEffect(() => {
@@ -627,6 +669,7 @@ export function FocusSessionProvider({ children }: { children: React.ReactNode }
     latePrompt,
     reminder,
     reminderNextTask,
+    endWarning,
     startFromAlert,
     startSession: beginSession,
     dismissAlert,
@@ -643,6 +686,7 @@ export function FocusSessionProvider({ children }: { children: React.ReactNode }
     resolveLatePush,
     resolveLateCheckEnd,
     dismissReminder,
+    dismissEndWarning,
   };
 
   return <FocusContext.Provider value={value}>{children}</FocusContext.Provider>;

@@ -130,6 +130,15 @@ export function FocusSessionLayer() {
           onDismiss={f.dismissReminder}
         />
       )}
+
+      {f.endWarning && f.status === "running" && (
+        <EndWarningBanner
+          title={f.sessionTask?.title || "המשימה"}
+          minutesLeft={f.endWarning.minutesLeft}
+          onExtend={f.extend}
+          onDismiss={f.dismissEndWarning}
+        />
+      )}
     </>
   );
 }
@@ -423,6 +432,60 @@ function LateStartModal({
       </div>
     </div>,
     document.body
+  );
+}
+
+function EndWarningBanner({
+  title,
+  minutesLeft,
+  onExtend,
+  onDismiss,
+}: {
+  title: string;
+  minutesLeft: number;
+  onExtend: (minutes: number) => void;
+  onDismiss: () => void;
+}) {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className={cn(
+        "fixed z-[60] top-4 left-1/2 -translate-x-1/2 card !p-2.5 shadow-lift",
+        "w-[min(26rem,calc(100vw-2rem))] space-y-2",
+        "border-amber-300 bg-gradient-to-l from-amber-50 to-white"
+      )}
+    >
+      <div className="flex items-center gap-2">
+        <AlarmClock className="w-4 h-4 text-amber-500 shrink-0" />
+        <div className="flex-1 min-w-0 text-sm text-ink-800">
+          נותרו כ-{minutesLeft} דק׳ ל<span className="font-semibold">{title}</span>
+        </div>
+        <button
+          type="button"
+          onClick={onDismiss}
+          className="shrink-0 w-6 h-6 rounded-full hover:bg-ink-100 flex items-center justify-center text-ink-500"
+          title="סגור"
+        >
+          <X className="w-3.5 h-3.5" />
+        </button>
+      </div>
+      <div className="flex flex-wrap gap-1.5 justify-end">
+        {[5, 15, 30].map((m) => (
+          <button
+            key={m}
+            type="button"
+            onClick={() => {
+              onExtend(m);
+              onDismiss();
+            }}
+            className="btn-ghost text-xs px-2.5 py-1 border border-ink-200"
+          >
+            +{m} דק׳
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 

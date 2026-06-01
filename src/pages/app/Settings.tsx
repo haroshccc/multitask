@@ -1273,6 +1273,22 @@ function NotificationSettingsTab() {
             onChange={(v) => setPrefs({ nextTaskReminderMin: v })}
           />
         </SettingRow>
+
+        <SettingRow
+          title="התראה לפני סוף הזמן"
+          desc="להתריע כשנותר זמן קצר לסיום המשימה הנוכחית"
+        >
+          <Segmented
+            value={prefs.endWarningMin}
+            options={[
+              { value: 0, label: "כבוי" },
+              { value: 3, label: "3 דק׳" },
+              { value: 5, label: "5 דק׳" },
+              { value: 10, label: "10 דק׳" },
+            ]}
+            onChange={(v) => setPrefs({ endWarningMin: v })}
+          />
+        </SettingRow>
       </section>
 
       <section

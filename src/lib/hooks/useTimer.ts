@@ -50,6 +50,9 @@ export function useStartTimer() {
     onSuccess: (entry) => {
       qc.setQueryData(queryKeys.activeTimer(), entry);
       qc.invalidateQueries({ queryKey: queryKeys.timeEntries(entry.task_id) });
+      // Refresh the calendar's "actual" stripes: each start opens a new
+      // time_entry that should appear as its own filled segment.
+      qc.invalidateQueries({ queryKey: ["time-entries-range"] });
       if (scope.organizationId) {
         qc.invalidateQueries({
           queryKey: queryFamilies.taskFamily(entry.task_id),
@@ -69,6 +72,10 @@ export function useStopTimer() {
         qc.invalidateQueries({ queryKey: queryKeys.timeEntries(entry.task_id) });
         qc.invalidateQueries({ queryKey: queryFamilies.taskFamily(entry.task_id) });
       }
+      // Stopping closes the current segment (sets ended_at) — refresh the
+      // calendar stripes so the worked segment freezes at its real length and
+      // the following gap shows as empty.
+      qc.invalidateQueries({ queryKey: ["time-entries-range"] });
     },
   });
 }

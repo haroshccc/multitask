@@ -32,6 +32,9 @@ export interface FocusPrefs {
   /** Minutes before the next scheduled task to remind during a session.
    *  0 = no reminder. */
   nextTaskReminderMin: number;
+  /** Minutes before the current session's countdown ends to warn.
+   *  0 = no warning. */
+  endWarningMin: number;
 }
 
 const STORAGE_KEY = "multitask:focus-prefs";
@@ -44,6 +47,7 @@ const DEFAULT_PREFS: FocusPrefs = {
   lateCatchMin: 15,
   lateStartBehavior: "ask",
   nextTaskReminderMin: 15,
+  endWarningMin: 5,
 };
 
 const LATE_BEHAVIORS = new Set<FocusPrefs["lateStartBehavior"]>([
@@ -75,6 +79,7 @@ function readFromStorage(): FocusPrefs {
           ? p.lateStartBehavior
           : DEFAULT_PREFS.lateStartBehavior,
       nextTaskReminderMin: clampInt(p.nextTaskReminderMin, 0, 240, DEFAULT_PREFS.nextTaskReminderMin),
+      endWarningMin: clampInt(p.endWarningMin, 0, 240, DEFAULT_PREFS.endWarningMin),
     };
   } catch {
     return DEFAULT_PREFS;
@@ -129,6 +134,7 @@ export function useFocusPrefs() {
     merged.defaultDurationMin = clampInt(merged.defaultDurationMin, 1, 600, DEFAULT_PREFS.defaultDurationMin);
     merged.lateCatchMin = clampInt(merged.lateCatchMin, 0, 240, DEFAULT_PREFS.lateCatchMin);
     merged.nextTaskReminderMin = clampInt(merged.nextTaskReminderMin, 0, 240, DEFAULT_PREFS.nextTaskReminderMin);
+    merged.endWarningMin = clampInt(merged.endWarningMin, 0, 240, DEFAULT_PREFS.endWarningMin);
     if (!LATE_BEHAVIORS.has(merged.lateStartBehavior))
       merged.lateStartBehavior = DEFAULT_PREFS.lateStartBehavior;
     if (typeof window !== "undefined") {

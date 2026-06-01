@@ -1,8 +1,17 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { CalendarX, Clock, Copy, FolderInput, Trash2, Check } from "lucide-react";
+import {
+  CalendarX,
+  Clock,
+  Copy,
+  FolderInput,
+  Trash2,
+  Check,
+  Timer,
+} from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import type { Task } from "@/lib/types/domain";
+import { useFocusSession } from "@/components/focus/FocusSessionProvider";
 import {
   useDeleteTask,
   useDuplicateTask,
@@ -36,6 +45,7 @@ export function TaskActionsMenu({
   const deleteTask = useDeleteTask();
   const restore = useRestoreTasks();
   const { data: taskLists = [] } = useTaskLists();
+  const { startSession } = useFocusSession();
 
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ left: x, top: y });
@@ -85,6 +95,13 @@ export function TaskActionsMenu({
         updateTask.mutate({ taskId: task.id, patch: { scheduled_at: prev } }),
       redo: () => updateTask.mutate({ taskId: task.id, patch }),
     });
+    onClose();
+  };
+
+  const startNow = () => {
+    // Begin a focus session right away, even before the scheduled time
+    // ("start earlier"). Same action as the task row's "start working now".
+    startSession(task);
     onClose();
   };
 
@@ -199,6 +216,8 @@ export function TaskActionsMenu({
         </div>
       ) : (
         <>
+          <MenuItem icon={Timer} label="התחל לעבוד עכשיו" onClick={startNow} />
+          <div className="h-px bg-ink-100 my-1" />
           <MenuItem
             icon={FolderInput}
             label="שינוי שיוך לרשימה"

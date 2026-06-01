@@ -400,9 +400,31 @@ export function FocusSessionProvider({ children }: { children: React.ReactNode }
           setLatePrompt({ taskId: task.id, lateMin });
         }
         // "check-near-end" → do nothing; the next-task reminder handles it.
+      } else if (startTs != null && startTs > now) {
+        // Early start — slide the calendar block to now so the plan matches
+        // reality. We do NOT push other tasks: overlaps render side-by-side
+        // (layoutDayOverlaps), exactly as requested.
+        const prevScheduled = task.scheduled_at!;
+        const patch = { scheduled_at: new Date(now).toISOString() };
+        updateTask.mutate({ taskId: task.id, patch });
+        pushUndo({
+          description: "הקדמת משימה ביומן",
+          undo: () =>
+            updateTask.mutate({
+              taskId: task.id,
+              patch: { scheduled_at: prevScheduled },
+            }),
+          redo: () => updateTask.mutate({ taskId: task.id, patch }),
+        });
       }
     },
-    [startTimer, prefs.defaultDurationMin, prefs.lateStartBehavior, shiftSchedule]
+    [
+      startTimer,
+      prefs.defaultDurationMin,
+      prefs.lateStartBehavior,
+      shiftSchedule,
+      updateTask,
+    ]
   );
 
   const startFromAlert = useCallback(() => {

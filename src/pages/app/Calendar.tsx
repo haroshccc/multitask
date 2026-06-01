@@ -20,6 +20,7 @@ import { EventCalendarEditDialog } from "@/components/calendar/EventCalendarEdit
 import { DragHoverPill } from "@/components/calendar/DragHoverPill";
 import { TaskSchedulingPanel } from "@/components/calendar/TaskSchedulingPanel";
 import { TaskActionsMenu } from "@/components/calendar/TaskActionsMenu";
+import { TimerLogPopup } from "@/components/projects/blocks/TimerLogPopup";
 import type { DropAction } from "@/components/calendar/calendar-drag";
 import { cn } from "@/lib/utils/cn";
 import { CalendarRange } from "lucide-react";
@@ -89,6 +90,7 @@ export function Calendar() {
     x: number;
     y: number;
   } | null>(null);
+  const [logTask, setLogTask] = useState<Task | null>(null);
   const [newListDialogOpen, setNewListDialogOpen] = useState(false);
   const [newListName, setNewListName] = useState("");
 
@@ -580,7 +582,11 @@ export function Calendar() {
           x={taskMenu.x}
           y={taskMenu.y}
           onClose={() => setTaskMenu(null)}
+          onOpenTimeLog={(t) => setLogTask(t)}
         />
+      )}
+      {logTask && (
+        <TimerLogPopup task={logTask} onClose={() => setLogTask(null)} />
       )}
       <div className="space-y-2">
         <CalendarChrome

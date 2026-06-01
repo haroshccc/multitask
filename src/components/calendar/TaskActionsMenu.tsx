@@ -8,6 +8,7 @@ import {
   Trash2,
   Check,
   Timer,
+  History,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import type { Task } from "@/lib/types/domain";
@@ -34,11 +35,14 @@ export function TaskActionsMenu({
   x,
   y,
   onClose,
+  onOpenTimeLog,
 }: {
   task: Task;
   x: number;
   y: number;
   onClose: () => void;
+  /** Open the retroactive time-log popup for this task. */
+  onOpenTimeLog?: (task: Task) => void;
 }) {
   const updateTask = useUpdateTask();
   const duplicate = useDuplicateTask();
@@ -217,6 +221,16 @@ export function TaskActionsMenu({
       ) : (
         <>
           <MenuItem icon={Timer} label="התחל לעבוד עכשיו" onClick={startNow} />
+          {onOpenTimeLog && (
+            <MenuItem
+              icon={History}
+              label="רישום זמן רטרואקטיבי"
+              onClick={() => {
+                onOpenTimeLog(task);
+                onClose();
+              }}
+            />
+          )}
           <div className="h-px bg-ink-100 my-1" />
           <MenuItem
             icon={FolderInput}

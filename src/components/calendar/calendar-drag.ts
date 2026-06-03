@@ -285,7 +285,13 @@ export interface PointerMoveOptions {
   /** Fired once the press is recognised as a drag, so the host can suppress
    *  the click that would otherwise open the edit dialog on release. */
   onDragRecognised?: () => void;
+  /** Long-press (touch/pen) without movement → open the context menu at the
+   *  press point. Lets mobile users reach the right-click actions menu. */
+  onLongPress?: (x: number, y: number) => void;
 }
+
+/** Long-press duration (ms) before a still press opens the context menu. */
+const LONG_PRESS_MS = 450;
 
 function dayColDateAtPoint(
   clientX: number,
@@ -360,13 +366,37 @@ export function startPointerMove(
   const startY = e.clientY;
   const target = e.currentTarget as HTMLElement;
   let active = false;
+  let longPressed = false;
   let lastDate: Date | null = null;
+  let longPressTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const clearLongPress = () => {
+    if (longPressTimer != null) {
+      clearTimeout(longPressTimer);
+      longPressTimer = null;
+    }
+  };
+
+  const cleanup = () => {
+    clearLongPress();
+    window.removeEventListener("pointermove", onMove);
+    window.removeEventListener("pointerup", onUp);
+    window.removeEventListener("pointercancel", onCancel);
+    try {
+      target.releasePointerCapture(pointerId);
+    } catch {
+      /* noop */
+    }
+  };
 
   const onMove = (ev: PointerEvent) => {
     if (ev.pointerId !== pointerId) return;
+    if (longPressed) return;
     if (!active) {
       if (Math.hypot(ev.clientX - startX, ev.clientY - startY) < POINTER_MOVE_THRESHOLD)
         return;
+      // Moved past the threshold → it's a drag, not a long-press.
+      clearLongPress();
       active = true;
       beginDrag(item, grabOffsetMin, "move");
       opts.onDragRecognised?.();
@@ -376,17 +406,6 @@ export function startPointerMove(
     if (date) {
       lastDate = date;
       emitHover({ x: ev.clientX, y: ev.clientY, label: moveHoverLabel(item, date) });
-    }
-  };
-
-  const cleanup = () => {
-    window.removeEventListener("pointermove", onMove);
-    window.removeEventListener("pointerup", onUp);
-    window.removeEventListener("pointercancel", onCancel);
-    try {
-      target.releasePointerCapture(pointerId);
-    } catch {
-      /* noop */
     }
   };
 
@@ -404,6 +423,20 @@ export function startPointerMove(
     cleanup();
     if (active) endDrag();
   };
+
+  // Long-press → context menu. A still finger for LONG_PRESS_MS (no drag yet)
+  // opens the actions menu at the press point. We flag onDragRecognised so the
+  // release click is swallowed (no edit dialog after the menu opens).
+  if (opts.onLongPress) {
+    longPressTimer = setTimeout(() => {
+      longPressTimer = null;
+      if (active) return;
+      longPressed = true;
+      opts.onDragRecognised?.();
+      opts.onLongPress?.(startX, startY);
+      cleanup();
+    }, LONG_PRESS_MS);
+  }
 
   try {
     target.setPointerCapture(pointerId);

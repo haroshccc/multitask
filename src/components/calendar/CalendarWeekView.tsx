@@ -803,6 +803,9 @@ function MultiDayBand({
           onDragRecognised: () => {
             touchDragRef.current = true;
           },
+          onLongPress: onContextMenu
+            ? (x, y) => onContextMenu(x, y)
+            : undefined,
         });
       }}
       onClick={() => {

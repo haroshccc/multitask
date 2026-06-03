@@ -64,14 +64,17 @@ function daysInMonth(d: Date): number {
 }
 
 /**
- * Monthly rule: matches when `cursor` falls on the anchor's day-of-month
- * (clamped to the month length) and the month offset from the anchor is a
- * multiple of the interval. e.g. anchor 2026-06-15, interval 4 → Jun 15,
- * Oct 15, Feb 15, … Only dates on/after the anchor match.
+ * Periodic rule: matches when `cursor` is an exact multiple of the interval
+ * from the anchor, in the chosen unit. Only dates on/after the anchor match.
+ *   - month: every N months on the anchor's day-of-month (clamped for short
+ *            months). e.g. anchor 2026-06-15, N=4 → Jun 15, Oct 15, Feb 15…
+ *   - week:  every N*7 days from the anchor (e.g. every 3 weeks).
+ *   - day:   every N days from the anchor (e.g. every 10 days).
  */
-function matchesMonthly(
+function matchesPeriodic(
   anchorKey: string | null,
   interval: number | null,
+  unit: "day" | "week" | "month",
   cursor: Date
 ): boolean {
   if (!anchorKey) return false;
@@ -80,11 +83,17 @@ function matchesMonthly(
   const cur = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate());
   if (cur < anc) return false;
   const n = Math.max(1, interval ?? 1);
-  const monthsDiff =
-    (cur.getFullYear() - anc.getFullYear()) * 12 + (cur.getMonth() - anc.getMonth());
-  if (monthsDiff % n !== 0) return false;
-  const targetDay = Math.min(anc.getDate(), daysInMonth(cur));
-  return cur.getDate() === targetDay;
+  if (unit === "month") {
+    const monthsDiff =
+      (cur.getFullYear() - anc.getFullYear()) * 12 + (cur.getMonth() - anc.getMonth());
+    if (monthsDiff % n !== 0) return false;
+    const targetDay = Math.min(anc.getDate(), daysInMonth(cur));
+    return cur.getDate() === targetDay;
+  }
+  const MS_PER_DAY = 86400000;
+  const daysDiff = Math.round((cur.getTime() - anc.getTime()) / MS_PER_DAY);
+  const step = unit === "week" ? 7 * n : n;
+  return daysDiff % step === 0;
 }
 
 /** Inclusive-from / inclusive-to test against optional yyyy-mm-dd bounds. */
@@ -169,10 +178,10 @@ export function projectFrameworkBlocks(
       out.push(viewFromBlock(framework, a, a.id, cursor, dateKey, statusByKey));
     }
 
-    // monthly / periodic blocks (every N months on the anchor's day-of-month)
+    // periodic blocks (every N days/weeks/months from the anchor)
     for (const m of monthly) {
       if (!withinRange(dateKey, m.effective_from, m.effective_to)) continue;
-      if (!matchesMonthly(m.month_anchor, m.month_interval, cursor)) continue;
+      if (!matchesPeriodic(m.month_anchor, m.month_interval, m.period_unit, cursor)) continue;
       out.push(viewFromBlock(framework, m, m.id, cursor, dateKey, statusByKey));
     }
   }
@@ -242,7 +251,7 @@ export function projectFrameworkDayLabels(
       chosen = monthly.find(
         (l) =>
           withinRange(dateKey, l.effective_from, l.effective_to) &&
-          matchesMonthly(l.month_anchor, l.month_interval, cursor)
+          matchesPeriodic(l.month_anchor, l.month_interval, l.period_unit, cursor)
       );
     }
     if (chosen && chosen.label.trim()) {

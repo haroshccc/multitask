@@ -11,6 +11,7 @@
  */
 
 export type FrameworkScope = "weekly" | "date" | "monthly";
+export type FrameworkPeriodUnit = "day" | "week" | "month";
 export type FrameworkOverrideKind = "add" | "remove" | "modify";
 export type FrameworkOccurrenceStatus = "done" | "skipped";
 export type FrameworkGoalPeriod = "day" | "week" | "month";
@@ -51,10 +52,12 @@ export interface FrameworkDayLabel {
   scope: FrameworkScope;
   day_of_week: number | null;
   specific_date: string | null;
-  /** Monthly scope: repeat every N months (>=1). */
+  /** Periodic (scope='monthly'): repeat every N units (>=1). */
   month_interval: number | null;
-  /** Monthly scope: reference date — defines day-of-month and the phase for N>1. */
+  /** Periodic: reference date — defines the phase and (for months) day-of-month. */
   month_anchor: string | null;
+  /** Periodic: the unit the interval counts in. */
+  period_unit: FrameworkPeriodUnit;
   label: string;
   color: string | null;
   effective_from: string | null;
@@ -82,10 +85,12 @@ export interface FrameworkBlock {
   scope: FrameworkScope;
   day_of_week: number | null;
   specific_date: string | null;
-  /** Monthly scope: repeat every N months (>=1). */
+  /** Periodic (scope='monthly'): repeat every N units (>=1). */
   month_interval: number | null;
-  /** Monthly scope: reference date — defines day-of-month and the phase for N>1. */
+  /** Periodic: reference date — defines the phase and (for months) day-of-month. */
   month_anchor: string | null;
+  /** Periodic: the unit the interval counts in. */
+  period_unit: FrameworkPeriodUnit;
   start_minute: number;
   end_minute: number;
   effective_from: string | null;

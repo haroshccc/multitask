@@ -16,6 +16,7 @@ import type {
   FrameworkBlock,
   FrameworkDayLabel,
   FrameworkGoalPeriod,
+  FrameworkPeriodUnit,
 } from "@/lib/types/frameworks";
 import type { FrameworkContent } from "@/lib/services/frameworks";
 
@@ -106,6 +107,7 @@ function DayColumn({
         specific_date: null,
         month_interval: null,
         month_anchor: null,
+        period_unit: "month",
         label: next,
         color: null,
         effective_from: null,
@@ -250,6 +252,7 @@ interface BlockFormValue {
   specific_date: null;
   month_interval: number | null;
   month_anchor: string | null;
+  period_unit: FrameworkPeriodUnit;
   title: string;
   color: string | null;
   start_minute: number;
@@ -304,6 +307,7 @@ function BlockEditForm({
       specific_date: null,
       month_interval: null,
       month_anchor: null,
+      period_unit: "month",
       title: title.trim(),
       color: null,
       start_minute: startMin,
@@ -403,12 +407,26 @@ function todayKey(): string {
   ).padStart(2, "0")}`;
 }
 
-function cadenceLabel(b: FrameworkBlock): string {
-  const n = Math.max(1, b.month_interval ?? 1);
-  const every = n === 1 ? "כל חודש" : `כל ${n} חודשים`;
-  if (!b.month_anchor) return every;
-  const d = new Date(b.month_anchor + "T00:00:00");
-  return `${every} · יום ${d.getDate()} בחודש`;
+const UNIT_OPTIONS: { value: FrameworkPeriodUnit; singular: string; plural: string }[] = [
+  { value: "day", singular: "יום", plural: "ימים" },
+  { value: "week", singular: "שבוע", plural: "שבועות" },
+  { value: "month", singular: "חודש", plural: "חודשים" },
+];
+
+/** "כל 3 שבועות" / "כל חודש · יום 15 בחודש" etc. */
+function cadenceText(
+  unit: FrameworkPeriodUnit,
+  interval: number | null,
+  anchor: string | null
+): string {
+  const n = Math.max(1, interval ?? 1);
+  const u = UNIT_OPTIONS.find((o) => o.value === unit) ?? UNIT_OPTIONS[2];
+  const every = n === 1 ? `כל ${u.singular}` : `כל ${n} ${u.plural}`;
+  if (unit === "month" && anchor) {
+    const d = new Date(anchor + "T00:00:00");
+    return `${every} · יום ${d.getDate()} בחודש`;
+  }
+  return every;
 }
 
 /**
@@ -461,7 +479,8 @@ function MonthlySection({
       <div className="p-2 sm:p-3 space-y-1.5">
         {empty && !addingBlock && !addingLabel && (
           <p className="text-xs text-ink-400 px-1 py-1 leading-relaxed">
-            דברים שחוזרים פעם בכמה חודשים — יום סידורים פעם בחודש, וטרינר פעם ב-4 חודשים וכו׳.
+            דברים שחוזרים כל כמה ימים / שבועות / חודשים — יום סידורים פעם בחודש,
+            וטרינר כל 4 חודשים, ניקיון כל 3 שבועות, השקיה כל 10 ימים וכו׳.
             "פריט מחזורי" = משבצת עם שעה (אפשר יעד); "כותרת יום" = שם לכל היום.
           </p>
         )}
@@ -504,6 +523,7 @@ interface LabelFormValue {
   specific_date: null;
   month_interval: number;
   month_anchor: string;
+  period_unit: FrameworkPeriodUnit;
   label: string;
   color: null;
   effective_from: null;
@@ -537,6 +557,7 @@ function MonthlyLabelRow({
                 label: payload.label,
                 month_interval: payload.month_interval,
                 month_anchor: payload.month_anchor,
+                period_unit: payload.period_unit,
               },
             },
             { onSuccess: () => setEditing(false) }
@@ -546,13 +567,7 @@ function MonthlyLabelRow({
     );
   }
 
-  const cadence = (() => {
-    const n = Math.max(1, label.month_interval ?? 1);
-    const every = n === 1 ? "כל חודש" : `כל ${n} חודשים`;
-    if (!label.month_anchor) return every;
-    const d = new Date(label.month_anchor + "T00:00:00");
-    return `${every} · יום ${d.getDate()} בחודש`;
-  })();
+  const cadence = cadenceText(label.period_unit, label.month_interval, label.month_anchor);
 
   return (
     <div
@@ -594,6 +609,7 @@ function MonthlyLabelForm({
 }) {
   const [label, setLabel] = useState(initial?.label ?? "");
   const [interval, setInterval] = useState<number>(initial?.month_interval ?? 1);
+  const [unit, setUnit] = useState<FrameworkPeriodUnit>(initial?.period_unit ?? "month");
   const [anchor, setAnchor] = useState<string>(initial?.month_anchor ?? todayKey());
 
   const save = () => {
@@ -606,6 +622,7 @@ function MonthlyLabelForm({
       specific_date: null,
       month_interval: Math.max(1, interval || 1),
       month_anchor: anchor || todayKey(),
+      period_unit: unit,
       label: label.trim(),
       color: null,
       effective_from: null,
@@ -622,7 +639,7 @@ function MonthlyLabelForm({
         value={label}
         onChange={(e) => setLabel(e.target.value)}
       />
-      <div className="flex items-center gap-1.5">
+      <div className="flex items-center gap-1.5 flex-wrap">
         <span className="text-[11px] text-ink-500 shrink-0">כל</span>
         <input
           type="number"
@@ -631,10 +648,21 @@ function MonthlyLabelForm({
           value={interval}
           onChange={(e) => setInterval(Math.max(1, Number(e.target.value) || 1))}
         />
-        <span className="text-[11px] text-ink-500 shrink-0">חודשים, החל מ־</span>
+        <select
+          className="field !py-1 !text-xs w-24"
+          value={unit}
+          onChange={(e) => setUnit(e.target.value as FrameworkPeriodUnit)}
+        >
+          {UNIT_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>
+              {interval === 1 ? o.singular : o.plural}
+            </option>
+          ))}
+        </select>
+        <span className="text-[11px] text-ink-500 shrink-0">החל מ־</span>
         <input
           type="date"
-          className="field !py-1 !text-xs flex-1"
+          className="field !py-1 !text-xs flex-1 min-w-[120px]"
           value={anchor}
           onChange={(e) => setAnchor(e.target.value)}
         />
@@ -684,6 +712,7 @@ function MonthlyBlockRow({
                 end_minute: payload.end_minute,
                 month_interval: payload.month_interval,
                 month_anchor: payload.month_anchor,
+                period_unit: payload.period_unit,
                 goal_period: payload.goal_period ?? null,
                 goal_target: payload.goal_target ?? null,
               },
@@ -709,8 +738,8 @@ function MonthlyBlockRow({
           {block.title || "ללא שם"}
         </div>
         <div className="text-[10px] text-ink-500">
-          {cadenceLabel(block)} · {minutesToHHMM(block.start_minute)}–
-          {minutesToHHMM(block.end_minute)}
+          {cadenceText(block.period_unit, block.month_interval, block.month_anchor)} ·{" "}
+          {minutesToHHMM(block.start_minute)}–{minutesToHHMM(block.end_minute)}
         </div>
       </div>
       {!readOnly && (
@@ -746,6 +775,7 @@ function MonthlyBlockForm({
   const [start, setStart] = useState(minutesToHHMM(initial?.start_minute ?? 540));
   const [end, setEnd] = useState(minutesToHHMM(initial?.end_minute ?? 600));
   const [interval, setInterval] = useState<number>(initial?.month_interval ?? 1);
+  const [unit, setUnit] = useState<FrameworkPeriodUnit>(initial?.period_unit ?? "month");
   const [anchor, setAnchor] = useState<string>(initial?.month_anchor ?? todayKey());
   const [goalOn, setGoalOn] = useState(!!initial?.goal_period);
   const [goalPeriod, setGoalPeriod] = useState<FrameworkGoalPeriod>(
@@ -765,6 +795,7 @@ function MonthlyBlockForm({
       specific_date: null,
       month_interval: Math.max(1, interval || 1),
       month_anchor: anchor || todayKey(),
+      period_unit: unit,
       title: title.trim(),
       color: null,
       start_minute: startMin,
@@ -789,7 +820,7 @@ function MonthlyBlockForm({
         value={title}
         onChange={(e) => setTitle(e.target.value)}
       />
-      <div className="flex items-center gap-1.5">
+      <div className="flex items-center gap-1.5 flex-wrap">
         <span className="text-[11px] text-ink-500 shrink-0">כל</span>
         <input
           type="number"
@@ -798,10 +829,21 @@ function MonthlyBlockForm({
           value={interval}
           onChange={(e) => setInterval(Math.max(1, Number(e.target.value) || 1))}
         />
-        <span className="text-[11px] text-ink-500 shrink-0">חודשים, החל מ־</span>
+        <select
+          className="field !py-1 !text-xs w-24"
+          value={unit}
+          onChange={(e) => setUnit(e.target.value as FrameworkPeriodUnit)}
+        >
+          {UNIT_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>
+              {interval === 1 ? o.singular : o.plural}
+            </option>
+          ))}
+        </select>
+        <span className="text-[11px] text-ink-500 shrink-0">החל מ־</span>
         <input
           type="date"
-          className="field !py-1 !text-xs flex-1"
+          className="field !py-1 !text-xs flex-1 min-w-[120px]"
           value={anchor}
           onChange={(e) => setAnchor(e.target.value)}
         />

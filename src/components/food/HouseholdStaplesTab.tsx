@@ -45,6 +45,97 @@ function stapleToDraft(s: HouseholdStaple): DraftFields {
   };
 }
 
+/** Inline add/edit row. Hoisted to module scope (not nested in the tab) so it
+ *  keeps a stable component identity across the parent's re-renders — otherwise
+ *  every keystroke would remount the inputs and drop focus. */
+function EditorRow({
+  draft,
+  setDraft,
+  categories,
+  onSave,
+  onCancel,
+}: {
+  draft: DraftFields;
+  setDraft: React.Dispatch<React.SetStateAction<DraftFields>>;
+  categories: { id: string; name: string }[];
+  onSave: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-2 p-2 bg-ink-50/60 rounded-lg">
+      <input
+        autoFocus
+        type="text"
+        value={draft.name}
+        onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") onSave();
+          if (e.key === "Escape") onCancel();
+        }}
+        placeholder="שם המוצר (נייר טואלט, חלב...)"
+        className="field text-sm py-1.5 flex-1 min-w-[8rem]"
+      />
+      <input
+        type="number"
+        min={0}
+        step="any"
+        value={draft.default_quantity}
+        onChange={(e) => setDraft((d) => ({ ...d, default_quantity: e.target.value }))}
+        className="field text-sm py-1.5 w-16"
+        title="כמות ברירת מחדל"
+      />
+      <input
+        type="text"
+        value={draft.default_unit}
+        onChange={(e) => setDraft((d) => ({ ...d, default_unit: e.target.value }))}
+        placeholder="יחידה"
+        className="field text-sm py-1.5 w-20"
+        title="יחידה (חבילה, ליטר...)"
+      />
+      <select
+        value={draft.category_id ?? ""}
+        onChange={(e) =>
+          setDraft((d) => ({ ...d, category_id: e.target.value || null }))
+        }
+        className="field text-sm py-1.5 w-32"
+      >
+        <option value="">ללא קטגוריה</option>
+        {categories.map((c) => (
+          <option key={c.id} value={c.id}>{c.name}</option>
+        ))}
+      </select>
+      <label className="inline-flex items-center gap-1.5 text-xs text-ink-700 select-none cursor-pointer">
+        <input
+          type="checkbox"
+          checked={draft.is_active}
+          onChange={(e) => setDraft((d) => ({ ...d, is_active: e.target.checked }))}
+          className="w-3.5 h-3.5"
+        />
+        פעיל
+      </label>
+      <div className="flex items-center gap-1 ms-auto">
+        <button
+          type="button"
+          onClick={onSave}
+          disabled={!draft.name.trim()}
+          className="p-1.5 rounded-md text-emerald-600 hover:bg-emerald-50 disabled:opacity-40"
+          title="שמור"
+        >
+          <Check className="w-4 h-4" />
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="p-1.5 rounded-md text-ink-400 hover:bg-ink-100"
+          title="ביטול"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function HouseholdStaplesTab() {
   const { data: staples = [], isLoading } = useHouseholdStaples();
   const { data: categories = [] } = useIngredientCategories();
@@ -146,6 +237,7 @@ export function HouseholdStaplesTab() {
       default_unit: s.default_unit,
       is_active: s.is_active,
       sort_order: s.sort_order,
+      last_added_at: s.last_added_at,
       notes: s.notes,
     };
     await deleteStaple.mutateAsync(s.id);
@@ -155,80 +247,6 @@ export function HouseholdStaplesTab() {
       redo: () => {}, // re-deletion handled by the next list refresh; no-op is safe
     });
   };
-
-  const EditorRow = ({ onSave }: { onSave: () => void }) => (
-    <div className="flex flex-wrap items-center gap-2 p-2 bg-ink-50/60 rounded-lg">
-      <input
-        autoFocus
-        type="text"
-        value={draft.name}
-        onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") onSave();
-          if (e.key === "Escape") cancelEdit();
-        }}
-        placeholder="שם המוצר (נייר טואלט, חלב...)"
-        className="field text-sm py-1.5 flex-1 min-w-[8rem]"
-      />
-      <input
-        type="number"
-        min={0}
-        step="any"
-        value={draft.default_quantity}
-        onChange={(e) => setDraft((d) => ({ ...d, default_quantity: e.target.value }))}
-        className="field text-sm py-1.5 w-16"
-        title="כמות ברירת מחדל"
-      />
-      <input
-        type="text"
-        value={draft.default_unit}
-        onChange={(e) => setDraft((d) => ({ ...d, default_unit: e.target.value }))}
-        placeholder="יחידה"
-        className="field text-sm py-1.5 w-20"
-        title="יחידה (חבילה, ליטר...)"
-      />
-      <select
-        value={draft.category_id ?? ""}
-        onChange={(e) =>
-          setDraft((d) => ({ ...d, category_id: e.target.value || null }))
-        }
-        className="field text-sm py-1.5 w-32"
-      >
-        <option value="">ללא קטגוריה</option>
-        {categories.map((c) => (
-          <option key={c.id} value={c.id}>{c.name}</option>
-        ))}
-      </select>
-      <label className="inline-flex items-center gap-1.5 text-xs text-ink-700 select-none cursor-pointer">
-        <input
-          type="checkbox"
-          checked={draft.is_active}
-          onChange={(e) => setDraft((d) => ({ ...d, is_active: e.target.checked }))}
-          className="w-3.5 h-3.5"
-        />
-        פעיל
-      </label>
-      <div className="flex items-center gap-1 ms-auto">
-        <button
-          type="button"
-          onClick={onSave}
-          disabled={!draft.name.trim()}
-          className="p-1.5 rounded-md text-emerald-600 hover:bg-emerald-50 disabled:opacity-40"
-          title="שמור"
-        >
-          <Check className="w-4 h-4" />
-        </button>
-        <button
-          type="button"
-          onClick={cancelEdit}
-          className="p-1.5 rounded-md text-ink-400 hover:bg-ink-100"
-          title="ביטול"
-        >
-          <X className="w-4 h-4" />
-        </button>
-      </div>
-    </div>
-  );
 
   return (
     <div className="space-y-3">
@@ -267,7 +285,15 @@ export function HouseholdStaplesTab() {
       </div>
 
       {/* ── Add row ── */}
-      {editingId === "new" && <EditorRow onSave={saveAdd} />}
+      {editingId === "new" && (
+        <EditorRow
+          draft={draft}
+          setDraft={setDraft}
+          categories={categories}
+          onSave={saveAdd}
+          onCancel={cancelEdit}
+        />
+      )}
 
       {/* ── List ── */}
       <div className="card divide-y divide-ink-100">
@@ -283,7 +309,13 @@ export function HouseholdStaplesTab() {
           filtered.map((s) =>
             editingId === s.id ? (
               <div key={s.id} className="p-1">
-                <EditorRow onSave={() => saveEdit(s)} />
+                <EditorRow
+                  draft={draft}
+                  setDraft={setDraft}
+                  categories={categories}
+                  onSave={() => saveEdit(s)}
+                  onCancel={cancelEdit}
+                />
               </div>
             ) : (
               <div

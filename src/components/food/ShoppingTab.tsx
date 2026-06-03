@@ -34,6 +34,7 @@ import { useFoodPeople, PersonAvatar } from "@/lib/food/people";
 import {
   buildShoppingList,
   shoppingListToRunItems,
+  draftsToShoppingListResult,
   type ShoppingRunItemDraft,
 } from "@/lib/food/shopping-list";
 import {
@@ -225,11 +226,11 @@ function ShoppingHome({ onOpenRun }: { onOpenRun: (id: string) => void }) {
     });
     setPickedStaples(new Set());
 
-    // Hand the list off to the chosen store (export / deeplink). For the
-    // menu-derived snapshot we reuse the live result; ticked staples are
-    // already in the run for tracking and get carried in the WA export from
-    // the run screen too.
-    const action = provider.exportList(liveResult, range.from, range.to);
+    // Hand the COMPLETE list off to the chosen store (export / deeplink) —
+    // menu items + the household staples the user just ticked, so the message
+    // the store/shopper receives matches what's tracked in the run.
+    const exportResult = draftsToShoppingListResult(drafts, ingredientCategories);
+    const action = provider.exportList(exportResult, range.from, range.to);
     if (action.type === "open_url") {
       window.open(action.url, "_blank");
     } else if (action.type === "copy") {
@@ -589,6 +590,7 @@ function RunTracker({ runId, onBack }: { runId: string; onBack: () => void }) {
   const deleteRun = useDeleteShoppingRun();
   const mergeItems = useMergeRunItems();
   const { data: ingredientCategories = [] } = useIngredientCategories();
+  const { data: storeConnections = [] } = useStoreConnections();
   const { data: runsWithMissing = [] } = useRunsWithMissingItems(runId);
 
   const catName = useMemo(
@@ -617,9 +619,14 @@ function RunTracker({ runId, onBack }: { runId: string; onBack: () => void }) {
   }
 
   const cycleStatus = (it: ShoppingRunItem) => {
-    const idx = ITEM_STATUS_FLOW.indexOf(it.status as ShoppingItemStatus);
-    const next = ITEM_STATUS_FLOW[(idx + 1) % ITEM_STATUS_FLOW.length] ?? "needed";
     const prev = it.status as ShoppingItemStatus;
+    const idx = ITEM_STATUS_FLOW.indexOf(prev);
+    // 'missing' / 'moved' aren't part of the happy-path flow (indexOf === -1).
+    // Cycling them would silently reset to 'needed' and drop the "didn't
+    // arrive" record, so ignore the badge tap for those — they're managed via
+    // the reconciliation buttons instead.
+    if (idx === -1) return;
+    const next = ITEM_STATUS_FLOW[(idx + 1) % ITEM_STATUS_FLOW.length];
     setItemStatus.mutate({ itemId: it.id, status: next });
     pushUndo({
       description: `סטטוס: ${it.name} → ${SHOPPING_ITEM_STATUS_LABELS[next]}`,
@@ -662,25 +669,37 @@ function RunTracker({ runId, onBack }: { runId: string; onBack: () => void }) {
   };
 
   const exportRun = () => {
-    // Build a WA text directly from the run's items grouped by category.
-    const lines: string[] = [
-      `🛒 ${run.title}`,
-      "",
-      ...[...grouped.entries()].flatMap(([cat, items]) => [
-        `*${cat}*`,
-        ...items.map(
-          (it) =>
-            `• ${it.name} — ${Number(it.quantity)}${it.unit ? ` ${it.unit}` : ""}`
-        ),
-        "",
-      ]),
-    ];
-    const text = lines.join("\n").trim();
-    navigator.clipboard
-      .writeText(text)
-      .then(() => toast("הרשימה הועתקה", "success"))
-      .catch(() => {});
-    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank");
+    // Reuse the shared formatter + the run's chosen provider so the run export
+    // matches every other shopping export (one WA/text format) and honors the
+    // store the run was created for.
+    const result = draftsToShoppingListResult(
+      activeItems.map((it) => ({
+        ingredientId: it.ingredient_id,
+        stapleId: it.staple_id,
+        name: it.name,
+        quantity: Number(it.quantity),
+        unit: it.unit,
+        categoryId: it.category_id,
+        source: "manual" as const,
+        sourceMeals: it.source_meals,
+      })),
+      ingredientCategories
+    );
+    const conn =
+      storeConnections.find((c) => c.id === run.store_connection_id) ?? null;
+    const action = providerForConnection(conn).exportList(
+      result,
+      run.frozen_from_date,
+      run.frozen_to_date
+    );
+    if (action.type === "open_url") {
+      window.open(action.url, "_blank");
+    } else {
+      navigator.clipboard
+        .writeText(action.text)
+        .then(() => toast("הרשימה הועתקה", "success"))
+        .catch(() => {});
+    }
   };
 
   const carryMissingFromOthers = async () => {

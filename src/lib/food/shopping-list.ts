@@ -318,3 +318,60 @@ export function shoppingListToRunItems(
   }
   return out;
 }
+
+/** Re-groups a flat set of run-item drafts (menu + ticked staples + manual)
+ *  back into a ShoppingListResult so the same WhatsApp/export formatter can
+ *  render the COMPLETE list — not just the menu-derived part. Category order
+ *  follows `categories` (by sort_order then name); uncategorized lands last. */
+export function draftsToShoppingListResult(
+  drafts: ShoppingRunItemDraft[],
+  categories: IngredientCategory[]
+): ShoppingListResult {
+  const byCat = new Map<string | null, ShoppingLineItem[]>();
+  for (const d of drafts) {
+    const item: ShoppingLineItem = {
+      ingredientId: d.ingredientId ?? d.stapleId ?? d.name,
+      ingredientName: d.name,
+      unitName: d.unit,
+      totalQuantity: d.quantity,
+      sourceMeals: d.sourceMeals,
+    };
+    const list = byCat.get(d.categoryId) ?? [];
+    list.push(item);
+    byCat.set(d.categoryId, list);
+  }
+
+  const ordered = [...categories].sort((a, b) => {
+    if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order;
+    return a.name.localeCompare(b.name, "he");
+  });
+
+  const groups: ShoppingGroup[] = [];
+  for (const c of ordered) {
+    const items = byCat.get(c.id);
+    if (!items || items.length === 0) continue;
+    groups.push({
+      categoryId: c.id,
+      categoryName: c.name,
+      items: items.sort((a, b) =>
+        a.ingredientName.localeCompare(b.ingredientName, "he")
+      ),
+    });
+  }
+  const uncategorized = byCat.get(null);
+  if (uncategorized && uncategorized.length > 0) {
+    groups.push({
+      categoryId: null,
+      categoryName: UNCATEGORIZED_LABEL,
+      items: uncategorized.sort((a, b) =>
+        a.ingredientName.localeCompare(b.ingredientName, "he")
+      ),
+    });
+  }
+
+  return {
+    groups,
+    totalLines: groups.reduce((sum, g) => sum + g.items.length, 0),
+    slotsCovered: 0,
+  };
+}

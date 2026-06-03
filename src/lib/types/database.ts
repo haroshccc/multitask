@@ -2057,6 +2057,7 @@ export type Database = {
           base_url: string | null
           config: Json
           created_at: string
+          created_by: string | null
           enabled: boolean
           id: string
           kind: string
@@ -2069,6 +2070,7 @@ export type Database = {
           base_url?: string | null
           config?: Json
           created_at?: string
+          created_by?: string | null
           enabled?: boolean
           id?: string
           kind?: string
@@ -2081,6 +2083,7 @@ export type Database = {
           base_url?: string | null
           config?: Json
           created_at?: string
+          created_by?: string | null
           enabled?: boolean
           id?: string
           kind?: string

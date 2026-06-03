@@ -65,14 +65,19 @@ export function buildStapleSuggestions(
 export function selectedStaplesToRunItems(
   staples: HouseholdStaple[]
 ): ShoppingRunItemDraft[] {
-  return staples.map((s) => ({
-    ingredientId: null,
-    stapleId: s.id,
-    name: s.name,
-    quantity: Number(s.default_quantity) || 1,
-    unit: s.default_unit,
-    categoryId: s.category_id,
-    source: "staple" as const,
-    sourceMeals: [],
-  }));
+  return staples.map((s) => {
+    // Preserve an explicit 0 (and only fall back to 1 for null/NaN) — a user
+    // may set qty 0 as a "check if we need it" placeholder.
+    const qty = Number(s.default_quantity);
+    return {
+      ingredientId: null,
+      stapleId: s.id,
+      name: s.name,
+      quantity: Number.isFinite(qty) ? qty : 1,
+      unit: s.default_unit,
+      categoryId: s.category_id,
+      source: "staple" as const,
+      sourceMeals: [],
+    };
+  });
 }

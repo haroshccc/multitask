@@ -95,11 +95,12 @@ export function useCreateStoreConnection() {
   const qc = useQueryClient();
   const scope = useOrgScope();
   return useMutation({
-    mutationFn: (input: Omit<StoreConnectionInsert, "organization_id">) => {
-      const { organizationId } = assertOrgScope(scope);
+    mutationFn: (input: Omit<StoreConnectionInsert, "organization_id" | "created_by">) => {
+      const { organizationId, userId } = assertOrgScope(scope);
       return service.createStoreConnection({
         ...input,
         organization_id: organizationId,
+        created_by: userId,
       });
     },
     onSuccess: () => {

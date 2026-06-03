@@ -196,7 +196,13 @@ export async function createRunFromDrafts(input: {
     const { error: itemsErr } = await supabase
       .from("shopping_run_items")
       .insert(rows);
-    if (itemsErr) throw itemsErr;
+    if (itemsErr) {
+      // No multi-statement transaction over PostgREST — if the items insert
+      // fails, delete the just-created run so we don't leave an empty orphan
+      // run in the list.
+      await supabase.from("shopping_runs").delete().eq("id", run.id);
+      throw itemsErr;
+    }
 
     // Touch last_added_at on the staples we just shopped for.
     const stapleIds = input.drafts
@@ -341,6 +347,34 @@ export async function mergeRunItems(input: {
 }): Promise<{ createdItemIds: string[]; movedFromIds: string[] }> {
   if (input.items.length === 0) return { createdItemIds: [], movedFromIds: [] };
 
+  // Re-validate against the live state: only items that are STILL 'missing'
+  // may be carried. This guards against a stale snapshot (the caller may hold
+  // items already moved by another merge / device / tab) so we never duplicate
+  // a line or re-shop something already handled.
+  const candidateIds = input.items.map((it) => it.id);
+  const { data: liveRows, error: liveErr } = await supabase
+    .from("shopping_run_items")
+    .select("id, status")
+    .in("id", candidateIds);
+  if (liveErr) throw liveErr;
+  const stillMissing = new Set(
+    (liveRows ?? []).filter((r) => r.status === "missing").map((r) => r.id)
+  );
+  const items = input.items.filter((it) => stillMissing.has(it.id));
+  if (items.length === 0) return { createdItemIds: [], movedFromIds: [] };
+
+  const movedFromIds = items.map((it) => it.id);
+
+  // Flip originals to 'moved' FIRST. If the copy-insert then fails we roll the
+  // move back — but the reverse ordering (insert first) could leave a live copy
+  // AND a live 'missing' original, i.e. a double-shop. Marking moved first means
+  // the worst case is an item that's neither (recoverable), never duplicated.
+  const { error: moveErr } = await supabase
+    .from("shopping_run_items")
+    .update({ status: "moved" })
+    .in("id", movedFromIds);
+  if (moveErr) throw moveErr;
+
   // Place carried items at the end of the target run.
   const { data: existing } = await supabase
     .from("shopping_run_items")
@@ -350,7 +384,7 @@ export async function mergeRunItems(input: {
     .limit(1);
   let nextSort = (existing?.[0]?.sort_order ?? -1) + 1;
 
-  const rows = input.items.map((it) => ({
+  const rows = items.map((it) => ({
     run_id: input.targetRunId,
     organization_id: input.organizationId,
     ingredient_id: it.ingredient_id,
@@ -370,14 +404,14 @@ export async function mergeRunItems(input: {
     .from("shopping_run_items")
     .insert(rows)
     .select("id");
-  if (insErr) throw insErr;
-
-  const movedFromIds = input.items.map((it) => it.id);
-  const { error: moveErr } = await supabase
-    .from("shopping_run_items")
-    .update({ status: "moved" })
-    .in("id", movedFromIds);
-  if (moveErr) throw moveErr;
+  if (insErr) {
+    // Roll the originals back to 'missing' so nothing is silently lost.
+    await supabase
+      .from("shopping_run_items")
+      .update({ status: "missing" })
+      .in("id", movedFromIds);
+    throw insErr;
+  }
 
   return {
     createdItemIds: (created ?? []).map((r) => r.id),

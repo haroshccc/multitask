@@ -58,6 +58,7 @@ create index household_staples_active_idx on public.household_staples(organizati
 create table public.store_connections (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references public.organizations(id) on delete cascade,
+  created_by uuid references auth.users(id) on delete set null,
   name text not null,
   kind text not null default 'export'
     check (kind in ('export', 'deeplink', 'cart_api')),
@@ -187,12 +188,21 @@ create policy "household_staples: owner or shared org"
     or (user_is_org_member(organization_id, auth.uid()) and org_food_is_shared(organization_id))
   );
 
--- store_connections: any org member (shopping infra is shared at org level,
--- not tied to a single owner — anyone in the household can wire up a store).
-create policy "store_connections: org members"
+-- store_connections: owner OR (org member when food is shared) — mirrors the
+-- rest of the food module so a non-food-shared org's store config (base_url /
+-- config jsonb) isn't visible to co-members.
+create policy "store_connections: owner or shared org"
   on public.store_connections for all
-  using (user_is_org_member(organization_id, auth.uid()) or user_is_super_admin(auth.uid()))
-  with check (user_is_org_member(organization_id, auth.uid()) or user_is_super_admin(auth.uid()));
+  using (
+    created_by = auth.uid()
+    or user_is_super_admin(auth.uid())
+    or (user_is_org_member(organization_id, auth.uid()) and org_food_is_shared(organization_id))
+  )
+  with check (
+    created_by = auth.uid()
+    or user_is_super_admin(auth.uid())
+    or (user_is_org_member(organization_id, auth.uid()) and org_food_is_shared(organization_id))
+  );
 
 -- shopping_runs: creator or (org member when food is shared)
 create policy "shopping_runs: creator or shared org"
@@ -238,7 +248,21 @@ create policy "shopping_run_items: via run"
 -- Realtime — add the new tables to the supabase_realtime publication so the
 -- household sees changes live (matches the food tables' behavior).
 -- =============================================================================
-alter publication supabase_realtime add table public.household_staples;
-alter publication supabase_realtime add table public.store_connections;
-alter publication supabase_realtime add table public.shopping_runs;
-alter publication supabase_realtime add table public.shopping_run_items;
+do $$ begin
+  alter publication supabase_realtime add table public.household_staples;
+exception when duplicate_object then null; end $$;
+do $$ begin
+  alter publication supabase_realtime add table public.store_connections;
+exception when duplicate_object then null; end $$;
+do $$ begin
+  alter publication supabase_realtime add table public.shopping_runs;
+exception when duplicate_object then null; end $$;
+do $$ begin
+  alter publication supabase_realtime add table public.shopping_run_items;
+exception when duplicate_object then null; end $$;
+
+-- shopping_run_items realtime handler keys off run_id (not the PK). With the
+-- default REPLICA IDENTITY a DELETE event's `old` row carries only the PK, so
+-- run_id would be missing and the per-run cache wouldn't refresh for other
+-- household members. FULL makes the old row complete on UPDATE/DELETE.
+alter table public.shopping_run_items replica identity full;

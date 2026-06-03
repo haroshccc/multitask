@@ -119,6 +119,18 @@ export const queryKeys = {
   storeConnections: (orgId: string) => ["store-connections", orgId] as const,
   shoppingRuns: (orgId: string) => ["shopping-runs", orgId] as const,
   shoppingRun: (runId: string) => ["shopping-run", runId] as const,
+
+  // Frameworks ("מסגרת")
+  frameworks: (orgId: string) => ["frameworks", orgId] as const,
+  framework: (frameworkId: string) => ["framework", frameworkId] as const,
+  frameworkContent: (frameworkId: string) =>
+    ["framework", frameworkId, "content"] as const,
+  frameworkShares: (frameworkId: string) =>
+    ["framework", frameworkId, "shares"] as const,
+  frameworkHistory: (frameworkId: string) =>
+    ["framework", frameworkId, "history"] as const,
+  frameworkVisibility: (userId: string, orgId: string) =>
+    ["framework-visibility", userId, orgId] as const,
 } as const;
 
 /**
@@ -153,4 +165,6 @@ export const queryFamilies = {
   allStoreConnections: (orgId: string) => ["store-connections", orgId] as const,
   allShoppingRuns: (orgId: string) => ["shopping-runs", orgId] as const,
   shoppingRunFamily: (runId: string) => ["shopping-run", runId] as const,
+  allFrameworks: (orgId: string) => ["frameworks", orgId] as const,
+  frameworkFamily: (frameworkId: string) => ["framework", frameworkId] as const,
 } as const;

@@ -35,6 +35,7 @@ import {
 } from "@/lib/goals/computation";
 import type { Task, TimeEntry } from "@/lib/types/domain";
 import { TaskEditModal, type TaskCreateDraft } from "@/components/tasks/TaskEditModal";
+import { FrameworkGoalsSection } from "@/components/frameworks/FrameworkGoalsSection";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -357,6 +358,9 @@ export function Goals() {
         </button>
       }
     >
+      {/* Frameworks goals — separate area, self-contained. */}
+      <FrameworkGoalsSection />
+
       {!isLoading && goalTasks.length > 0 && (
         <div className="flex flex-col gap-3 mb-4">
           {/* Row 1: scope filter */}

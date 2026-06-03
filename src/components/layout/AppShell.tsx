@@ -229,12 +229,15 @@ export function AppShell() {
         <div className="flex items-center gap-2 min-w-0">
           <button
             onClick={() => setSidebarOpen((v) => !v)}
-            className="md:hidden p-2 rounded-xl hover:bg-ink-100"
+            className="md:hidden p-2 rounded-xl hover:bg-ink-100 shrink-0"
             aria-label="פתח תפריט"
           >
             {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
-          <Logo markSize={28} className="min-w-0" idKey="shellLogo" />
+          {/* Mobile: mark only (the wordmark is wide and crowded the menu
+              button). Desktop: full wordmark. */}
+          <Logo markSize={26} markOnly className="md:hidden shrink-0" idKey="shellLogoM" />
+          <Logo markSize={28} className="hidden md:flex min-w-0" idKey="shellLogo" />
         </div>
 
         {/* Horizontal nav (desktop) */}

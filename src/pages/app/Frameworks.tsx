@@ -17,6 +17,7 @@ import {
   useDeleteFramework,
 } from "@/lib/hooks/useFrameworks";
 import { FrameworkWeekEditor } from "@/components/frameworks/FrameworkWeekEditor";
+import { FrameworkMonthGrid } from "@/components/frameworks/FrameworkMonthGrid";
 import { ShareFrameworkModal } from "@/components/frameworks/ShareFrameworkModal";
 import { FrameworkHistoryModal } from "@/components/frameworks/FrameworkHistoryModal";
 import type { Framework } from "@/lib/types/frameworks";
@@ -137,6 +138,7 @@ function FrameworkEditorPane({
   const [historyOpen, setHistoryOpen] = useState(false);
   const [showRange, setShowRange] = useState(!!(framework.run_start || framework.run_end));
   const [name, setName] = useState(framework.name);
+  const [editorView, setEditorView] = useState<"week" | "month">("week");
 
   useEffect(() => setName(framework.name), [framework.id, framework.name]);
 
@@ -248,9 +250,37 @@ function FrameworkEditorPane({
         </div>
       )}
 
-      {/* Week editor */}
+      {/* View toggle: week (time blocks) / month (day headers) */}
+      <div className="inline-flex rounded-xl border border-ink-200 p-0.5 text-sm">
+        <button
+          type="button"
+          onClick={() => setEditorView("week")}
+          className={cn(
+            "px-3 py-1 rounded-lg transition-colors",
+            editorView === "week" ? "bg-ink-900 text-white" : "text-ink-600 hover:bg-ink-100"
+          )}
+        >
+          שבוע
+        </button>
+        <button
+          type="button"
+          onClick={() => setEditorView("month")}
+          className={cn(
+            "px-3 py-1 rounded-lg transition-colors",
+            editorView === "month" ? "bg-ink-900 text-white" : "text-ink-600 hover:bg-ink-100"
+          )}
+        >
+          חודש
+        </button>
+      </div>
+
+      {/* Editor body */}
       {content ? (
-        <FrameworkWeekEditor framework={framework} content={content} readOnly={readOnly} />
+        editorView === "week" ? (
+          <FrameworkWeekEditor framework={framework} content={content} readOnly={readOnly} />
+        ) : (
+          <FrameworkMonthGrid framework={framework} content={content} readOnly={readOnly} />
+        )
       ) : (
         <p className="text-sm text-ink-400">טוען תוכן…</p>
       )}

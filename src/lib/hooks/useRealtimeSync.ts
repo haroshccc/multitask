@@ -155,6 +155,53 @@ export function useRealtimeSync() {
           }
         }
       )
+      // Shopping — household staples, store connections, runs + run items
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "household_staples", filter: orgFilter },
+        () => {
+          qc.invalidateQueries({
+            queryKey: queryFamilies.allHouseholdStaples(organizationId),
+          });
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "store_connections", filter: orgFilter },
+        () => {
+          qc.invalidateQueries({
+            queryKey: queryFamilies.allStoreConnections(organizationId),
+          });
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "shopping_runs", filter: orgFilter },
+        (payload) => {
+          qc.invalidateQueries({ queryKey: queryFamilies.allShoppingRuns(organizationId) });
+          const changedId =
+            (payload.new as { id?: string })?.id ??
+            (payload.old as { id?: string })?.id;
+          if (changedId) {
+            qc.invalidateQueries({ queryKey: queryFamilies.shoppingRunFamily(changedId) });
+          }
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "shopping_run_items", filter: orgFilter },
+        (payload) => {
+          // Items don't carry the run's own id under `id`; refetch the run
+          // family for the affected run plus the runs list (item counts/status).
+          const runId =
+            (payload.new as { run_id?: string })?.run_id ??
+            (payload.old as { run_id?: string })?.run_id;
+          if (runId) {
+            qc.invalidateQueries({ queryKey: queryFamilies.shoppingRunFamily(runId) });
+          }
+          qc.invalidateQueries({ queryKey: queryFamilies.allShoppingRuns(organizationId) });
+        }
+      )
       .subscribe();
 
     return () => {

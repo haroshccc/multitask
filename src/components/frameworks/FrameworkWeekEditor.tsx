@@ -39,6 +39,9 @@ export function FrameworkWeekEditor({ framework, content, readOnly = false }: Pr
   const monthlyBlocks = content.blocks
     .filter((b) => b.scope === "monthly")
     .sort((a, b) => (a.month_anchor ?? "").localeCompare(b.month_anchor ?? ""));
+  const monthlyLabels = content.labels
+    .filter((l) => l.scope === "monthly")
+    .sort((a, b) => (a.month_anchor ?? "").localeCompare(b.month_anchor ?? ""));
 
   return (
     <div className="space-y-5">
@@ -57,7 +60,12 @@ export function FrameworkWeekEditor({ framework, content, readOnly = false }: Pr
         ))}
       </div>
 
-      <MonthlySection framework={framework} blocks={monthlyBlocks} readOnly={readOnly} />
+      <MonthlySection
+        framework={framework}
+        blocks={monthlyBlocks}
+        labels={monthlyLabels}
+        readOnly={readOnly}
+      />
     </div>
   );
 }
@@ -411,50 +419,237 @@ function cadenceLabel(b: FrameworkBlock): string {
 function MonthlySection({
   framework,
   blocks,
+  labels,
   readOnly,
 }: {
   framework: Framework;
   blocks: FrameworkBlock[];
+  labels: FrameworkDayLabel[];
   readOnly: boolean;
 }) {
   const createBlock = useCreateBlock();
-  const [adding, setAdding] = useState(false);
+  const createLabel = useCreateDayLabel();
+  const [addingBlock, setAddingBlock] = useState(false);
+  const [addingLabel, setAddingLabel] = useState(false);
+
+  const empty = blocks.length === 0 && labels.length === 0;
 
   return (
     <div className="rounded-2xl border border-ink-200 bg-white">
-      <div className="px-3 sm:px-4 py-2.5 border-b border-ink-100 flex items-center justify-between gap-2">
+      <div className="px-3 sm:px-4 py-2.5 border-b border-ink-100 flex items-center justify-between gap-2 flex-wrap">
         <div className="text-sm font-semibold text-ink-700">פעם בחודש / מחזורי</div>
-        {!readOnly && !adding && (
-          <button
-            type="button"
-            onClick={() => setAdding(true)}
-            className="inline-flex items-center gap-1 text-xs text-ink-600 hover:text-ink-900 hover:bg-ink-100 rounded-lg px-2 py-1"
-          >
-            <Plus className="w-3.5 h-3.5" /> פריט מחזורי
-          </button>
+        {!readOnly && (
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setAddingLabel(true)}
+              className="inline-flex items-center gap-1 text-xs text-ink-600 hover:text-ink-900 hover:bg-ink-100 rounded-lg px-2 py-1"
+            >
+              <Plus className="w-3.5 h-3.5" /> כותרת יום
+            </button>
+            <button
+              type="button"
+              onClick={() => setAddingBlock(true)}
+              className="inline-flex items-center gap-1 text-xs text-ink-600 hover:text-ink-900 hover:bg-ink-100 rounded-lg px-2 py-1"
+            >
+              <Plus className="w-3.5 h-3.5" /> פריט מחזורי
+            </button>
+          </div>
         )}
       </div>
 
       <div className="p-2 sm:p-3 space-y-1.5">
-        {blocks.length === 0 && !adding && (
+        {empty && !addingBlock && !addingLabel && (
           <p className="text-xs text-ink-400 px-1 py-1 leading-relaxed">
-            פריטים שחוזרים פעם בכמה חודשים — יום סידורים פעם בחודש, וטרינר פעם ב-4 חודשים וכו׳.
+            דברים שחוזרים פעם בכמה חודשים — יום סידורים פעם בחודש, וטרינר פעם ב-4 חודשים וכו׳.
+            "פריט מחזורי" = משבצת עם שעה (אפשר יעד); "כותרת יום" = שם לכל היום.
           </p>
+        )}
+
+        {labels.map((l) => (
+          <MonthlyLabelRow key={l.id} framework={framework} label={l} readOnly={readOnly} />
+        ))}
+        {addingLabel && (
+          <MonthlyLabelForm
+            framework={framework}
+            onDone={() => setAddingLabel(false)}
+            onSave={(payload) =>
+              createLabel.mutate(payload, { onSuccess: () => setAddingLabel(false) })
+            }
+          />
         )}
 
         {blocks.map((b) => (
           <MonthlyBlockRow key={b.id} framework={framework} block={b} readOnly={readOnly} />
         ))}
-
-        {adding && (
+        {addingBlock && (
           <MonthlyBlockForm
             framework={framework}
-            onDone={() => setAdding(false)}
+            onDone={() => setAddingBlock(false)}
             onSave={(payload) =>
-              createBlock.mutate(payload, { onSuccess: () => setAdding(false) })
+              createBlock.mutate(payload, { onSuccess: () => setAddingBlock(false) })
             }
           />
         )}
+      </div>
+    </div>
+  );
+}
+
+interface LabelFormValue {
+  framework_id: string;
+  organization_id: string;
+  scope: "monthly";
+  day_of_week: null;
+  specific_date: null;
+  month_interval: number;
+  month_anchor: string;
+  label: string;
+  color: null;
+  effective_from: null;
+  effective_to: null;
+}
+
+function MonthlyLabelRow({
+  framework,
+  label,
+  readOnly,
+}: {
+  framework: Framework;
+  label: FrameworkDayLabel;
+  readOnly: boolean;
+}) {
+  const [editing, setEditing] = useState(false);
+  const updateLabel = useUpdateDayLabel();
+  const deleteLabel = useDeleteDayLabel();
+
+  if (editing) {
+    return (
+      <MonthlyLabelForm
+        framework={framework}
+        initial={label}
+        onDone={() => setEditing(false)}
+        onSave={(payload) =>
+          updateLabel.mutate(
+            {
+              id: label.id,
+              patch: {
+                label: payload.label,
+                month_interval: payload.month_interval,
+                month_anchor: payload.month_anchor,
+              },
+            },
+            { onSuccess: () => setEditing(false) }
+          )
+        }
+      />
+    );
+  }
+
+  const cadence = (() => {
+    const n = Math.max(1, label.month_interval ?? 1);
+    const every = n === 1 ? "כל חודש" : `כל ${n} חודשים`;
+    if (!label.month_anchor) return every;
+    const d = new Date(label.month_anchor + "T00:00:00");
+    return `${every} · יום ${d.getDate()} בחודש`;
+  })();
+
+  return (
+    <div
+      className="group rounded-lg px-2 py-1.5 text-xs flex items-center gap-2 border border-dashed"
+      style={{ borderColor: (label.color ?? framework.color ?? "#6366f1") + "88" }}
+    >
+      <div className="flex-1 min-w-0">
+        <div className="font-medium text-ink-800 truncate">{label.label || "כותרת יום"}</div>
+        <div className="text-[10px] text-ink-500">כותרת יום · {cadence}</div>
+      </div>
+      {!readOnly && (
+        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button onClick={() => setEditing(true)} className="p-1 rounded hover:bg-ink-100" title="עריכה">
+            <Pencil className="w-3 h-3 text-ink-600" />
+          </button>
+          <button
+            onClick={() => deleteLabel.mutate({ id: label.id, frameworkId: framework.id })}
+            className="p-1 rounded hover:bg-ink-100"
+            title="מחיקה"
+          >
+            <Trash2 className="w-3 h-3 text-rose-500" />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MonthlyLabelForm({
+  framework,
+  initial,
+  onDone,
+  onSave,
+}: {
+  framework: Framework;
+  initial?: FrameworkDayLabel;
+  onDone: () => void;
+  onSave: (payload: LabelFormValue) => void;
+}) {
+  const [label, setLabel] = useState(initial?.label ?? "");
+  const [interval, setInterval] = useState<number>(initial?.month_interval ?? 1);
+  const [anchor, setAnchor] = useState<string>(initial?.month_anchor ?? todayKey());
+
+  const save = () => {
+    if (!label.trim()) return;
+    onSave({
+      framework_id: framework.id,
+      organization_id: framework.organization_id,
+      scope: "monthly",
+      day_of_week: null,
+      specific_date: null,
+      month_interval: Math.max(1, interval || 1),
+      month_anchor: anchor || todayKey(),
+      label: label.trim(),
+      color: null,
+      effective_from: null,
+      effective_to: null,
+    });
+  };
+
+  return (
+    <div className="rounded-lg border border-ink-200 bg-ink-50/50 p-2 space-y-2">
+      <input
+        autoFocus
+        className="field !py-1 !text-xs w-full"
+        placeholder="כותרת היום (למשל: יום סידורים)"
+        value={label}
+        onChange={(e) => setLabel(e.target.value)}
+      />
+      <div className="flex items-center gap-1.5">
+        <span className="text-[11px] text-ink-500 shrink-0">כל</span>
+        <input
+          type="number"
+          min={1}
+          className="field !py-1 !text-xs w-14"
+          value={interval}
+          onChange={(e) => setInterval(Math.max(1, Number(e.target.value) || 1))}
+        />
+        <span className="text-[11px] text-ink-500 shrink-0">חודשים, החל מ־</span>
+        <input
+          type="date"
+          className="field !py-1 !text-xs flex-1"
+          value={anchor}
+          onChange={(e) => setAnchor(e.target.value)}
+        />
+      </div>
+      <div className="flex items-center justify-end gap-1">
+        <button onClick={onDone} className="p-1 rounded hover:bg-ink-100" title="ביטול">
+          <X className="w-3.5 h-3.5 text-ink-500" />
+        </button>
+        <button
+          onClick={save}
+          className="p-1 rounded text-white bg-primary-500 hover:bg-primary-600"
+          title="שמירה"
+        >
+          <Check className="w-3.5 h-3.5" />
+        </button>
       </div>
     </div>
   );

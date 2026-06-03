@@ -275,3 +275,46 @@ export function shoppingListToWhatsAppText(
 export function whatsAppShareUrl(text: string): string {
   return `https://wa.me/?text=${encodeURIComponent(text)}`;
 }
+
+// =============================================================================
+// Snapshot → run items
+// =============================================================================
+
+/** A single line ready to be frozen into a shopping_run as an item. Carries
+ *  only the snapshot-relevant fields; the service injects run_id +
+ *  organization_id + sort_order on insert. `source` distinguishes menu-derived
+ *  lines from interactively-added household staples. */
+export interface ShoppingRunItemDraft {
+  ingredientId: string | null;
+  stapleId: string | null;
+  name: string;
+  quantity: number;
+  unit: string | null;
+  categoryId: string | null;
+  source: "menu" | "staple" | "manual";
+  sourceMeals: string[];
+}
+
+/** Flattens a (live) ShoppingListResult into menu-sourced run-item drafts —
+ *  the frozen snapshot the user is about to shop. Category is resolved per
+ *  line from the group it sits in. */
+export function shoppingListToRunItems(
+  result: ShoppingListResult
+): ShoppingRunItemDraft[] {
+  const out: ShoppingRunItemDraft[] = [];
+  for (const g of result.groups) {
+    for (const it of g.items) {
+      out.push({
+        ingredientId: it.ingredientId,
+        stapleId: null,
+        name: it.ingredientName,
+        quantity: it.totalQuantity,
+        unit: it.unitName,
+        categoryId: g.categoryId,
+        source: "menu",
+        sourceMeals: it.sourceMeals,
+      });
+    }
+  }
+  return out;
+}

@@ -113,6 +113,12 @@ export const queryKeys = {
   mealPlanDays: (orgId: string, from: string, to: string) =>
     ["meal-plan-days", orgId, from, to] as const,
   mealPlanShares: (orgId: string) => ["meal-plan-shares", orgId] as const,
+
+  // Shopping — staples, store connections, runs
+  householdStaples: (orgId: string) => ["household-staples", orgId] as const,
+  storeConnections: (orgId: string) => ["store-connections", orgId] as const,
+  shoppingRuns: (orgId: string) => ["shopping-runs", orgId] as const,
+  shoppingRun: (runId: string) => ["shopping-run", runId] as const,
 } as const;
 
 /**
@@ -143,4 +149,8 @@ export const queryFamilies = {
   allMealPlanTemplate: (orgId: string) => ["meal-plan-template", orgId] as const,
   allMealPlanDays: (orgId: string) => ["meal-plan-days", orgId] as const,
   allMealPlanShares: (orgId: string) => ["meal-plan-shares", orgId] as const,
+  allHouseholdStaples: (orgId: string) => ["household-staples", orgId] as const,
+  allStoreConnections: (orgId: string) => ["store-connections", orgId] as const,
+  allShoppingRuns: (orgId: string) => ["shopping-runs", orgId] as const,
+  shoppingRunFamily: (runId: string) => ["shopping-run", runId] as const,
 } as const;

@@ -26,6 +26,17 @@ import {
   useUpdateMemberRole,
 } from "@/lib/hooks/useOrganizations";
 import type { OrgType } from "@/lib/services/organizations";
+import {
+  useStoreConnections,
+  useCreateStoreConnection,
+  useUpdateStoreConnection,
+  useDeleteStoreConnection,
+} from "@/lib/hooks/useShopping";
+import {
+  STORE_CONNECTION_KINDS,
+  STORE_CONNECTION_KIND_LABELS,
+  type StoreConnectionKind,
+} from "@/lib/types/domain";
 import { pushUndo } from "@/lib/undo/store";
 import { useFocusPrefs, type FocusPrefs } from "@/lib/hooks/useFocusPrefs";
 import {
@@ -67,6 +78,151 @@ const ROLE_LABELS: Record<string, string> = {
 // ---------------------------------------------------------------------------
 
 const COMING_SOON_TABS: Tab[] = [];
+
+// ---------------------------------------------------------------------------
+// Store connections — where shopping runs get handed off (export / deeplink).
+// Lives under the org tab next to food sharing since it's a household setting.
+// ---------------------------------------------------------------------------
+
+function StoreConnectionsSection() {
+  const { data: connections = [] } = useStoreConnections();
+  const createConn = useCreateStoreConnection();
+  const updateConn = useUpdateStoreConnection();
+  const deleteConn = useDeleteStoreConnection();
+
+  const [adding, setAdding] = useState(false);
+  const [name, setName] = useState("");
+  const [kind, setKind] = useState<StoreConnectionKind>("deeplink");
+  const [baseUrl, setBaseUrl] = useState("");
+
+  const reset = () => {
+    setName("");
+    setKind("deeplink");
+    setBaseUrl("");
+    setAdding(false);
+  };
+
+  const handleCreate = async () => {
+    if (!name.trim()) return;
+    const created = await createConn.mutateAsync({
+      name: name.trim(),
+      kind,
+      base_url: baseUrl.trim() || null,
+      enabled: true,
+    });
+    pushUndo({
+      description: `הוספת חנות: ${created.name}`,
+      undo: () => deleteConn.mutate(created.id),
+      redo: () => {},
+    });
+    reset();
+  };
+
+  return (
+    <section className="card p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <h2 className="font-semibold text-ink-900 text-sm">חנויות לקנייה</h2>
+        {!adding && (
+          <button
+            type="button"
+            onClick={() => setAdding(true)}
+            className="text-xs text-primary-600 hover:underline px-2 py-1 inline-flex items-center gap-1"
+          >
+            <Plus className="w-3.5 h-3.5" /> הוספת חנות
+          </button>
+        )}
+      </div>
+      <p className="text-xs text-ink-500">
+        חיבור לאתרי סחר: רשימת הקניות תיוצא או תיפתח באתר החנות. השתמשו ב-
+        <code className="mx-0.5 text-[11px]">{"{{list}}"}</code>
+        בכתובת כדי לשלב את הרשימה בקישור.
+      </p>
+
+      {connections.length > 0 && (
+        <ul className="divide-y divide-ink-100">
+          {connections.map((c) => (
+            <li key={c.id} className="flex items-center gap-2 py-2">
+              <span className="font-medium text-ink-800 text-sm">{c.name}</span>
+              <span className="text-[10px] text-ink-400 bg-ink-50 rounded px-1.5 py-0.5">
+                {STORE_CONNECTION_KIND_LABELS[c.kind as StoreConnectionKind]}
+              </span>
+              <label className="ms-auto inline-flex items-center gap-1.5 text-xs text-ink-600 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={c.enabled}
+                  onChange={(e) =>
+                    updateConn.mutate({ id: c.id, patch: { enabled: e.target.checked } })
+                  }
+                  className="w-3.5 h-3.5"
+                />
+                פעיל
+              </label>
+              <button
+                type="button"
+                onClick={() => {
+                  if (confirm(`למחוק את "${c.name}"?`)) deleteConn.mutate(c.id);
+                }}
+                className="p-1.5 rounded-md text-ink-400 hover:text-danger-600 hover:bg-danger-50"
+                title="מחק"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {adding && (
+        <div className="border-t border-ink-100 pt-3 space-y-2">
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="שם החנות (שופרסל, רמי לוי...)"
+            className="field text-sm w-full"
+            autoFocus
+          />
+          <div className="flex gap-2">
+            <select
+              value={kind}
+              onChange={(e) => setKind(e.target.value as StoreConnectionKind)}
+              className="field text-sm flex-1"
+            >
+              {STORE_CONNECTION_KINDS.map((k) => (
+                <option key={k} value={k}>{STORE_CONNECTION_KIND_LABELS[k]}</option>
+              ))}
+            </select>
+          </div>
+          {kind !== "export" && (
+            <input
+              value={baseUrl}
+              onChange={(e) => setBaseUrl(e.target.value)}
+              placeholder="כתובת אתר (https://...?list={{list}})"
+              className="field text-sm w-full"
+              dir="ltr"
+            />
+          )}
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={handleCreate}
+              disabled={!name.trim() || createConn.isPending}
+              className="flex-1 py-2 rounded-xl bg-primary-500 text-white text-sm font-medium hover:bg-primary-600 disabled:opacity-50"
+            >
+              {createConn.isPending ? "מוסיף..." : "הוסף"}
+            </button>
+            <button
+              type="button"
+              onClick={reset}
+              className="px-4 py-2 rounded-xl border border-ink-200 text-sm text-ink-600 hover:bg-ink-50"
+            >
+              ביטול
+            </button>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
 
 export function Settings() {
   const [tab, setTab] = useState<Tab>("organization");
@@ -445,6 +601,9 @@ function OrgTab() {
               )}
             </section>
           )}
+
+          {/* ── Store connections (shopping handoff) ─────────────────── */}
+          <StoreConnectionsSection />
 
           {/* ── 3. חברים ───────────────────────────────────────────────── */}
           <section className="card overflow-hidden">

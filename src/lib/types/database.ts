@@ -330,6 +330,140 @@ export type Database = {
           },
         ]
       }
+      gantt_baseline_tasks: {
+        Row: {
+          baseline_id: string
+          duration_minutes: number | null
+          id: string
+          scheduled_at: string | null
+          task_id: string
+        }
+        Insert: {
+          baseline_id: string
+          duration_minutes?: number | null
+          id?: string
+          scheduled_at?: string | null
+          task_id: string
+        }
+        Update: {
+          baseline_id?: string
+          duration_minutes?: number | null
+          id?: string
+          scheduled_at?: string | null
+          task_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gantt_baseline_tasks_baseline_id_fkey"
+            columns: ["baseline_id"]
+            isOneToOne: false
+            referencedRelation: "gantt_baselines"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gantt_baseline_tasks_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      gantt_baselines: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          organization_id: string
+          owner_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name?: string
+          organization_id: string
+          owner_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          organization_id?: string
+          owner_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gantt_baselines_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      household_staples: {
+        Row: {
+          category_id: string | null
+          created_at: string
+          default_quantity: number
+          default_unit: string | null
+          id: string
+          is_active: boolean
+          last_added_at: string | null
+          name: string
+          notes: string | null
+          organization_id: string
+          owner_id: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          category_id?: string | null
+          created_at?: string
+          default_quantity?: number
+          default_unit?: string | null
+          id?: string
+          is_active?: boolean
+          last_added_at?: string | null
+          name: string
+          notes?: string | null
+          organization_id: string
+          owner_id: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          category_id?: string | null
+          created_at?: string
+          default_quantity?: number
+          default_unit?: string | null
+          id?: string
+          is_active?: boolean
+          last_added_at?: string | null
+          name?: string
+          notes?: string | null
+          organization_id?: string
+          owner_id?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "household_staples_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "ingredient_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "household_staples_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ingredient_categories: {
         Row: {
           color: string | null
@@ -337,6 +471,7 @@ export type Database = {
           id: string
           name: string
           organization_id: string
+          owner_id: string | null
           sort_order: number
           updated_at: string
         }
@@ -346,6 +481,7 @@ export type Database = {
           id?: string
           name: string
           organization_id: string
+          owner_id?: string | null
           sort_order?: number
           updated_at?: string
         }
@@ -355,6 +491,7 @@ export type Database = {
           id?: string
           name?: string
           organization_id?: string
+          owner_id?: string | null
           sort_order?: number
           updated_at?: string
         }
@@ -489,6 +626,7 @@ export type Database = {
           id: string
           name: string
           organization_id: string
+          owner_id: string | null
           sort_order: number
           updated_at: string
         }
@@ -498,6 +636,7 @@ export type Database = {
           id?: string
           name: string
           organization_id: string
+          owner_id?: string | null
           sort_order?: number
           updated_at?: string
         }
@@ -507,6 +646,7 @@ export type Database = {
           id?: string
           name?: string
           organization_id?: string
+          owner_id?: string | null
           sort_order?: number
           updated_at?: string
         }
@@ -832,6 +972,56 @@ export type Database = {
           },
         ]
       }
+      org_invites: {
+        Row: {
+          accepted_at: string | null
+          created_at: string
+          declined_at: string | null
+          email: string
+          expires_at: string
+          id: string
+          invited_by: string
+          org_name_snapshot: string | null
+          organization_id: string
+          role: Database["public"]["Enums"]["organization_member_role"]
+          token: string
+        }
+        Insert: {
+          accepted_at?: string | null
+          created_at?: string
+          declined_at?: string | null
+          email: string
+          expires_at?: string
+          id?: string
+          invited_by?: string
+          org_name_snapshot?: string | null
+          organization_id: string
+          role?: Database["public"]["Enums"]["organization_member_role"]
+          token?: string
+        }
+        Update: {
+          accepted_at?: string | null
+          created_at?: string
+          declined_at?: string | null
+          email?: string
+          expires_at?: string
+          id?: string
+          invited_by?: string
+          org_name_snapshot?: string | null
+          organization_id?: string
+          role?: Database["public"]["Enums"]["organization_member_role"]
+          token?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "org_invites_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       organization_members: {
         Row: {
           joined_at: string
@@ -951,6 +1141,7 @@ export type Database = {
           google_refresh_token_encrypted: string | null
           id: string
           is_super_admin: boolean
+          onboarding_done: boolean
           plan: Database["public"]["Enums"]["billing_plan"]
           storage_bytes_limit: number | null
           storage_bytes_used: number
@@ -982,6 +1173,7 @@ export type Database = {
           google_refresh_token_encrypted?: string | null
           id: string
           is_super_admin?: boolean
+          onboarding_done?: boolean
           plan?: Database["public"]["Enums"]["billing_plan"]
           storage_bytes_limit?: number | null
           storage_bytes_used?: number
@@ -1013,6 +1205,7 @@ export type Database = {
           google_refresh_token_encrypted?: string | null
           id?: string
           is_super_admin?: boolean
+          onboarding_done?: boolean
           plan?: Database["public"]["Enums"]["billing_plan"]
           storage_bytes_limit?: number | null
           storage_bytes_used?: number
@@ -1507,6 +1700,7 @@ export type Database = {
           duration_seconds: number | null
           error_message: string | null
           event_calendar_id: string | null
+          free_text_qa: Json
           id: string
           language: string
           merged_into: string | null
@@ -1544,6 +1738,7 @@ export type Database = {
           duration_seconds?: number | null
           error_message?: string | null
           event_calendar_id?: string | null
+          free_text_qa?: Json
           id?: string
           language?: string
           merged_into?: string | null
@@ -1581,6 +1776,7 @@ export type Database = {
           duration_seconds?: number | null
           error_message?: string | null
           event_calendar_id?: string | null
+          free_text_qa?: Json
           id?: string
           language?: string
           merged_into?: string | null
@@ -1687,6 +1883,222 @@ export type Database = {
           },
         ]
       }
+      shopping_run_items: {
+        Row: {
+          carried_from_run_id: string | null
+          category_id: string | null
+          created_at: string
+          id: string
+          ingredient_id: string | null
+          matched_from_receipt: boolean
+          name: string
+          notes: string | null
+          organization_id: string
+          quantity: number
+          run_id: string
+          sort_order: number
+          source: string
+          source_meals: string[]
+          staple_id: string | null
+          status: string
+          unit: string | null
+          updated_at: string
+        }
+        Insert: {
+          carried_from_run_id?: string | null
+          category_id?: string | null
+          created_at?: string
+          id?: string
+          ingredient_id?: string | null
+          matched_from_receipt?: boolean
+          name: string
+          notes?: string | null
+          organization_id: string
+          quantity?: number
+          run_id: string
+          sort_order?: number
+          source?: string
+          source_meals?: string[]
+          staple_id?: string | null
+          status?: string
+          unit?: string | null
+          updated_at?: string
+        }
+        Update: {
+          carried_from_run_id?: string | null
+          category_id?: string | null
+          created_at?: string
+          id?: string
+          ingredient_id?: string | null
+          matched_from_receipt?: boolean
+          name?: string
+          notes?: string | null
+          organization_id?: string
+          quantity?: number
+          run_id?: string
+          sort_order?: number
+          source?: string
+          source_meals?: string[]
+          staple_id?: string | null
+          status?: string
+          unit?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shopping_run_items_carried_from_run_id_fkey"
+            columns: ["carried_from_run_id"]
+            isOneToOne: false
+            referencedRelation: "shopping_runs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shopping_run_items_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "ingredient_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shopping_run_items_ingredient_id_fkey"
+            columns: ["ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shopping_run_items_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shopping_run_items_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "shopping_runs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shopping_run_items_staple_id_fkey"
+            columns: ["staple_id"]
+            isOneToOne: false
+            referencedRelation: "household_staples"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      shopping_runs: {
+        Row: {
+          closed_at: string | null
+          created_at: string
+          created_by: string
+          frozen_from_date: string
+          frozen_to_date: string
+          id: string
+          included_user_ids: string[]
+          organization_id: string
+          receipt_storage_path: string | null
+          status: string
+          store_connection_id: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          closed_at?: string | null
+          created_at?: string
+          created_by: string
+          frozen_from_date: string
+          frozen_to_date: string
+          id?: string
+          included_user_ids?: string[]
+          organization_id: string
+          receipt_storage_path?: string | null
+          status?: string
+          store_connection_id?: string | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          closed_at?: string | null
+          created_at?: string
+          created_by?: string
+          frozen_from_date?: string
+          frozen_to_date?: string
+          id?: string
+          included_user_ids?: string[]
+          organization_id?: string
+          receipt_storage_path?: string | null
+          status?: string
+          store_connection_id?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shopping_runs_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shopping_runs_store_connection_id_fkey"
+            columns: ["store_connection_id"]
+            isOneToOne: false
+            referencedRelation: "store_connections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      store_connections: {
+        Row: {
+          base_url: string | null
+          config: Json
+          created_at: string
+          enabled: boolean
+          id: string
+          kind: string
+          name: string
+          organization_id: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          base_url?: string | null
+          config?: Json
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          kind?: string
+          name: string
+          organization_id: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          base_url?: string | null
+          config?: Json
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          kind?: string
+          name?: string
+          organization_id?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "store_connections_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       super_admin_audit_log: {
         Row: {
           action: string
@@ -1722,6 +2134,51 @@ export type Database = {
           user_agent?: string | null
         }
         Relationships: []
+      }
+      task_assignees: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          delegation_status: Database["public"]["Enums"]["delegation_status"]
+          id: string
+          organization_id: string
+          task_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          delegation_status?: Database["public"]["Enums"]["delegation_status"]
+          id?: string
+          organization_id: string
+          task_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          delegation_status?: Database["public"]["Enums"]["delegation_status"]
+          id?: string
+          organization_id?: string
+          task_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_assignees_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_assignees_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       task_attachments: {
         Row: {
@@ -1908,6 +2365,55 @@ export type Database = {
           },
         ]
       }
+      task_edits: {
+        Row: {
+          changes: Json
+          edited_at: string
+          edited_by: string | null
+          id: string
+          org_id: string
+          task_id: string
+        }
+        Insert: {
+          changes: Json
+          edited_at?: string
+          edited_by?: string | null
+          id?: string
+          org_id: string
+          task_id: string
+        }
+        Update: {
+          changes?: Json
+          edited_at?: string
+          edited_by?: string | null
+          id?: string
+          org_id?: string
+          task_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_edits_edited_by_profiles_fkey"
+            columns: ["edited_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_edits_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_edits_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       task_lists: {
         Row: {
           archive_expires_at: string | null
@@ -2001,19 +2507,25 @@ export type Database = {
           created_at: string
           custom_fields: Json
           deadline_at: string | null
+          delegation_status:
+            | Database["public"]["Enums"]["delegation_status"]
+            | null
           description: string | null
           duration_minutes: number | null
           estimated_hours: number | null
+          excluded_occurrences: Json
           external_url: string | null
           extra_occurrences: Json
-          excluded_occurrences: Json
+          goal_deadline: string | null
           goal_min_streak_periods: number | null
           goal_period: string | null
           goal_started_on: string | null
           goal_target: number | null
           goal_track_time: boolean
+          goal_type: string | null
           google_event_ids: Json | null
           id: string
+          is_critical: boolean
           is_event: boolean
           is_phase: boolean
           location: string | null
@@ -2052,19 +2564,25 @@ export type Database = {
           created_at?: string
           custom_fields?: Json
           deadline_at?: string | null
+          delegation_status?:
+            | Database["public"]["Enums"]["delegation_status"]
+            | null
           description?: string | null
           duration_minutes?: number | null
           estimated_hours?: number | null
+          excluded_occurrences?: Json
           external_url?: string | null
           extra_occurrences?: Json
-          excluded_occurrences?: Json
+          goal_deadline?: string | null
           goal_min_streak_periods?: number | null
           goal_period?: string | null
           goal_started_on?: string | null
           goal_target?: number | null
           goal_track_time?: boolean
+          goal_type?: string | null
           google_event_ids?: Json | null
           id?: string
+          is_critical?: boolean
           is_event?: boolean
           is_phase?: boolean
           location?: string | null
@@ -2103,19 +2621,25 @@ export type Database = {
           created_at?: string
           custom_fields?: Json
           deadline_at?: string | null
+          delegation_status?:
+            | Database["public"]["Enums"]["delegation_status"]
+            | null
           description?: string | null
           duration_minutes?: number | null
           estimated_hours?: number | null
+          excluded_occurrences?: Json
           external_url?: string | null
           extra_occurrences?: Json
-          excluded_occurrences?: Json
+          goal_deadline?: string | null
           goal_min_streak_periods?: number | null
           goal_period?: string | null
           goal_started_on?: string | null
           goal_target?: number | null
           goal_track_time?: boolean
+          goal_type?: string | null
           google_event_ids?: Json | null
           id?: string
+          is_critical?: boolean
           is_event?: boolean
           is_phase?: boolean
           location?: string | null
@@ -2678,43 +3202,76 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      _meal_image_org_id: { Args: { name: string }; Returns: string }
+      accept_org_invite: { Args: { p_token: string }; Returns: Json }
       can_use_feature: {
         Args: { p_feature: string; p_organization_id: string }
         Returns: boolean
       }
-      create_organization_with_password: {
+      create_org_invite: {
         Args: {
-          p_join_password: string
+          p_email: string
+          p_org_id: string
+          p_role?: Database["public"]["Enums"]["organization_member_role"]
+        }
+        Returns: Json
+      }
+      create_organization_with_password:
+        | {
+            Args: {
+              p_join_password: string
+              p_name: string
+              p_suggested_email_domain?: string
+            }
+            Returns: {
+              archive_expires_at: string | null
+              archived_at: string | null
+              billing_customer_id: string | null
+              created_at: string
+              created_by: string | null
+              current_period_end: string | null
+              food_shared: boolean
+              id: string
+              is_archived: boolean
+              join_password_hash: string | null
+              name: string
+              org_type: Database["public"]["Enums"]["organization_type"]
+              plan: Database["public"]["Enums"]["billing_plan"]
+              slug: string | null
+              storage_bytes_limit: number
+              storage_bytes_used: number
+              subscription_status: Database["public"]["Enums"]["subscription_status"]
+              suggested_email_domain: string | null
+              trial_ends_at: string | null
+              updated_at: string
+            }
+            SetofOptions: {
+              from: "*"
+              to: "organizations"
+              isOneToOne: true
+              isSetofReturn: false
+            }
+          }
+        | {
+            Args: {
+              p_join_password: string
+              p_name: string
+              p_org_type?: string
+              p_suggested_email_domain?: string
+            }
+            Returns: Json
+          }
+      create_organization_with_type: {
+        Args: {
+          p_join_password?: string
           p_name: string
+          p_org_type?: Database["public"]["Enums"]["organization_type"]
           p_suggested_email_domain?: string
         }
-        Returns: {
-          archive_expires_at: string | null
-          archived_at: string | null
-          billing_customer_id: string | null
-          created_at: string
-          created_by: string | null
-          current_period_end: string | null
-          id: string
-          is_archived: boolean
-          join_password_hash: string | null
-          name: string
-          plan: Database["public"]["Enums"]["billing_plan"]
-          slug: string | null
-          storage_bytes_limit: number
-          storage_bytes_used: number
-          subscription_status: Database["public"]["Enums"]["subscription_status"]
-          suggested_email_domain: string | null
-          trial_ends_at: string | null
-          updated_at: string
-        }
-        SetofOptions: {
-          from: "*"
-          to: "organizations"
-          isOneToOne: true
-          isSetofReturn: false
-        }
+        Returns: Json
       }
+      decline_org_invite: { Args: { p_token: string }; Returns: Json }
+      delete_organization: { Args: { p_org_id: string }; Returns: undefined }
       duplicate_task_tree: {
         Args: {
           p_source_task_id: string
@@ -2731,6 +3288,7 @@ export type Database = {
           suggested_email_domain: string
         }[]
       }
+      get_invite_by_token: { Args: { p_token: string }; Returns: Json }
       global_search: {
         Args: { p_limit?: number; p_organization_id: string; p_query: string }
         Returns: {
@@ -2740,6 +3298,10 @@ export type Database = {
           snippet: string
           title: string
         }[]
+      }
+      join_organization_by_name_and_password: {
+        Args: { p_join_password: string; p_name: string }
+        Returns: Json
       }
       join_organization_with_password: {
         Args: { p_join_password: string; p_organization_id: string }
@@ -2756,14 +3318,23 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      org_food_is_shared: { Args: { p_org_id: string }; Returns: boolean }
       promote_self_to_super_admin_if_allowed: { Args: never; Returns: boolean }
       recalc_task_actual_seconds: {
         Args: { p_task: string }
         Returns: undefined
       }
+      remove_org_member: {
+        Args: { p_org_id: string; p_user_id: string }
+        Returns: Json
+      }
       reset_user_task_statuses: { Args: never; Returns: undefined }
       seed_user_default_statuses: {
         Args: { p_user_id: string }
+        Returns: undefined
+      }
+      set_onboarding_done: {
+        Args: { p_plan?: Database["public"]["Enums"]["billing_plan"] }
         Returns: undefined
       }
       show_limit: { Args: never; Returns: number }
@@ -2813,12 +3384,24 @@ export type Database = {
         }
       }
       unaccent: { Args: { "": string }; Returns: string }
+      update_org_member_role: {
+        Args: {
+          p_org_id: string
+          p_role: Database["public"]["Enums"]["organization_member_role"]
+          p_user_id: string
+        }
+        Returns: Json
+      }
       user_has_share: {
         Args: {
           p_entity_id: string
           p_entity_type: Database["public"]["Enums"]["share_entity_type"]
           p_user: string
         }
+        Returns: boolean
+      }
+      user_is_event_participant: {
+        Args: { p_event: string; p_user: string }
         Returns: boolean
       }
       user_is_org_member: {
@@ -2860,6 +3443,7 @@ export type Database = {
         | "projects"
         | "pricing"
         | "project_detail"
+      delegation_status: "pending" | "accepted" | "rejected"
       dependency_relation:
         | "finish_to_start"
         | "start_to_start"
@@ -3104,6 +3688,7 @@ export const Constants = {
         "pricing",
         "project_detail",
       ],
+      delegation_status: ["pending", "accepted", "rejected"],
       dependency_relation: [
         "finish_to_start",
         "start_to_start",

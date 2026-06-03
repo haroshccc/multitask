@@ -126,6 +126,15 @@ export function FocusSessionLayer() {
         />
       )}
 
+      {f.overrunPrompt && (
+        <OverrunPromptModal
+          kind={f.overrunPrompt.kind}
+          overrunMin={f.overrunPrompt.overrunMin}
+          onGrow={() => f.resolveOverrunPrompt(true)}
+          onSkip={() => f.resolveOverrunPrompt(false)}
+        />
+      )}
+
       {f.reminder && (
         <ReminderBanner
           title={f.reminderNextTask?.title || "המשימה הבאה"}
@@ -280,25 +289,23 @@ function SessionBanner({
             עבדת {fmt(elapsedMs)}
           </div>
         </div>
-        {!isTimeup && (
-          <button
-            type="button"
-            onClick={isPaused ? onResume : onPause}
-            className={cn(
-              "shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-white",
-              isPaused
-                ? "bg-primary-500 hover:bg-primary-600"
-                : "bg-danger-500 hover:bg-danger-600"
-            )}
-            title={isPaused ? "המשך" : "עצור"}
-          >
-            {isPaused ? (
-              <Play className="w-3.5 h-3.5 ms-0.5" />
-            ) : (
-              <Pause className="w-3.5 h-3.5" />
-            )}
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={isPaused ? onResume : onPause}
+          className={cn(
+            "shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-white",
+            isPaused
+              ? "bg-primary-500 hover:bg-primary-600"
+              : "bg-danger-500 hover:bg-danger-600"
+          )}
+          title={isPaused ? "המשך" : "עצור"}
+        >
+          {isPaused ? (
+            <Play className="w-3.5 h-3.5 ms-0.5" />
+          ) : (
+            <Pause className="w-3.5 h-3.5" />
+          )}
+        </button>
         <button
           type="button"
           onClick={isPaused ? onClose : onFinish}
@@ -452,6 +459,48 @@ function LateStartModal({
             className="btn-primary text-sm inline-flex items-center gap-1"
           >
             <CalendarClock className="w-4 h-4" /> דחה את הלו״ז קדימה
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+function OverrunPromptModal({
+  kind,
+  overrunMin,
+  onGrow,
+  onSkip,
+}: {
+  kind: "finish" | "pause";
+  overrunMin: number;
+  onGrow: () => void;
+  onSkip: () => void;
+}) {
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4">
+      <div className="card w-full max-w-sm p-5 shadow-lift">
+        <div className="flex items-center gap-2 mb-1">
+          <AlarmClock className="w-5 h-5 text-amber-500" />
+          <h2 className="text-base font-bold text-ink-900">
+            עבדת אחרי הזמן
+          </h2>
+        </div>
+        <p className="text-sm text-ink-700 mb-4">
+          עבדת עוד כ-{overrunMin} דק׳ אחרי סוף הזמן שתוכנן. להאריך את המשימה
+          ביומן כדי שתשקף את הזמן שבאמת עבדת? (אפשר לבטל אחר כך)
+        </p>
+        <div className="flex items-center justify-end gap-2">
+          <button type="button" onClick={onSkip} className="btn-ghost text-sm">
+            {kind === "pause" ? "רק עצור" : "לא, סיים כמו שזה"}
+          </button>
+          <button
+            type="button"
+            onClick={onGrow}
+            className="btn-primary text-sm inline-flex items-center gap-1"
+          >
+            <CalendarClock className="w-4 h-4" /> כן, הארך ב-{overrunMin} דק׳
           </button>
         </div>
       </div>

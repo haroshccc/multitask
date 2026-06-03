@@ -6,18 +6,22 @@ import { MealsTab } from "@/components/food/MealsTab";
 import { IngredientsTab } from "@/components/food/IngredientsTab";
 import { WeeklyMenuTab } from "@/components/food/WeeklyMenuTab";
 import { InteractiveMenuTab } from "@/components/food/InteractiveMenuTab";
+import { HouseholdStaplesTab } from "@/components/food/HouseholdStaplesTab";
+import { ShoppingTab } from "@/components/food/ShoppingTab";
 import { TomorrowMenuBanner } from "@/components/food/TomorrowMenuBanner";
 import { ShareMenuModal } from "@/components/food/ShareMenuModal";
 import { ShoppingListExportModal } from "@/components/food/ShoppingListExportModal";
 import { MenuTaskExportModal } from "@/components/food/MenuTaskExportModal";
 import { ImportFoodDataModal } from "@/components/food/ImportFoodDataModal";
 
-type Tab = "meals" | "ingredients" | "weekly" | "menu";
+type Tab = "meals" | "ingredients" | "weekly" | "menu" | "shopping" | "staples";
 
 const TABS: Array<{ id: Tab; label: string }> = [
   { id: "menu", label: "תפריט אישי" },
+  { id: "shopping", label: "קניות" },
   { id: "meals", label: "מנות" },
   { id: "ingredients", label: "מצרכים" },
+  { id: "staples", label: "מוצרי בית" },
   { id: "weekly", label: "תפריט שבועי" },
 ];
 
@@ -30,7 +34,9 @@ export function Food() {
     if (
       stored === "ingredients" ||
       stored === "weekly" ||
-      stored === "menu"
+      stored === "menu" ||
+      stored === "shopping" ||
+      stored === "staples"
     ) {
       return stored;
     }
@@ -119,6 +125,7 @@ export function Food() {
       </div>
 
       {tab === "menu" && <InteractiveMenuTab />}
+      {tab === "shopping" && <ShoppingTab />}
       {tab === "meals" && (
         <MealsTab
           ingredientsPanelOpen={ingredientsPanelOpen}
@@ -126,6 +133,7 @@ export function Food() {
         />
       )}
       {tab === "ingredients" && <IngredientsTab />}
+      {tab === "staples" && <HouseholdStaplesTab />}
       {tab === "weekly" && <WeeklyMenuTab />}
 
       <ShareMenuModal open={shareOpen} onClose={() => setShareOpen(false)} />

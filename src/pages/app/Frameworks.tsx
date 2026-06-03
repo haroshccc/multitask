@@ -71,9 +71,9 @@ export function Frameworks() {
         </button>
       </header>
 
-      <div className="flex-1 flex min-h-0">
-        {/* Framework rail */}
-        <aside className="w-48 md:w-56 shrink-0 border-e border-ink-200 overflow-y-auto p-2 space-y-1">
+      <div className="flex-1 flex flex-col md:flex-row min-h-0">
+        {/* Framework rail — horizontal scroll on mobile, vertical column on md+ */}
+        <aside className="shrink-0 md:w-56 border-b md:border-b-0 md:border-e border-ink-200 p-2 flex md:flex-col gap-1 overflow-x-auto md:overflow-y-auto">
           {isLoading && <p className="text-xs text-ink-400 px-2 py-2">טוען…</p>}
           {!isLoading && frameworks.length === 0 && (
             <p className="text-xs text-ink-400 px-2 py-3 leading-relaxed">
@@ -85,7 +85,7 @@ export function Frameworks() {
               key={f.id}
               onClick={() => setSelectedId(f.id)}
               className={cn(
-                "w-full flex items-center gap-2 rounded-xl px-2.5 py-2 text-sm text-start",
+                "shrink-0 md:w-full flex items-center gap-2 rounded-xl px-2.5 py-2 text-sm text-start whitespace-nowrap",
                 selectedId === f.id ? "bg-ink-900 text-white" : "text-ink-700 hover:bg-ink-100"
               )}
             >
@@ -93,7 +93,7 @@ export function Frameworks() {
                 className="w-3 h-3 rounded-full shrink-0"
                 style={{ background: f.color ?? "#6366f1" }}
               />
-              <span className="truncate flex-1">
+              <span className="truncate md:flex-1 max-w-[40vw] md:max-w-none">
                 {f.emoji ? `${f.emoji} ` : ""}
                 {f.name}
               </span>

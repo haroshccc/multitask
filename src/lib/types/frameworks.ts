@@ -10,7 +10,7 @@
  * declare the shapes here. Services cast the supabase client to `any` (`db`).
  */
 
-export type FrameworkScope = "weekly" | "date";
+export type FrameworkScope = "weekly" | "date" | "monthly";
 export type FrameworkOverrideKind = "add" | "remove" | "modify";
 export type FrameworkOccurrenceStatus = "done" | "skipped";
 export type FrameworkGoalPeriod = "day" | "week" | "month";
@@ -51,6 +51,10 @@ export interface FrameworkDayLabel {
   scope: FrameworkScope;
   day_of_week: number | null;
   specific_date: string | null;
+  /** Monthly scope: repeat every N months (>=1). */
+  month_interval: number | null;
+  /** Monthly scope: reference date — defines day-of-month and the phase for N>1. */
+  month_anchor: string | null;
   label: string;
   color: string | null;
   effective_from: string | null;
@@ -78,6 +82,10 @@ export interface FrameworkBlock {
   scope: FrameworkScope;
   day_of_week: number | null;
   specific_date: string | null;
+  /** Monthly scope: repeat every N months (>=1). */
+  month_interval: number | null;
+  /** Monthly scope: reference date — defines day-of-month and the phase for N>1. */
+  month_anchor: string | null;
   start_minute: number;
   end_minute: number;
   effective_from: string | null;

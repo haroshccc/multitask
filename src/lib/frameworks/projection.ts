@@ -59,6 +59,34 @@ function atMinutes(day: Date, minutes: number): Date {
   return r;
 }
 
+function daysInMonth(d: Date): number {
+  return new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+}
+
+/**
+ * Monthly rule: matches when `cursor` falls on the anchor's day-of-month
+ * (clamped to the month length) and the month offset from the anchor is a
+ * multiple of the interval. e.g. anchor 2026-06-15, interval 4 → Jun 15,
+ * Oct 15, Feb 15, … Only dates on/after the anchor match.
+ */
+function matchesMonthly(
+  anchorKey: string | null,
+  interval: number | null,
+  cursor: Date
+): boolean {
+  if (!anchorKey) return false;
+  const a = fromDateKey(anchorKey);
+  const anc = new Date(a.getFullYear(), a.getMonth(), a.getDate());
+  const cur = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate());
+  if (cur < anc) return false;
+  const n = Math.max(1, interval ?? 1);
+  const monthsDiff =
+    (cur.getFullYear() - anc.getFullYear()) * 12 + (cur.getMonth() - anc.getMonth());
+  if (monthsDiff % n !== 0) return false;
+  const targetDay = Math.min(anc.getDate(), daysInMonth(cur));
+  return cur.getDate() === targetDay;
+}
+
 /** Inclusive-from / inclusive-to test against optional yyyy-mm-dd bounds. */
 function withinRange(dateKey: string, from: string | null, to: string | null): boolean {
   if (from && dateKey < from) return false;
@@ -91,6 +119,7 @@ export function projectFrameworkBlocks(
 ): FrameworkBlockOccurrenceView[] {
   const weekly = blocks.filter((b) => b.scope === "weekly");
   const dated = blocks.filter((b) => b.scope === "date");
+  const monthly = blocks.filter((b) => b.scope === "monthly");
 
   // index overrides by `${sourceBlockId}|${date}` and standalone adds by date
   const overrideByKey = new Map<string, FrameworkBlock>();
@@ -139,6 +168,13 @@ export function projectFrameworkBlocks(
     for (const a of addsByDate.get(dateKey) ?? []) {
       out.push(viewFromBlock(framework, a, a.id, cursor, dateKey, statusByKey));
     }
+
+    // monthly / periodic blocks (every N months on the anchor's day-of-month)
+    for (const m of monthly) {
+      if (!withinRange(dateKey, m.effective_from, m.effective_to)) continue;
+      if (!matchesMonthly(m.month_anchor, m.month_interval, cursor)) continue;
+      out.push(viewFromBlock(framework, m, m.id, cursor, dateKey, statusByKey));
+    }
   }
 
   return out;
@@ -179,6 +215,7 @@ export function projectFrameworkDayLabels(
   to: Date
 ): Map<string, FrameworkDayLabelView> {
   const weekly = labels.filter((l) => l.scope === "weekly");
+  const monthly = labels.filter((l) => l.scope === "monthly");
   const byDate = new Map<string, FrameworkDayLabel>();
   for (const l of labels) {
     if (l.scope === "date" && l.specific_date) byDate.set(l.specific_date, l);
@@ -199,6 +236,13 @@ export function projectFrameworkDayLabels(
         (l) =>
           l.day_of_week === dow &&
           withinRange(dateKey, l.effective_from, l.effective_to)
+      );
+    }
+    if (!chosen) {
+      chosen = monthly.find(
+        (l) =>
+          withinRange(dateKey, l.effective_from, l.effective_to) &&
+          matchesMonthly(l.month_anchor, l.month_interval, cursor)
       );
     }
     if (chosen && chosen.label.trim()) {

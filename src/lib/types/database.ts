@@ -2424,8 +2424,11 @@ export type Database = {
           color: string | null
           created_at: string
           emoji: string | null
+          framework_ends_on: string | null
+          framework_starts_on: string | null
           id: string
           is_archived: boolean
+          is_framework: boolean
           is_pinned: boolean
           kind: Database["public"]["Enums"]["task_list_kind"]
           linked_event_calendar_id: string | null
@@ -2442,8 +2445,11 @@ export type Database = {
           color?: string | null
           created_at?: string
           emoji?: string | null
+          framework_ends_on?: string | null
+          framework_starts_on?: string | null
           id?: string
           is_archived?: boolean
+          is_framework?: boolean
           is_pinned?: boolean
           kind?: Database["public"]["Enums"]["task_list_kind"]
           linked_event_calendar_id?: string | null
@@ -2530,6 +2536,7 @@ export type Database = {
           id: string
           is_critical: boolean
           is_event: boolean
+          is_framework: boolean
           is_phase: boolean
           location: string | null
           notes: string | null
@@ -2587,6 +2594,7 @@ export type Database = {
           id?: string
           is_critical?: boolean
           is_event?: boolean
+          is_framework?: boolean
           is_phase?: boolean
           location?: string | null
           notes?: string | null
@@ -2644,6 +2652,7 @@ export type Database = {
           id?: string
           is_critical?: boolean
           is_event?: boolean
+          is_framework?: boolean
           is_phase?: boolean
           location?: string | null
           notes?: string | null

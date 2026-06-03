@@ -35,6 +35,11 @@ import { CalendarBlock } from "./CalendarDayView";
 import { RecurringMarker } from "./RecurringMarker";
 import { DayNoteSlot } from "./DayNoteSlot";
 import { TaskCheckButton } from "./TaskCheckButton";
+import { FrameworkBlockChip } from "./FrameworkBlockChip";
+import type {
+  FrameworkBlockOccurrenceView,
+  FrameworkDayLabelView,
+} from "@/lib/types/frameworks";
 
 /** yyyy-mm-dd in local time — same shape as `dateKey()` in the service. */
 function dayNoteKey(d: Date): string {
@@ -71,6 +76,18 @@ interface CalendarWeekViewProps {
   /** When true, recurring task items render as a flat deadline-style marker
    *  (repeat glyph + start time + underline) instead of a bordered block. */
   recurringAsMarker?: boolean;
+  /** Framework time-blocks (faded background layer), already projected to dates. */
+  frameworkBlocks?: FrameworkBlockOccurrenceView[];
+  /** Per-day framework labels (yyyy-mm-dd → labels), shown under each date. */
+  frameworkLabelsByDate?: Map<string, FrameworkDayLabelView[]>;
+  /** Left-click a framework block → cycle its check state. */
+  onFrameworkBlockClick?: (occ: FrameworkBlockOccurrenceView) => void;
+  /** Right-click a framework block → move gesture (single/future prompt). */
+  onFrameworkBlockContextMenu?: (
+    occ: FrameworkBlockOccurrenceView,
+    x: number,
+    y: number
+  ) => void;
 }
 
 export function CalendarWeekView({
@@ -89,6 +106,10 @@ export function CalendarWeekView({
   onDateNoteClick,
   readOnly,
   recurringAsMarker,
+  frameworkBlocks,
+  frameworkLabelsByDate,
+  onFrameworkBlockClick,
+  onFrameworkBlockContextMenu,
 }: CalendarWeekViewProps) {
   const { prefs } = useCalendarPrefs();
   const weekStart = startOfWeek(anchor);
@@ -354,6 +375,19 @@ export function CalendarWeekView({
                   className="flex-1 text-end"
                 />
               </div>
+              {(frameworkLabelsByDate?.get(dayNoteKey(day)) ?? []).map((lbl, i) => (
+                <div
+                  key={i}
+                  className="mt-0.5 text-[10px] font-medium truncate rounded px-1 py-0.5"
+                  style={{
+                    background: (lbl.color ?? "#6366f1") + "1a",
+                    color: lbl.color ?? "#6366f1",
+                  }}
+                  title={lbl.label}
+                >
+                  {lbl.label}
+                </div>
+              ))}
             </div>
           );
         })}
@@ -557,6 +591,20 @@ export function CalendarWeekView({
                   className="absolute inset-x-0 border-t border-ink-150 pointer-events-none"
                 />
               ))}
+
+              {/* Framework background blocks (faded) — behind planned items */}
+              {(frameworkBlocks ?? [])
+                .filter((b) => b.date === dayNoteKey(day))
+                .map((b) => (
+                  <FrameworkBlockChip
+                    key={b.id}
+                    occ={b}
+                    top={percentFor(b.start, dayStart)}
+                    height={durationPercentFor(b.end.getTime() - b.start.getTime())}
+                    onClick={onFrameworkBlockClick}
+                    onContextMenu={onFrameworkBlockContextMenu}
+                  />
+                ))}
 
               {/* Planned blocks with actual overlays */}
               {layout.map(({ item, column, columns }) => {

@@ -23,7 +23,7 @@ import { TaskActionsMenu } from "@/components/calendar/TaskActionsMenu";
 import { TimerLogPopup } from "@/components/projects/blocks/TimerLogPopup";
 import type { DropAction } from "@/components/calendar/calendar-drag";
 import { cn } from "@/lib/utils/cn";
-import { CalendarRange } from "lucide-react";
+import { CalendarRange, Frame, Eye, EyeOff } from "lucide-react";
 import {
   useCalendarDayNotes,
 } from "@/lib/hooks/useCalendarDayNotes";
@@ -57,6 +57,22 @@ import {
   useUpdateTask,
 } from "@/lib/hooks";
 import { useCalendarPrefs } from "@/lib/hooks/useCalendarPrefs";
+import {
+  useFrameworks,
+  useFrameworkVisibility,
+  useSetFrameworkVisibility,
+  useFrameworkContentForMany,
+  useSetBlockOccurrence,
+} from "@/lib/hooks/useFrameworks";
+import {
+  projectFrameworkBlocks,
+  projectFrameworkDayLabels,
+} from "@/lib/frameworks/projection";
+import type {
+  FrameworkBlockOccurrenceView,
+  FrameworkDayLabelView,
+  FrameworkOccurrenceStatus,
+} from "@/lib/types/frameworks";
 import { pushUndo } from "@/lib/undo/store";
 import type { FilterConfig, Task } from "@/lib/types/domain";
 
@@ -303,6 +319,63 @@ export function Calendar() {
     }
     return stripes;
   }, [timeEntries]);
+
+  // ── Frameworks layer ────────────────────────────────────────────────────
+  // Frameworks are an independent overlay: active ones contribute a banner
+  // title, per-day labels, and faded background blocks. Toggling is per-user
+  // and separate from list visibility.
+  const { data: frameworks = [] } = useFrameworks();
+  const { data: visibilityRows = [] } = useFrameworkVisibility();
+  const setFrameworkVisibility = useSetFrameworkVisibility();
+  const setBlockOccurrence = useSetBlockOccurrence();
+
+  const frameworkActive = useMemo(() => {
+    const m = new Map<string, boolean>();
+    for (const v of visibilityRows) m.set(v.framework_id, v.is_active);
+    return m;
+  }, [visibilityRows]);
+
+  const activeFrameworks = useMemo(
+    () => frameworks.filter((f) => frameworkActive.get(f.id) !== false),
+    [frameworks, frameworkActive]
+  );
+  const activeFrameworkIds = useMemo(
+    () => activeFrameworks.map((f) => f.id),
+    [activeFrameworks]
+  );
+  const { data: frameworkContentById = {} } =
+    useFrameworkContentForMany(activeFrameworkIds);
+
+  const { frameworkBlocks, frameworkLabelsByDate } = useMemo(() => {
+    const blocks: FrameworkBlockOccurrenceView[] = [];
+    const labels = new Map<string, FrameworkDayLabelView[]>();
+    for (const f of activeFrameworks) {
+      const content = frameworkContentById[f.id];
+      if (!content) continue;
+      blocks.push(
+        ...projectFrameworkBlocks(f, content.blocks, content.occurrences, range.from, range.to)
+      );
+      const labelMap = projectFrameworkDayLabels(f, content.labels, range.from, range.to);
+      for (const [key, view] of labelMap) {
+        const arr = labels.get(key) ?? [];
+        arr.push(view);
+        labels.set(key, arr);
+      }
+    }
+    return { frameworkBlocks: blocks, frameworkLabelsByDate: labels };
+  }, [activeFrameworks, frameworkContentById, range]);
+
+  /** Left-click a framework block cycles: none → done → skipped → none. */
+  const cycleFrameworkBlock = (occ: FrameworkBlockOccurrenceView) => {
+    const next: FrameworkOccurrenceStatus | null =
+      occ.status === null ? "done" : occ.status === "done" ? "skipped" : null;
+    setBlockOccurrence.mutate({
+      blockId: occ.blockId,
+      frameworkId: occ.frameworkId,
+      date: occ.date,
+      status: next,
+    });
+  };
 
   const fields: FilterField[] = useMemo(
     () => [
@@ -639,6 +712,42 @@ export function Calendar() {
           />
         )}
 
+        {/* Frameworks bar — active frameworks show their title as a filled
+            pill (the banner above the calendar); click toggles on/off. */}
+        {frameworks.length > 0 && (
+          <div className="flex items-center gap-2 flex-wrap pt-1">
+            <span className="inline-flex items-center gap-1 text-xs text-ink-500 shrink-0">
+              <Frame className="w-3.5 h-3.5" /> מסגרות
+            </span>
+            {frameworks.map((f) => {
+              const active = frameworkActive.get(f.id) !== false;
+              const color = f.color ?? "#6366f1";
+              return (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() =>
+                    setFrameworkVisibility.mutate({
+                      frameworkId: f.id,
+                      isActive: !active,
+                    })
+                  }
+                  className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm border transition-colors"
+                  style={
+                    active
+                      ? { background: color, color: "#fff", borderColor: color }
+                      : { borderColor: "#e5e7eb", color: "#6b6b80" }
+                  }
+                  title={active ? "מסגרת פעילה — לחצי לכיבוי" : "מסגרת כבויה — לחצי להפעלה"}
+                >
+                  {active ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                  <span>{f.name}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         <div className="flex items-center justify-end pt-1">
           <button
             type="button"
@@ -682,6 +791,9 @@ export function Calendar() {
             dayNote={notesByDate.get(dateKey(anchor))}
             dayNoteColor={noteColorsByDate.get(dateKey(anchor))}
             onDateNoteClick={setEditingNoteDate}
+            frameworkBlocks={frameworkBlocks}
+            frameworkLabelsByDate={frameworkLabelsByDate}
+            onFrameworkBlockClick={cycleFrameworkBlock}
           />
         )}
         {view === "week" && (
@@ -699,6 +811,9 @@ export function Calendar() {
             notesByDate={notesByDate}
             noteColorsByDate={noteColorsByDate}
             onDateNoteClick={setEditingNoteDate}
+            frameworkBlocks={frameworkBlocks}
+            frameworkLabelsByDate={frameworkLabelsByDate}
+            onFrameworkBlockClick={cycleFrameworkBlock}
           />
         )}
         {view === "month" && (

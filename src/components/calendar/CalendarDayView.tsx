@@ -35,6 +35,11 @@ import { DayNoteSlot } from "./DayNoteSlot";
 import { TaskCheckButton } from "./TaskCheckButton";
 import { HalfCheckIcon } from "@/components/ui/HalfCheckIcon";
 import { RecurringMarker } from "./RecurringMarker";
+import { FrameworkBlockChip } from "./FrameworkBlockChip";
+import type {
+  FrameworkBlockOccurrenceView,
+  FrameworkDayLabelView,
+} from "@/lib/types/frameworks";
 
 interface CalendarDayViewProps {
   date: Date;
@@ -56,6 +61,18 @@ interface CalendarDayViewProps {
   dayNoteColor?: string | null;
   /** Click on the date digit → open the per-day note editor. */
   onDateNoteClick?: (date: Date) => void;
+  /** Framework time-blocks (faded background layer), already projected to dates. */
+  frameworkBlocks?: FrameworkBlockOccurrenceView[];
+  /** Per-day framework labels (yyyy-mm-dd → labels), shown under the date. */
+  frameworkLabelsByDate?: Map<string, FrameworkDayLabelView[]>;
+  /** Left-click a framework block → cycle its check state. */
+  onFrameworkBlockClick?: (occ: FrameworkBlockOccurrenceView) => void;
+  /** Right-click a framework block → move gesture (single/future prompt). */
+  onFrameworkBlockContextMenu?: (
+    occ: FrameworkBlockOccurrenceView,
+    x: number,
+    y: number
+  ) => void;
 }
 
 export function CalendarDayView({
@@ -72,11 +89,18 @@ export function CalendarDayView({
   dayNote,
   dayNoteColor,
   onDateNoteClick,
+  frameworkBlocks,
+  frameworkLabelsByDate,
+  onFrameworkBlockClick,
+  onFrameworkBlockContextMenu,
 }: CalendarDayViewProps) {
   const dayStart = startOfDay(date);
   const dayEnd = new Date(dayStart.getTime() + 24 * HOUR);
   const now = new Date();
   const isToday = isSameDay(date, now);
+  const dayKey = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  const dayFrameworkLabels = frameworkLabelsByDate?.get(dayKey) ?? [];
+  const dayFrameworkBlocks = (frameworkBlocks ?? []).filter((b) => b.date === dayKey);
 
   const { allDay, timed } = useMemo(() => {
     const allDay: CalendarItem[] = [];
@@ -229,6 +253,24 @@ export function CalendarDayView({
         <DayNoteSlot body={dayNote} textColor={dayNoteColor} />
       </div>
 
+      {/* Framework day labels ("יום לימודים") under the date */}
+      {dayFrameworkLabels.length > 0 && (
+        <div className="px-3 py-1 border-b border-ink-200 bg-white flex flex-wrap gap-1">
+          {dayFrameworkLabels.map((lbl, i) => (
+            <span
+              key={i}
+              className="text-[11px] font-medium rounded px-1.5 py-0.5"
+              style={{
+                background: (lbl.color ?? "#6366f1") + "1a",
+                color: lbl.color ?? "#6366f1",
+              }}
+            >
+              {lbl.label}
+            </span>
+          ))}
+        </div>
+      )}
+
       {/* All-day strip */}
       {allDay.length > 0 && (
         <div className="px-3 py-2 border-b border-ink-200 bg-ink-50/60">
@@ -281,6 +323,18 @@ export function CalendarDayView({
               key={h}
               style={{ top: i * hourHeight }}
               className="absolute inset-x-0 border-t border-ink-150 pointer-events-none"
+            />
+          ))}
+
+          {/* Framework background blocks (faded) — behind planned items */}
+          {dayFrameworkBlocks.map((b) => (
+            <FrameworkBlockChip
+              key={b.id}
+              occ={b}
+              top={toPercent(b.start)}
+              height={toDurationPercent(b.end.getTime() - b.start.getTime())}
+              onClick={onFrameworkBlockClick}
+              onContextMenu={onFrameworkBlockContextMenu}
             />
           ))}
 

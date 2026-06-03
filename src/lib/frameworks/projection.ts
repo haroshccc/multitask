@@ -34,6 +34,19 @@ export function fromDateKey(key: string): Date {
   return new Date(y, (m ?? 1) - 1, d ?? 1);
 }
 
+/** 540 -> "09:00" */
+export function minutesToHHMM(min: number): string {
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+/** "09:30" -> 570 */
+export function hhmmToMinutes(value: string): number {
+  const [h, m] = value.split(":").map(Number);
+  return (h ?? 0) * 60 + (m ?? 0);
+}
+
 function addDays(d: Date, n: number): Date {
   const r = new Date(d);
   r.setDate(r.getDate() + n);

@@ -9,6 +9,7 @@ import {
   Lightbulb,
   FolderKanban,
   Target,
+  Frame,
   UtensilsCrossed,
   Settings as SettingsIcon,
   Shield,
@@ -49,6 +50,7 @@ const NAV: NavItem[] = [
   { to: "/app", label: "דשבורד", icon: Home, end: true },
   { to: "/app/tasks", label: "משימות", icon: CheckSquare },
   { to: "/app/goals", label: "יעדים", icon: Target },
+  { to: "/app/frameworks", label: "מסגרות", icon: Frame },
   { to: "/app/calendar", label: "יומן", icon: CalendarIcon },
   { to: "/app/gantt", label: "Gantt", icon: BarChart3 },
   { to: "/app/recordings", label: "הקלטות", icon: Mic },
@@ -61,6 +63,7 @@ const NAV: NavItem[] = [
 const G_NAV: Record<string, string> = {
   KeyT: "/app/tasks",
   KeyG: "/app/goals",
+  KeyM: "/app/frameworks",
   KeyC: "/app/calendar",
   KeyR: "/app/recordings",
   KeyH: "/app/thoughts",

@@ -39,6 +39,9 @@ const Food = lazy(() =>
 const Goals = lazy(() =>
   import("@/pages/app/Goals").then((m) => ({ default: m.Goals }))
 );
+const Frameworks = lazy(() =>
+  import("@/pages/app/Frameworks").then((m) => ({ default: m.Frameworks }))
+);
 const ProjectDetail = lazy(() =>
   import("@/pages/app/ProjectDetail").then((m) => ({ default: m.ProjectDetail }))
 );
@@ -179,6 +182,14 @@ export default function App() {
           element={
             <Suspense fallback={<LoadingShell />}>
               <Goals />
+            </Suspense>
+          }
+        />
+        <Route
+          path="frameworks"
+          element={
+            <Suspense fallback={<LoadingShell />}>
+              <Frameworks />
             </Suspense>
           }
         />

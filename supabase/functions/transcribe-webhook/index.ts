@@ -107,14 +107,35 @@ async function webhookHandler(req: Request): Promise<Response> {
     return jsonResponse({ ok: true, ignored: "unknown_job" }, { origin });
   }
 
+  // Idempotency / retry guard. Gladia may deliver duplicate or retried
+  // callbacks for the same job (and on any non-2xx response it retries).
+  // Once we've persisted a terminal state, ack 200 and do nothing — otherwise
+  // each retry re-writes the (large) transcript and re-appends it to linked
+  // thoughts, and under load these concurrent UPDATEs pile row-locks onto the
+  // same recording. Only the `transcribing → terminal` transition does work.
+  if (recording.status !== "transcribing") {
+    return jsonResponse(
+      {
+        ok: true,
+        ignored: "not_transcribing",
+        status: recording.status,
+        job_id: body.id,
+      },
+      { origin }
+    );
+  }
+
   if (isError) {
+    // Conditional on status so two racing callbacks (or a late error after a
+    // success) can't clobber a recording that already moved past transcribing.
     await service
       .from("recordings")
       .update({
         status: "error",
         error_message: `gladia_error: ${body.error_code ?? body.event ?? "unknown"}`,
       })
-      .eq("id", recording.id);
+      .eq("id", recording.id)
+      .eq("status", "transcribing");
     return jsonResponse({ ok: true }, { origin });
   }
 
@@ -141,7 +162,11 @@ async function webhookHandler(req: Request): Promise<Response> {
   }
   const speakersCount = speakerIndices.size;
 
-  const { error: updErr } = await service
+  // Conditional on status = 'transcribing' so only ONE writer wins the
+  // transition. A racing poll/webhook (or a Gladia retry) updates 0 rows and
+  // skips the speakers upsert + thought sync below, so we never double-write
+  // the transcript or double-append it to linked thoughts.
+  const { data: updated, error: updErr } = await service
     .from("recordings")
     .update({
       status: "ready",
@@ -150,11 +175,21 @@ async function webhookHandler(req: Request): Promise<Response> {
       speakers_count: speakersCount,
       error_message: null,
     })
-    .eq("id", recording.id);
+    .eq("id", recording.id)
+    .eq("status", "transcribing")
+    .select("id");
 
   if (updErr) {
     console.error("transcribe_webhook_update_failed", updErr);
     return jsonResponse({ error: "db_update_failed" }, { status: 500, origin });
+  }
+
+  // Another writer already finished this recording — ack and stop.
+  if (!updated || updated.length === 0) {
+    return jsonResponse(
+      { ok: true, ignored: "already_finalized", recording_id: recording.id },
+      { origin }
+    );
   }
 
   if (speakersCount > 0) {
@@ -191,6 +226,9 @@ async function webhookHandler(req: Request): Promise<Response> {
     } else if (linkedThoughts && linkedThoughts.length > 0) {
       for (const t of linkedThoughts) {
         const existing = (t.text_content ?? "").trim();
+        // Idempotency guard: never append the same transcript twice (e.g. if a
+        // poll and a webhook both raced through before the status flipped).
+        if (existing.includes(transcriptText.trim())) continue;
         const merged = existing
           ? `${t.text_content}\n\n---\n${transcriptText}`
           : transcriptText;

@@ -225,3 +225,32 @@ A goal can be shared **at the list level** (`task_list_shares`) **or at the task
 - **`TaskColumn.tsx`** — historically only checked list-level shares, so a task-shared goal in a private list rendered amber. **Fixed**: column now also calls `useTaskSharesForTasks(allGoalTaskIds)` and exposes `getGoalShareKind(taskId)` per row. `collectGoalTaskIds(roots)` walks the tree to find all goal task IDs.
 
 When adding a new surface that renders the `<Target>` icon, **never** infer share kind from list-level shares alone.
+
+## Frameworks (מסגרות) — recurring schedule templates
+
+A framework is an independent overlay on the calendar: per-day **labels** (כותרות) and timed **blocks** (מופעים), each recurring. Toggling a framework on/off is per-user (`framework_visibility`), separate from list visibility.
+
+### Domain & projection
+
+- Types: `src/lib/types/frameworks.ts` — `FrameworkScope = "weekly" | "date" | "monthly"`, `FrameworkPeriodUnit = "hour" | "day" | "week" | "month"`. `framework_blocks.all_day:boolean` → all-day occurrence (renders in the month/agenda/all-day areas, not the timed grid).
+- Pure engine: `src/lib/frameworks/projection.ts` — `projectFrameworkBlocks` / `projectFrameworkDayLabels` expand into dated views keyed by **local `yyyy-mm-dd`** (`toDateKey`). `matchesPeriodic(anchorKey, interval, unit, cursor)` handles every-N hour/day/week/month. Date-scoped labels override weekly, weekly override monthly.
+- Hooks: `src/lib/hooks/useFrameworks.ts` — `useFrameworks`, `useFrameworkContentForMany`, `useFrameworkVisibility` / `useSetFrameworkVisibility`, `useSetBlockOccurrence`. All gate on `enabled: ids.length > 0`.
+
+### Calendar rendering rules (learned the hard way)
+
+- **Label vs note positioning** (all 4 views): the **framework label is always on the start side (right in RTL), grouped with the date number in a `shrink-0` wrapper**; the regular `DayNoteSlot` always fills the **end side (left in RTL)**. Label style: bold colored text, **no border / no background** (`text-[10px..13px] font-bold` + framework color).
+- **Day view "missing" label is usually data, not a bug**: the day shown (defaults to the anchor/today) simply has no label. Verify against `framework_day_labels` before debugging code — week view shows labels because the whole week (incl. the labeled day) is visible.
+- **Chips**: `FrameworkBlockChip` (absolute, timed grid) vs `FrameworkInlineChip` (relative — month cells, agenda, all-day strip). Both: faded fill + `1px dashed` border. **Past occurrences fade hard (`opacity-30`) regardless of done/skipped** so pink frameworks clearly recede vs a dimmed regular past event.
+- **Right-click (context menu) works in all 4 views**: month chips + agenda rows fire `onItemContextMenu` → `handleItemContextMenu` in `Calendar.tsx`; week/day already had it via `CalendarBlock`.
+- **Day view must clamp block geometry to the visible window** (`hourStart..hourEnd`). A task starting before `hourStart` otherwise gets a negative `top` and **bleeds upward over the date/framework header**. Clamp: `top = max(0, toPercent(start))`, `height = min(100, toPercent(end)) - top`, skip if `≤ 0`. (Week view already clamps via `percentFor`.)
+- **A task must not fully hide a framework block in the same slot**: `CalendarBlock` takes `startReservePx` — when a task overlaps a framework block in time, reserve a strip on the start side (day ≈ 86px, week ≈ 16px) so the framework stays visible beside the task.
+
+### Scheduling panel
+
+`TaskSchedulingPanel` accepts `wide` — the panel grows (`w-80 → sm:w-96 → lg:w-[28rem]`) in **day/agenda** views (more horizontal room); week/month keep `w-72`.
+
+## Migrations applied (frameworks)
+
+| File | Description |
+|---|---|
+| `20260603181000_frameworks_block_all_day.sql` | Adds `all_day` to `framework_blocks` (all-day occurrences) |

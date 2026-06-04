@@ -22,6 +22,7 @@ import {
   Undo2,
   Redo2,
   Keyboard,
+  Sparkles,
 } from "lucide-react";
 import { useUndoStore, useCanUndo, useCanRedo } from "@/lib/undo/store";
 import { useAuth } from "@/lib/auth/AuthContext";
@@ -38,6 +39,8 @@ import { FocusSessionLayer } from "@/components/focus/FocusSessionLayer";
 import { PendingInviteBanner } from "@/components/org/PendingInviteBanner";
 import { KeyboardShortcutsPanel } from "@/components/ui/KeyboardShortcutsPanel";
 import { ToastRegion } from "@/components/ui/Toast";
+import { AssistantPanel } from "@/components/ai/AssistantPanel";
+import { useAssistantUi } from "@/lib/ai/store";
 
 interface NavItem {
   to: string;
@@ -80,6 +83,8 @@ export function AppShell() {
   const [captureOpen, setCaptureOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const assistantUi = useAssistantUi();
+  const assistantEnabled = import.meta.env.VITE_FEATURE_AI_ASSISTANT === "true";
 
   // Ref so keyboard handler always sees the latest pathname without re-registering.
   const pathnameRef = useRef(location.pathname);
@@ -498,6 +503,23 @@ export function AppShell() {
 
       <FloatingTimerBanner />
       <FocusSessionLayer />
+
+      {assistantEnabled && (
+        <>
+          {!assistantUi.open && (
+            <button
+              type="button"
+              onClick={() => assistantUi.setOpen(true)}
+              className="fixed bottom-4 start-4 z-40 w-12 h-12 rounded-full bg-gradient-to-br from-violet-500 to-primary-600 text-white shadow-lift flex items-center justify-center hover:opacity-90"
+              aria-label="עוזר AI"
+              title="עוזר AI"
+            >
+              <Sparkles className="w-5 h-5" />
+            </button>
+          )}
+          <AssistantPanel />
+        </>
+      )}
     </div>
     </FocusSessionProvider>
   );

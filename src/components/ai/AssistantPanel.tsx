@@ -1,11 +1,24 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
-import { Sparkles, X, Send, RotateCcw, Loader2 } from "lucide-react";
+import {
+  Sparkles,
+  X,
+  Send,
+  RotateCcw,
+  Loader2,
+  ImagePlus,
+  Maximize2,
+  Minimize2,
+} from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { useAssistantUi } from "@/lib/ai/store";
 import { useActiveSkill } from "@/lib/ai/registry";
 import { useAssistantChat } from "@/lib/hooks/useAssistant";
+import { fileToChatImage, chatImageSrc } from "@/lib/ai/image";
+import type { ChatImage } from "@/lib/ai/types";
 import { AssistantProposalCard } from "./AssistantProposalCard";
+
+const MAX_ATTACHMENTS = 6;
 
 /**
  * Global AI assistant panel. Mounts once at the AppShell level; picks the
@@ -18,21 +31,44 @@ export function AssistantPanel() {
   const skill = useActiveSkill(location.pathname);
   const chat = useAssistantChat(skill);
   const [input, setInput] = useState("");
+  const [expanded, setExpanded] = useState(false);
+  const [attachments, setAttachments] = useState<ChatImage[]>([]);
+  const [attaching, setAttaching] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Auto-scroll to the newest message / proposal.
   useEffect(() => {
     if (!open) return;
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [chat.messages, chat.pending, chat.busy, open]);
+  }, [chat.messages, chat.pending, chat.busy, attachments, open]);
 
   if (!open) return null;
 
+  const pickFiles = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    setAttaching(true);
+    try {
+      const imgs = await Promise.all(
+        Array.from(files)
+          .filter((f) => f.type.startsWith("image/"))
+          .map(fileToChatImage)
+      );
+      setAttachments((prev) => [...prev, ...imgs].slice(0, MAX_ATTACHMENTS));
+    } catch {
+      /* ignore decode errors — the user can retry */
+    } finally {
+      setAttaching(false);
+    }
+  };
+
   const submit = () => {
     const t = input.trim();
-    if (!t) return;
+    if ((!t && attachments.length === 0) || chat.busy) return;
+    const imgs = attachments;
     setInput("");
-    chat.sendMessage(t);
+    setAttachments([]);
+    chat.sendMessage(t, imgs.length ? imgs : undefined);
   };
 
   // Index pending tool calls by the assistant message they belong to so each
@@ -46,7 +82,13 @@ export function AssistantPanel() {
 
   return (
     <div
-      className="fixed inset-0 z-50 md:inset-auto md:bottom-4 md:start-4 md:w-[26rem] md:max-h-[80vh] flex flex-col bg-white md:rounded-2xl shadow-lift border border-ink-200"
+      className={cn(
+        "fixed inset-0 z-50 flex flex-col bg-white shadow-lift border border-ink-200",
+        "md:inset-auto md:bottom-4 md:start-4 md:rounded-2xl",
+        expanded
+          ? "md:w-[44rem] md:max-w-[calc(100vw-2rem)] md:max-h-[92vh]"
+          : "md:w-[26rem] md:max-h-[80vh]"
+      )}
       dir="rtl"
     >
       {/* Header */}
@@ -71,6 +113,14 @@ export function AssistantPanel() {
         )}
         <button
           type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="hidden md:inline-flex p-1.5 rounded-md text-ink-400 hover:text-ink-900 hover:bg-ink-100"
+          title={expanded ? "הקטן חלון" : "הגדל חלון"}
+        >
+          {expanded ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+        </button>
+        <button
+          type="button"
           onClick={() => setOpen(false)}
           className="p-1.5 rounded-md text-ink-400 hover:text-ink-900 hover:bg-ink-100"
           title="סגור"
@@ -89,7 +139,8 @@ export function AssistantPanel() {
           <div className="space-y-3">
             <p className="text-sm text-ink-500">
               שלום! אני {skill.label}. ספרי לי איזו מנה להוסיף ואבנה לך אותה — מתכון,
-              מצרכים, וערכים תזונתיים.
+              מצרכים, וערכים תזונתיים. אפשר גם לצרף תמונה של מתכון, אריזת מוצר או תווית
+              ערכים תזונתיים ואני אקרא ממנה את הפרטים.
             </p>
             {skill.starters && skill.starters.length > 0 && (
               <div className="flex flex-col gap-1.5">
@@ -109,6 +160,18 @@ export function AssistantPanel() {
         ) : (
           chat.messages.map((m, i) => (
             <div key={i} className="space-y-2">
+              {m.images && m.images.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 ms-auto max-w-[90%] justify-end">
+                  {m.images.map((img, k) => (
+                    <img
+                      key={k}
+                      src={chatImageSrc(img)}
+                      alt="תמונה שצורפה"
+                      className="w-24 h-24 object-cover rounded-xl border border-ink-200"
+                    />
+                  ))}
+                </div>
+              )}
               {m.content && (
                 <div
                   className={cn(
@@ -148,7 +211,55 @@ export function AssistantPanel() {
       {/* Composer */}
       {skill && (
         <div className="p-3 border-t border-ink-100 shrink-0">
+          {/* Pending image attachments */}
+          {attachments.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-2">
+              {attachments.map((img, k) => (
+                <div key={k} className="relative">
+                  <img
+                    src={chatImageSrc(img)}
+                    alt="תצוגה מקדימה"
+                    className="w-16 h-16 object-cover rounded-lg border border-ink-200"
+                  />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setAttachments((prev) => prev.filter((_, idx) => idx !== k))
+                    }
+                    className="absolute -top-1.5 -start-1.5 w-5 h-5 rounded-full bg-ink-900 text-white flex items-center justify-center shadow"
+                    title="הסר תמונה"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
           <div className="flex items-end gap-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              className="hidden"
+              onChange={(e) => {
+                pickFiles(e.target.files);
+                e.target.value = "";
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={attaching || attachments.length >= MAX_ATTACHMENTS}
+              className="p-2 rounded-xl text-ink-500 hover:text-ink-900 hover:bg-ink-100 disabled:opacity-40 shrink-0"
+              title="צרפי תמונה (מתכון, אריזת מוצר, תווית ערכים תזונתיים)"
+            >
+              {attaching ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <ImagePlus className="w-5 h-5" />
+              )}
+            </button>
             <textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -159,14 +270,14 @@ export function AssistantPanel() {
                 }
               }}
               rows={1}
-              placeholder="כתבי הודעה..."
+              placeholder="כתבי הודעה או צרפי תמונה..."
               className="field text-sm flex-1 resize-none max-h-28"
             />
             <button
               type="button"
               onClick={submit}
-              disabled={!input.trim() || chat.busy}
-              className="btn-dark p-2 rounded-xl disabled:opacity-40"
+              disabled={(!input.trim() && attachments.length === 0) || chat.busy}
+              className="btn-dark p-2 rounded-xl disabled:opacity-40 shrink-0"
               title="שלח"
             >
               <Send className="w-4 h-4" />

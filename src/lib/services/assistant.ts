@@ -41,6 +41,10 @@ export async function sendAssistantMessage(args: {
   const wireMessages = args.messages.map((m) => ({
     role: m.role,
     content: m.content,
+    images: m.images?.map((img) => ({
+      media_type: img.mediaType,
+      data: img.data,
+    })),
     tool_calls: m.toolCalls?.map((tc) => ({
       id: tc.id,
       name: tc.name,

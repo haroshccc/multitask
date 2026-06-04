@@ -38,6 +38,8 @@ interface AnthropicTool {
 interface IncomingMessage {
   role: "user" | "assistant";
   content: string;
+  /** Base64 images attached to a user turn — relayed to Claude as vision. */
+  images?: Array<{ media_type: string; data: string }>;
   tool_calls?: Array<{ id: string; name: string; input: unknown }>;
   tool_results?: Array<{ tool_call_id: string; output: string }>;
 }
@@ -84,6 +86,18 @@ function toAnthropicMessages(messages: IncomingMessage[]) {
         if (m.content) {
           out.push({ role: "user", content: m.content });
         }
+      } else if (m.images && m.images.length > 0) {
+        // A user turn with attached images → image block(s) + optional text.
+        const blocks: unknown[] = m.images.map((img) => ({
+          type: "image",
+          source: {
+            type: "base64",
+            media_type: img.media_type,
+            data: img.data,
+          },
+        }));
+        if (m.content) blocks.push({ type: "text", text: m.content });
+        out.push({ role: "user", content: blocks });
       } else {
         out.push({ role: "user", content: m.content });
       }

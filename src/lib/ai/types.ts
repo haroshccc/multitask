@@ -19,12 +19,21 @@ export interface ToolInputSchema {
   required?: string[];
 }
 
+/** An image the user attached to a chat turn, fed to Claude as vision input.
+ *  `data` is base64 (no `data:` prefix); `mediaType` e.g. "image/jpeg". */
+export interface ChatImage {
+  mediaType: string;
+  data: string;
+}
+
 /** A single chat turn. `tool_calls` carry the model's proposed actions for an
  *  assistant turn; the UI renders them as approve/edit/dismiss cards. */
 export interface ChatMessage {
   role: "user" | "assistant";
   /** Free text shown in the bubble. May be empty for a pure tool-call turn. */
   content: string;
+  /** Images the user attached to this (user) turn — sent to Claude as vision. */
+  images?: ChatImage[];
   /** Proposed tool calls for this assistant turn (awaiting user decision). */
   toolCalls?: ToolCall[];
   /** Outcomes of tools run for the PREVIOUS assistant turn, carried on the

@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from "react";
 import { sendAssistantMessage } from "@/lib/services/assistant";
 import type {
   AssistantSkill,
+  ChatImage,
   ChatMessage,
   ToolCall,
   ToolResult,
@@ -108,9 +109,14 @@ export function useAssistantChat(skill: AssistantSkill | null) {
   );
 
   const sendMessage = useCallback(
-    async (text: string) => {
-      if (!skill || !text.trim() || busy) return;
-      const userMsg: ChatMessage = { role: "user", content: text.trim() };
+    async (text: string, images?: ChatImage[]) => {
+      const hasImages = Boolean(images && images.length > 0);
+      if (!skill || (!text.trim() && !hasImages) || busy) return;
+      const userMsg: ChatMessage = {
+        role: "user",
+        content: text.trim(),
+        ...(hasImages ? { images } : {}),
+      };
       const history = [...messagesRef.current, userMsg];
       setMessagesSynced(history);
       await runTurn(history);

@@ -69,8 +69,8 @@ export function FrameworkBlockChip({
         "absolute rounded-md px-1.5 py-0.5 text-start overflow-hidden cursor-pointer transition-opacity",
         skipped && "opacity-50",
         // Past framework occurrences fade much harder than a regular past event
-        // (events dim to ~55%); here the whole pink block drops to 35%.
-        isPast && !done && !skipped && "opacity-[0.35]"
+        // (events dim to ~55%); here the whole pink block drops to 30% (~70% fade).
+        isPast && !done && !skipped && "opacity-30"
       )}
       style={{
         top: `${top}%`,

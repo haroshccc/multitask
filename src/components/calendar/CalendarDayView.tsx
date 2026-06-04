@@ -250,23 +250,19 @@ export function CalendarDayView({
         >
           {date.getDate()}
         </button>
-        <DayNoteSlot body={dayNote} textColor={dayNoteColor} />
+        {/* Framework header(s) on the date line */}
+        {dayFrameworkLabels.map((lbl, i) => (
+          <span
+            key={i}
+            className="text-[13px] font-bold truncate shrink-0"
+            style={{ color: lbl.color ?? "#6366f1" }}
+            title={lbl.label}
+          >
+            {lbl.label}
+          </span>
+        ))}
+        <DayNoteSlot body={dayNote} textColor={dayNoteColor} className="flex-1" />
       </div>
-
-      {/* Framework day labels ("יום לימודים") under the date */}
-      {dayFrameworkLabels.length > 0 && (
-        <div className="px-3 py-1 border-b border-ink-200 bg-white flex flex-wrap gap-1">
-          {dayFrameworkLabels.map((lbl, i) => (
-            <span
-              key={i}
-              className="text-[11px] font-bold"
-              style={{ color: lbl.color ?? "#6366f1" }}
-            >
-              {lbl.label}
-            </span>
-          ))}
-        </div>
-      )}
 
       {/* All-day strip */}
       {allDay.length > 0 && (

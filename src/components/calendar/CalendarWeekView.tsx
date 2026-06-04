@@ -357,7 +357,7 @@ export function CalendarWeekView({
                 <button
                   onClick={() => onDateNoteClick?.(day)}
                   className={cn(
-                    "text-end shrink-0 rounded-md px-1 hover:bg-ink-100",
+                    "min-w-0 flex-1 rounded-md px-1 hover:bg-ink-100",
                     today ? "text-primary-700" : past ? "text-ink-500" : "text-ink-900"
                   )}
                   title="לחצי לעריכת הערה ליום"
@@ -367,24 +367,27 @@ export function CalendarWeekView({
                     <span className="sm:hidden">{DAY_NAMES_SHORT[day.getDay()]}</span>
                     <span className="hidden sm:inline">{DAY_NAMES[day.getDay()]}</span>
                   </div>
-                  <div className="text-sm font-semibold">{day.getDate()}</div>
+                  {/* date + framework header on the same line */}
+                  <div className="text-sm font-semibold flex items-baseline gap-1 min-w-0">
+                    <span className="shrink-0">{day.getDate()}</span>
+                    {(frameworkLabelsByDate?.get(dayNoteKey(day)) ?? []).map((lbl, i) => (
+                      <span
+                        key={i}
+                        className="text-[10px] font-bold truncate flex-1 min-w-0"
+                        style={{ color: lbl.color ?? "#6366f1" }}
+                        title={lbl.label}
+                      >
+                        {lbl.label}
+                      </span>
+                    ))}
+                  </div>
                 </button>
                 <DayNoteSlot
                   body={noteBody}
                   textColor={noteColorsByDate?.get(dayNoteKey(day))}
-                  className="flex-1 text-end"
+                  className="shrink-0 text-end"
                 />
               </div>
-              {(frameworkLabelsByDate?.get(dayNoteKey(day)) ?? []).map((lbl, i) => (
-                <div
-                  key={i}
-                  className="mt-0.5 text-[10px] font-bold truncate"
-                  style={{ color: lbl.color ?? "#6366f1" }}
-                  title={lbl.label}
-                >
-                  {lbl.label}
-                </div>
-              ))}
             </div>
           );
         })}

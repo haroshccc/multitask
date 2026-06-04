@@ -62,8 +62,13 @@ export function FrameworkMonthGrid({
   );
   const blocksByDate = useMemo(() => {
     const all = projectFrameworkBlocks(framework, content.blocks, content.occurrences, from, to);
-    const m = new Map<string, number>();
-    for (const b of all) m.set(b.date, (m.get(b.date) ?? 0) + 1);
+    const m = new Map<string, typeof all>();
+    for (const b of all) {
+      const arr = m.get(b.date) ?? [];
+      arr.push(b);
+      m.set(b.date, arr);
+    }
+    for (const arr of m.values()) arr.sort((a, b) => a.start.getTime() - b.start.getTime());
     return m;
   }, [framework, content.blocks, content.occurrences, from, to]);
 
@@ -107,7 +112,7 @@ export function FrameworkMonthGrid({
           const key = toDateKey(day);
           const inMonth = day.getMonth() === curMonth;
           const lbl = labelMap.get(key);
-          const count = blocksByDate.get(key) ?? 0;
+          const occ = blocksByDate.get(key) ?? [];
           const isToday = key === todayKey;
           return (
             <button
@@ -115,35 +120,52 @@ export function FrameworkMonthGrid({
               type="button"
               onClick={() => setSelected(key)}
               className={cn(
-                "min-h-[58px] sm:min-h-[76px] rounded-lg border p-1 text-start flex flex-col gap-0.5 transition-colors hover:border-primary-400",
+                "min-h-[92px] sm:min-h-[120px] rounded-lg border p-1.5 text-start flex flex-col gap-1 transition-colors hover:border-primary-400 align-top",
                 inMonth ? "bg-white" : "bg-ink-50/50",
                 "border-ink-150"
               )}
             >
-              <span
-                className={cn(
-                  "text-[11px] font-medium tabular-nums",
-                  isToday ? "text-primary-700" : inMonth ? "text-ink-700" : "text-ink-300"
-                )}
-              >
-                {day.getDate()}
-              </span>
-              {lbl && (
+              {/* date + כותרת on the same line */}
+              <div className="flex items-center gap-1 min-w-0">
                 <span
-                  className="text-[9px] leading-tight rounded px-1 py-0.5 truncate"
-                  style={{
-                    background: (lbl.color ?? framework.color ?? "#6366f1") + "1f",
-                    color: lbl.color ?? framework.color ?? "#6366f1",
-                  }}
+                  className={cn(
+                    "text-[11px] font-semibold tabular-nums shrink-0",
+                    isToday ? "text-primary-700" : inMonth ? "text-ink-700" : "text-ink-300"
+                  )}
                 >
-                  {lbl.label}
+                  {day.getDate()}
                 </span>
-              )}
-              {count > 0 && (
-                <span className="text-[8px] text-ink-400 mt-auto">
-                  {count} בלוק{count > 1 ? "ים" : ""}
-                </span>
-              )}
+                {lbl && (
+                  <span
+                    className="text-[9px] leading-tight rounded px-1 py-0.5 truncate flex-1 min-w-0"
+                    style={{
+                      background: (lbl.color ?? framework.color ?? "#6366f1") + "1f",
+                      color: lbl.color ?? framework.color ?? "#6366f1",
+                    }}
+                    title={lbl.label}
+                  >
+                    {lbl.label}
+                  </span>
+                )}
+              </div>
+
+              {/* מופעים */}
+              <div className="flex flex-col gap-0.5 min-w-0">
+                {occ.map((o) => (
+                  <span
+                    key={o.id}
+                    className="text-[9px] leading-tight rounded px-1 py-0.5 flex items-center gap-1 min-w-0"
+                    style={{ background: (o.color ?? framework.color ?? "#6366f1") + "1a", color: "#3a3a46" }}
+                    title={o.title}
+                  >
+                    <span className="tabular-nums text-ink-500 shrink-0">
+                      {String(o.start.getHours()).padStart(2, "0")}:
+                      {String(o.start.getMinutes()).padStart(2, "0")}
+                    </span>
+                    <span className="truncate flex-1 min-w-0">{o.title || "מופע"}</span>
+                  </span>
+                ))}
+              </div>
             </button>
           );
         })}

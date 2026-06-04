@@ -142,7 +142,7 @@ export function FrameworkDayEditor({
                   tab === "block" ? "bg-ink-900 text-white" : "text-ink-600 hover:bg-ink-100"
                 )}
               >
-                בלוק / מסגרת
+                מופע
               </button>
             </div>
 
@@ -409,7 +409,7 @@ function BlockForm({
       <input
         autoFocus
         className="field !py-1.5 !text-sm w-full"
-        placeholder="שם הבלוק (למשל: אימון)"
+        placeholder="שם המופע (למשל: אימון)"
         value={title}
         onChange={(e) => setTitle(e.target.value)}
       />
@@ -457,7 +457,7 @@ function BlockForm({
         onClick={save}
         className="w-full inline-flex items-center justify-center gap-1 text-sm text-white bg-primary-500 hover:bg-primary-600 rounded-xl py-2"
       >
-        <Plus className="w-4 h-4" /> הוספת בלוק
+        <Plus className="w-4 h-4" /> הוספת מופע
       </button>
     </div>
   );

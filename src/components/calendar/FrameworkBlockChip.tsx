@@ -38,6 +38,9 @@ export function FrameworkBlockChip({
   const accent = occ.color ?? "#6366f1";
   const done = occ.status === "done";
   const skipped = occ.status === "skipped";
+  // Past occurrences (whole past days, and earlier hours today) fade much more
+  // so they don't read like a slightly-dimmed regular past event.
+  const isPast = occ.end.getTime() < Date.now();
 
   return (
     <div
@@ -64,16 +67,17 @@ export function FrameworkBlockChip({
       }}
       className={cn(
         "absolute rounded-md px-1.5 py-0.5 text-start overflow-hidden cursor-pointer transition-opacity",
-        skipped && "opacity-50"
+        skipped && "opacity-50",
+        isPast && !done && "opacity-60"
       )}
       style={{
         top: `${top}%`,
         height: `${Math.max(height, 1.5)}%`,
         insetInlineStart: "2px",
         insetInlineEnd: "2px",
-        backgroundColor: hexToRgba(accent, done ? 0.22 : 0.1),
-        border: `1px dashed ${hexToRgba(accent, 0.55)}`,
-        color: accent,
+        backgroundColor: hexToRgba(accent, done ? 0.22 : isPast ? 0.04 : 0.1),
+        border: `1px dashed ${hexToRgba(accent, isPast ? 0.25 : 0.55)}`,
+        color: isPast ? hexToRgba(accent, 0.5) : accent,
       }}
       title={`מסגרת · ${occ.title}`}
     >

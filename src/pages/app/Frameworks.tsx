@@ -139,6 +139,7 @@ function FrameworkEditorPane({
   const [showRange, setShowRange] = useState(!!(framework.run_start || framework.run_end));
   const [name, setName] = useState(framework.name);
   const [editorView, setEditorView] = useState<"week" | "month">("week");
+  const [colorOpen, setColorOpen] = useState(false);
 
   useEffect(() => setName(framework.name), [framework.id, framework.name]);
 
@@ -158,19 +159,36 @@ function FrameworkEditorPane({
         />
 
         {!readOnly && (
-          <div className="flex items-center gap-1">
-            {PALETTE.map((c) => (
-              <button
-                key={c}
-                onClick={() => updateFramework.mutate({ id: framework.id, patch: { color: c } })}
-                className={cn(
-                  "w-5 h-5 rounded-full border-2",
-                  framework.color === c ? "border-ink-900" : "border-transparent"
-                )}
-                style={{ background: c }}
-                title="צבע"
-              />
-            ))}
+          <div className="relative">
+            <button
+              onClick={() => setColorOpen((v) => !v)}
+              className="w-6 h-6 rounded-full border-2 border-ink-300 hover:border-ink-500"
+              style={{ background: framework.color ?? "#6366f1" }}
+              title="צבע המסגרת — לחצי לשינוי"
+              aria-label="צבע המסגרת"
+            />
+            {colorOpen && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setColorOpen(false)} />
+                <div className="absolute z-20 mt-1 start-0 p-2 bg-white rounded-xl border border-ink-200 shadow-lift flex items-center gap-1">
+                  {PALETTE.map((c) => (
+                    <button
+                      key={c}
+                      onClick={() => {
+                        updateFramework.mutate({ id: framework.id, patch: { color: c } });
+                        setColorOpen(false);
+                      }}
+                      className={cn(
+                        "w-5 h-5 rounded-full border-2",
+                        framework.color === c ? "border-ink-900" : "border-transparent"
+                      )}
+                      style={{ background: c }}
+                      title="צבע"
+                    />
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         )}
 

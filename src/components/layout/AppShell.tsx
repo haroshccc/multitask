@@ -518,7 +518,7 @@ export function AppShell() {
               aria-label="עוזר AI"
               title="עוזר AI"
             >
-              <Sparkles className="w-7 h-7" />
+              <Sparkles className="ai-launcher-icon w-7 h-7" />
             </button>
           )}
           <AssistantPanel />

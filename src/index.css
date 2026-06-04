@@ -226,11 +226,7 @@
   display: none;
 }
 
-/* ── AI assistant launcher: cycling colors + soft glow ── */
-@keyframes aiLauncherHue {
-  0%   { filter: hue-rotate(0deg); }
-  100% { filter: hue-rotate(360deg); }
-}
+/* ── AI assistant launcher: gently shifting violet→pink→orange + soft glow ── */
 @keyframes aiLauncherGlow {
   0%, 100% {
     box-shadow: 0 0 0 4px rgba(139, 92, 246, 0.18),
@@ -240,17 +236,26 @@
   50% {
     box-shadow: 0 0 0 6px rgba(236, 72, 153, 0.22),
                 0 0 30px 6px rgba(236, 72, 153, 0.6),
-                0 10px 30px -6px rgba(139, 92, 246, 0.55);
+                0 10px 30px -6px rgba(245, 158, 11, 0.5);
   }
 }
 .ai-launcher {
-  background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 35%, #ec4899 70%, #f59e0b 100%);
-  background-size: 300% 300%;
-  animation: gradShift 5s ease infinite, aiLauncherHue 8s linear infinite,
-             aiLauncherGlow 3s ease-in-out infinite;
+  background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 55%, #f59e0b 100%);
+  background-size: 220% 220%;
+  animation: gradShift 6s ease infinite, aiLauncherGlow 3s ease-in-out infinite;
+}
+
+/* The white AI icon inside the launcher: a soft, slow twinkle. */
+@keyframes aiSparkleTwinkle {
+  0%, 100% { transform: scale(1) rotate(0deg); opacity: 0.9; }
+  50%      { transform: scale(1.12) rotate(8deg); opacity: 1; }
+}
+.ai-launcher-icon {
+  animation: aiSparkleTwinkle 2.8s ease-in-out infinite;
 }
 @media (prefers-reduced-motion: reduce) {
   .ai-launcher { animation: aiLauncherGlow 3s ease-in-out infinite; }
+  .ai-launcher-icon { animation: none; }
 }
 
 /* ── Multitask onboarding/login animations ── */

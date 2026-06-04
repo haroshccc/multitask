@@ -27,6 +27,11 @@ export interface ChatMessage {
   content: string;
   /** Proposed tool calls for this assistant turn (awaiting user decision). */
   toolCalls?: ToolCall[];
+  /** Outcomes of tools run for the PREVIOUS assistant turn, carried on the
+   *  (usually empty) user continuation turn. Persisted on the message — not
+   *  just passed once — so the full history replays validly: every tool_use
+   *  must keep a matching tool_result on every subsequent request. */
+  toolResults?: ToolResult[];
 }
 
 /** A proposed tool invocation returned by the model. `id` ties an approval/

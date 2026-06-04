@@ -41,13 +41,16 @@ export function useAssistantChat(skill: AssistantSkill | null) {
   const pendingRef = useRef<PendingToolCall[]>([]);
   const messagesRef = useRef<ChatMessage[]>([]);
 
+  // Mutate pending through the ref so reads are synchronous: a React functional
+  // updater runs deferred, so reading pendingRef right after a setState could
+  // see stale state — and the "is the whole group resolved?" check in
+  // maybeContinue runs immediately after an approval. We compute from the ref
+  // (the live truth), assign it, then render with a fresh array.
   const setPendingSynced = useCallback(
     (updater: (prev: PendingToolCall[]) => PendingToolCall[]) => {
-      setPending((prev) => {
-        const next = updater(prev);
-        pendingRef.current = next;
-        return next;
-      });
+      const next = updater(pendingRef.current);
+      pendingRef.current = next;
+      setPending(next);
     },
     []
   );
@@ -63,7 +66,7 @@ export function useAssistantChat(skill: AssistantSkill | null) {
   }, [setMessagesSynced, setPendingSynced]);
 
   const runTurn = useCallback(
-    async (history: ChatMessage[], toolResults?: ToolResult[]) => {
+    async (history: ChatMessage[]) => {
       if (!skill) return;
       setBusy(true);
       setError(null);
@@ -74,7 +77,6 @@ export function useAssistantChat(skill: AssistantSkill | null) {
           context: skill.buildContext(),
           tools: skill.tools,
           messages: history,
-          toolResults,
         });
         const assistantMsg: ChatMessage = {
           role: "assistant",
@@ -135,10 +137,12 @@ export function useAssistantChat(skill: AssistantSkill | null) {
             : p.resultText ?? "בוצע.",
       }));
 
-      const continuation: ChatMessage = { role: "user", content: "" };
+      // Embed the results on the continuation turn itself so they persist in
+      // history and replay on every later request (not just this one send).
+      const continuation: ChatMessage = { role: "user", content: "", toolResults: results };
       const history = [...messagesRef.current, continuation];
       setMessagesSynced(history);
-      await runTurn(history, results);
+      await runTurn(history);
     },
     [runTurn, setMessagesSynced]
   );

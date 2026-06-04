@@ -46,7 +46,7 @@ export function AssistantPanel() {
 
   return (
     <div
-      className="fixed inset-0 z-50 sm:inset-auto sm:bottom-4 sm:end-4 sm:w-[26rem] sm:max-h-[80vh] flex flex-col bg-white sm:rounded-2xl shadow-lift border border-ink-200"
+      className="fixed inset-0 z-50 md:inset-auto md:bottom-4 md:start-4 md:w-[26rem] md:max-h-[80vh] flex flex-col bg-white md:rounded-2xl shadow-lift border border-ink-200"
       dir="rtl"
     >
       {/* Header */}

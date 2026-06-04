@@ -15,12 +15,14 @@ export interface PendingToolCall extends ToolCall {
   messageIndex: number;
   requiresApproval: boolean;
   label?: string;
-  /** UI state. 'pending' awaits the user; the rest are terminal. */
-  state: "pending" | "running" | "done" | "dismissed" | "error";
+  /** UI state. 'pending' awaits the user; the rest are terminal. 'deferred'
+   *  means the user asked a question instead of deciding — the proposal is
+   *  closed with a "still open, answer first" result and the model re-proposes. */
+  state: "pending" | "running" | "done" | "dismissed" | "error" | "deferred";
   resultText?: string;
 }
 
-const RESOLVED = new Set(["done", "dismissed", "error"]);
+const RESOLVED = new Set(["done", "dismissed", "error", "deferred"]);
 
 /**
  * Drives an assistant conversation for one skill: sends user messages, surfaces
@@ -112,6 +114,42 @@ export function useAssistantChat(skill: AssistantSkill | null) {
     async (text: string, images?: ChatImage[]) => {
       const hasImages = Boolean(images && images.length > 0);
       if (!skill || (!text.trim() && !hasImages) || busy) return;
+
+      // If tool proposals are still awaiting a decision and the user types a
+      // message instead of approving/dismissing, Anthropic still requires a
+      // tool_result for every open tool_use. So we close each open call with a
+      // "still open — answer the question first, then re-propose" result and
+      // carry the user's message on the same turn. The model answers, then
+      // re-proposes the same action so the cards reappear. (All open calls
+      // belong to the latest assistant turn — you can't advance past an
+      // unresolved group — so their results legally precede the user text.)
+      const open = pendingRef.current.filter(
+        (p) => p.state === "pending" || p.state === "running"
+      );
+      if (open.length > 0) {
+        const openIds = new Set(open.map((p) => p.id));
+        setPendingSynced((prev) =>
+          prev.map((p) => (openIds.has(p.id) ? { ...p, state: "deferred" } : p))
+        );
+        const deferredResults: ToolResult[] = open.map((p) => ({
+          toolCallId: p.id,
+          output:
+            "המשתמשת שאלה שאלה לפני שהחליטה; הצעה זו עדיין פתוחה. עני קודם על " +
+            "שאלתה במלל, ואז הציעי שוב את אותה פעולה (קריאת הכלי) כדי שתוכל לאשר " +
+            "או לדחות.",
+        }));
+        const continuation: ChatMessage = {
+          role: "user",
+          content: text.trim(),
+          toolResults: deferredResults,
+          ...(hasImages ? { images } : {}),
+        };
+        const history = [...messagesRef.current, continuation];
+        setMessagesSynced(history);
+        await runTurn(history);
+        return;
+      }
+
       const userMsg: ChatMessage = {
         role: "user",
         content: text.trim(),
@@ -121,7 +159,7 @@ export function useAssistantChat(skill: AssistantSkill | null) {
       setMessagesSynced(history);
       await runTurn(history);
     },
-    [skill, busy, runTurn, setMessagesSynced]
+    [skill, busy, runTurn, setMessagesSynced, setPendingSynced]
   );
 
   /** Once every tool call from `messageIndex` is resolved, continue the

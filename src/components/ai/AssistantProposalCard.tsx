@@ -45,6 +45,14 @@ export function AssistantProposalCard({
       </div>
     );
   }
+  if (call.state === "deferred") {
+    return (
+      <div className="rounded-lg border border-ink-200 bg-ink-50 px-3 py-2 text-sm text-ink-400 flex items-center gap-2">
+        <Loader2 className="w-4 h-4 shrink-0" />
+        <span>{title} — ממתין, אענה קודם לשאלתך</span>
+      </div>
+    );
+  }
   if (call.state === "error") {
     return (
       <div className="rounded-lg border border-danger-200 bg-danger-50 px-3 py-2 text-sm text-danger-700 flex items-center gap-2">
@@ -143,11 +151,35 @@ function ProposalSummary({ input }: { input: Record<string, unknown> }) {
       {Object.entries(input).map(([k, v]) => (
         <div key={k} className="flex gap-1.5">
           <span className="text-ink-400 shrink-0">{LABELS[k] ?? k}:</span>
-          <span className={cn("min-w-0 break-words")}>{renderValue(v)}</span>
+          <span className={cn("min-w-0 break-words whitespace-pre-line")}>
+            {k === "units" && Array.isArray(v) ? renderUnits(v) : renderValue(v)}
+          </span>
         </div>
       ))}
     </div>
   );
+}
+
+/** Formats the `units` array with Hebrew nutrition labels (one line per unit)
+ *  so the card reads "100 גרם · 350 קל׳ · חלבון 12ג׳ · ..." instead of a raw
+ *  "גרם 100 350 12 1.5 70 true" value dump. */
+function renderUnits(units: unknown[]): string {
+  return units
+    .map((u) => {
+      if (!u || typeof u !== "object") return String(u);
+      const o = u as Record<string, unknown>;
+      const num = (x: unknown) => (x == null || x === "" ? null : String(x));
+      const amount = num(o.amount);
+      const name = (o.unit_name as string) || "יחידה";
+      const parts: string[] = [amount ? `${amount} ${name}` : name];
+      if (num(o.calories) != null) parts.push(`${o.calories} קל׳`);
+      if (num(o.protein_g) != null) parts.push(`חלבון ${o.protein_g}ג׳`);
+      if (num(o.fat_g) != null) parts.push(`שומן ${o.fat_g}ג׳`);
+      if (num(o.carbs_g) != null) parts.push(`פחמ׳ ${o.carbs_g}ג׳`);
+      if (o.is_default) parts.push("ברירת מחדל");
+      return parts.join(" · ");
+    })
+    .join("\n");
 }
 
 function renderValue(v: unknown): string {

@@ -83,8 +83,15 @@ function toAnthropicMessages(messages: IncomingMessage[]) {
             content: r.output,
           })),
         });
-        if (m.content) {
-          out.push({ role: "user", content: m.content });
+        // The same user turn may also carry images / text (e.g. the user asked
+        // a question — possibly with a photo — while tool proposals were open).
+        const rest: unknown[] = (m.images ?? []).map((img) => ({
+          type: "image",
+          source: { type: "base64", media_type: img.media_type, data: img.data },
+        }));
+        if (m.content) rest.push({ type: "text", text: m.content });
+        if (rest.length > 0) {
+          out.push({ role: "user", content: rest });
         }
       } else if (m.images && m.images.length > 0) {
         // A user turn with attached images → image block(s) + optional text.

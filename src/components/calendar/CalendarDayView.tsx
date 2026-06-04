@@ -259,11 +259,8 @@ export function CalendarDayView({
           {dayFrameworkLabels.map((lbl, i) => (
             <span
               key={i}
-              className="text-[11px] font-medium rounded px-1.5 py-0.5"
-              style={{
-                background: (lbl.color ?? "#6366f1") + "1a",
-                color: lbl.color ?? "#6366f1",
-              }}
+              className="text-[11px] font-bold"
+              style={{ color: lbl.color ?? "#6366f1" }}
             >
               {lbl.label}
             </span>

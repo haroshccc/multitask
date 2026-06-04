@@ -378,11 +378,8 @@ export function CalendarWeekView({
               {(frameworkLabelsByDate?.get(dayNoteKey(day)) ?? []).map((lbl, i) => (
                 <div
                   key={i}
-                  className="mt-0.5 text-[10px] font-medium truncate rounded px-1 py-0.5"
-                  style={{
-                    background: (lbl.color ?? "#6366f1") + "1a",
-                    color: lbl.color ?? "#6366f1",
-                  }}
+                  className="mt-0.5 text-[10px] font-bold truncate"
+                  style={{ color: lbl.color ?? "#6366f1" }}
                   title={lbl.label}
                 >
                   {lbl.label}

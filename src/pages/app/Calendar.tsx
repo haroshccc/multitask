@@ -773,6 +773,7 @@ export function Calendar() {
               onOpenTask={(id) => setEditingTaskId(id)}
               onContextMenu={(task, x, y) => setTaskMenu({ task, x, y })}
               onClose={() => setScheduling(false)}
+              wide={view === "day" || view === "agenda"}
             />
           )}
           <div className="flex-1 min-w-0">

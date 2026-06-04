@@ -84,7 +84,8 @@ export function AppShell() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const assistantUi = useAssistantUi();
-  const assistantEnabled = import.meta.env.VITE_FEATURE_AI_ASSISTANT === "true";
+  // On by default; set VITE_FEATURE_AI_ASSISTANT=false to hide it.
+  const assistantEnabled = import.meta.env.VITE_FEATURE_AI_ASSISTANT !== "false";
 
   // Ref so keyboard handler always sees the latest pathname without re-registering.
   const pathnameRef = useRef(location.pathname);

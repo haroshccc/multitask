@@ -44,6 +44,8 @@ interface CalendarAgendaViewProps {
   frameworkLabelsByDate?: Map<string, FrameworkDayLabelView[]>;
   /** Left-click a framework occurrence → cycle its check state. */
   onFrameworkBlockClick?: (occ: FrameworkBlockOccurrenceView) => void;
+  /** Right-click a task row → open the actions menu. */
+  onItemContextMenu?: (item: CalendarItem, x: number, y: number) => void;
 }
 
 /**
@@ -63,6 +65,7 @@ export function CalendarAgendaView({
   frameworkBlocks,
   frameworkLabelsByDate,
   onFrameworkBlockClick,
+  onItemContextMenu,
 }: CalendarAgendaViewProps) {
   const windowStart = startOfDay(startOfWeek(anchor));
   const windowDays = 14;
@@ -135,6 +138,7 @@ export function CalendarAgendaView({
             today={today}
             items={list}
             onItemClick={onItemClick}
+            onItemContextMenu={onItemContextMenu}
             onCreateAt={onCreateAt}
             noteBody={notesByDate?.get(key)}
             onDateNoteClick={onDateNoteClick}
@@ -161,6 +165,7 @@ function DayGroup({
   today,
   items,
   onItemClick,
+  onItemContextMenu,
   onCreateAt,
   noteBody,
   onDateNoteClick,
@@ -174,6 +179,7 @@ function DayGroup({
   today: boolean;
   items: CalendarItem[];
   onItemClick: (item: CalendarItem) => void;
+  onItemContextMenu?: (item: CalendarItem, x: number, y: number) => void;
   onCreateAt: (start: Date) => void;
   noteBody?: string;
   onDateNoteClick?: (date: Date) => void;
@@ -322,6 +328,11 @@ function DayGroup({
                 item={it}
                 now={now}
                 onClick={() => onItemClick(it)}
+                onContextMenu={
+                  onItemContextMenu
+                    ? (x, y) => onItemContextMenu(it, x, y)
+                    : undefined
+                }
               />
             ))}
           </ul>
@@ -335,10 +346,12 @@ function AgendaRow({
   item,
   now,
   onClick,
+  onContextMenu,
 }: {
   item: CalendarItem;
   now: Date;
   onClick: () => void;
+  onContextMenu?: (x: number, y: number) => void;
 }) {
   const { prefs } = useCalendarPrefs();
   const tz = prefs.timezone;
@@ -351,6 +364,11 @@ function AgendaRow({
     <li>
       <button
         onClick={onClick}
+        onContextMenu={
+          onContextMenu
+            ? (e) => { e.preventDefault(); e.stopPropagation(); onContextMenu(e.clientX, e.clientY); }
+            : undefined
+        }
         className={cn(
           "w-full px-3 py-2 flex items-center gap-2 text-start hover:bg-ink-50",
           past && "opacity-75",

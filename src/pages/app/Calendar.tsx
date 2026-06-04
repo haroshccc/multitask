@@ -821,6 +821,7 @@ export function Calendar() {
             anchor={anchor}
             items={items}
             onItemClick={handleItemClick}
+            onItemContextMenu={handleItemContextMenu}
             onDayClick={handleMonthDayClick}
             onCellClick={handleMonthCellClick}
             onItemDrop={handleItemDrop}
@@ -836,6 +837,7 @@ export function Calendar() {
             anchor={anchor}
             items={items}
             onItemClick={handleItemClick}
+            onItemContextMenu={handleItemContextMenu}
             onCreateAt={handleCreateAt}
             notesByDate={notesByDate}
             onDateNoteClick={setEditingNoteDate}

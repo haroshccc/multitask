@@ -238,31 +238,32 @@ export function CalendarDayView({
 
   return (
     <div className="card overflow-hidden">
-      {/* Date header — date number on the start side, day note slot to its
-          left (per spec). Clicking the digit opens the note editor. */}
+      {/* Date header — date + framework label always on the start (right in
+          RTL), regular note fills the end (left in RTL). */}
       <div className="px-3 py-1.5 border-b border-ink-200 bg-white flex items-center gap-2">
-        <button
-          onClick={() => onDateNoteClick?.(date)}
-          className={cn(
-            "text-base font-bold tabular-nums px-1 rounded-md hover:bg-ink-100 shrink-0",
-            isToday ? "text-primary-700" : "text-ink-900"
-          )}
-          type="button"
-          title="לחצי לעריכת הערה ליום"
-        >
-          {date.getDate()}
-        </button>
-        {/* Framework header(s) on the date line */}
-        {dayFrameworkLabels.map((lbl, i) => (
-          <span
-            key={i}
-            className="text-[13px] font-bold truncate shrink-0"
-            style={{ color: lbl.color ?? "#6366f1" }}
-            title={lbl.label}
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            onClick={() => onDateNoteClick?.(date)}
+            className={cn(
+              "text-base font-bold tabular-nums px-1 rounded-md hover:bg-ink-100",
+              isToday ? "text-primary-700" : "text-ink-900"
+            )}
+            type="button"
+            title="לחצי לעריכת הערה ליום"
           >
-            {lbl.label}
-          </span>
-        ))}
+            {date.getDate()}
+          </button>
+          {dayFrameworkLabels.map((lbl, i) => (
+            <span
+              key={i}
+              className="text-[13px] font-bold"
+              style={{ color: lbl.color ?? "#6366f1" }}
+              title={lbl.label}
+            >
+              {lbl.label}
+            </span>
+          ))}
+        </div>
         <DayNoteSlot body={dayNote} textColor={dayNoteColor} className="flex-1" />
       </div>
 

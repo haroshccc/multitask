@@ -11,7 +11,7 @@
  */
 
 export type FrameworkScope = "weekly" | "date" | "monthly";
-export type FrameworkPeriodUnit = "day" | "week" | "month";
+export type FrameworkPeriodUnit = "hour" | "day" | "week" | "month";
 export type FrameworkOverrideKind = "add" | "remove" | "modify";
 export type FrameworkOccurrenceStatus = "done" | "skipped";
 export type FrameworkGoalPeriod = "day" | "week" | "month";

@@ -16,7 +16,7 @@ import {
   useUpdateFramework,
   useDeleteFramework,
 } from "@/lib/hooks/useFrameworks";
-import { FrameworkWeekEditor } from "@/components/frameworks/FrameworkWeekEditor";
+import { FrameworkWeekStrip } from "@/components/frameworks/FrameworkWeekStrip";
 import { FrameworkMonthGrid } from "@/components/frameworks/FrameworkMonthGrid";
 import { ShareFrameworkModal } from "@/components/frameworks/ShareFrameworkModal";
 import { FrameworkHistoryModal } from "@/components/frameworks/FrameworkHistoryModal";
@@ -277,7 +277,7 @@ function FrameworkEditorPane({
       {/* Editor body */}
       {content ? (
         editorView === "week" ? (
-          <FrameworkWeekEditor framework={framework} content={content} readOnly={readOnly} />
+          <FrameworkWeekStrip framework={framework} content={content} readOnly={readOnly} />
         ) : (
           <FrameworkMonthGrid framework={framework} content={content} readOnly={readOnly} />
         )

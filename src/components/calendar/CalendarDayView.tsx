@@ -328,23 +328,43 @@ export function CalendarDayView({
           ))}
 
           {/* Framework background blocks (faded) — behind planned items */}
-          {dayFrameworkBlocks.map((b) => (
-            <FrameworkBlockChip
-              key={b.id}
-              occ={b}
-              top={toPercent(b.start)}
-              height={toDurationPercent(b.end.getTime() - b.start.getTime())}
-              onClick={onFrameworkBlockClick}
-              onContextMenu={onFrameworkBlockContextMenu}
-            />
-          ))}
+          {dayFrameworkBlocks.map((b) => {
+            const fwTop = Math.max(0, toPercent(b.start));
+            const fwEnd = Math.min(100, toPercent(b.end));
+            if (fwEnd - fwTop <= 0) return null;
+            return (
+              <FrameworkBlockChip
+                key={b.id}
+                occ={b}
+                top={fwTop}
+                height={fwEnd - fwTop}
+                onClick={onFrameworkBlockClick}
+                onContextMenu={onFrameworkBlockContextMenu}
+              />
+            );
+          })}
 
           {/* Planned blocks */}
           {laidOut.map(({ item, column, columns }) => {
-            const top = toPercent(item.start);
-            const height = toDurationPercent(item.end.getTime() - item.start.getTime());
+            // Clamp to the visible window so a block that starts before
+            // hourStart (or ends after hourEnd) is cut at the grid edge
+            // instead of overflowing up into the date/framework header.
+            const clampedTop = Math.max(0, toPercent(item.start));
+            const clampedEnd = Math.min(100, toPercent(item.end));
+            const top = clampedTop;
+            const height = clampedEnd - clampedTop;
+            if (height <= 0) return null;
             const widthPct = 100 / columns;
             const leftPct = column * widthPct;
+
+            // If a framework background block shares this slot, reserve a strip
+            // on the start side (right in RTL) so the framework stays visible
+            // instead of being fully hidden by the task.
+            const overlapsFramework = dayFrameworkBlocks.some(
+              (b) =>
+                b.start.getTime() < item.end.getTime() &&
+                b.end.getTime() > item.start.getTime()
+            );
 
             // Actual stripes for this task (if it's a task).
             const taskActuals =
@@ -383,6 +403,7 @@ export function CalendarDayView({
                     : undefined
                 }
                 onItemDrop={onItemDrop}
+                startReservePx={overlapsFramework ? 86 : 0}
               />
             );
           })}
@@ -427,6 +448,7 @@ export function CalendarBlock({
   compact,
   readOnly,
   recurringAsMarker,
+  startReservePx = 0,
 }: {
   item: CalendarItem;
   now: Date;
@@ -448,6 +470,10 @@ export function CalendarBlock({
   /** When true, a recurring task renders as a flat deadline-style marker
    *  (repeat glyph + start time + underline) instead of a bordered block. */
   recurringAsMarker?: boolean;
+  /** Reserve this many px on the start side (right in RTL) so a framework
+   *  background block sharing this time slot stays visible behind/beside the
+   *  task instead of being fully covered. */
+  startReservePx?: number;
 }) {
   const { prefs } = useCalendarPrefs();
   const tz = prefs.timezone;
@@ -685,8 +711,8 @@ export function CalendarBlock({
       style={{
         top: `${top}%`,
         height: `${Math.max(height, 1.5)}%`,
-        insetInlineStart: `calc(${leftPct}% + 2px)`,
-        width: `calc(${widthPct}% - 4px)`,
+        insetInlineStart: `calc(${leftPct}% + ${2 + startReservePx}px)`,
+        width: `calc(${widthPct}% - ${4 + startReservePx}px)`,
         // Touch/pen: claim the gesture for our manual move drag instead of
         // letting the browser scroll. Mouse uses native DnD (unaffected).
         touchAction: draggable ? "none" : undefined,

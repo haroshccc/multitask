@@ -626,6 +626,17 @@ export function CalendarWeekView({
                 const widthPct = 100 / columns;
                 const leftPct = column * widthPct;
 
+                // If a framework background block shares this slot, reserve a
+                // small strip on the start side (right in RTL) so the framework
+                // stays visible instead of being fully covered by the task.
+                const overlapsFramework = (frameworkBlocks ?? []).some(
+                  (b) =>
+                    b.date === dayNoteKey(day) &&
+                    !b.allDay &&
+                    b.start.getTime() < item.end.getTime() &&
+                    b.end.getTime() > item.start.getTime()
+                );
+
                 const taskActuals =
                   item.kind === "task"
                     ? stripes
@@ -662,6 +673,7 @@ export function CalendarWeekView({
                     compact
                     readOnly={readOnly}
                     recurringAsMarker={recurringAsMarker}
+                    startReservePx={overlapsFramework ? 16 : 0}
                   />
                 );
               })}

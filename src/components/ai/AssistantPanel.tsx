@@ -86,7 +86,7 @@ export function AssistantPanel() {
         "fixed inset-0 z-50 flex flex-col bg-white shadow-lift border border-ink-200",
         "md:inset-auto md:bottom-4 md:start-4 md:rounded-2xl",
         expanded
-          ? "md:w-[44rem] md:max-w-[calc(100vw-2rem)] md:max-h-[92vh]"
+          ? "md:w-[54rem] md:max-w-[calc(100vw-2rem)] md:h-[90vh] md:max-h-[calc(100vh-2rem)]"
           : "md:w-[26rem] md:max-h-[80vh]"
       )}
       dir="rtl"

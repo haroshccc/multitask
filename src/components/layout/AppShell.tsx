@@ -514,7 +514,7 @@ export function AppShell() {
             <button
               type="button"
               onClick={() => assistantUi.setOpen(true)}
-              className="fixed bottom-20 md:bottom-4 start-4 z-40 w-16 h-16 rounded-full bg-gradient-to-br from-violet-500 to-primary-600 text-white shadow-lift flex items-center justify-center hover:opacity-90 ring-4 ring-violet-500/15 transition-transform hover:scale-105"
+              className="ai-launcher fixed bottom-20 md:bottom-4 start-4 z-40 w-16 h-16 rounded-full text-white flex items-center justify-center transition-transform hover:scale-110"
               aria-label="עוזר AI"
               title="עוזר AI"
             >

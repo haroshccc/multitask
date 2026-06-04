@@ -108,22 +108,22 @@ export function FrameworkWeekStrip({
                 isToday ? "border-primary-300 ring-1 ring-primary-200" : "border-ink-200"
               )}
             >
-              <div className="flex items-baseline justify-between">
-                <span className={cn("text-xs font-semibold", isToday ? "text-primary-700" : "text-ink-700")}>
+              <div className="flex items-baseline gap-1">
+                <span className={cn("text-xs font-semibold shrink-0", isToday ? "text-primary-700" : "text-ink-700")}>
                   <span className="sm:hidden">{WEEKDAY_SHORT[day.getDay()]}</span>
                   <span className="hidden sm:inline">{WEEKDAY[day.getDay()]}</span>
                 </span>
-                <span className="text-[11px] text-ink-400 tabular-nums">{day.getDate()}</span>
+                {lbl && (
+                  <span
+                    className="text-[11px] font-bold leading-tight truncate flex-1 min-w-0"
+                    style={{ color: lbl.color ?? framework.color ?? "#6366f1" }}
+                    title={lbl.label}
+                  >
+                    {lbl.label}
+                  </span>
+                )}
+                <span className="text-[11px] text-ink-400 tabular-nums shrink-0 ms-auto">{day.getDate()}</span>
               </div>
-              {lbl && (
-                <span
-                  className="text-[11px] font-bold leading-tight truncate"
-                  style={{ color: lbl.color ?? framework.color ?? "#6366f1" }}
-                  title={lbl.label}
-                >
-                  {lbl.label}
-                </span>
-              )}
               <div className="flex flex-col gap-0.5">
                 {blocks.map((b) => (
                   <span

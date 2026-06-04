@@ -35,7 +35,7 @@ import { CalendarBlock } from "./CalendarDayView";
 import { RecurringMarker } from "./RecurringMarker";
 import { DayNoteSlot } from "./DayNoteSlot";
 import { TaskCheckButton } from "./TaskCheckButton";
-import { FrameworkBlockChip } from "./FrameworkBlockChip";
+import { FrameworkBlockChip, FrameworkInlineChip } from "./FrameworkBlockChip";
 import type {
   FrameworkBlockOccurrenceView,
   FrameworkDayLabelView,
@@ -192,6 +192,14 @@ export function CalendarWeekView({
   );
   const gridHeight = (hourEnd - hourStart) * hourHeight;
   const now = new Date();
+
+  // All-day framework occurrences per day-column → shown in the "ללא שעה" row.
+  const frameworkAllDayByDay = days.map((day) =>
+    (frameworkBlocks ?? []).filter((b) => b.date === dayNoteKey(day) && b.allDay)
+  );
+  const hasHourlessRow =
+    hourlessByDay.some((col) => col.length > 0) ||
+    frameworkAllDayByDay.some((col) => col.length > 0);
 
   const handleColClick = (dayStart: Date, e: React.MouseEvent<HTMLDivElement>) => {
     if (e.target !== e.currentTarget) return;
@@ -452,7 +460,7 @@ export function CalendarWeekView({
 
       {/* Hourless tasks row — daily tasks with no specific time appear here,
           above the timed grid, one chip per task per day-column. */}
-      {hourlessByDay.some((col) => col.length > 0) && (
+      {hasHourlessRow && (
         <div
           className="grid border-b border-ink-200 bg-white"
           style={headerGrid()}
@@ -466,6 +474,9 @@ export function CalendarWeekView({
                 key={i}
                 className="border-s border-ink-100/60 px-0.5 py-1 flex flex-col gap-0.5 min-h-[28px]"
               >
+                {frameworkAllDayByDay[i]!.map((occ) => (
+                  <FrameworkInlineChip key={occ.id} occ={occ} onClick={onFrameworkBlockClick} />
+                ))}
                 {dayItems.map((item) => {
                   const isTask = item.kind === "task";
                   if (recurringAsMarker && isTask && item.recurring) {
@@ -594,7 +605,7 @@ export function CalendarWeekView({
 
               {/* Framework background blocks (faded) — behind planned items */}
               {(frameworkBlocks ?? [])
-                .filter((b) => b.date === dayNoteKey(day))
+                .filter((b) => b.date === dayNoteKey(day) && !b.allDay)
                 .map((b) => (
                   <FrameworkBlockChip
                     key={b.id}

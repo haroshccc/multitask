@@ -826,6 +826,9 @@ export function Calendar() {
             onItemDrop={handleItemDrop}
             notesByDate={notesByDate}
             noteColorsByDate={noteColorsByDate}
+            frameworkBlocks={frameworkBlocks}
+            frameworkLabelsByDate={frameworkLabelsByDate}
+            onFrameworkBlockClick={cycleFrameworkBlock}
           />
         )}
         {view === "agenda" && (
@@ -836,6 +839,9 @@ export function Calendar() {
             onCreateAt={handleCreateAt}
             notesByDate={notesByDate}
             onDateNoteClick={setEditingNoteDate}
+            frameworkBlocks={frameworkBlocks}
+            frameworkLabelsByDate={frameworkLabelsByDate}
+            onFrameworkBlockClick={cycleFrameworkBlock}
           />
         )}
           </div>

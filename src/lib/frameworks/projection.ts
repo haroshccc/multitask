@@ -226,6 +226,7 @@ export function projectFrameworkBlocks(
             start: atMinutes(cursor, t),
             end: atMinutes(cursor, endT),
             date: dateKey,
+            allDay: false,
             status: occ?.status ?? null,
           });
         }
@@ -247,15 +248,17 @@ function viewFromBlock(
   statusByKey: Map<string, FrameworkBlockOccurrence>
 ): FrameworkBlockOccurrenceView {
   const occ = statusByKey.get(`${stateBlockId}|${dateKey}`);
+  const allDay = block.all_day;
   return {
     id: `fwblock:${stateBlockId}:${dateKey}`,
     frameworkId: framework.id,
     blockId: stateBlockId,
     title: block.title,
     color: block.color ?? framework.color ?? null,
-    start: atMinutes(day, block.start_minute),
-    end: atMinutes(day, block.end_minute),
+    start: atMinutes(day, allDay ? 0 : block.start_minute),
+    end: atMinutes(day, allDay ? 1440 : block.end_minute),
     date: dateKey,
+    allDay,
     status: occ?.status ?? null,
   };
 }

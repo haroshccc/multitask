@@ -30,6 +30,11 @@ import { useCalendarPrefs } from "@/lib/hooks/useCalendarPrefs";
 import { DayNoteSlot } from "./DayNoteSlot";
 import { TaskCheckButton } from "./TaskCheckButton";
 import { RecurringMarker } from "./RecurringMarker";
+import { FrameworkInlineChip } from "./FrameworkBlockChip";
+import type {
+  FrameworkBlockOccurrenceView,
+  FrameworkDayLabelView,
+} from "@/lib/types/frameworks";
 
 /** yyyy-mm-dd in local time. */
 function monthDayKey(d: Date): string {
@@ -63,6 +68,12 @@ interface CalendarMonthViewProps {
   /** When true, recurring task items render as a flat deadline-style marker
    *  (repeat glyph + start time + underline) instead of a bordered chip. */
   recurringAsMarker?: boolean;
+  /** Framework occurrences (only all-day ones render in month cells). */
+  frameworkBlocks?: FrameworkBlockOccurrenceView[];
+  /** Per-day framework headers (yyyy-mm-dd → labels). */
+  frameworkLabelsByDate?: Map<string, FrameworkDayLabelView[]>;
+  /** Left-click a framework occurrence → cycle its check state. */
+  onFrameworkBlockClick?: (occ: FrameworkBlockOccurrenceView) => void;
 }
 
 export function CalendarMonthView({
@@ -76,6 +87,9 @@ export function CalendarMonthView({
   noteColorsByDate,
   readOnly,
   recurringAsMarker,
+  frameworkBlocks,
+  frameworkLabelsByDate,
+  onFrameworkBlockClick,
 }: CalendarMonthViewProps) {
   // "+ עוד N" popover — opens with the full list of single-day items for that
   // day so the user can reach the overflow without losing the cell's context.
@@ -332,6 +346,16 @@ export function CalendarMonthView({
                         >
                           {day.getDate()}
                         </button>
+                        {(frameworkLabelsByDate?.get(monthDayKey(day)) ?? []).map((lbl, i) => (
+                          <span
+                            key={i}
+                            className="text-[10px] font-bold truncate min-w-0"
+                            style={{ color: lbl.color ?? "#6366f1" }}
+                            title={lbl.label}
+                          >
+                            {lbl.label}
+                          </span>
+                        ))}
                         <DayNoteSlot
                           body={notesByDate?.get(monthDayKey(day))}
                           textColor={noteColorsByDate?.get(monthDayKey(day))}
@@ -339,6 +363,15 @@ export function CalendarMonthView({
                         />
                       </div>
                       <div className="space-y-0.5">
+                        {(frameworkBlocks ?? [])
+                          .filter((b) => b.date === monthDayKey(day) && b.allDay)
+                          .map((occ) => (
+                            <FrameworkInlineChip
+                              key={occ.id}
+                              occ={occ}
+                              onClick={onFrameworkBlockClick}
+                            />
+                          ))}
                         {visible.map((it) => (
                           <MonthItemChip
                             key={it.id}

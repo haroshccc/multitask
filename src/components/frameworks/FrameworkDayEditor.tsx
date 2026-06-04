@@ -351,6 +351,7 @@ function BlockForm({
 }) {
   const createBlock = useCreateBlock();
   const [title, setTitle] = useState("");
+  const [allDay, setAllDay] = useState(false);
   const [start, setStart] = useState("09:00");
   const [end, setEnd] = useState("10:00");
   const [recurring, setRecurring] = useState(false);
@@ -361,14 +362,15 @@ function BlockForm({
   const [goalTarget, setGoalTarget] = useState(1);
 
   const save = () => {
-    const startMin = hhmmToMinutes(start);
-    let endMin = hhmmToMinutes(end);
-    if (endMin <= startMin) endMin = Math.min(startMin + 30, 1440);
+    const startMin = allDay ? 0 : hhmmToMinutes(start);
+    let endMin = allDay ? 1440 : hhmmToMinutes(end);
+    if (!allDay && endMin <= startMin) endMin = Math.min(startMin + 30, 1440);
     const base = {
       framework_id: framework.id,
       organization_id: framework.organization_id,
       title: title.trim(),
       color: null,
+      all_day: allDay,
       start_minute: startMin,
       end_minute: endMin,
       effective_from: null,
@@ -386,7 +388,7 @@ function BlockForm({
           specific_date: null,
           month_interval: Math.max(1, interval),
           month_anchor: dateKey,
-          period_unit: unit,
+          period_unit: allDay && unit === "hour" ? "day" : unit,
           override_kind: null,
           source_block_id: null,
         }
@@ -413,19 +415,25 @@ function BlockForm({
         value={title}
         onChange={(e) => setTitle(e.target.value)}
       />
-      <div className="flex items-center gap-1.5">
-        <input type="time" className="field !py-1 !text-xs flex-1" value={start} onChange={(e) => setStart(e.target.value)} />
-        <span className="text-ink-400 text-xs">–</span>
-        <input type="time" className="field !py-1 !text-xs flex-1" value={end} onChange={(e) => setEnd(e.target.value)} />
-      </div>
+      <label className="flex items-center gap-1.5 text-[11px] text-ink-600">
+        <input type="checkbox" checked={allDay} onChange={(e) => setAllDay(e.target.checked)} />
+        יום שלם (ללא שעה)
+      </label>
+      {!allDay && (
+        <div className="flex items-center gap-1.5">
+          <input type="time" className="field !py-1 !text-xs flex-1" value={start} onChange={(e) => setStart(e.target.value)} />
+          <span className="text-ink-400 text-xs">–</span>
+          <input type="time" className="field !py-1 !text-xs flex-1" value={end} onChange={(e) => setEnd(e.target.value)} />
+        </div>
+      )}
       <RecurrenceFields
         recurring={recurring}
         setRecurring={setRecurring}
         interval={interval}
         setInterval={setInterval}
-        unit={unit}
+        unit={unit === "hour" && allDay ? "day" : unit}
         setUnit={setUnit}
-        units={["hour", "day", "week", "month"]}
+        units={allDay ? ["day", "week", "month"] : ["hour", "day", "week", "month"]}
       />
       <div className="space-y-1">
         <label className="flex items-center gap-1.5 text-[11px] text-ink-600">

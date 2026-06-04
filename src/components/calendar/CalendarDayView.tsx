@@ -35,7 +35,7 @@ import { DayNoteSlot } from "./DayNoteSlot";
 import { TaskCheckButton } from "./TaskCheckButton";
 import { HalfCheckIcon } from "@/components/ui/HalfCheckIcon";
 import { RecurringMarker } from "./RecurringMarker";
-import { FrameworkBlockChip } from "./FrameworkBlockChip";
+import { FrameworkBlockChip, FrameworkInlineChip } from "./FrameworkBlockChip";
 import type {
   FrameworkBlockOccurrenceView,
   FrameworkDayLabelView,
@@ -100,7 +100,9 @@ export function CalendarDayView({
   const isToday = isSameDay(date, now);
   const dayKey = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
   const dayFrameworkLabels = frameworkLabelsByDate?.get(dayKey) ?? [];
-  const dayFrameworkBlocks = (frameworkBlocks ?? []).filter((b) => b.date === dayKey);
+  const dayFrameworkAll = (frameworkBlocks ?? []).filter((b) => b.date === dayKey);
+  const dayFrameworkBlocks = dayFrameworkAll.filter((b) => !b.allDay);
+  const dayFrameworkAllDay = dayFrameworkAll.filter((b) => b.allDay);
 
   const { allDay, timed } = useMemo(() => {
     const allDay: CalendarItem[] = [];
@@ -265,12 +267,17 @@ export function CalendarDayView({
       </div>
 
       {/* All-day strip */}
-      {allDay.length > 0 && (
+      {(allDay.length > 0 || dayFrameworkAllDay.length > 0) && (
         <div className="px-3 py-2 border-b border-ink-200 bg-ink-50/60">
           <div className="eyebrow mb-1">כל היום</div>
           <div className="flex flex-wrap gap-1">
             {allDay.map((it) => (
               <AllDayChip key={it.id} item={it} now={now} onClick={() => onItemClick(it)} />
+            ))}
+            {dayFrameworkAllDay.map((occ) => (
+              <div key={occ.id} className="min-w-[120px] max-w-[200px]">
+                <FrameworkInlineChip occ={occ} onClick={onFrameworkBlockClick} />
+              </div>
             ))}
           </div>
         </div>

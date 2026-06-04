@@ -1,6 +1,59 @@
-import { Check, X } from "lucide-react";
+import { Check, X, Repeat } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import type { FrameworkBlockOccurrenceView } from "@/lib/types/frameworks";
+
+/**
+ * Inline (relative-positioned) framework occurrence chip for the all-day strip,
+ * month cells and agenda — anywhere there's no time axis. Faded dashed pill,
+ * left-click cycles check state. Shows a tiny time label for timed occurrences.
+ */
+export function FrameworkInlineChip({
+  occ,
+  showTime,
+  onClick,
+}: {
+  occ: FrameworkBlockOccurrenceView;
+  /** Show the start time before the title (for timed occurrences in agenda). */
+  showTime?: boolean;
+  onClick?: (occ: FrameworkBlockOccurrenceView) => void;
+}) {
+  const accent = occ.color ?? "#6366f1";
+  const done = occ.status === "done";
+  const skipped = occ.status === "skipped";
+  const isPast = occ.end.getTime() < Date.now();
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick?.(occ);
+      }}
+      className={cn(
+        "w-full inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-start text-[10px] transition-opacity",
+        isPast ? "opacity-30" : skipped && "opacity-50"
+      )}
+      style={{
+        backgroundColor: hexToRgba(accent, done ? 0.22 : 0.1),
+        border: `1px dashed ${hexToRgba(accent, 0.55)}`,
+        color: accent,
+      }}
+      title={`מסגרת · ${occ.title}`}
+    >
+      {done && <Check className="w-2.5 h-2.5 shrink-0" />}
+      {skipped && <X className="w-2.5 h-2.5 shrink-0" />}
+      {showTime && !occ.allDay && (
+        <span className="tabular-nums shrink-0 opacity-80">
+          {String(occ.start.getHours()).padStart(2, "0")}:
+          {String(occ.start.getMinutes()).padStart(2, "0")}
+        </span>
+      )}
+      <span className={cn("truncate flex-1 min-w-0", skipped && "line-through")}>
+        {occ.title || "מסגרת"}
+      </span>
+      <Repeat className="w-2.5 h-2.5 shrink-0 opacity-50" />
+    </button>
+  );
+}
 
 function hexToRgba(hex: string, alpha: number): string {
   const h = hex.replace("#", "");

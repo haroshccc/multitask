@@ -35,7 +35,7 @@ import { CalendarBlock } from "./CalendarDayView";
 import { RecurringMarker } from "./RecurringMarker";
 import { DayNoteSlot } from "./DayNoteSlot";
 import { TaskCheckButton } from "./TaskCheckButton";
-import { FrameworkBlockChip } from "./FrameworkBlockChip";
+import { FrameworkBlockChip, FrameworkInlineChip } from "./FrameworkBlockChip";
 import type {
   FrameworkBlockOccurrenceView,
   FrameworkDayLabelView,
@@ -192,6 +192,14 @@ export function CalendarWeekView({
   );
   const gridHeight = (hourEnd - hourStart) * hourHeight;
   const now = new Date();
+
+  // All-day framework occurrences per day-column → shown in the "ללא שעה" row.
+  const frameworkAllDayByDay = days.map((day) =>
+    (frameworkBlocks ?? []).filter((b) => b.date === dayNoteKey(day) && b.allDay)
+  );
+  const hasHourlessRow =
+    hourlessByDay.some((col) => col.length > 0) ||
+    frameworkAllDayByDay.some((col) => col.length > 0);
 
   const handleColClick = (dayStart: Date, e: React.MouseEvent<HTMLDivElement>) => {
     if (e.target !== e.currentTarget) return;
@@ -353,11 +361,11 @@ export function CalendarWeekView({
                 past && !today && "bg-ink-100/60"
               )}
             >
-              <div className="flex items-start justify-between gap-1 min-w-0">
+              <div className="min-w-0">
                 <button
                   onClick={() => onDateNoteClick?.(day)}
                   className={cn(
-                    "text-end shrink-0 rounded-md px-1 hover:bg-ink-100",
+                    "w-full text-start rounded-md px-1 hover:bg-ink-100",
                     today ? "text-primary-700" : past ? "text-ink-500" : "text-ink-900"
                   )}
                   title="לחצי לעריכת הערה ליום"
@@ -367,27 +375,27 @@ export function CalendarWeekView({
                     <span className="sm:hidden">{DAY_NAMES_SHORT[day.getDay()]}</span>
                     <span className="hidden sm:inline">{DAY_NAMES[day.getDay()]}</span>
                   </div>
-                  <div className="text-sm font-semibold">{day.getDate()}</div>
+                  {/* date + framework header on the same line */}
+                  <div className="text-sm font-semibold flex items-baseline gap-1 min-w-0">
+                    <span className="shrink-0">{day.getDate()}</span>
+                    {(frameworkLabelsByDate?.get(dayNoteKey(day)) ?? []).map((lbl, i) => (
+                      <span
+                        key={i}
+                        className="text-[10px] font-bold truncate min-w-0"
+                        style={{ color: lbl.color ?? "#6366f1" }}
+                        title={lbl.label}
+                      >
+                        {lbl.label}
+                      </span>
+                    ))}
+                  </div>
                 </button>
                 <DayNoteSlot
                   body={noteBody}
                   textColor={noteColorsByDate?.get(dayNoteKey(day))}
-                  className="flex-1 text-end"
+                  className="block text-end truncate"
                 />
               </div>
-              {(frameworkLabelsByDate?.get(dayNoteKey(day)) ?? []).map((lbl, i) => (
-                <div
-                  key={i}
-                  className="mt-0.5 text-[10px] font-medium truncate rounded px-1 py-0.5"
-                  style={{
-                    background: (lbl.color ?? "#6366f1") + "1a",
-                    color: lbl.color ?? "#6366f1",
-                  }}
-                  title={lbl.label}
-                >
-                  {lbl.label}
-                </div>
-              ))}
             </div>
           );
         })}
@@ -452,7 +460,7 @@ export function CalendarWeekView({
 
       {/* Hourless tasks row — daily tasks with no specific time appear here,
           above the timed grid, one chip per task per day-column. */}
-      {hourlessByDay.some((col) => col.length > 0) && (
+      {hasHourlessRow && (
         <div
           className="grid border-b border-ink-200 bg-white"
           style={headerGrid()}
@@ -466,6 +474,9 @@ export function CalendarWeekView({
                 key={i}
                 className="border-s border-ink-100/60 px-0.5 py-1 flex flex-col gap-0.5 min-h-[28px]"
               >
+                {frameworkAllDayByDay[i]!.map((occ) => (
+                  <FrameworkInlineChip key={occ.id} occ={occ} onClick={onFrameworkBlockClick} />
+                ))}
                 {dayItems.map((item) => {
                   const isTask = item.kind === "task";
                   if (recurringAsMarker && isTask && item.recurring) {
@@ -594,7 +605,7 @@ export function CalendarWeekView({
 
               {/* Framework background blocks (faded) — behind planned items */}
               {(frameworkBlocks ?? [])
-                .filter((b) => b.date === dayNoteKey(day))
+                .filter((b) => b.date === dayNoteKey(day) && !b.allDay)
                 .map((b) => (
                   <FrameworkBlockChip
                     key={b.id}
@@ -614,6 +625,17 @@ export function CalendarWeekView({
                 );
                 const widthPct = 100 / columns;
                 const leftPct = column * widthPct;
+
+                // If a framework background block shares this slot, reserve a
+                // small strip on the start side (right in RTL) so the framework
+                // stays visible instead of being fully covered by the task.
+                const overlapsFramework = (frameworkBlocks ?? []).some(
+                  (b) =>
+                    b.date === dayNoteKey(day) &&
+                    !b.allDay &&
+                    b.start.getTime() < item.end.getTime() &&
+                    b.end.getTime() > item.start.getTime()
+                );
 
                 const taskActuals =
                   item.kind === "task"
@@ -651,6 +673,7 @@ export function CalendarWeekView({
                     compact
                     readOnly={readOnly}
                     recurringAsMarker={recurringAsMarker}
+                    startReservePx={overlapsFramework ? 16 : 0}
                   />
                 );
               })}

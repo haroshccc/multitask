@@ -11,7 +11,7 @@
  */
 
 export type FrameworkScope = "weekly" | "date" | "monthly";
-export type FrameworkPeriodUnit = "day" | "week" | "month";
+export type FrameworkPeriodUnit = "hour" | "day" | "week" | "month";
 export type FrameworkOverrideKind = "add" | "remove" | "modify";
 export type FrameworkOccurrenceStatus = "done" | "skipped";
 export type FrameworkGoalPeriod = "day" | "week" | "month";
@@ -91,6 +91,8 @@ export interface FrameworkBlock {
   month_anchor: string | null;
   /** Periodic: the unit the interval counts in. */
   period_unit: FrameworkPeriodUnit;
+  /** When true the occurrence has no time — renders in all-day/month/agenda. */
+  all_day: boolean;
   start_minute: number;
   end_minute: number;
   effective_from: string | null;
@@ -182,6 +184,8 @@ export interface FrameworkBlockOccurrenceView {
   end: Date;
   /** yyyy-mm-dd of the occurrence day. */
   date: string;
+  /** All-day occurrence (no specific time). */
+  allDay: boolean;
   status: FrameworkOccurrenceStatus | null;
 }
 

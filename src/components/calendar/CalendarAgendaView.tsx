@@ -1,4 +1,5 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { ChevronDown, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import {
   type CalendarItem,
@@ -13,6 +14,11 @@ import {
 } from "./calendar-utils";
 import { useCalendarPrefs } from "@/lib/hooks/useCalendarPrefs";
 import { TaskCheckButton } from "./TaskCheckButton";
+import { FrameworkInlineChip } from "./FrameworkBlockChip";
+import type {
+  FrameworkBlockOccurrenceView,
+  FrameworkDayLabelView,
+} from "@/lib/types/frameworks";
 
 /** yyyy-mm-dd in local time. */
 function agendaDayKey(d: Date): string {
@@ -32,6 +38,14 @@ interface CalendarAgendaViewProps {
   notesByDate?: Map<string, string>;
   /** Click on a section's date digit → open the per-day note editor. */
   onDateNoteClick?: (date: Date) => void;
+  /** Framework occurrences (timed + all-day) shown per day. */
+  frameworkBlocks?: FrameworkBlockOccurrenceView[];
+  /** Per-day framework headers (yyyy-mm-dd → labels). */
+  frameworkLabelsByDate?: Map<string, FrameworkDayLabelView[]>;
+  /** Left-click a framework occurrence → cycle its check state. */
+  onFrameworkBlockClick?: (occ: FrameworkBlockOccurrenceView) => void;
+  /** Right-click a task row → open the actions menu. */
+  onItemContextMenu?: (item: CalendarItem, x: number, y: number) => void;
 }
 
 /**
@@ -48,6 +62,10 @@ export function CalendarAgendaView({
   onCreateAt,
   notesByDate,
   onDateNoteClick,
+  frameworkBlocks,
+  frameworkLabelsByDate,
+  onFrameworkBlockClick,
+  onItemContextMenu,
 }: CalendarAgendaViewProps) {
   const windowStart = startOfDay(startOfWeek(anchor));
   const windowDays = 14;
@@ -58,6 +76,22 @@ export function CalendarAgendaView({
   );
 
   const now = new Date();
+  const [collapsePast, setCollapsePast] = useState(false);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const todayStart = startOfDay(now).getTime();
+
+  const fwByDay = useMemo(() => {
+    const m = new Map<string, FrameworkBlockOccurrenceView[]>();
+    for (const b of frameworkBlocks ?? []) {
+      const arr = m.get(b.date) ?? [];
+      arr.push(b);
+      m.set(b.date, arr);
+    }
+    for (const arr of m.values()) arr.sort((a, b) => a.start.getTime() - b.start.getTime());
+    return m;
+  }, [frameworkBlocks]);
+
+  const hasPast = days.some((d) => d.getTime() < todayStart);
 
   const byDay = useMemo(() => {
     const m = new Map<string, CalendarItem[]>();
@@ -81,9 +115,22 @@ export function CalendarAgendaView({
 
   return (
     <div className="card overflow-hidden">
+      {hasPast && (
+        <button
+          type="button"
+          onClick={() => setCollapsePast((v) => !v)}
+          className="w-full flex items-center justify-center gap-1.5 py-1.5 text-[11px] text-ink-500 hover:bg-ink-50 border-b border-ink-200"
+        >
+          <EyeOff className="w-3.5 h-3.5" />
+          {collapsePast ? "הצגת ימים שעברו" : "מזעור ימים שעברו"}
+        </button>
+      )}
       {days.map((day) => {
         const today = isSameDay(day, now);
         const list = byDay.get(keyOf(day)) ?? [];
+        const key = agendaDayKey(day);
+        const isPastDay = day.getTime() < todayStart;
+        const collapsed = collapsePast && isPastDay && !expanded.has(key);
         return (
           <DayGroup
             key={day.toISOString()}
@@ -91,9 +138,21 @@ export function CalendarAgendaView({
             today={today}
             items={list}
             onItemClick={onItemClick}
+            onItemContextMenu={onItemContextMenu}
             onCreateAt={onCreateAt}
-            noteBody={notesByDate?.get(agendaDayKey(day))}
+            noteBody={notesByDate?.get(key)}
             onDateNoteClick={onDateNoteClick}
+            frameworkLabels={frameworkLabelsByDate?.get(key) ?? []}
+            frameworkOccs={fwByDay.get(key) ?? []}
+            onFrameworkBlockClick={onFrameworkBlockClick}
+            collapsed={collapsed}
+            onExpand={() =>
+              setExpanded((prev) => {
+                const next = new Set(prev);
+                next.add(key);
+                return next;
+              })
+            }
           />
         );
       })}
@@ -106,17 +165,29 @@ function DayGroup({
   today,
   items,
   onItemClick,
+  onItemContextMenu,
   onCreateAt,
   noteBody,
   onDateNoteClick,
+  frameworkLabels,
+  frameworkOccs,
+  onFrameworkBlockClick,
+  collapsed,
+  onExpand,
 }: {
   day: Date;
   today: boolean;
   items: CalendarItem[];
   onItemClick: (item: CalendarItem) => void;
+  onItemContextMenu?: (item: CalendarItem, x: number, y: number) => void;
   onCreateAt: (start: Date) => void;
   noteBody?: string;
   onDateNoteClick?: (date: Date) => void;
+  frameworkLabels: FrameworkDayLabelView[];
+  frameworkOccs: FrameworkBlockOccurrenceView[];
+  onFrameworkBlockClick?: (occ: FrameworkBlockOccurrenceView) => void;
+  collapsed: boolean;
+  onExpand: () => void;
 }) {
   const { prefs } = useCalendarPrefs();
   const tz = prefs.timezone;
@@ -128,6 +199,26 @@ function DayGroup({
   const dayNum = day.getDate();
   const monthShort = day.toLocaleDateString("he-IL", { month: "short", timeZone: tz });
   const past = day.getTime() < startOfDay(now).getTime();
+
+  // Collapsed (minimized past day) — a thin clickable summary line.
+  if (collapsed) {
+    const count = items.length + frameworkOccs.length;
+    return (
+      <button
+        type="button"
+        onClick={onExpand}
+        className="w-full flex items-center gap-2 px-3 py-1.5 border-b border-ink-200 bg-ink-50/40 text-start hover:bg-ink-50"
+      >
+        <span className="text-[11px] font-medium text-ink-500 tabular-nums shrink-0 w-16 sm:w-32">
+          {dayNameShort} {dayNum}/{day.getMonth() + 1}
+        </span>
+        <span className="text-[11px] text-ink-400 flex-1 truncate">
+          {count > 0 ? `${count} פריטים` : "—"}
+        </span>
+        <ChevronDown className="w-3.5 h-3.5 text-ink-400 shrink-0" />
+      </button>
+    );
+  }
 
   return (
     <div
@@ -182,6 +273,16 @@ function DayGroup({
             {monthShort}
           </span>
         </button>
+        {frameworkLabels.map((lbl, i) => (
+          <div
+            key={i}
+            className={cn("mt-1.5 text-[10px] font-bold leading-tight px-1 truncate", today && "drop-shadow")}
+            style={{ color: today ? "#fff" : lbl.color ?? "#6366f1" }}
+            title={lbl.label}
+          >
+            {lbl.label}
+          </div>
+        ))}
         {noteBody && (
           <div
             className={cn(
@@ -197,14 +298,28 @@ function DayGroup({
 
       {/* Items column */}
       <div className="flex-1 min-w-0 py-1">
+        {frameworkOccs.length > 0 && (
+          <div className="px-3 py-1.5 flex flex-col gap-1">
+            {frameworkOccs.map((occ) => (
+              <FrameworkInlineChip
+                key={occ.id}
+                occ={occ}
+                showTime
+                onClick={onFrameworkBlockClick}
+              />
+            ))}
+          </div>
+        )}
         {items.length === 0 ? (
-          <button
-            onClick={() => onCreateAt(day)}
-            className="w-full text-start px-4 py-2.5 text-[11px] text-ink-400 hover:text-primary-600 hover:bg-ink-50"
-            type="button"
-          >
-            + הוסף אירוע ליום זה
-          </button>
+          frameworkOccs.length === 0 ? (
+            <button
+              onClick={() => onCreateAt(day)}
+              className="w-full text-start px-4 py-2.5 text-[11px] text-ink-400 hover:text-primary-600 hover:bg-ink-50"
+              type="button"
+            >
+              + הוסף אירוע ליום זה
+            </button>
+          ) : null
         ) : (
           <ul className="divide-y divide-ink-150">
             {items.map((it) => (
@@ -213,6 +328,11 @@ function DayGroup({
                 item={it}
                 now={now}
                 onClick={() => onItemClick(it)}
+                onContextMenu={
+                  onItemContextMenu
+                    ? (x, y) => onItemContextMenu(it, x, y)
+                    : undefined
+                }
               />
             ))}
           </ul>
@@ -226,10 +346,12 @@ function AgendaRow({
   item,
   now,
   onClick,
+  onContextMenu,
 }: {
   item: CalendarItem;
   now: Date;
   onClick: () => void;
+  onContextMenu?: (x: number, y: number) => void;
 }) {
   const { prefs } = useCalendarPrefs();
   const tz = prefs.timezone;
@@ -242,6 +364,11 @@ function AgendaRow({
     <li>
       <button
         onClick={onClick}
+        onContextMenu={
+          onContextMenu
+            ? (e) => { e.preventDefault(); e.stopPropagation(); onContextMenu(e.clientX, e.clientY); }
+            : undefined
+        }
         className={cn(
           "w-full px-3 py-2 flex items-center gap-2 text-start hover:bg-ink-50",
           past && "opacity-75",

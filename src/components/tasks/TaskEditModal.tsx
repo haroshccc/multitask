@@ -55,6 +55,8 @@ import {
   useUpdateUserTaskStatus,
 } from "@/lib/hooks/useUserTaskStatuses";
 import { slugifyStatusKey } from "@/lib/services/user-task-statuses";
+import { useTaskFormPrefs } from "@/lib/hooks/useTaskFormPrefs";
+import { ListColorSelect } from "./ListColorSelect";
 import { useOrgMembersForOrg } from "@/lib/hooks/useOrgMembers";
 import { useUserOrganizations } from "@/lib/hooks/useOrganizations";
 import {
@@ -230,6 +232,7 @@ export function TaskEditModal({
   const [notes, setNotes] = useState("");
   const [urgency, setUrgency] = useState<number>(0);
   const [status, setStatus] = useState<string>("todo");
+  const { prefs: taskFormPrefs } = useTaskFormPrefs();
   const [listId, setListId] = useState<string | null>(null);
   const [tags, setTags] = useState<string[]>([]);
   const [location, setLocation] = useState("");
@@ -707,32 +710,24 @@ export function TaskEditModal({
                 <div className="space-y-4">
                   {/* --- Fields locked in write mode --- */}
                   <fieldset disabled={isWriteView} style={{ border: "none", padding: 0, margin: 0 }} className={cn(isWriteView && "opacity-50")}>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <Field label="סטטוס">
-                      <StatusPicker
-                        value={status}
-                        statuses={myStatuses}
-                        onChange={setStatus}
-                      />
-                    </Field>
+                  {taskFormPrefs.showStatus ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <Field label="סטטוס">
+                        <StatusPicker
+                          value={status}
+                          statuses={myStatuses}
+                          onChange={setStatus}
+                        />
+                      </Field>
+                      <Field label="רשימה">
+                        <ListColorSelect lists={lists} value={listId} onChange={setListId} />
+                      </Field>
+                    </div>
+                  ) : (
                     <Field label="רשימה">
-                      <select
-                        value={listId ?? ""}
-                        onChange={(e) => setListId(e.target.value || null)}
-                        className="field"
-                      >
-                        <option value="">לא משויכת</option>
-                        {lists.map((l) => (
-                          <option key={l.id} value={l.id}>
-                            {l.emoji && !l.emoji.startsWith("icon:")
-                              ? `${l.emoji} `
-                              : ""}
-                            {l.name}
-                          </option>
-                        ))}
-                      </select>
+                      <ListColorSelect lists={lists} value={listId} onChange={setListId} />
                     </Field>
-                  </div>
+                  )}
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <Field label="דחיפות">

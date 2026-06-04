@@ -773,6 +773,7 @@ export function Calendar() {
               onOpenTask={(id) => setEditingTaskId(id)}
               onContextMenu={(task, x, y) => setTaskMenu({ task, x, y })}
               onClose={() => setScheduling(false)}
+              wide={view === "day" || view === "agenda"}
             />
           )}
           <div className="flex-1 min-w-0">
@@ -821,11 +822,15 @@ export function Calendar() {
             anchor={anchor}
             items={items}
             onItemClick={handleItemClick}
+            onItemContextMenu={handleItemContextMenu}
             onDayClick={handleMonthDayClick}
             onCellClick={handleMonthCellClick}
             onItemDrop={handleItemDrop}
             notesByDate={notesByDate}
             noteColorsByDate={noteColorsByDate}
+            frameworkBlocks={frameworkBlocks}
+            frameworkLabelsByDate={frameworkLabelsByDate}
+            onFrameworkBlockClick={cycleFrameworkBlock}
           />
         )}
         {view === "agenda" && (
@@ -833,9 +838,13 @@ export function Calendar() {
             anchor={anchor}
             items={items}
             onItemClick={handleItemClick}
+            onItemContextMenu={handleItemContextMenu}
             onCreateAt={handleCreateAt}
             notesByDate={notesByDate}
             onDateNoteClick={setEditingNoteDate}
+            frameworkBlocks={frameworkBlocks}
+            frameworkLabelsByDate={frameworkLabelsByDate}
+            onFrameworkBlockClick={cycleFrameworkBlock}
           />
         )}
           </div>

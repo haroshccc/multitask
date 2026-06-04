@@ -137,11 +137,8 @@ export function FrameworkMonthGrid({
                 </span>
                 {lbl && (
                   <span
-                    className="text-[9px] leading-tight rounded px-1 py-0.5 truncate flex-1 min-w-0"
-                    style={{
-                      background: (lbl.color ?? framework.color ?? "#6366f1") + "1f",
-                      color: lbl.color ?? framework.color ?? "#6366f1",
-                    }}
+                    className="text-[10px] font-bold leading-tight truncate flex-1 min-w-0"
+                    style={{ color: lbl.color ?? framework.color ?? "#6366f1" }}
                     title={lbl.label}
                   >
                     {lbl.label}

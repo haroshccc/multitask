@@ -117,11 +117,9 @@ export function FrameworkWeekStrip({
               </div>
               {lbl && (
                 <span
-                  className="text-[10px] leading-tight rounded px-1 py-0.5 truncate"
-                  style={{
-                    background: (lbl.color ?? framework.color ?? "#6366f1") + "1f",
-                    color: lbl.color ?? framework.color ?? "#6366f1",
-                  }}
+                  className="text-[11px] font-bold leading-tight truncate"
+                  style={{ color: lbl.color ?? framework.color ?? "#6366f1" }}
+                  title={lbl.label}
                 >
                   {lbl.label}
                 </span>

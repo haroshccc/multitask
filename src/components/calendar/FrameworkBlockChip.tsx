@@ -68,16 +68,19 @@ export function FrameworkBlockChip({
       className={cn(
         "absolute rounded-md px-1.5 py-0.5 text-start overflow-hidden cursor-pointer transition-opacity",
         skipped && "opacity-50",
-        isPast && !done && "opacity-60"
+        isPast && !done && "opacity-45"
       )}
       style={{
         top: `${top}%`,
         height: `${Math.max(height, 1.5)}%`,
         insetInlineStart: "2px",
         insetInlineEnd: "2px",
-        backgroundColor: hexToRgba(accent, done ? 0.22 : isPast ? 0.04 : 0.1),
-        border: `1px dashed ${hexToRgba(accent, isPast ? 0.25 : 0.55)}`,
-        color: isPast ? hexToRgba(accent, 0.5) : accent,
+        // Past framework occurrences become a faint ghost — no fill, very light
+        // dashed outline — so they clearly recede vs a regular dimmed past event
+        // (which keeps a solid fill).
+        backgroundColor: done ? hexToRgba(accent, 0.22) : isPast ? "transparent" : hexToRgba(accent, 0.1),
+        border: `1px dashed ${hexToRgba(accent, isPast ? 0.2 : 0.55)}`,
+        color: isPast ? hexToRgba(accent, 0.4) : accent,
       }}
       title={`מסגרת · ${occ.title}`}
     >

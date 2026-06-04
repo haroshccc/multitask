@@ -14,7 +14,7 @@ import {
   startOfWeek,
 } from "date-fns";
 import { he } from "date-fns/locale";
-import { Calendar as CalendarIcon, ChevronDown, Clock, X } from "lucide-react";
+import { Calendar as CalendarIcon, ChevronDown, ChevronUp, Clock, X } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
 interface DateTimePickerProps {
@@ -135,6 +135,13 @@ export function DateTimePicker({
     const base = current ?? new Date();
     const next = new Date(base);
     next.setHours(9, 0, 0, 0);
+    onChange(next.toISOString());
+  };
+
+  const setTime = (hh: number, mm: number) => {
+    const base = current ?? new Date();
+    const next = new Date(base);
+    next.setHours(hh, mm, 0, 0);
     onChange(next.toISOString());
   };
 
@@ -264,51 +271,65 @@ export function DateTimePicker({
               </div>
             </div>
 
-            {/* Time — native <input type="time"> gives the OS-level picker
-                on iOS / Android / desktop, matching the one used by the
-                Timer-entry manual fields and avoiding the tall scroll columns
-                that squeezed the popover on mobile. */}
-            {!dateOnly && !isHourless && (
-              <div className="flex items-center gap-2 p-3 bg-ink-50 border-t sm:border-t-0 sm:border-s border-ink-200">
-                <Clock className="w-4 h-4 text-ink-500 shrink-0" />
-                <input
-                  type="time"
-                  dir="ltr"
-                  value={
-                    current
-                      ? `${String(current.getHours()).padStart(2, "0")}:${String(
-                          current.getMinutes()
-                        ).padStart(2, "0")}`
-                      : ""
-                  }
-                  onChange={(e) => {
-                    const [hh, mm] = e.target.value.split(":").map(Number);
-                    if (Number.isNaN(hh) || Number.isNaN(mm)) return;
-                    const base = current ?? new Date();
-                    const next = new Date(base);
-                    next.setHours(hh, mm, 0, 0);
-                    onChange(next.toISOString());
-                  }}
-                  className="field text-sm font-mono tabular-nums text-center flex-1 min-w-0"
-                />
-              </div>
-            )}
-            {!dateOnly && isHourless && (
-              <div className="flex items-center gap-2 p-3 bg-ink-50 border-t sm:border-t-0 sm:border-s border-ink-200">
-                <Clock className="w-4 h-4 text-ink-400 shrink-0" />
-                <span className="flex-1 text-sm text-ink-500">ללא שעה</span>
+            {/* Side panel: a click-or-type time spinner (▲/▼ jump the hour by
+                1 and the minute by 5, the inputs accept any manual value) plus
+                the ללא שעה / היום shortcuts directly under the time so they sit
+                next to what they affect. The footer is reserved for ניקוי /
+                שמור. */}
+            <div className="flex flex-col gap-3 p-3 bg-ink-50 border-t sm:border-t-0 sm:border-s border-ink-200 sm:min-w-[208px] sm:justify-center">
+              {!dateOnly && !isHourless && (
+                <div className="flex items-center justify-center gap-3">
+                  <Clock className="w-4 h-4 text-ink-500 shrink-0" />
+                  <TimeSpinner
+                    hours={current ? current.getHours() : 0}
+                    minutes={current ? current.getMinutes() : 0}
+                    onChange={setTime}
+                  />
+                </div>
+              )}
+              {!dateOnly && isHourless && (
+                <div className="flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-ink-400 shrink-0" />
+                  <span className="flex-1 text-sm text-ink-500">ללא שעה</span>
+                  <button
+                    type="button"
+                    onClick={setDefaultTime}
+                    className="text-xs font-medium text-primary-700 hover:bg-primary-50 px-2 py-1 rounded-md"
+                  >
+                    הוסף שעה
+                  </button>
+                </div>
+              )}
+
+              {/* Quick actions: ללא שעה / היום */}
+              <div
+                className={cn(
+                  "flex items-center justify-center gap-1.5",
+                  !dateOnly && "border-t border-ink-200 pt-2"
+                )}
+              >
+                {allowNoTime && !isHourless && current && (
+                  <button
+                    type="button"
+                    onClick={setHourless}
+                    className="flex-1 text-xs font-medium text-ink-700 bg-white border border-ink-200 hover:bg-ink-100 px-2 py-1.5 rounded-lg"
+                    title="קבע את המשימה ליום זה ללא שעה ספציפית"
+                  >
+                    ללא שעה
+                  </button>
+                )}
                 <button
                   type="button"
-                  onClick={setDefaultTime}
-                  className="text-xs font-medium text-primary-700 hover:bg-primary-50 px-2 py-1 rounded-md"
+                  onClick={chooseToday}
+                  className="flex-1 text-xs font-medium text-primary-700 bg-white border border-primary-200 hover:bg-primary-50 px-2 py-1.5 rounded-lg"
                 >
-                  הוסף שעה
+                  היום
                 </button>
               </div>
-            )}
+            </div>
           </div>
 
-          {/* Footer */}
+          {/* Footer — ניקוי on the start side, שמור (close) on the end side */}
           <div className="flex items-center justify-between gap-2 px-3 py-2 border-t border-ink-200 bg-white">
             <button
               type="button"
@@ -317,25 +338,13 @@ export function DateTimePicker({
             >
               ניקוי
             </button>
-            <div className="inline-flex items-center gap-1">
-              {allowNoTime && !isHourless && current && (
-                <button
-                  type="button"
-                  onClick={setHourless}
-                  className="text-xs font-medium text-ink-700 hover:bg-ink-100 px-2 py-1 rounded-md"
-                  title="קבע את המשימה ליום זה ללא שעה ספציפית"
-                >
-                  ללא שעה
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={chooseToday}
-                className="text-xs font-medium text-primary-700 hover:bg-primary-50 px-2 py-1 rounded-md"
-              >
-                היום
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="text-sm font-medium text-white bg-primary-500 hover:bg-primary-600 px-5 py-1.5 rounded-lg shadow-accent"
+            >
+              שמור
+            </button>
           </div>
           </PortalPopover>,
           document.body
@@ -396,6 +405,120 @@ const PortalPopover = forwardRef<
     </div>
   );
 });
+
+/**
+ * A two-column hour:minute spinner. Each column can be nudged with the ▲/▼
+ * buttons (hour ±1, minute ±5 and carrying over the hour) or typed into
+ * directly for an exact value. Stepping wraps around the clock.
+ */
+function TimeSpinner({
+  hours,
+  minutes,
+  minuteStep = 5,
+  onChange,
+}: {
+  hours: number;
+  minutes: number;
+  minuteStep?: number;
+  onChange: (h: number, m: number) => void;
+}) {
+  const stepHour = (delta: number) => onChange((hours + delta + 24) % 24, minutes);
+  const stepMinute = (delta: number) => {
+    const total =
+      (((hours * 60 + minutes + delta * minuteStep) % 1440) + 1440) % 1440;
+    onChange(Math.floor(total / 60), total % 60);
+  };
+  const typeHour = (raw: string) => {
+    const h = parseInt(raw, 10);
+    if (Number.isNaN(h)) return;
+    onChange(Math.min(23, Math.max(0, h)), minutes);
+  };
+  const typeMinute = (raw: string) => {
+    const m = parseInt(raw, 10);
+    if (Number.isNaN(m)) return;
+    onChange(hours, Math.min(59, Math.max(0, m)));
+  };
+
+  return (
+    <div className="flex items-center gap-1" dir="ltr">
+      <SpinnerColumn
+        value={hours}
+        onStep={stepHour}
+        onType={typeHour}
+        ariaLabel="שעה"
+      />
+      <span className="text-lg font-mono text-ink-400 pb-0.5 select-none">:</span>
+      <SpinnerColumn
+        value={minutes}
+        onStep={stepMinute}
+        onType={typeMinute}
+        ariaLabel="דקה"
+      />
+    </div>
+  );
+}
+
+function SpinnerColumn({
+  value,
+  onStep,
+  onType,
+  ariaLabel,
+}: {
+  value: number;
+  onStep: (delta: number) => void;
+  onType: (raw: string) => void;
+  ariaLabel: string;
+}) {
+  const [text, setText] = useState(() => String(value).padStart(2, "0"));
+  const focused = useRef(false);
+
+  // Keep the displayed text in sync with the value unless the user is mid-edit
+  // (so typing "1" toward "13" isn't clobbered back to "01").
+  useEffect(() => {
+    if (!focused.current) setText(String(value).padStart(2, "0"));
+  }, [value]);
+
+  return (
+    <div className="flex flex-col items-center gap-1">
+      <button
+        type="button"
+        aria-label={`${ariaLabel} +`}
+        onClick={() => onStep(1)}
+        className="w-11 h-6 flex items-center justify-center rounded-md text-ink-500 hover:bg-ink-200 hover:text-ink-700"
+      >
+        <ChevronUp className="w-4 h-4" />
+      </button>
+      <input
+        dir="ltr"
+        inputMode="numeric"
+        aria-label={ariaLabel}
+        value={text}
+        onFocus={(e) => {
+          focused.current = true;
+          e.currentTarget.select();
+        }}
+        onChange={(e) => {
+          const raw = e.target.value.replace(/\D/g, "").slice(0, 2);
+          setText(raw);
+          if (raw !== "") onType(raw);
+        }}
+        onBlur={() => {
+          focused.current = false;
+          setText(String(value).padStart(2, "0"));
+        }}
+        className="w-12 text-center text-lg font-mono tabular-nums bg-white border border-ink-300 rounded-lg py-1.5 outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/25"
+      />
+      <button
+        type="button"
+        aria-label={`${ariaLabel} -`}
+        onClick={() => onStep(-1)}
+        className="w-11 h-6 flex items-center justify-center rounded-md text-ink-500 hover:bg-ink-200 hover:text-ink-700"
+      >
+        <ChevronDown className="w-4 h-4" />
+      </button>
+    </div>
+  );
+}
 
 // Utility exports — useful for other places that need ISO <-> display parsing.
 export function parseDateTimeLocal(display: string): Date | null {

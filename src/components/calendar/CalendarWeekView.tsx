@@ -353,11 +353,11 @@ export function CalendarWeekView({
                 past && !today && "bg-ink-100/60"
               )}
             >
-              <div className="flex items-start justify-between gap-1 min-w-0">
+              <div className="min-w-0">
                 <button
                   onClick={() => onDateNoteClick?.(day)}
                   className={cn(
-                    "min-w-0 flex-1 rounded-md px-1 hover:bg-ink-100",
+                    "w-full text-start rounded-md px-1 hover:bg-ink-100",
                     today ? "text-primary-700" : past ? "text-ink-500" : "text-ink-900"
                   )}
                   title="לחצי לעריכת הערה ליום"
@@ -373,7 +373,7 @@ export function CalendarWeekView({
                     {(frameworkLabelsByDate?.get(dayNoteKey(day)) ?? []).map((lbl, i) => (
                       <span
                         key={i}
-                        className="text-[10px] font-bold truncate flex-1 min-w-0"
+                        className="text-[10px] font-bold truncate min-w-0"
                         style={{ color: lbl.color ?? "#6366f1" }}
                         title={lbl.label}
                       >
@@ -385,7 +385,7 @@ export function CalendarWeekView({
                 <DayNoteSlot
                   body={noteBody}
                   textColor={noteColorsByDate?.get(dayNoteKey(day))}
-                  className="shrink-0 text-end"
+                  className="block text-end truncate"
                 />
               </div>
             </div>

@@ -1,18 +1,26 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import * as service from "@/lib/services/task-custom-fields";
+import type { CustomFieldEntity } from "@/lib/services/task-custom-fields";
 import type {
   TaskCustomField,
   TaskCustomFieldInsert,
   TaskCustomFieldUpdate,
 } from "@/lib/types/domain";
 
-const QK = (projectId: string | null | undefined) =>
-  ["task_custom_fields", projectId ?? ""] as const;
+export type { CustomFieldEntity } from "@/lib/services/task-custom-fields";
 
-export function useProjectCustomFields(projectId: string | null | undefined) {
+const QK = (
+  projectId: string | null | undefined,
+  entityType: CustomFieldEntity = "task"
+) => ["task_custom_fields", entityType, projectId ?? ""] as const;
+
+export function useProjectCustomFields(
+  projectId: string | null | undefined,
+  entityType: CustomFieldEntity = "task"
+) {
   return useQuery<TaskCustomField[]>({
-    queryKey: QK(projectId),
-    queryFn: () => service.listProjectCustomFields(projectId!),
+    queryKey: QK(projectId, entityType),
+    queryFn: () => service.listProjectCustomFields(projectId!, entityType),
     enabled: !!projectId,
   });
 }
@@ -20,9 +28,11 @@ export function useProjectCustomFields(projectId: string | null | undefined) {
 export function useCreateCustomField() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: TaskCustomFieldInsert) => service.createCustomField(input),
-    onSuccess: (_data, vars) => {
-      qc.invalidateQueries({ queryKey: QK(vars.project_id) });
+    mutationFn: (
+      input: TaskCustomFieldInsert & { entity_type?: CustomFieldEntity }
+    ) => service.createCustomField(input),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["task_custom_fields"] });
     },
   });
 }

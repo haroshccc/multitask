@@ -44,7 +44,9 @@ export function TableHeader<TKey extends string>({
   onRenameField,
   onReorderFields,
   onEditFieldOptions,
+  controlSpacerCount = 3,
 }: {
+  controlSpacerCount?: number;
   gridCols: string;
   customFields: EntityCustomField[];
   fixedLabels: Record<string, string>;
@@ -106,9 +108,9 @@ export function TableHeader<TKey extends string>({
       className="grid items-center gap-1 px-1.5 py-1.5 sticky top-0 bg-ink-50/80 backdrop-blur z-10 text-[10px] font-semibold uppercase tracking-wider text-ink-500 border-b border-ink-200"
       style={{ gridTemplateColumns: gridCols }}
     >
-      <span></span>
-      <span></span>
-      <span></span>
+      {Array.from({ length: controlSpacerCount }).map((_, i) => (
+        <span key={`ctrl-${i}`} />
+      ))}
       <DndContext
         sensors={colDragSensors}
         collisionDetection={closestCenter}

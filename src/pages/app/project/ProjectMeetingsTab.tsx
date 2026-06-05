@@ -25,8 +25,33 @@ import {
   useUnlinkMeetingTask,
   type ProjectMeeting,
 } from "@/lib/hooks/useProjectMeetings";
+import { useUpdateProjectMeeting } from "@/lib/hooks/useProjectMeetings";
 import { useTasksByProject } from "@/lib/hooks/useTasks";
 import { useRecordings } from "@/lib/hooks/useRecordings";
+import {
+  useProjectCustomFields,
+  useCreateCustomField,
+  useUpdateCustomField,
+  useDeleteCustomField,
+} from "@/lib/hooks/useTaskCustomFields";
+import { useEntityColumns } from "@/lib/hooks/useEntityColumns";
+import {
+  buildGridCols,
+  buildGridMinWidth,
+  type FixedColumnDescriptor,
+} from "@/components/configurable-table/gridLayout";
+import { TableHeader } from "@/components/configurable-table/ConfigurableTableHeader";
+import {
+  DynCell,
+  OptionsEditorModal,
+  readCustomField,
+  writeCustomField,
+  type SelectOption,
+} from "@/components/configurable-table/fieldCells";
+import type {
+  CustomFieldType,
+  TaskCustomField,
+} from "@/lib/types/domain";
 import { cn } from "@/lib/utils/cn";
 
 const VIEW_KEY = "multitask.projectMeetings.view";
@@ -70,12 +95,151 @@ function formatWhen(iso: string | null, allDay: boolean): string {
   });
 }
 
+// ── Configurable-table column model for the meetings table view ──────────────
+// Meetings reuse the same CSS-grid configurable table as tasks, but with no
+// control columns (no drag/expand/checkbox), no sub-rows, and a small actions
+// column for the delete button. Fixed columns are renamable/reorderable via
+// `useEntityColumns({ entityType: "meeting" })`.
+type MeetingFixedKey = "title" | "when" | "status" | "tasks" | "recording";
+
+const MEETING_FIXED_DESCRIPTORS: FixedColumnDescriptor<MeetingFixedKey>[] = [
+  {
+    key: "title",
+    width: "minmax(160px, 1fr)",
+    defaultLabel: "פגישה",
+    align: "start",
+    sortable: false,
+    sortKey: null,
+  },
+  {
+    key: "when",
+    width: "minmax(120px, 0.5fr)",
+    defaultLabel: "מתי",
+    align: "start",
+    sortable: false,
+    sortKey: null,
+  },
+  {
+    key: "status",
+    width: "90px",
+    defaultLabel: "סטטוס",
+    align: "start",
+    sortable: false,
+    sortKey: null,
+  },
+  {
+    key: "tasks",
+    width: "70px",
+    defaultLabel: "משימות",
+    align: "start",
+    sortable: false,
+    sortKey: null,
+  },
+  {
+    key: "recording",
+    width: "120px",
+    defaultLabel: "הקלטה",
+    align: "start",
+    sortable: false,
+    sortKey: null,
+  },
+];
+
+const MEETING_FIXED_WIDTHS = Object.fromEntries(
+  MEETING_FIXED_DESCRIPTORS.map((d) => [d.key, d.width])
+) as Record<MeetingFixedKey, string>;
+
+const MEETING_CONTROL_COLS = ""; // meetings have no drag/expand/checkbox chrome
+const MEETING_ACTIONS_COL = "40px"; // delete button
+const MEETING_DYN_COL_WIDTH = 160;
+const MEETING_CONTROL_AND_ACTIONS_WIDTH = 40;
+
 export function ProjectMeetingsTab() {
   const { projectId } = useProjectContext();
   const { data: meetings = [], isLoading } = useProjectMeetings(projectId);
   const { data: links = [] } = useMeetingTaskLinks(projectId);
   const createMeeting = useCreateProjectMeeting();
   const [openId, setOpenId] = useState<string | null>(null);
+
+  // Configurable custom columns (meeting entity).
+  const { data: customFields = [] } = useProjectCustomFields(
+    projectId,
+    "meeting"
+  );
+  const createField = useCreateCustomField();
+  const updateField = useUpdateCustomField();
+  const deleteField = useDeleteCustomField();
+  const updateMeeting = useUpdateProjectMeeting();
+  const { fixedLabels, orderedKeys, renameFixed, reorderFixed } =
+    useEntityColumns<MeetingFixedKey>({
+      entityType: "meeting",
+      projectId,
+      descriptors: MEETING_FIXED_DESCRIPTORS,
+    });
+  const [optionsFieldId, setOptionsFieldId] = useState<string | null>(null);
+  const optionsField = useMemo(
+    () => customFields.find((f) => f.id === optionsFieldId) ?? null,
+    [customFields, optionsFieldId]
+  );
+
+  const orderedDescriptors = useMemo(
+    () =>
+      orderedKeys.map(
+        (k) => MEETING_FIXED_DESCRIPTORS.find((d) => d.key === k)!
+      ),
+    [orderedKeys]
+  );
+
+  const gridCols = useMemo(
+    () =>
+      buildGridCols(orderedKeys, customFields.length, MEETING_FIXED_WIDTHS, {
+        controlCols: MEETING_CONTROL_COLS,
+        actionsCol: MEETING_ACTIONS_COL,
+        dynColWidth: MEETING_DYN_COL_WIDTH,
+      }),
+    [orderedKeys, customFields.length]
+  );
+  const gridMinWidth = useMemo(
+    () =>
+      buildGridMinWidth(orderedKeys, customFields.length, MEETING_FIXED_WIDTHS, {
+        controlAndActionsWidth: MEETING_CONTROL_AND_ACTIONS_WIDTH,
+        dynColWidth: MEETING_DYN_COL_WIDTH,
+      }),
+    [orderedKeys, customFields.length]
+  );
+
+  const handleAddField = (type: CustomFieldType, label: string) => {
+    if (!projectId) return;
+    const fieldKey = `f_${Date.now().toString(36)}_${Math.random()
+      .toString(36)
+      .slice(2, 6)}`;
+    createField.mutate({
+      project_id: projectId,
+      field_key: fieldKey,
+      field_label: label,
+      field_type: type,
+      is_visible: true,
+      entity_type: "meeting",
+    });
+  };
+  const handleRenameField = (fieldId: string, label: string) =>
+    updateField.mutate({ fieldId, patch: { field_label: label } });
+  const handleReorderFields = (newOrder: TaskCustomField[]) => {
+    newOrder.forEach((field, i) => {
+      const next = (i + 1) * 1000;
+      if (field.sort_order !== next) {
+        updateField.mutate({ fieldId: field.id, patch: { sort_order: next } });
+      }
+    });
+  };
+  const handleDeleteField = (fieldId: string) => deleteField.mutate(fieldId);
+  const handleSaveOptions = (fieldId: string, options: SelectOption[]) => {
+    updateField.mutate({
+      fieldId,
+      patch: { options: options as unknown as TaskCustomField["options"] },
+    });
+    setOptionsFieldId(null);
+  };
   const [view, setView] = useState<ViewMode>(() => {
     if (typeof window === "undefined") return "table";
     return localStorage.getItem(VIEW_KEY) === "cards" ? "cards" : "table";
@@ -122,34 +286,63 @@ export function ProjectMeetingsTab() {
         </button>
       </div>
 
+      {optionsField && (
+        <OptionsEditorModal
+          field={optionsField}
+          onSave={(opts) => handleSaveOptions(optionsField.id, opts)}
+          onClose={() => setOptionsFieldId(null)}
+        />
+      )}
+
       {meetings.length === 0 ? (
         <EmptyState onCreate={handleCreate} />
       ) : view === "table" ? (
         <div className="card overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-ink-50 border-b border-ink-200">
-                <tr className="text-start text-ink-500 text-xs">
-                  <th className="text-start font-semibold px-3 py-2">פגישה</th>
-                  <th className="text-start font-semibold px-3 py-2">מתי</th>
-                  <th className="text-start font-semibold px-3 py-2">סטטוס</th>
-                  <th className="text-start font-semibold px-3 py-2">משימות</th>
-                  <th className="text-start font-semibold px-3 py-2">הקלטה</th>
-                  <th className="w-8 px-3 py-2"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {meetings.map((m) => (
-                  <MeetingRow
-                    key={m.id}
-                    meeting={m}
-                    projectId={projectId}
-                    linkCount={linkCountByMeeting.get(m.id) ?? 0}
-                    onOpen={() => setOpenId(m.id)}
-                  />
-                ))}
-              </tbody>
-            </table>
+          <div className="overflow-auto">
+            <div style={{ minWidth: gridMinWidth }}>
+              <TableHeader
+                controlSpacerCount={0}
+                gridCols={gridCols}
+                customFields={customFields}
+                fixedLabels={fixedLabels}
+                orderedDescriptors={orderedDescriptors}
+                sortKey={null}
+                sortDir="asc"
+                onSort={() => {}}
+                onRenameFixed={renameFixed}
+                onReorderFixed={reorderFixed}
+                onAddField={handleAddField}
+                onDeleteField={handleDeleteField}
+                onRenameField={handleRenameField}
+                onReorderFields={handleReorderFields}
+                onEditFieldOptions={(fieldId) => setOptionsFieldId(fieldId)}
+              />
+              {meetings.map((m) => (
+                <MeetingRow
+                  key={m.id}
+                  meeting={m}
+                  projectId={projectId}
+                  linkCount={linkCountByMeeting.get(m.id) ?? 0}
+                  gridCols={gridCols}
+                  orderedKeys={orderedKeys}
+                  customFields={customFields}
+                  onSaveCustom={(field, value) =>
+                    updateMeeting.mutate({
+                      id: m.id,
+                      projectId,
+                      patch: {
+                        custom_fields: writeCustomField(
+                          m,
+                          field.field_key,
+                          value
+                        ),
+                      },
+                    })
+                  }
+                  onOpen={() => setOpenId(m.id)}
+                />
+              ))}
+            </div>
           </div>
         </div>
       ) : (
@@ -203,63 +396,99 @@ function MeetingRow({
   meeting,
   projectId,
   linkCount,
+  gridCols,
+  orderedKeys,
+  customFields,
+  onSaveCustom,
   onOpen,
 }: {
   meeting: ProjectMeeting;
   projectId: string;
   linkCount: number;
+  gridCols: string;
+  orderedKeys: MeetingFixedKey[];
+  customFields: TaskCustomField[];
+  onSaveCustom: (field: TaskCustomField, value: unknown) => void;
   onOpen: () => void;
 }) {
   const del = useDeleteProjectMeeting();
-  return (
-    <tr className="border-b border-ink-100 hover:bg-ink-50">
-      <td className="px-3 py-2">
-        <button
-          type="button"
-          onClick={onOpen}
-          className="text-start font-medium text-ink-900 hover:text-primary-700"
-        >
-          {meeting.title.trim() || "פגישה ללא שם"}
-        </button>
-      </td>
-      <td className="px-3 py-2 text-ink-600 whitespace-nowrap">
-        {formatWhen(meeting.meeting_at, meeting.all_day)}
-        {meeting.event_id && (
-          <CalendarPlus
-            className="inline-block w-3.5 h-3.5 text-primary-600 ms-1 align-text-bottom"
-            aria-label="מסונכרן ליומן"
-          />
-        )}
-      </td>
-      <td className="px-3 py-2">
-        <span className="chip">
-          {STATUS_LABEL[meeting.status] ?? meeting.status}
-        </span>
-      </td>
-      <td className="px-3 py-2">
-        {linkCount > 0 ? (
+
+  const renderFixed = (key: MeetingFixedKey) => {
+    switch (key) {
+      case "title":
+        return (
+          <button
+            type="button"
+            onClick={onOpen}
+            className="min-w-0 truncate text-start font-medium text-ink-900 hover:text-primary-700"
+          >
+            {meeting.title.trim() || "פגישה ללא שם"}
+          </button>
+        );
+      case "when":
+        return (
+          <span className="text-xs text-ink-600 truncate">
+            {formatWhen(meeting.meeting_at, meeting.all_day)}
+            {meeting.event_id && (
+              <CalendarPlus
+                className="inline-block w-3.5 h-3.5 text-primary-600 ms-1 align-text-bottom"
+                aria-label="מסונכרן ליומן"
+              />
+            )}
+          </span>
+        );
+      case "status":
+        return (
+          <span className="chip text-[10px]">
+            {STATUS_LABEL[meeting.status] ?? meeting.status}
+          </span>
+        );
+      case "tasks":
+        return linkCount > 0 ? (
           <span className="inline-flex items-center gap-1 text-xs text-ink-600">
             <ListChecks className="w-3.5 h-3.5" />
             {linkCount}
           </span>
         ) : (
           <span className="text-xs text-ink-400">—</span>
-        )}
-      </td>
-      <td className="px-3 py-2">
-        {meeting.recording_id ? (
+        );
+      case "recording":
+        return meeting.recording_id ? (
           <Link
             to={`/app/recordings?id=${meeting.recording_id}`}
-            className="inline-flex items-center gap-1 text-xs text-primary-700 hover:underline"
+            className="inline-flex items-center gap-1 text-xs text-primary-700 hover:underline truncate"
           >
-            <Mic className="w-3.5 h-3.5" />
-            לעמוד ההקלטה
+            <Mic className="w-3.5 h-3.5 shrink-0" />
+            <span className="truncate">לעמוד ההקלטה</span>
           </Link>
         ) : (
           <span className="text-xs text-ink-400">—</span>
-        )}
-      </td>
-      <td className="px-3 py-2 text-end">
+        );
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <div
+      className="grid items-center gap-1 px-1.5 py-1.5 border-b border-ink-100 hover:bg-ink-50"
+      style={{ gridTemplateColumns: gridCols }}
+    >
+      {orderedKeys.map((key) => (
+        <div key={key} className="min-w-0 flex items-center">
+          {renderFixed(key)}
+        </div>
+      ))}
+      {customFields.map((f) => (
+        <div key={f.id} className="min-w-0 flex items-center">
+          <DynCell
+            field={f}
+            value={readCustomField(meeting, f.field_key)}
+            onSave={(v) => onSaveCustom(f, v)}
+          />
+        </div>
+      ))}
+      <div className="flex items-center justify-end">
         <button
           type="button"
           onClick={() => {
@@ -275,8 +504,8 @@ function MeetingRow({
         >
           <Trash2 className="w-4 h-4" />
         </button>
-      </td>
-    </tr>
+      </div>
+    </div>
   );
 }
 

@@ -16,6 +16,7 @@ export interface ProjectMeeting {
   status: string;
   recording_id: string | null;
   event_id: string | null;
+  custom_fields: Record<string, unknown>;
   sort_order: number;
   created_at: string;
   updated_at: string;

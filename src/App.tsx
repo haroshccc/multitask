@@ -51,7 +51,7 @@ const ProjectTasksTab = lazy(() =>
   }))
 );
 const ProjectDashboardTab = lazy(() =>
-  import("@/pages/app/project/ProjectStubTabs").then((m) => ({
+  import("@/pages/app/project/ProjectDashboardTab").then((m) => ({
     default: m.ProjectDashboardTab,
   }))
 );

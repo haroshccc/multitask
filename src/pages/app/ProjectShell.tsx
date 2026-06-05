@@ -333,7 +333,7 @@ function TagsRow({
           <button
             type="button"
             onClick={() => onRemove(t)}
-            className="opacity-0 group-hover:opacity-100 transition-opacity text-ink-400 hover:text-ink-700"
+            className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity text-ink-400 hover:text-ink-700"
             aria-label={`הסירי תג ${t}`}
           >
             <X className="w-3 h-3" />

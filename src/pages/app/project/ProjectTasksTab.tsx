@@ -68,7 +68,7 @@ export function ProjectTasksTab() {
             type="button"
             onClick={() => setSidePanel((p) => (p === "calendar" ? null : "calendar"))}
             className={cn(
-              "inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md border",
+              "hidden lg:inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md border",
               sidePanel === "calendar"
                 ? "bg-ink-900 text-white border-ink-900"
                 : "bg-white text-ink-700 border-ink-200 hover:bg-ink-50"

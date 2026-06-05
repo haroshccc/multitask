@@ -34,12 +34,12 @@ export function ScreenScaffold({
       )}
       dir="rtl"
     >
-      <header className="flex items-start justify-between gap-4 mb-5 text-start">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4 mb-5 text-start">
         <div className="min-w-0 text-start">
           <h1 className="text-[22px] sm:text-2xl md:text-3xl font-bold text-ink-900 truncate text-start">{title}</h1>
           {subtitle && <p className="text-sm text-ink-500 mt-1 text-start">{subtitle}</p>}
         </div>
-        {actions && <div className="flex items-center gap-2 shrink-0">{actions}</div>}
+        {actions && <div className="flex flex-wrap items-center gap-2 shrink-0">{actions}</div>}
       </header>
       {children}
     </div>

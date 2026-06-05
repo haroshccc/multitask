@@ -61,3 +61,46 @@ export function useDeleteProjectMeeting() {
       qc.invalidateQueries({ queryKey: key(vars.projectId) }),
   });
 }
+
+// ── Meeting ⇄ task links ─────────────────────────────────────────────────────
+
+const linksKey = (projectId: string) => ["meeting-task-links", projectId];
+
+export function useMeetingTaskLinks(projectId: string | null | undefined) {
+  return useQuery({
+    queryKey: linksKey(projectId ?? ""),
+    queryFn: () => service.listMeetingTaskLinks(projectId!),
+    enabled: !!projectId,
+  });
+}
+
+export function useLinkMeetingTask() {
+  const qc = useQueryClient();
+  const scope = useOrgScope();
+  return useMutation({
+    mutationFn: (input: {
+      projectId: string;
+      meetingId: string;
+      taskId: string;
+    }) => {
+      const { organizationId } = assertOrgScope(scope);
+      return service.linkMeetingTask({
+        organization_id: organizationId,
+        meeting_id: input.meetingId,
+        task_id: input.taskId,
+      });
+    },
+    onSuccess: (_d, vars) =>
+      qc.invalidateQueries({ queryKey: linksKey(vars.projectId) }),
+  });
+}
+
+export function useUnlinkMeetingTask() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ linkId }: { linkId: string; projectId: string }) =>
+      service.unlinkMeetingTask(linkId),
+    onSuccess: (_d, vars) =>
+      qc.invalidateQueries({ queryKey: linksKey(vars.projectId) }),
+  });
+}

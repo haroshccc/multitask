@@ -56,7 +56,7 @@ const ProjectDashboardTab = lazy(() =>
   }))
 );
 const ProjectMeetingsTab = lazy(() =>
-  import("@/pages/app/project/ProjectStubTabs").then((m) => ({
+  import("@/pages/app/project/ProjectMeetingsTab").then((m) => ({
     default: m.ProjectMeetingsTab,
   }))
 );

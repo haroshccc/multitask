@@ -35,12 +35,17 @@ import {
   useDeleteCustomField,
 } from "@/lib/hooks/useTaskCustomFields";
 import { useEntityColumns } from "@/lib/hooks/useEntityColumns";
+import { useEntityColumnVisibility } from "@/lib/hooks/useEntityColumnVisibility";
 import {
   buildGridCols,
   buildGridMinWidth,
   type FixedColumnDescriptor,
 } from "@/components/configurable-table/gridLayout";
 import { TableHeader } from "@/components/configurable-table/ConfigurableTableHeader";
+import {
+  ColumnsMenu,
+  type ColumnsMenuItem,
+} from "@/components/configurable-table/ColumnsMenu";
 import {
   DynCell,
   OptionsEditorModal,
@@ -176,36 +181,67 @@ export function ProjectMeetingsTab() {
       projectId,
       descriptors: MEETING_FIXED_DESCRIPTORS,
     });
+  const { hiddenIds, toggleHidden } = useEntityColumnVisibility({
+    entityType: "meeting",
+    projectId,
+  });
   const [optionsFieldId, setOptionsFieldId] = useState<string | null>(null);
   const optionsField = useMemo(
     () => customFields.find((f) => f.id === optionsFieldId) ?? null,
     [customFields, optionsFieldId]
   );
 
+  // Visible (non-hidden) columns drive the table; the full lists drive the
+  // "עמודות" menu so hidden columns can be toggled back on.
+  const visibleKeys = useMemo(
+    () => orderedKeys.filter((k) => !hiddenIds.has(k)),
+    [orderedKeys, hiddenIds]
+  );
+  const visibleFields = useMemo(
+    () => customFields.filter((f) => !hiddenIds.has(f.id)),
+    [customFields, hiddenIds]
+  );
+  const columnMenuItems = useMemo<ColumnsMenuItem[]>(
+    () => [
+      ...orderedKeys.map((k) => ({
+        id: k,
+        kind: "fixed" as const,
+        label:
+          fixedLabels[k] ??
+          MEETING_FIXED_DESCRIPTORS.find((d) => d.key === k)?.defaultLabel ??
+          k,
+      })),
+      ...customFields.map((f) => ({
+        id: f.id,
+        kind: "custom" as const,
+        label: f.field_label,
+      })),
+    ],
+    [orderedKeys, customFields, fixedLabels]
+  );
+
   const orderedDescriptors = useMemo(
     () =>
-      orderedKeys.map(
-        (k) => MEETING_FIXED_DESCRIPTORS.find((d) => d.key === k)!
-      ),
-    [orderedKeys]
+      visibleKeys.map((k) => MEETING_FIXED_DESCRIPTORS.find((d) => d.key === k)!),
+    [visibleKeys]
   );
 
   const gridCols = useMemo(
     () =>
-      buildGridCols(orderedKeys, customFields.length, MEETING_FIXED_WIDTHS, {
+      buildGridCols(visibleKeys, visibleFields.length, MEETING_FIXED_WIDTHS, {
         controlCols: MEETING_CONTROL_COLS,
         actionsCol: MEETING_ACTIONS_COL,
         dynColWidth: MEETING_DYN_COL_WIDTH,
       }),
-    [orderedKeys, customFields.length]
+    [visibleKeys, visibleFields.length]
   );
   const gridMinWidth = useMemo(
     () =>
-      buildGridMinWidth(orderedKeys, customFields.length, MEETING_FIXED_WIDTHS, {
+      buildGridMinWidth(visibleKeys, visibleFields.length, MEETING_FIXED_WIDTHS, {
         controlAndActionsWidth: MEETING_CONTROL_AND_ACTIONS_WIDTH,
         dynColWidth: MEETING_DYN_COL_WIDTH,
       }),
-    [orderedKeys, customFields.length]
+    [visibleKeys, visibleFields.length]
   );
 
   const handleAddField = (type: CustomFieldType, label: string) => {
@@ -275,15 +311,24 @@ export function ProjectMeetingsTab() {
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <ViewToggle view={view} onChange={setViewPersist} />
-        <button
-          type="button"
-          onClick={handleCreate}
-          disabled={createMeeting.isPending}
-          className="btn-accent text-sm inline-flex items-center gap-1.5 disabled:opacity-50"
-        >
-          <Plus className="w-4 h-4" />
-          פגישה חדשה
-        </button>
+        <div className="inline-flex items-center gap-2">
+          {view === "table" && (
+            <ColumnsMenu
+              items={columnMenuItems}
+              hiddenIds={hiddenIds}
+              onToggle={toggleHidden}
+            />
+          )}
+          <button
+            type="button"
+            onClick={handleCreate}
+            disabled={createMeeting.isPending}
+            className="btn-accent text-sm inline-flex items-center gap-1.5 disabled:opacity-50"
+          >
+            <Plus className="w-4 h-4" />
+            פגישה חדשה
+          </button>
+        </div>
       </div>
 
       {optionsField && (
@@ -303,7 +348,7 @@ export function ProjectMeetingsTab() {
               <TableHeader
                 controlSpacerCount={0}
                 gridCols={gridCols}
-                customFields={customFields}
+                customFields={visibleFields}
                 fixedLabels={fixedLabels}
                 orderedDescriptors={orderedDescriptors}
                 sortKey={null}
@@ -324,8 +369,8 @@ export function ProjectMeetingsTab() {
                   projectId={projectId}
                   linkCount={linkCountByMeeting.get(m.id) ?? 0}
                   gridCols={gridCols}
-                  orderedKeys={orderedKeys}
-                  customFields={customFields}
+                  orderedKeys={visibleKeys}
+                  customFields={visibleFields}
                   onSaveCustom={(field, value) =>
                     updateMeeting.mutate({
                       id: m.id,

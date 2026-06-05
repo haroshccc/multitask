@@ -1,14 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import {
-  LayoutGrid,
-  Table2,
-  Plus,
-  Loader2,
-  CalendarDays,
-  GanttChartSquare,
-  PanelRightClose,
-} from "lucide-react";
+import { LayoutGrid, Table2, Plus, Loader2 } from "lucide-react";
 import { useProjectContext } from "@/pages/app/ProjectShell";
 import { useTaskLists, useCreateTaskList } from "@/lib/hooks/useTaskLists";
 import {
@@ -20,7 +11,6 @@ import { useRowDisplayPrefs } from "@/lib/hooks/useRowDisplayPrefs";
 import { TaskRow, type TaskTreeNode } from "@/components/tasks/TaskRow";
 import { TaskEditModal } from "@/components/tasks/TaskEditModal";
 import { TasksBlock } from "@/components/projects/blocks/TasksBlock";
-import { CalendarBlock } from "@/components/projects/blocks/CalendarBlock";
 import type { Task, TaskList } from "@/lib/types/domain";
 import { pushUndo } from "@/lib/undo/store";
 import { cn } from "@/lib/utils/cn";
@@ -44,8 +34,6 @@ export function ProjectTasksTab() {
     if (typeof window !== "undefined") localStorage.setItem(VIEW_KEY, view);
   }, [view]);
 
-  const [sidePanel, setSidePanel] = useState<"calendar" | null>(null);
-
   if (listsLoading) {
     return (
       <div className="card p-10 text-center text-ink-500 text-sm">
@@ -63,57 +51,13 @@ export function ProjectTasksTab() {
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <ViewToggle view={view} onChange={setView} />
-        <div className="inline-flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={() => setSidePanel((p) => (p === "calendar" ? null : "calendar"))}
-            className={cn(
-              "hidden lg:inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md border",
-              sidePanel === "calendar"
-                ? "bg-ink-900 text-white border-ink-900"
-                : "bg-white text-ink-700 border-ink-200 hover:bg-ink-50"
-            )}
-          >
-            <CalendarDays className="w-3.5 h-3.5" />
-            יומן
-          </button>
-          <Link
-            to="/app/gantt"
-            className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md border bg-white text-ink-700 border-ink-200 hover:bg-ink-50"
-            title="פתח גאנט (אפשר לסנן לפי הפרויקט)"
-          >
-            <GanttChartSquare className="w-3.5 h-3.5" />
-            גאנט
-          </Link>
-        </div>
       </div>
 
-      <div className={cn("flex gap-3", sidePanel && "items-start")}>
-        <div className="flex-1 min-w-0">
-          {view === "table" ? (
-            <TasksBlock scopeId={projectId} />
-          ) : (
-            <PhaseListsView projectList={projectList} projectId={projectId} />
-          )}
-        </div>
-
-        {sidePanel === "calendar" && (
-          <aside className="hidden lg:block w-[380px] shrink-0 card p-3 sticky top-4">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-semibold text-ink-800">יומן הפרויקט</span>
-              <button
-                type="button"
-                onClick={() => setSidePanel(null)}
-                className="p-1 rounded-md text-ink-400 hover:text-ink-700 hover:bg-ink-100"
-                aria-label="סגור פאנל"
-              >
-                <PanelRightClose className="w-4 h-4" />
-              </button>
-            </div>
-            <div style={{ height: "420px" }}>
-              <CalendarBlock scopeId={projectId} />
-            </div>
-          </aside>
+      <div>
+        {view === "table" ? (
+          <TasksBlock scopeId={projectId} />
+        ) : (
+          <PhaseListsView projectList={projectList} projectId={projectId} />
         )}
       </div>
     </div>

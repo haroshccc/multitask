@@ -136,6 +136,9 @@ export async function unlinkMeetingTask(linkId: string): Promise<void> {
 export async function reconcileMeetingEvent(args: {
   organizationId: string;
   ownerId: string;
+  /** The meeting's project — written onto the synced event as `project_id`
+   *  so the event shows up on that project's calendar. */
+  projectId: string | null;
   title: string;
   meetingAt: string | null;
   allDay: boolean;
@@ -172,6 +175,10 @@ export async function reconcileMeetingEvent(args: {
     all_day: args.allDay,
     location: args.location,
     source_recording_id: args.recordingId,
+    // `events.project_id` is a nullable column (added by migration) that the
+    // generated types may lag behind; the service already runs through `db`
+    // (supabase cast to any), so writing it is safe even if typegen is stale.
+    project_id: args.projectId,
   };
 
   if (existingEventId) {

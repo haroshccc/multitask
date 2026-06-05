@@ -17,6 +17,7 @@ import {
   LayoutDashboard,
   ListTodo,
   CalendarClock,
+  CalendarRange,
   Receipt,
   FolderOpen,
   FolderKanban,
@@ -53,6 +54,7 @@ export function useProjectContext(): ProjectOutletContext {
 
 const TABS: { to: string; label: string; icon: typeof ListTodo }[] = [
   { to: "tasks", label: "משימות", icon: ListTodo },
+  { to: "calendar", label: "יומן", icon: CalendarRange },
   { to: "meetings", label: "פגישות", icon: CalendarClock },
   { to: "payments", label: "תשלומים", icon: Receipt },
   { to: "documents", label: "מסמכים", icon: FolderOpen },

@@ -55,6 +55,11 @@ const ProjectDashboardTab = lazy(() =>
     default: m.ProjectDashboardTab,
   }))
 );
+const ProjectCalendarTab = lazy(() =>
+  import("@/pages/app/project/ProjectCalendarTab").then((m) => ({
+    default: m.ProjectCalendarTab,
+  }))
+);
 const ProjectMeetingsTab = lazy(() =>
   import("@/pages/app/project/ProjectMeetingsTab").then((m) => ({
     default: m.ProjectMeetingsTab,
@@ -232,6 +237,14 @@ export default function App() {
             element={
               <Suspense fallback={<LoadingShell />}>
                 <ProjectTasksTab />
+              </Suspense>
+            }
+          />
+          <Route
+            path="calendar"
+            element={
+              <Suspense fallback={<LoadingShell />}>
+                <ProjectCalendarTab />
               </Suspense>
             }
           />

@@ -81,6 +81,7 @@ export function useSaveProjectMeeting() {
       const eventId = await service.reconcileMeetingEvent({
         organizationId,
         ownerId: userId,
+        projectId: input.projectId,
         title: input.patch.title,
         meetingAt: input.patch.meeting_at,
         allDay: input.patch.all_day,
@@ -96,6 +97,7 @@ export function useSaveProjectMeeting() {
     },
     onSuccess: (_d, vars) => {
       qc.invalidateQueries({ queryKey: key(vars.projectId) });
+      qc.invalidateQueries({ queryKey: ["project-events"] });
       if (scope.organizationId) {
         qc.invalidateQueries({
           queryKey: queryFamilies.allEvents(scope.organizationId),
@@ -122,6 +124,7 @@ export function useDeleteProjectMeeting() {
     },
     onSuccess: (_d, vars) => {
       qc.invalidateQueries({ queryKey: key(vars.projectId) });
+      qc.invalidateQueries({ queryKey: ["project-events"] });
       if (scope.organizationId) {
         qc.invalidateQueries({
           queryKey: queryFamilies.allEvents(scope.organizationId),

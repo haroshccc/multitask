@@ -130,7 +130,10 @@ export function CalendarChrome(props: CalendarChromeProps) {
       ? formatWeekRange(anchor, tz)
       : formatMonthYear(anchor, tz);
 
-  const visibleListCount = lists.length - hiddenListIds.size;
+  // Count only lists that aren't hidden. `hiddenListIds` can also hold event
+  // calendar ids (they share the set), so subtracting its raw size would
+  // undercount — go negative once calendars are hidden.
+  const visibleListCount = lists.filter((l) => !hiddenListIds.has(l.id)).length;
 
   return (
     <div className="card overflow-visible">

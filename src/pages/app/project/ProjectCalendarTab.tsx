@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   CalendarRange,
@@ -19,6 +19,9 @@ import { CalendarWeekView } from "@/components/calendar/CalendarWeekView";
 import { CalendarMonthView } from "@/components/calendar/CalendarMonthView";
 import { CalendarAgendaView } from "@/components/calendar/CalendarAgendaView";
 import { EventEditModal } from "@/components/calendar/EventEditModal";
+import { DragHoverPill } from "@/components/calendar/DragHoverPill";
+import { TaskSchedulingPanel } from "@/components/calendar/TaskSchedulingPanel";
+import { MeetingSchedulingPanel } from "@/components/calendar/MeetingSchedulingPanel";
 import { TaskEditModal } from "@/components/tasks/TaskEditModal";
 import type { DropAction } from "@/components/calendar/calendar-drag";
 import {
@@ -45,16 +48,17 @@ import {
   startOfDay as ganttStartOfDay,
 } from "@/components/gantt/gantt-utils";
 
-import { useTaskLists } from "@/lib/hooks/useTaskLists";
-import { useTasksByProject, useUpdateTask, useCreateTask } from "@/lib/hooks/useTasks";
-import { useUpdateEvent } from "@/lib/hooks/useEvents";
-import { useProjectEvents } from "@/lib/hooks/useProjectEvents";
+import { useTaskLists, useCreateTaskList } from "@/lib/hooks/useTaskLists";
+import { useTasks, useUpdateTask, useCreateTask } from "@/lib/hooks/useTasks";
+import { useEvents, useUpdateEvent, useCreateEvent } from "@/lib/hooks/useEvents";
+import { useEventCalendars } from "@/lib/hooks/useEventCalendars";
 import {
+  useProjectMeetings,
   useCreateProjectMeeting,
   useSaveProjectMeeting,
 } from "@/lib/hooks/useProjectMeetings";
-import { useCreateEvent } from "@/lib/hooks/useEvents";
 import { pushUndo } from "@/lib/undo/store";
+import type { Task } from "@/lib/types/domain";
 
 const MODE_KEY = "multitask.projectCalendar.mode";
 const VIEW_KEY = "multitask.projectCalendar.view";
@@ -94,29 +98,140 @@ export function ProjectCalendarTab() {
   const [layer, setLayer] = useState<LayerMode>("both");
 
   const { data: lists = [] } = useTaskLists();
+  const { data: eventCalendars = [] } = useEventCalendars();
+  const { data: meetings = [] } = useProjectMeetings(projectId);
+
+  // The list(s) that belong to THIS project — visible by default. Everything
+  // else (other projects' lists, general lists, event calendars) is hidden by
+  // default and can be turned on per-project via the calendar's "רשימות"
+  // picker, so the project calendar can show context from across the workspace.
+  const projectListIds = useMemo(
+    () => new Set(lists.filter((l) => l.project_id === projectId).map((l) => l.id)),
+    [lists, projectId]
+  );
   const projectList = useMemo(
     () => lists.find((l) => l.project_id === projectId) ?? null,
     [lists, projectId]
   );
+
+  // ── Cross-project visibility (persisted per project) ────────────────────────
+  // `hidden`  — project list ids the user turned OFF (default: all shown).
+  // `extra`   — non-project list / calendar ids the user turned ON.
+  // Adjusted during render when the project changes (the tab stays mounted
+  // across :projectId param changes).
+  const [vis, setVis] = useState<{
+    projectId: string;
+    hidden: Set<string>;
+    extra: Set<string>;
+  }>(() => ({
+    projectId,
+    hidden: loadIdSet(visHiddenKey(projectId)),
+    extra: loadIdSet(visExtraKey(projectId)),
+  }));
+  if (vis.projectId !== projectId) {
+    setVis({
+      projectId,
+      hidden: loadIdSet(visHiddenKey(projectId)),
+      extra: loadIdSet(visExtraKey(projectId)),
+    });
+  }
+  useEffect(() => {
+    if (vis.projectId !== projectId) return;
+    try {
+      localStorage.setItem(visHiddenKey(projectId), JSON.stringify([...vis.hidden]));
+      localStorage.setItem(visExtraKey(projectId), JSON.stringify([...vis.extra]));
+    } catch {
+      /* ignore quota / private-mode errors */
+    }
+  }, [vis, projectId]);
+
+  const isVisible = (id: string | null | undefined): boolean => {
+    if (!id) return false;
+    return projectListIds.has(id) ? !vis.hidden.has(id) : vis.extra.has(id);
+  };
+
+  const toggleVisibility = (id: string) => {
+    setVis((v) => {
+      if (projectListIds.has(id)) {
+        const hidden = new Set(v.hidden);
+        if (hidden.has(id)) hidden.delete(id);
+        else hidden.add(id);
+        return { ...v, hidden };
+      }
+      const extra = new Set(v.extra);
+      if (extra.has(id)) extra.delete(id);
+      else extra.add(id);
+      return { ...v, extra };
+    });
+  };
+
+  // Hidden-set the CalendarChrome picker consumes (covers both lists and
+  // event calendars; UUIDs never collide).
+  const hiddenListIds = useMemo(() => {
+    const s = new Set<string>();
+    for (const l of lists) if (!isVisible(l.id)) s.add(l.id);
+    for (const c of eventCalendars) if (!isVisible(c.id)) s.add(c.id);
+    return s;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lists, eventCalendars, projectListIds, vis]);
+
+  const unifiedLists = useMemo(
+    () =>
+      lists.map((l) => ({
+        id: l.id,
+        name: l.name,
+        emoji: l.emoji,
+        color: l.color,
+      })),
+    [lists]
+  );
+  const unifiedCalendars = useMemo(
+    () =>
+      eventCalendars.map((c) => ({
+        id: c.id,
+        name: c.name,
+        emoji: c.emoji,
+        color: c.color,
+      })),
+    [eventCalendars]
+  );
+
   const listColorById = useMemo(() => {
     const m = new Map<string, string | null>();
     for (const l of lists) m.set(l.id, l.color);
     return m;
   }, [lists]);
-
-  const { data: tasks = [] } = useTasksByProject(projectId);
+  const calendarColorById = useMemo(() => {
+    const m = new Map<string, string | null>();
+    for (const c of eventCalendars) m.set(c.id, c.color);
+    return m;
+  }, [eventCalendars]);
 
   const range = useMemo(() => rangeFor(view, anchor), [view, anchor]);
-  const { data: events = [] } = useProjectEvents(projectId, {
+
+  // Workspace-wide tasks/events; the project's own data shows by default and
+  // the rest is filtered by the per-project visibility set below.
+  const { data: allTasks = [] } = useTasks();
+  const { data: events = [] } = useEvents({
     from: range.fromIso,
     to: range.toIso,
   });
 
-  // ── CalendarItem[] (mirrors Calendar.tsx, project-scoped) ───────────────────
+  // Project tasks (derived) — drives the gantt sub-view + create defaults.
+  const tasks = useMemo(
+    () =>
+      allTasks.filter(
+        (t) => t.task_list_id && projectListIds.has(t.task_list_id)
+      ),
+    [allTasks, projectListIds]
+  );
+
+  // ── CalendarItem[] (mirrors Calendar.tsx, with cross-project visibility) ────
   const items: CalendarItem[] = useMemo(() => {
     const out: CalendarItem[] = [];
     if (layer !== "events") {
-      for (const t of tasks) {
+      for (const t of allTasks) {
+        if (!isVisible(t.task_list_id)) continue;
         const listColor = listColorById.get(t.task_list_id ?? "") ?? null;
         if (t.scheduled_at) {
           const base = taskToItem(t, listColor, user?.id);
@@ -168,7 +283,12 @@ export function ProjectCalendarTab() {
     }
     if (layer !== "tasks") {
       for (const e of events) {
-        const base = eventToItem(e);
+        // Always show the project's own events (project_id match); show any
+        // other event only if its calendar was turned on in the picker.
+        const belongsToProject =
+          (e as { project_id?: string | null }).project_id === projectId;
+        if (!belongsToProject && !isVisible(e.calendar_id)) continue;
+        const base = eventToItem(e, calendarColorById);
         if (e.recurrence_rule) {
           const anchorStart = base.start;
           const duration = base.end.getTime() - anchorStart.getTime();
@@ -204,7 +324,19 @@ export function ProjectCalendarTab() {
       }
     }
     return out;
-  }, [tasks, events, layer, listColorById, range, user?.id]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    allTasks,
+    events,
+    layer,
+    listColorById,
+    calendarColorById,
+    range,
+    user?.id,
+    projectId,
+    projectListIds,
+    vis,
+  ]);
 
   // ── Mutations ───────────────────────────────────────────────────────────────
   const updateTask = useUpdateTask();
@@ -232,6 +364,61 @@ export function ProjectCalendarTab() {
       if (newStart.getTime() >= newEnd.getTime())
         newStart = new Date(newEnd.getTime() - 15 * 60_000);
     }
+
+    // Dragged out of the meetings scheduling panel → set / move meeting_at and
+    // reconcile its linked calendar event (so it shows on the grid).
+    if (item.id.startsWith("meeting:")) {
+      const meetingId = item.id.slice("meeting:".length);
+      const m = meetings.find((x) => x.id === meetingId);
+      if (!m) return;
+      const prevAt = m.meeting_at;
+      const saveAt = (at: string | null) =>
+        saveMeeting.mutate({
+          id: m.id,
+          projectId,
+          existingEventId: m.event_id,
+          patch: {
+            title: m.title,
+            meeting_at: at,
+            all_day: m.all_day,
+            location: m.location,
+            status: m.status,
+            notes: m.notes,
+            summary: m.summary,
+            recording_id: m.recording_id,
+          },
+        });
+      const nextAt = newStart.toISOString();
+      saveAt(nextAt);
+      pushUndo({
+        description: "שיבוץ פגישה",
+        undo: () => saveAt(prevAt),
+        redo: () => saveAt(nextAt),
+      });
+      return;
+    }
+
+    // Dragged out of the tasks scheduling panel → schedule the task at the drop
+    // time, preserving its real duration (null stays null = "no duration").
+    if (item.kind === "task" && item.isUnscheduledDraft) {
+      const src = item.source as {
+        id: string;
+        duration_minutes: number | null;
+      };
+      const nextPatch = {
+        scheduled_at: newStart.toISOString(),
+        duration_minutes: src.duration_minutes ?? null,
+      };
+      updateTask.mutate({ taskId: src.id, patch: nextPatch });
+      pushUndo({
+        description: "שיבוץ משימה",
+        undo: () =>
+          updateTask.mutate({ taskId: src.id, patch: { scheduled_at: null } }),
+        redo: () => updateTask.mutate({ taskId: src.id, patch: nextPatch }),
+      });
+      return;
+    }
+
     if (item.kind === "task") {
       const taskId = (item.source as { id: string }).id;
       const prevScheduledAt = item.start.toISOString();
@@ -293,6 +480,31 @@ export function ProjectCalendarTab() {
   // ── Edit / create state ─────────────────────────────────────────────────────
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
+
+  // Scheduling side-panel: drag tasks or meetings from the side onto the grid.
+  const [scheduling, setScheduling] = useState(false);
+  const [panelMode, setPanelMode] = useState<"tasks" | "meetings">("tasks");
+
+  // New-list dialog (the "רשימה חדשה" action in the lists picker, scoped to
+  // this project).
+  const [newListDialogOpen, setNewListDialogOpen] = useState(false);
+  const [newListName, setNewListName] = useState("");
+  const createTaskList = useCreateTaskList();
+  const handleCreateList = () => {
+    setNewListName("");
+    setNewListDialogOpen(true);
+  };
+  const handleCreateListSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    const name = newListName.trim();
+    if (!name) return;
+    setNewListDialogOpen(false);
+    await createTaskList.mutateAsync({
+      name,
+      kind: "custom",
+      project_id: projectId,
+    });
+  };
 
   // Scheduling chooser: a popover that lets the user pick task / event /
   // meeting for the clicked slot. Anchored at the cursor.
@@ -446,9 +658,56 @@ export function ProjectCalendarTab() {
 
   return (
     <div className="space-y-2">
-      {/* Mode toggle (calendar ⇄ gantt) */}
+      <DragHoverPill />
+      {/* Mode toggle (calendar ⇄ gantt) + scheduling controls */}
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <ModeToggle mode={mode} onChange={setMode} />
+        {mode === "calendar" && (
+          <div className="inline-flex items-center gap-2">
+            {scheduling && (
+              <div className="inline-flex items-center rounded-md border border-ink-200 bg-white overflow-hidden text-xs">
+                <button
+                  type="button"
+                  onClick={() => setPanelMode("tasks")}
+                  className={cn(
+                    "px-2.5 py-1.5 inline-flex items-center gap-1",
+                    panelMode === "tasks"
+                      ? "bg-ink-900 text-white"
+                      : "text-ink-600 hover:bg-ink-50"
+                  )}
+                >
+                  <CheckSquare className="w-3.5 h-3.5" />
+                  משימות
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPanelMode("meetings")}
+                  className={cn(
+                    "px-2.5 py-1.5 inline-flex items-center gap-1",
+                    panelMode === "meetings"
+                      ? "bg-ink-900 text-white"
+                      : "text-ink-600 hover:bg-ink-50"
+                  )}
+                >
+                  <Users className="w-3.5 h-3.5" />
+                  פגישות
+                </button>
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={() => setScheduling((v) => !v)}
+              className={cn(
+                "btn-ghost text-sm inline-flex items-center gap-1.5",
+                scheduling && "bg-ink-100 text-ink-900"
+              )}
+              title="גררי משימות או פגישות אל היומן"
+            >
+              <CalendarRange className="w-4 h-4" />
+              {scheduling ? "סגרי מצב שיבוץ" : "מצב שיבוץ"}
+            </button>
+          </div>
+        )}
       </div>
 
       {mode === "calendar" ? (
@@ -461,10 +720,12 @@ export function ProjectCalendarTab() {
             availableViews={availableViews}
             layer={layer}
             onLayerChange={setLayer}
-            lists={[]}
-            hiddenListIds={new Set()}
-            onToggleListVisibility={() => {}}
-            onCreateList={() => {}}
+            lists={unifiedLists}
+            hiddenListIds={hiddenListIds}
+            onToggleListVisibility={toggleVisibility}
+            onCreateList={handleCreateList}
+            eventCalendars={unifiedCalendars}
+            onToggleCalendarVisibility={toggleVisibility}
             filtersActiveCount={0}
             filtersOpen={false}
             onToggleFilters={() => {}}
@@ -474,50 +735,77 @@ export function ProjectCalendarTab() {
             onCreateTask={handleCreateTaskToolbar}
           />
 
-          {view === "day" && (
-            <CalendarDayView
-              date={anchor}
-              items={items}
-              actualStripes={[]}
-              hourStart={HOUR_START}
-              hourEnd={HOUR_END}
-              hourHeight={DAY_HOUR_HEIGHT}
-              onItemClick={handleItemClick}
-              onCreateAt={handleCreateAt}
-              onItemDrop={handleItemDrop}
-            />
-          )}
-          {view === "week" && (
-            <CalendarWeekView
-              anchor={anchor}
-              items={items}
-              actualStripes={[]}
-              hourStart={HOUR_START}
-              hourEnd={HOUR_END}
-              hourHeight={WEEK_HOUR_HEIGHT}
-              onItemClick={handleItemClick}
-              onCreateAt={handleCreateAt}
-              onItemDrop={handleItemDrop}
-            />
-          )}
-          {view === "month" && (
-            <CalendarMonthView
-              anchor={anchor}
-              items={items}
-              onItemClick={handleItemClick}
-              onDayClick={(day) => handleCreateAt(noonOf(day))}
-              onCellClick={(day) => handleCreateAt(at9(day))}
-              onItemDrop={handleItemDrop}
-            />
-          )}
-          {view === "agenda" && (
-            <CalendarAgendaView
-              anchor={anchor}
-              items={items}
-              onItemClick={handleItemClick}
-              onCreateAt={handleCreateAt}
-            />
-          )}
+          <div className="flex items-start gap-3">
+            {scheduling &&
+              (panelMode === "tasks" ? (
+                <TaskSchedulingPanel
+                  tasks={allTasks}
+                  taskLists={lists}
+                  hiddenListIds={hiddenListIds}
+                  onItemDrop={handleItemDrop}
+                  onOpenTask={(id) => setEditingTaskId(id)}
+                  onContextMenu={(task: Task) => setEditingTaskId(task.id)}
+                  onClose={() => setScheduling(false)}
+                  wide={view === "day" || view === "agenda"}
+                />
+              ) : (
+                <MeetingSchedulingPanel
+                  meetings={meetings}
+                  onItemDrop={handleItemDrop}
+                  onOpenMeeting={() =>
+                    navigate(`/app/projects/${projectId}/meetings`)
+                  }
+                  onClose={() => setScheduling(false)}
+                  wide={view === "day" || view === "agenda"}
+                />
+              ))}
+            <div className="flex-1 min-w-0">
+              {view === "day" && (
+                <CalendarDayView
+                  date={anchor}
+                  items={items}
+                  actualStripes={[]}
+                  hourStart={HOUR_START}
+                  hourEnd={HOUR_END}
+                  hourHeight={DAY_HOUR_HEIGHT}
+                  onItemClick={handleItemClick}
+                  onCreateAt={handleCreateAt}
+                  onItemDrop={handleItemDrop}
+                />
+              )}
+              {view === "week" && (
+                <CalendarWeekView
+                  anchor={anchor}
+                  items={items}
+                  actualStripes={[]}
+                  hourStart={HOUR_START}
+                  hourEnd={HOUR_END}
+                  hourHeight={WEEK_HOUR_HEIGHT}
+                  onItemClick={handleItemClick}
+                  onCreateAt={handleCreateAt}
+                  onItemDrop={handleItemDrop}
+                />
+              )}
+              {view === "month" && (
+                <CalendarMonthView
+                  anchor={anchor}
+                  items={items}
+                  onItemClick={handleItemClick}
+                  onDayClick={(day) => handleCreateAt(noonOf(day))}
+                  onCellClick={(day) => handleCreateAt(at9(day))}
+                  onItemDrop={handleItemDrop}
+                />
+              )}
+              {view === "agenda" && (
+                <CalendarAgendaView
+                  anchor={anchor}
+                  items={items}
+                  onItemClick={handleItemClick}
+                  onCreateAt={handleCreateAt}
+                />
+              )}
+            </div>
+          </div>
         </div>
       ) : (
         <ProjectGantt
@@ -587,8 +875,71 @@ export function ProjectCalendarTab() {
           onClose={() => setEventDraftStart(null)}
         />
       )}
+
+      {/* New-list dialog (scoped to this project) */}
+      {newListDialogOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40"
+          onClick={() => setNewListDialogOpen(false)}
+        >
+          <form
+            className="bg-white rounded-2xl shadow-lift p-6 w-80 flex flex-col gap-4"
+            onClick={(e) => e.stopPropagation()}
+            onSubmit={handleCreateListSubmit}
+          >
+            <h2 className="text-sm font-semibold text-ink-900">רשימה חדשה</h2>
+            <input
+              autoFocus
+              type="text"
+              className="input text-sm"
+              placeholder="שם הרשימה"
+              value={newListName}
+              onChange={(e) => setNewListName(e.target.value)}
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                className="btn-ghost text-sm"
+                onClick={() => setNewListDialogOpen(false)}
+              >
+                ביטול
+              </button>
+              <button
+                type="submit"
+                className="btn-dark text-sm"
+                disabled={!newListName.trim()}
+              >
+                יצירה
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
+}
+
+// ─── Per-project visibility persistence ─────────────────────────────────────────
+
+const visExtraKey = (projectId: string) =>
+  `multitask.projectCalendar.extraLists.${projectId}`;
+const visHiddenKey = (projectId: string) =>
+  `multitask.projectCalendar.hiddenLists.${projectId}`;
+
+function loadIdSet(key: string): Set<string> {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return new Set();
+    const arr = JSON.parse(raw);
+    return new Set(
+      Array.isArray(arr)
+        ? arr.filter((x): x is string => typeof x === "string")
+        : []
+    );
+  } catch {
+    return new Set();
+  }
 }
 
 // ─── Gantt sub-view ────────────────────────────────────────────────────────────

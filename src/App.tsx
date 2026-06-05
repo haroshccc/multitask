@@ -42,8 +42,33 @@ const Goals = lazy(() =>
 const Frameworks = lazy(() =>
   import("@/pages/app/Frameworks").then((m) => ({ default: m.Frameworks }))
 );
-const ProjectDetail = lazy(() =>
-  import("@/pages/app/ProjectDetail").then((m) => ({ default: m.ProjectDetail }))
+const ProjectShell = lazy(() =>
+  import("@/pages/app/ProjectShell").then((m) => ({ default: m.ProjectShell }))
+);
+const ProjectTasksTab = lazy(() =>
+  import("@/pages/app/project/ProjectTasksTab").then((m) => ({
+    default: m.ProjectTasksTab,
+  }))
+);
+const ProjectDashboardTab = lazy(() =>
+  import("@/pages/app/project/ProjectStubTabs").then((m) => ({
+    default: m.ProjectDashboardTab,
+  }))
+);
+const ProjectMeetingsTab = lazy(() =>
+  import("@/pages/app/project/ProjectStubTabs").then((m) => ({
+    default: m.ProjectMeetingsTab,
+  }))
+);
+const ProjectPaymentsTab = lazy(() =>
+  import("@/pages/app/project/ProjectStubTabs").then((m) => ({
+    default: m.ProjectPaymentsTab,
+  }))
+);
+const ProjectDocumentsTab = lazy(() =>
+  import("@/pages/app/project/ProjectStubTabs").then((m) => ({
+    default: m.ProjectDocumentsTab,
+  }))
 );
 const Settings = lazy(() =>
   import("@/pages/app/Settings").then((m) => ({ default: m.Settings }))
@@ -197,10 +222,52 @@ export default function App() {
           path="projects/:projectId"
           element={
             <Suspense fallback={<LoadingShell />}>
-              <ProjectDetail />
+              <ProjectShell />
             </Suspense>
           }
-        />
+        >
+          <Route index element={<Navigate to="tasks" replace />} />
+          <Route
+            path="tasks"
+            element={
+              <Suspense fallback={<LoadingShell />}>
+                <ProjectTasksTab />
+              </Suspense>
+            }
+          />
+          <Route
+            path="meetings"
+            element={
+              <Suspense fallback={<LoadingShell />}>
+                <ProjectMeetingsTab />
+              </Suspense>
+            }
+          />
+          <Route
+            path="payments"
+            element={
+              <Suspense fallback={<LoadingShell />}>
+                <ProjectPaymentsTab />
+              </Suspense>
+            }
+          />
+          <Route
+            path="documents"
+            element={
+              <Suspense fallback={<LoadingShell />}>
+                <ProjectDocumentsTab />
+              </Suspense>
+            }
+          />
+          <Route
+            path="dashboard"
+            element={
+              <Suspense fallback={<LoadingShell />}>
+                <ProjectDashboardTab />
+              </Suspense>
+            }
+          />
+        </Route>
         <Route
           path="settings"
           element={

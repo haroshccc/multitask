@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, FolderPlus } from "lucide-react";
 import { useCreateProject, useArchiveProject } from "@/lib/hooks/useProjects";
-import type { ProjectPricingMode } from "@/lib/types/domain";
 import { pushUndo } from "@/lib/undo/store";
 import { LIST_ICON_PRESETS, ListIcon } from "@/components/tasks/list-icons";
 import { cn } from "@/lib/utils/cn";
@@ -12,24 +11,6 @@ interface Props {
   onClose: () => void;
   onCreated?: (projectId: string) => void;
 }
-
-const PRICING_OPTIONS: { value: ProjectPricingMode; label: string; hint: string }[] = [
-  {
-    value: "hourly",
-    label: "תעריף שעתי",
-    hint: "תעריף פר שעה + רווח. מציג מחיר מוצע מחושב.",
-  },
-  {
-    value: "fixed_price",
-    label: "מחיר סופי",
-    hint: "הלקוח נתן מספר. רואים תעריף שעתי אפקטיבי.",
-  },
-  {
-    value: "quote",
-    label: "הצעת מחיר",
-    hint: "ללא תמחור פעיל — שלב מחקר/תכנון.",
-  },
-];
 
 const COLOR_PALETTE = [
   "#f59e0b", "#f97316", "#ef4444", "#ec4899",
@@ -42,7 +23,6 @@ export function CreateProjectDialog({ open, onClose, onCreated }: Props) {
   const create = useCreateProject();
   const archive = useArchiveProject();
   const [name, setName] = useState("");
-  const [pricingMode, setPricingMode] = useState<ProjectPricingMode>("hourly");
   const [emoji, setEmoji] = useState("");
   const [color, setColor] = useState<string>(COLOR_PALETTE[0]);
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
@@ -50,7 +30,6 @@ export function CreateProjectDialog({ open, onClose, onCreated }: Props) {
   useEffect(() => {
     if (!open) return;
     setName("");
-    setPricingMode("hourly");
     setEmoji("");
     setColor(COLOR_PALETTE[0]);
     setIconPickerOpen(false);
@@ -61,7 +40,7 @@ export function CreateProjectDialog({ open, onClose, onCreated }: Props) {
     if (!trimmed) return;
     const payload = {
       name: trimmed,
-      pricing_mode: pricingMode,
+      pricing_mode: "hourly" as const,
       emoji: emoji.trim() || null,
       color,
       vat_percentage: 18,
@@ -131,33 +110,6 @@ export function CreateProjectDialog({ open, onClose, onCreated }: Props) {
                   placeholder="למשל: שיפוץ דירת שלי"
                   className="field"
                 />
-              </div>
-
-              <div>
-                <label className="eyebrow mb-1.5 block">מצב תמחור</label>
-                <div className="grid grid-cols-1 gap-1.5">
-                  {PRICING_OPTIONS.map((opt) => {
-                    const active = pricingMode === opt.value;
-                    return (
-                      <button
-                        key={opt.value}
-                        type="button"
-                        onClick={() => setPricingMode(opt.value)}
-                        className={
-                          "text-start rounded-lg border px-3 py-2 transition-colors " +
-                          (active
-                            ? "border-primary-500 bg-primary-50"
-                            : "border-ink-200 hover:bg-ink-50")
-                        }
-                      >
-                        <div className="text-sm font-semibold text-ink-900">
-                          {opt.label}
-                        </div>
-                        <div className="text-xs text-ink-500 mt-0.5">{opt.hint}</div>
-                      </button>
-                    );
-                  })}
-                </div>
               </div>
 
               <div>

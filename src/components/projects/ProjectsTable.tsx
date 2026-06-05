@@ -2,18 +2,12 @@ import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { MoreHorizontal, Archive, ArchiveRestore } from "lucide-react";
 import { useArchiveProject, useRestoreProject } from "@/lib/hooks/useProjects";
-import type { Project, ProjectPricingMode } from "@/lib/types/domain";
+import type { Project } from "@/lib/types/domain";
 import { pushUndo } from "@/lib/undo/store";
 
 interface Props {
   projects: Project[];
 }
-
-const PRICING_LABEL: Record<ProjectPricingMode, string> = {
-  hourly: "שעתי",
-  fixed_price: "מחיר סופי",
-  quote: "הצעת מחיר",
-};
 
 const STATUS_LABEL: Record<string, string> = {
   active: "פעיל",
@@ -32,7 +26,6 @@ export function ProjectsTable({ projects }: Props) {
           <thead className="bg-ink-50 border-b border-ink-200">
             <tr className="text-start text-ink-500 text-xs">
               <th className="text-start font-semibold px-3 py-2">שם</th>
-              <th className="text-start font-semibold px-3 py-2">תמחור</th>
               <th className="text-start font-semibold px-3 py-2">סטטוס</th>
               <th className="text-start font-semibold px-3 py-2">תגים</th>
               <th className="text-start font-semibold px-3 py-2 hidden md:table-cell">
@@ -108,9 +101,6 @@ function ProjectRow({
           )}
           <span className="font-medium text-ink-900 truncate">{project.name}</span>
         </div>
-      </td>
-      <td className="px-3 py-2 text-ink-700">
-        {PRICING_LABEL[project.pricing_mode]}
       </td>
       <td className="px-3 py-2 text-ink-600">
         {STATUS_LABEL[project.status] ?? project.status}

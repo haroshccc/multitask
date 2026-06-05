@@ -2,18 +2,12 @@ import { useState, useRef, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { MoreHorizontal, Archive, ArchiveRestore } from "lucide-react";
 import { useArchiveProject, useRestoreProject } from "@/lib/hooks/useProjects";
-import type { Project, ProjectPricingMode } from "@/lib/types/domain";
+import type { Project } from "@/lib/types/domain";
 import { pushUndo } from "@/lib/undo/store";
 
 interface Props {
   project: Project;
 }
-
-const PRICING_LABEL: Record<ProjectPricingMode, string> = {
-  hourly: "שעתי",
-  fixed_price: "מחיר סופי",
-  quote: "הצעת מחיר",
-};
 
 const STATUS_LABEL: Record<string, string> = {
   active: "פעיל",
@@ -140,7 +134,6 @@ export function ProjectCard({ project }: Props) {
       )}
 
       <div className="flex items-center gap-1.5 flex-wrap">
-        <span className="chip">{PRICING_LABEL[project.pricing_mode]}</span>
         {project.status && project.status !== "active" && (
           <span className="chip">{STATUS_LABEL[project.status] ?? project.status}</span>
         )}

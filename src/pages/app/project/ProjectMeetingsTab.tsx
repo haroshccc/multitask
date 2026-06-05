@@ -18,7 +18,7 @@ import { useProjectContext } from "@/pages/app/ProjectShell";
 import {
   useProjectMeetings,
   useCreateProjectMeeting,
-  useUpdateProjectMeeting,
+  useSaveProjectMeeting,
   useDeleteProjectMeeting,
   useMeetingTaskLinks,
   useLinkMeetingTask,
@@ -27,7 +27,6 @@ import {
 } from "@/lib/hooks/useProjectMeetings";
 import { useTasksByProject } from "@/lib/hooks/useTasks";
 import { useRecordings } from "@/lib/hooks/useRecordings";
-import { useCreateEvent } from "@/lib/hooks/useEvents";
 import { cn } from "@/lib/utils/cn";
 
 const VIEW_KEY = "multitask.projectMeetings.view";
@@ -42,29 +41,32 @@ const STATUS_LABEL = Object.fromEntries(
   STATUS_OPTIONS.map((o) => [o.value, o.label])
 );
 
-function toLocalInput(iso: string | null): string {
-  if (!iso) return "";
+const pad2 = (n: number) => String(n).padStart(2, "0");
+
+function splitLocal(iso: string | null): { date: string; time: string } {
+  if (!iso) return { date: "", time: "" };
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(
-    d.getHours()
-  )}:${pad(d.getMinutes())}`;
+  if (Number.isNaN(d.getTime())) return { date: "", time: "" };
+  return {
+    date: `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`,
+    time: `${pad2(d.getHours())}:${pad2(d.getMinutes())}`,
+  };
 }
-function fromLocalInput(val: string): string | null {
-  if (!val) return null;
-  const d = new Date(val);
-  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+function combineLocal(date: string, time: string): string | null {
+  if (!date) return null;
+  const [y, m, d] = date.split("-").map(Number);
+  const [hh, mm] = (time || "00:00").split(":").map(Number);
+  const dt = new Date(y!, (m ?? 1) - 1, d!, hh || 0, mm || 0, 0, 0);
+  return Number.isNaN(dt.getTime()) ? null : dt.toISOString();
 }
-function formatWhen(iso: string | null): string {
+function formatWhen(iso: string | null, allDay: boolean): string {
   if (!iso) return "—";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
   return d.toLocaleString("he-IL", {
     day: "numeric",
     month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
+    ...(allDay ? {} : { hour: "2-digit", minute: "2-digit" }),
   });
 }
 
@@ -221,7 +223,13 @@ function MeetingRow({
         </button>
       </td>
       <td className="px-3 py-2 text-ink-600 whitespace-nowrap">
-        {formatWhen(meeting.meeting_at)}
+        {formatWhen(meeting.meeting_at, meeting.all_day)}
+        {meeting.event_id && (
+          <CalendarPlus
+            className="inline-block w-3.5 h-3.5 text-primary-600 ms-1 align-text-bottom"
+            aria-label="מסונכרן ליומן"
+          />
+        )}
       </td>
       <td className="px-3 py-2">
         <span className="chip">
@@ -255,8 +263,12 @@ function MeetingRow({
         <button
           type="button"
           onClick={() => {
-            if (confirm("למחוק את הפגישה?"))
-              del.mutate({ id: meeting.id, projectId });
+            if (confirm("למחוק את הפגישה? (גם האירוע ביומן יימחק)"))
+              del.mutate({
+                id: meeting.id,
+                projectId,
+                eventId: meeting.event_id,
+              });
           }}
           className="p-1 rounded-md text-ink-400 hover:text-danger-600 hover:bg-danger/10"
           aria-label="מחק פגישה"
@@ -293,7 +305,7 @@ function MeetingCard({
       </div>
       <div className="text-xs text-ink-500 inline-flex items-center gap-1">
         <CalendarClock className="w-3.5 h-3.5" />
-        {formatWhen(meeting.meeting_at)}
+        {formatWhen(meeting.meeting_at, meeting.all_day)}
       </div>
       {meeting.notes && (
         <p className="text-xs text-ink-600 line-clamp-2">{meeting.notes}</p>
@@ -331,22 +343,23 @@ function MeetingDetailModal({
   projectId: string;
   onClose: () => void;
 }) {
-  const update = useUpdateProjectMeeting();
-  const createEvent = useCreateEvent();
+  const saveMeeting = useSaveProjectMeeting();
   const { data: recordings = [] } = useRecordings();
   const { data: tasks = [] } = useTasksByProject(projectId);
   const { data: links = [] } = useMeetingTaskLinks(projectId);
   const linkTask = useLinkMeetingTask();
   const unlinkTask = useUnlinkMeetingTask();
 
+  const initial = splitLocal(meeting.meeting_at);
   const [title, setTitle] = useState(meeting.title);
-  const [when, setWhen] = useState(toLocalInput(meeting.meeting_at));
+  const [dateStr, setDateStr] = useState(initial.date);
+  const [timeStr, setTimeStr] = useState(initial.time || "09:00");
+  const [hasTime, setHasTime] = useState(!meeting.all_day && !!meeting.meeting_at);
   const [location, setLocation] = useState(meeting.location ?? "");
   const [status, setStatus] = useState(meeting.status);
   const [notes, setNotes] = useState(meeting.notes ?? "");
   const [summary, setSummary] = useState(meeting.summary ?? "");
   const [recordingId, setRecordingId] = useState(meeting.recording_id ?? "");
-  const [eventId, setEventId] = useState(meeting.event_id ?? "");
 
   const projectRecordings = useMemo(
     () => recordings.filter((r) => r.project_id === projectId),
@@ -374,13 +387,18 @@ function MeetingDetailModal({
   };
   const canPullSummary = !!recordingSummary(selectedRecording);
 
+  const meetingAt = combineLocal(dateStr, hasTime ? timeStr : "00:00");
+  const allDay = !!dateStr && !hasTime;
+
   const save = () => {
-    update.mutate({
+    saveMeeting.mutate({
       id: meeting.id,
       projectId,
+      existingEventId: meeting.event_id,
       patch: {
         title: title.trim(),
-        meeting_at: fromLocalInput(when),
+        meeting_at: meetingAt,
+        all_day: allDay,
         location: location.trim() || null,
         status,
         notes: notes.trim() || null,
@@ -389,24 +407,6 @@ function MeetingDetailModal({
       },
     });
     onClose();
-  };
-
-  const createCalendarEvent = async () => {
-    const starts = fromLocalInput(when);
-    if (!starts) return;
-    const ends = new Date(
-      new Date(starts).getTime() + 60 * 60 * 1000
-    ).toISOString();
-    const ev = await createEvent.mutateAsync({
-      title: title.trim() || "פגישה",
-      starts_at: starts,
-      ends_at: ends,
-      all_day: false,
-      location: location.trim() || null,
-      source_recording_id: recordingId || null,
-    } as any);
-    setEventId(ev.id);
-    update.mutate({ id: meeting.id, projectId, patch: { event_id: ev.id } });
   };
 
   return (
@@ -440,16 +440,44 @@ function MeetingDetailModal({
             />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div>
-              <label className="eyebrow mb-1.5 block">תאריך ושעה</label>
+          <div>
+            <label className="eyebrow mb-1.5 block">מועד</label>
+            <div className="flex items-center gap-2 flex-wrap">
               <input
-                type="datetime-local"
-                value={when}
-                onChange={(e) => setWhen(e.target.value)}
-                className="field"
+                type="date"
+                value={dateStr}
+                onChange={(e) => setDateStr(e.target.value)}
+                className="field w-auto"
               />
+              <label className="inline-flex items-center gap-1.5 text-sm text-ink-700 select-none">
+                <input
+                  type="checkbox"
+                  checked={hasTime}
+                  disabled={!dateStr}
+                  onChange={(e) => setHasTime(e.target.checked)}
+                  className="rounded"
+                />
+                שעה ספציפית
+              </label>
+              {hasTime && (
+                <input
+                  type="time"
+                  value={timeStr}
+                  onChange={(e) => setTimeStr(e.target.value)}
+                  className="field w-auto"
+                />
+              )}
             </div>
+            <p className="text-[11px] text-ink-400 mt-1">
+              {!dateStr
+                ? "בלי תאריך — הפגישה לא תופיע ביומן."
+                : hasTime
+                ? "תיווצר אוטומטית כאירוע מתוזמן ביומן."
+                : "תופיע ביומן כאירוע ליום שלם (בלי שעה)."}
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="eyebrow mb-1.5 block">סטטוס</label>
               <select
@@ -569,31 +597,17 @@ function MeetingDetailModal({
             </select>
           </div>
 
-          {/* Calendar event */}
-          <div>
-            <label className="eyebrow mb-1.5 block">אירוע יומן</label>
-            {eventId ? (
-              <Link
-                to="/app/calendar"
-                className="inline-flex items-center gap-1.5 text-sm text-primary-700 hover:underline"
-              >
-                <CalendarPlus className="w-4 h-4" />
-                אירוע מקושר ביומן — פתח יומן
-                <ExternalLink className="w-3.5 h-3.5" />
-              </Link>
-            ) : (
-              <button
-                type="button"
-                disabled={!when || createEvent.isPending}
-                onClick={createCalendarEvent}
-                className="btn-ghost text-sm inline-flex items-center gap-1.5 disabled:opacity-50"
-                title={when ? "" : "קבעי קודם תאריך ושעה לפגישה"}
-              >
-                <CalendarPlus className="w-4 h-4" />
-                {createEvent.isPending ? "יוצר…" : "צרי אירוע ביומן"}
-              </button>
-            )}
-          </div>
+          {/* Calendar event — kept in sync automatically from the date above */}
+          {meeting.event_id && (
+            <Link
+              to="/app/calendar"
+              className="inline-flex items-center gap-1.5 text-sm text-primary-700 hover:underline"
+            >
+              <CalendarPlus className="w-4 h-4" />
+              מסונכרן ליומן — פתח יומן
+              <ExternalLink className="w-3.5 h-3.5" />
+            </Link>
+          )}
 
           <div>
             <label className="eyebrow mb-1.5 block">נקודות / הערות</label>
@@ -624,13 +638,13 @@ function MeetingDetailModal({
           </button>
           <button
             onClick={save}
-            disabled={update.isPending}
+            disabled={saveMeeting.isPending}
             className={cn(
               "btn-accent text-sm",
-              update.isPending && "opacity-50"
+              saveMeeting.isPending && "opacity-50"
             )}
           >
-            {update.isPending ? "שומר…" : "שמירה"}
+            {saveMeeting.isPending ? "שומר…" : "שמירה"}
           </button>
         </div>
       </div>

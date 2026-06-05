@@ -19,8 +19,10 @@ import {
   CalendarClock,
   Receipt,
   FolderOpen,
+  FolderKanban,
   Share2,
 } from "lucide-react";
+import { ListIcon } from "@/components/tasks/list-icons";
 import { ScreenScaffold } from "@/components/layout/ScreenScaffold";
 import {
   useProject,
@@ -265,10 +267,15 @@ function ProjectHeader({
       <div className="flex items-start gap-3">
         <span
           aria-hidden
-          className="text-3xl shrink-0 mt-0.5"
+          className="shrink-0 mt-0.5 inline-flex text-ink-700"
           style={{ filter: "saturate(1.1)" }}
         >
-          {project.emoji || "📁"}
+          <ListIcon
+            emoji={project.emoji}
+            fallback={FolderKanban}
+            className="w-8 h-8"
+            emojiClassName="text-3xl leading-none"
+          />
         </span>
         <div className="min-w-0 flex-1">
           <input

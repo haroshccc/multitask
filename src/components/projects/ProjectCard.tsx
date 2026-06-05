@@ -4,6 +4,7 @@ import { MoreHorizontal, Archive, ArchiveRestore } from "lucide-react";
 import { useArchiveProject, useRestoreProject } from "@/lib/hooks/useProjects";
 import type { Project } from "@/lib/types/domain";
 import { pushUndo } from "@/lib/undo/store";
+import { ListIcon } from "@/components/tasks/list-icons";
 
 interface Props {
   project: Project;
@@ -78,8 +79,12 @@ export function ProjectCard({ project }: Props) {
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="flex items-center gap-2 min-w-0">
           {project.emoji && (
-            <span className="text-xl shrink-0" aria-hidden>
-              {project.emoji}
+            <span className="shrink-0 inline-flex text-ink-700" aria-hidden>
+              <ListIcon
+                emoji={project.emoji}
+                className="w-5 h-5"
+                emojiClassName="text-xl leading-none"
+              />
             </span>
           )}
           <h3 className="text-base font-semibold text-ink-900 truncate">

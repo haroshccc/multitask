@@ -9,6 +9,7 @@ import {
   useRemoveProjectShare,
 } from "@/lib/hooks/useProjectShares";
 import { useAuth } from "@/lib/auth/AuthContext";
+import { ListIcon } from "@/components/tasks/list-icons";
 import type { Project } from "@/lib/types/domain";
 
 interface ShareProjectModalProps {
@@ -70,8 +71,14 @@ export function ShareProjectModal({ project, onClose }: ShareProjectModalProps) 
         <div className="px-5 py-4 border-b border-ink-200 flex items-center justify-between shrink-0">
           <div>
             <h3 className="font-semibold text-ink-900">שיתוף פרויקט</h3>
-            <p className="text-xs text-ink-500">
-              {project.emoji ? `${project.emoji} ` : ""}
+            <p className="text-xs text-ink-500 inline-flex items-center gap-1">
+              {project.emoji && (
+                <ListIcon
+                  emoji={project.emoji}
+                  className="w-3.5 h-3.5"
+                  emojiClassName="text-sm leading-none"
+                />
+              )}
               {project.name}
             </p>
           </div>

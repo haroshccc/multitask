@@ -4,6 +4,7 @@ import { MoreHorizontal, Archive, ArchiveRestore } from "lucide-react";
 import { useArchiveProject, useRestoreProject } from "@/lib/hooks/useProjects";
 import type { Project } from "@/lib/types/domain";
 import { pushUndo } from "@/lib/undo/store";
+import { ListIcon } from "@/components/tasks/list-icons";
 
 interface Props {
   projects: Project[];
@@ -95,8 +96,8 @@ function ProjectRow({
             aria-hidden
           />
           {project.emoji && (
-            <span className="text-base shrink-0" aria-hidden>
-              {project.emoji}
+            <span className="shrink-0 inline-flex text-ink-700" aria-hidden>
+              <ListIcon emoji={project.emoji} className="w-4 h-4" />
             </span>
           )}
           <span className="font-medium text-ink-900 truncate">{project.name}</span>

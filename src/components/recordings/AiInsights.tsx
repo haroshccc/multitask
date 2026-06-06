@@ -1736,6 +1736,16 @@ function DocumentsSection({
   const [prompt, setPrompt] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pendingKind, setPendingKind] = useState<"preset" | "free" | null>(null);
+  const promptRef = useRef<HTMLTextAreaElement>(null);
+
+  const onFreeClick = () => {
+    if (!prompt.trim()) {
+      setError("כתבי בקשה חופשית בתיבה כדי ליצור מסמך.");
+      promptRef.current?.focus();
+      return;
+    }
+    generate(prompt, titleFromPrompt(prompt), "free");
+  };
 
   const generate = async (
     instruction: string,
@@ -1807,6 +1817,7 @@ function DocumentsSection({
 
           <div className="space-y-1.5">
             <textarea
+              ref={promptRef}
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               rows={2}
@@ -1817,8 +1828,13 @@ function DocumentsSection({
             />
             <button
               type="button"
-              onClick={() => generate(prompt, titleFromPrompt(prompt), "free")}
-              disabled={!hasTranscript || !prompt.trim() || pendingKind !== null}
+              onClick={onFreeClick}
+              disabled={!hasTranscript || pendingKind !== null}
+              title={
+                !hasTranscript
+                  ? "צריך תמלול לפני יצירת מסמך"
+                  : "כתבי בקשה בתיבה ואז לחצי"
+              }
               className="btn-outline !py-1 !px-2.5 text-xs inline-flex items-center gap-1"
             >
               {pendingKind === "free" ? (

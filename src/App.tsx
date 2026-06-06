@@ -51,7 +51,7 @@ const ProjectTasksTab = lazy(() =>
   }))
 );
 const ProjectDashboardTab = lazy(() =>
-  import("@/pages/app/project/ProjectStubTabs").then((m) => ({
+  import("@/pages/app/project/ProjectDashboardTab").then((m) => ({
     default: m.ProjectDashboardTab,
   }))
 );
@@ -66,12 +66,12 @@ const ProjectMeetingsTab = lazy(() =>
   }))
 );
 const ProjectPaymentsTab = lazy(() =>
-  import("@/pages/app/project/ProjectStubTabs").then((m) => ({
+  import("@/pages/app/project/ProjectPaymentsTab").then((m) => ({
     default: m.ProjectPaymentsTab,
   }))
 );
 const ProjectDocumentsTab = lazy(() =>
-  import("@/pages/app/project/ProjectStubTabs").then((m) => ({
+  import("@/pages/app/project/ProjectDocumentsTab").then((m) => ({
     default: m.ProjectDocumentsTab,
   }))
 );

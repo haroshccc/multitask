@@ -301,7 +301,7 @@ function FixedColumnHeader({
       type="button"
       onClick={onStartEdit}
       onPointerDown={(e) => e.stopPropagation()}
-      className="opacity-0 group-hover/fixed:opacity-100 text-ink-400 hover:text-primary-600 transition-opacity ms-0.5"
+      className="opacity-100 sm:opacity-0 sm:group-hover/fixed:opacity-100 text-ink-400 hover:text-primary-600 transition-opacity ms-0.5"
       aria-label="שני שם"
       title="שני שם עמודה"
     >
@@ -426,7 +426,7 @@ function DynColumnHeader({
         type="button"
         onClick={() => setEditing(true)}
         onPointerDown={(e) => e.stopPropagation()}
-        className="opacity-0 group-hover/dyn:opacity-100 text-ink-400 hover:text-primary-600 transition-opacity"
+        className="opacity-100 sm:opacity-0 sm:group-hover/dyn:opacity-100 text-ink-400 hover:text-primary-600 transition-opacity"
         aria-label="שני שם"
         title="שני שם עמודה"
       >
@@ -437,7 +437,7 @@ function DynColumnHeader({
           type="button"
           onClick={onEditOptions}
           onPointerDown={(e) => e.stopPropagation()}
-          className="opacity-0 group-hover/dyn:opacity-100 text-ink-400 hover:text-primary-600 transition-opacity"
+          className="opacity-100 sm:opacity-0 sm:group-hover/dyn:opacity-100 text-ink-400 hover:text-primary-600 transition-opacity"
           aria-label="ערכי אפשרויות"
           title="ערכי אפשרויות"
         >
@@ -450,7 +450,7 @@ function DynColumnHeader({
           if (confirm(`למחוק את עמודת "${field.field_label}"?`)) onDelete();
         }}
         onPointerDown={(e) => e.stopPropagation()}
-        className="opacity-0 group-hover/dyn:opacity-100 text-ink-400 hover:text-danger transition-opacity"
+        className="opacity-100 sm:opacity-0 sm:group-hover/dyn:opacity-100 text-ink-400 hover:text-danger transition-opacity"
         aria-label="מחקי עמודה"
         title="מחקי עמודה"
       >

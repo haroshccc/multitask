@@ -67,12 +67,17 @@ import {
 } from "@/components/configurable-table/gridLayout";
 import { TableHeader } from "@/components/configurable-table/ConfigurableTableHeader";
 import {
+  ColumnsMenu,
+  type ColumnsMenuItem,
+} from "@/components/configurable-table/ColumnsMenu";
+import {
   DynCell,
   OptionsEditorModal,
   readCustomField,
   writeCustomField,
   type SelectOption,
 } from "@/components/configurable-table/fieldCells";
+import { useEntityColumnVisibility } from "@/lib/hooks/useEntityColumnVisibility";
 
 interface TaskNode {
   task: Task;
@@ -317,6 +322,10 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
   const createField = useCreateCustomField();
   const updateField = useUpdateCustomField();
   const deleteField = useDeleteCustomField();
+  const { hiddenIds, toggleHidden } = useEntityColumnVisibility({
+    entityType: "task",
+    projectId,
+  });
 
   const [search, setSearch] = useState("");
   const [focusTaskId, setFocusTaskId] = useState<string | null>(null);
@@ -619,23 +628,50 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
     [project?.column_order]
   );
 
+  // Visible (non-hidden) columns drive the table grid/header/rows; the full
+  // lists drive the "עמודות" menu so hidden columns can be toggled back on.
+  // Hiding is per-project and never deletes data.
+  const visibleFixedKeys = useMemo(
+    () => orderedFixedKeys.filter((k) => !hiddenIds.has(k)),
+    [orderedFixedKeys, hiddenIds]
+  );
+  const visibleFields = useMemo(
+    () => customFields.filter((f) => !hiddenIds.has(f.id)),
+    [customFields, hiddenIds]
+  );
+  const columnMenuItems = useMemo<ColumnsMenuItem[]>(
+    () => [
+      ...orderedFixedKeys.map((k) => ({
+        id: k,
+        kind: "fixed" as const,
+        label: fixedLabels[k] ?? TASK_FIXED_DESCRIPTOR_BY_KEY[k].defaultLabel,
+      })),
+      ...customFields.map((f) => ({
+        id: f.id,
+        kind: "custom" as const,
+        label: f.field_label,
+      })),
+    ],
+    [orderedFixedKeys, customFields, fixedLabels]
+  );
+
   const orderedDescriptors = useMemo(
-    () => orderedFixedKeys.map((k) => TASK_FIXED_DESCRIPTOR_BY_KEY[k]),
-    [orderedFixedKeys]
+    () => visibleFixedKeys.map((k) => TASK_FIXED_DESCRIPTOR_BY_KEY[k]),
+    [visibleFixedKeys]
   );
 
   const gridCols = useMemo(
     () =>
-      buildGridCols(orderedFixedKeys, customFields.length, TASK_FIXED_WIDTHS, {
+      buildGridCols(visibleFixedKeys, visibleFields.length, TASK_FIXED_WIDTHS, {
         controlCols: CONTROL_COLS,
         actionsCol: ACTIONS_COL,
         dynColWidth: DYN_COL_WIDTH,
       }),
-    [orderedFixedKeys, customFields.length]
+    [visibleFixedKeys, visibleFields.length]
   );
   const gridMinWidth = buildGridMinWidth(
-    orderedFixedKeys,
-    customFields.length,
+    visibleFixedKeys,
+    visibleFields.length,
     TASK_FIXED_WIDTHS,
     {
       controlAndActionsWidth: CONTROL_AND_ACTIONS_WIDTH,
@@ -690,6 +726,13 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
             className="field py-1.5 ps-7 text-xs"
           />
         </div>
+        <div className="shrink-0">
+          <ColumnsMenu
+            items={columnMenuItems}
+            hiddenIds={hiddenIds}
+            onToggle={toggleHidden}
+          />
+        </div>
         <button
           type="button"
           onClick={handleAddTopLevel}
@@ -716,7 +759,7 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
           <div style={{ minWidth: gridMinWidth }}>
             <TableHeader
               gridCols={gridCols}
-              customFields={customFields}
+              customFields={visibleFields}
               fixedLabels={fixedLabels}
               orderedDescriptors={orderedDescriptors}
               sortKey={sortKey}
@@ -735,9 +778,9 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
               activeTimer={activeTimer ?? null}
               focusTaskId={focusTaskId}
               onFocusHandled={() => setFocusTaskId(null)}
-              customFields={customFields}
+              customFields={visibleFields}
               gridCols={gridCols}
-              orderedFixedKeys={orderedFixedKeys}
+              orderedFixedKeys={visibleFixedKeys}
               questionsByTaskId={questionsByTaskId}
               onReorder={handleReorderTopLevel}
               onUpdate={handleTaskUpdate}

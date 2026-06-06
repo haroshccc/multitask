@@ -216,6 +216,50 @@ export async function createPlanTask(input: {
   return data as PlanTask;
 }
 
+/** Create an "important thing" — a loose plan task with no stage yet
+ *  (parent_task_id null, is_phase false). Shows only in the banner until
+ *  assigned to a stage. */
+export async function createImportantItem(input: {
+  organization_id: string;
+  owner_id: string;
+  plan_id: string;
+  title: string;
+}): Promise<PlanTask> {
+  const sort_order = await nextSortOrder(input.organization_id, {
+    parent_task_id: null,
+    task_list_id: input.plan_id,
+  });
+  const { data, error } = await db
+    .from("tasks")
+    .insert({
+      organization_id: input.organization_id,
+      owner_id: input.owner_id,
+      task_list_id: input.plan_id,
+      parent_task_id: null,
+      is_phase: false,
+      title: input.title,
+      status: "todo",
+      plan_status: "notstarted",
+      sort_order,
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return data as PlanTask;
+}
+
+/** Assign a loose item to a stage (or back to the banner with null). */
+export async function setPlanTaskParent(
+  taskId: string,
+  parentId: string | null
+): Promise<void> {
+  const { error } = await db
+    .from("tasks")
+    .update({ parent_task_id: parentId })
+    .eq("id", taskId);
+  if (error) throw error;
+}
+
 export interface PlanRowPatch {
   title?: string;
   description?: string | null;

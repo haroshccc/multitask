@@ -152,6 +152,14 @@ export function buildPlanTree(tasks: PlanTask[]): PlanStageNode[] {
   return stages;
 }
 
+/** "Things important to us" — loose plan tasks not yet under any stage
+ *  (no parent, not a stage). They live only in the banner until assigned. */
+export function unassignedPlanTasks(tasks: PlanTask[]): PlanTask[] {
+  return tasks
+    .filter((t) => !t.is_phase && !t.parent_task_id)
+    .sort((a, b) => a.sort_order - b.sort_order);
+}
+
 /** Progress 0..1 across a stage's children (done counts as complete). */
 export function stageProgress(stage: PlanStageNode): number {
   if (stage.children.length === 0) return stage.plan_status === "done" ? 1 : 0;

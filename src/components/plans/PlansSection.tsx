@@ -151,8 +151,8 @@ function PlanCard({
       </div>
 
       <div className="flex items-center gap-1.5 text-xs text-ink-500 mt-1">
-        <CalendarRange className="w-3.5 h-3.5" />
-        {formatPlanRange(plan.plan_start_date, plan.plan_end_date)}
+        <CalendarRange className="w-3.5 h-3.5 shrink-0" />
+        <span dir="ltr">{formatPlanRange(plan.plan_start_date, plan.plan_end_date)}</span>
       </div>
 
       {plan.plan_general_goal && (

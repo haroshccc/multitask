@@ -17,9 +17,11 @@ import {
   useCreatePlanTask,
   useUpdatePlanRow,
   useDeletePlanRow,
+  useAssignTaskToStage,
 } from "@/lib/hooks/usePlans";
 import type { PlanRowPatch } from "@/lib/services/plans";
 import { PlanInlineText, PlanStatusChip } from "./plan-bits";
+import { PLAN_ITEM_DND } from "./ImportantThingsBanner";
 
 const COLS = "minmax(9rem,1.4fr) minmax(9rem,1.4fr) minmax(5rem,0.8fr) minmax(7rem,1.1fr) minmax(6rem,0.9fr) auto auto";
 
@@ -92,9 +94,11 @@ function StageBlock({
 }) {
   const [open, setOpen] = useState(true);
   const [newTask, setNewTask] = useState("");
+  const [dropActive, setDropActive] = useState(false);
   const createTask = useCreatePlanTask();
   const updateRow = useUpdatePlanRow();
   const deleteRow = useDeletePlanRow();
+  const assign = useAssignTaskToStage();
   const pct = Math.round(stageProgress(stage) * 100);
 
   const patch = (taskId: string, p: PlanRowPatch) =>
@@ -108,9 +112,31 @@ function StageBlock({
   };
 
   return (
-    <div className="card overflow-hidden">
-      {/* Stage header */}
-      <div className="flex items-center gap-2 px-3 py-2 bg-ink-50/60 border-b border-ink-100">
+    <div className={cn("card overflow-hidden", dropActive && "ring-2 ring-amber-400")}>
+      {/* Stage header — also a drop target for "important things" items */}
+      <div
+        className={cn(
+          "flex items-center gap-2 px-3 py-2 border-b border-ink-100 transition-colors",
+          dropActive ? "bg-amber-100" : "bg-ink-50/60"
+        )}
+        onDragOver={(e) => {
+          if (!canEdit) return;
+          if (e.dataTransfer.types.includes(PLAN_ITEM_DND)) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "move";
+            setDropActive(true);
+          }
+        }}
+        onDragLeave={() => setDropActive(false)}
+        onDrop={(e) => {
+          setDropActive(false);
+          const id = e.dataTransfer.getData(PLAN_ITEM_DND);
+          if (id) {
+            e.preventDefault();
+            assign.mutate({ planId, taskId: id, stageId: stage.id });
+          }
+        }}
+      >
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}

@@ -23,12 +23,14 @@ import { useOrgScope } from "@/lib/hooks/useOrgScope";
 import { usePlan, usePlanTasks, useUpdatePlan } from "@/lib/hooks/usePlans";
 import {
   buildPlanTree,
+  unassignedPlanTasks,
   CALENDAR_DISPLAY_META,
   type Plan,
   type PlanTask,
   type CalendarDisplayMode,
 } from "@/lib/types/plans";
 import { ClonePlanDialog } from "@/components/plans/ClonePlanDialog";
+import { ImportantThingsBanner } from "@/components/plans/ImportantThingsBanner";
 import { PlanTasksTable } from "@/components/plans/PlanTasksTable";
 import { PlanDecisionsTab } from "@/components/plans/PlanDecisionsTab";
 import { PlanImpactMatrix } from "@/components/plans/PlanImpactMatrix";
@@ -111,6 +113,7 @@ function PlanShellLoaded({
     () => buildPlanTree(tasks).map((s) => ({ id: s.id, title: s.title })),
     [tasks]
   );
+  const importantItems = useMemo(() => unassignedPlanTasks(tasks), [tasks]);
 
   return (
     <ScreenScaffold
@@ -128,6 +131,10 @@ function PlanShellLoaded({
       }
     >
       <PlanHeader plan={plan} planId={planId} canEdit={canEdit} onPatch={(p) => updatePlan.mutate({ planId, patch: p })} />
+
+      <div className="mt-4">
+        <ImportantThingsBanner planId={planId} items={importantItems} stages={stages} canEdit={canEdit} />
+      </div>
 
       <PlanTabsNav />
 
@@ -247,11 +254,36 @@ function PlanHeader({
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
         <label className="inline-flex items-center gap-1.5">
           <span className="text-ink-500 text-xs">מ־</span>
-          <input type="date" disabled={!canEdit} value={plan.plan_start_date ?? ""} onChange={(e) => onPatch({ plan_start_date: e.target.value || null })} className="field text-xs py-1 w-auto" />
+          <input
+            type="date"
+            disabled={!canEdit}
+            value={plan.plan_start_date ?? ""}
+            max={plan.plan_end_date ?? undefined}
+            onChange={(e) => {
+              const v = e.target.value || null;
+              const patch: Record<string, unknown> = { plan_start_date: v };
+              // keep end ≥ start
+              if (v && plan.plan_end_date && plan.plan_end_date < v) patch.plan_end_date = v;
+              onPatch(patch);
+            }}
+            className="field text-xs py-1 w-auto"
+          />
         </label>
         <label className="inline-flex items-center gap-1.5">
           <span className="text-ink-500 text-xs">עד</span>
-          <input type="date" disabled={!canEdit} value={plan.plan_end_date ?? ""} onChange={(e) => onPatch({ plan_end_date: e.target.value || null })} className="field text-xs py-1 w-auto" />
+          <input
+            type="date"
+            disabled={!canEdit}
+            value={plan.plan_end_date ?? ""}
+            min={plan.plan_start_date ?? undefined}
+            onChange={(e) => {
+              let v = e.target.value || null;
+              // never let end precede start
+              if (v && plan.plan_start_date && v < plan.plan_start_date) v = plan.plan_start_date;
+              onPatch({ plan_end_date: v });
+            }}
+            className="field text-xs py-1 w-auto"
+          />
         </label>
         <label className="inline-flex items-center gap-1.5">
           <CalendarRange className="w-3.5 h-3.5 text-ink-400" />

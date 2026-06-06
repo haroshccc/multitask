@@ -202,6 +202,38 @@ export function useCreatePlanTask() {
   });
 }
 
+export function useCreateImportantItem() {
+  const scope = useOrgScope();
+  const invalidate = useInvalidatePlanContent();
+  return useMutation({
+    mutationFn: ({ planId, title }: { planId: string; title: string }) => {
+      const { organizationId, userId } = assertOrgScope(scope);
+      return service.createImportantItem({
+        organization_id: organizationId,
+        owner_id: userId,
+        plan_id: planId,
+        title,
+      });
+    },
+    onSuccess: (_d, vars) => invalidate(vars.planId),
+  });
+}
+
+export function useAssignTaskToStage() {
+  const invalidate = useInvalidatePlanContent();
+  return useMutation({
+    mutationFn: ({
+      taskId,
+      stageId,
+    }: {
+      planId: string;
+      taskId: string;
+      stageId: string | null;
+    }) => service.setPlanTaskParent(taskId, stageId),
+    onSuccess: (_d, vars) => invalidate(vars.planId),
+  });
+}
+
 export function useUpdatePlanRow() {
   const invalidate = useInvalidatePlanContent();
   return useMutation({

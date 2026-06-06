@@ -10,12 +10,14 @@ import type { ExportDoc, ExportSection } from "./model";
 // Rough number of body lines that fit comfortably on one content slide.
 const LINES_PER_SLIDE = 9;
 
-type Line = { text: string; bullet: boolean };
+type Line = { text: string; bullet: boolean; bold?: boolean };
 
 function sectionLines(section: ExportSection): Line[] {
   const lines: Line[] = [];
   for (const block of section.blocks) {
-    if (block.type === "paragraph") {
+    if (block.type === "heading") {
+      lines.push({ text: block.text, bullet: false, bold: true });
+    } else if (block.type === "paragraph") {
       lines.push({ text: block.text, bullet: false });
     } else {
       for (const item of block.items) lines.push({ text: item, bullet: true });
@@ -90,7 +92,7 @@ export async function renderPptx(doc: ExportDoc): Promise<Blob> {
         slide.addText(
           pageLines.map((l) => ({
             text: l.text,
-            options: { bullet: l.bullet, breakLine: true },
+            options: { bullet: l.bullet, bold: l.bold, breakLine: true },
           })),
           {
             x: 0.5,

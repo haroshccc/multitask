@@ -62,7 +62,20 @@ export async function renderDocx(doc: ExportDoc): Promise<Blob> {
     );
 
     for (const block of section.blocks) {
-      if (block.type === "paragraph") {
+      if (block.type === "heading") {
+        children.push(
+          new Paragraph({
+            heading:
+              block.level === 2 ? HeadingLevel.HEADING_3 : HeadingLevel.HEADING_4,
+            bidirectional: true,
+            alignment: AlignmentType.RIGHT,
+            spacing: { before: 160, after: 80 },
+            children: [
+              new TextRun({ text: block.text, rightToLeft: true, bold: true }),
+            ],
+          }),
+        );
+      } else if (block.type === "paragraph") {
         children.push(
           new Paragraph({
             bidirectional: true,

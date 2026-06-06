@@ -12,13 +12,15 @@ import type { Recording } from "@/lib/types/domain";
 import type {
   RecordingAiOutput,
   FreeTextQaEntry,
+  RecordingGeneratedDoc,
 } from "@/lib/services/recordings";
 
 export type ExportFormat = "docx" | "pdf" | "pptx";
 
 export type ExportBlock =
   | { type: "paragraph"; text: string }
-  | { type: "bullets"; items: string[] };
+  | { type: "bullets"; items: string[] }
+  | { type: "heading"; level: 2 | 3; text: string };
 
 export interface ExportSection {
   heading: string;
@@ -48,6 +50,8 @@ export interface BuildExportInput {
   aiOutput: RecordingAiOutput;
   /** Already filtered to the Q&A entries the user selected. */
   qaEntries: FreeTextQaEntry[];
+  /** Already filtered to the generated documents the user selected. */
+  documents: RecordingGeneratedDoc[];
   include: ExportInclude;
 }
 
@@ -122,7 +126,7 @@ function transcriptParagraphs(rec: Recording): string[] {
 }
 
 export function buildExportDoc(input: BuildExportInput): ExportDoc {
-  const { recording, aiOutput, qaEntries, include } = input;
+  const { recording, aiOutput, qaEntries, documents, include } = input;
 
   const title =
     (recording.title ?? "").trim() ||
@@ -219,6 +223,16 @@ export function buildExportDoc(input: BuildExportInput): ExportDoc {
     sections.push({ heading: "מייל", blocks });
   }
 
+  for (const docItem of documents) {
+    const blocks = parseMarkdown(docItem.content);
+    if (blocks.length > 0) {
+      sections.push({
+        heading: docItem.title.trim() || "מסמך",
+        blocks,
+      });
+    }
+  }
+
   for (const qa of qaEntries) {
     sections.push({
       heading: `שאלה: ${qa.question.trim()}`,
@@ -243,6 +257,72 @@ function paragraphsToBlocks(text: string): ExportBlock[] {
   return toParagraphs(text).map(
     (t) => ({ type: "paragraph", text: t }) as const,
   );
+}
+
+/** Strip common inline Markdown markers (bold/italic/code) for plain output. */
+function cleanInline(s: string): string {
+  return s
+    .replace(/\*\*(.+?)\*\*/g, "$1")
+    .replace(/__(.+?)__/g, "$1")
+    .replace(/`(.+?)`/g, "$1")
+    .replace(/^\*(.+?)\*$/g, "$1")
+    .trim();
+}
+
+/**
+ * Parse a Markdown document (as produced by the AI document generator) into
+ * structured export blocks: ATX headings (#/##/###), unordered + ordered
+ * lists, and paragraphs. Good enough for the subset the model emits — not a
+ * full CommonMark parser.
+ */
+export function parseMarkdown(md: string): ExportBlock[] {
+  const lines = (md ?? "").replace(/\r\n/g, "\n").split("\n");
+  const blocks: ExportBlock[] = [];
+  let para: string[] = [];
+  let bullets: string[] = [];
+  const flushPara = () => {
+    if (para.length) {
+      blocks.push({ type: "paragraph", text: cleanInline(para.join(" ")) });
+      para = [];
+    }
+  };
+  const flushBullets = () => {
+    if (bullets.length) {
+      blocks.push({ type: "bullets", items: bullets.slice() });
+      bullets = [];
+    }
+  };
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line) {
+      flushPara();
+      flushBullets();
+      continue;
+    }
+    const heading = line.match(/^(#{1,6})\s+(.*)$/);
+    if (heading) {
+      flushPara();
+      flushBullets();
+      blocks.push({
+        type: "heading",
+        level: heading[1].length <= 2 ? 2 : 3,
+        text: cleanInline(heading[2]),
+      });
+      continue;
+    }
+    const ul = line.match(/^[-*•]\s+(.*)$/);
+    const ol = line.match(/^\d+[.)]\s+(.*)$/);
+    if (ul || ol) {
+      flushPara();
+      bullets.push(cleanInline((ul ?? ol)![1]));
+      continue;
+    }
+    flushBullets();
+    para.push(line);
+  }
+  flushPara();
+  flushBullets();
+  return blocks;
 }
 
 /** Build a safe, human filename for the export (no extension). */

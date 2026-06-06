@@ -36,6 +36,8 @@ export function ExportRecordingModal({
 }: Props) {
   const { data: history = [] } = useRecordingFreeTextHistory(recording.id);
 
+  const docs = useMemo(() => aiOutput.documents ?? [], [aiOutput.documents]);
+
   const hasTranscript = useMemo(() => {
     if ((recording.transcript_text ?? "").trim()) return true;
     const json = recording.transcript_json as
@@ -63,6 +65,7 @@ export function ExportRecordingModal({
     defaultInclude(available),
   );
   const [qaSelected, setQaSelected] = useState<Set<number>>(new Set());
+  const [docsSelected, setDocsSelected] = useState<Set<number>>(new Set());
   const [format, setFormat] = useState<ExportFormat>("docx");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -72,6 +75,8 @@ export function ExportRecordingModal({
     if (!open) return;
     setInclude(defaultInclude(available));
     setQaSelected(new Set());
+    // Generated documents are the point of exporting — default them all on.
+    setDocsSelected(new Set((aiOutput.documents ?? []).map((_, i) => i)));
     setError(null);
     setBusy(false);
   }, [open, recording.id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -87,18 +92,29 @@ export function ExportRecordingModal({
       return next;
     });
 
+  const toggleDoc = (idx: number) =>
+    setDocsSelected((s) => {
+      const next = new Set(s);
+      if (next.has(idx)) next.delete(idx);
+      else next.add(idx);
+      return next;
+    });
+
   const anySelected =
     (Object.keys(include) as IncludeKey[]).some(
       (k) => k !== "meta" && include[k],
-    ) || qaSelected.size > 0;
+    ) ||
+    qaSelected.size > 0 ||
+    docsSelected.size > 0;
 
   const onExport = async () => {
     setBusy(true);
     setError(null);
     try {
       const qaEntries = history.filter((_, i) => qaSelected.has(i));
+      const selectedDocs = docs.filter((_, i) => docsSelected.has(i));
       const { blob, fileName } = await generateExport(
-        { recording, aiOutput, qaEntries, include },
+        { recording, aiOutput, qaEntries, documents: selectedDocs, include },
         format,
       );
       downloadBlob(blob, fileName);
@@ -198,6 +214,23 @@ export function ExportRecordingModal({
                   onToggle={() => toggle("transcript")}
                 />
               </div>
+
+              {/* Generated documents (detailed summaries / free-prompt docs) */}
+              {docs.length > 0 && (
+                <div className="space-y-1.5">
+                  <div className="text-xs font-semibold text-ink-700">
+                    מסמכים מפורטים ({docs.length})
+                  </div>
+                  {docs.map((d, idx) => (
+                    <CheckRow
+                      key={d.id}
+                      label={d.title.trim() || `מסמך ${idx + 1}`}
+                      checked={docsSelected.has(idx)}
+                      onToggle={() => toggleDoc(idx)}
+                    />
+                  ))}
+                </div>
+              )}
 
               {/* Free-text Q&A */}
               {history.length > 0 && (

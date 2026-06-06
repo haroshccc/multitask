@@ -251,6 +251,69 @@ async function callClaude(args: {
   return toolBlock.input as AiOutput;
 }
 
+// Long-form document generation. Unlike the bundled structured call (which
+// shares a 4096-token budget across all sections), this produces a single
+// multi-page Markdown document with a generous token budget. Used for the
+// "very detailed summary" preset and for free-prompt document requests.
+// Returns Markdown text; the client persists it into `ai_output.documents`.
+const DOCUMENT_MAX_TOKENS = 16000;
+
+async function callClaudeDocument(args: {
+  title: string | null;
+  transcript_text: string;
+  instruction: string;
+  speakerLabels: Record<number, string>;
+}): Promise<string> {
+  if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not set");
+  const t =
+    args.transcript_text.length > MAX_TRANSCRIPT_CHARS
+      ? args.transcript_text.slice(0, MAX_TRANSCRIPT_CHARS) + "\n\n[התמלול קוצר]"
+      : args.transcript_text;
+  const speakerHint = Object.keys(args.speakerLabels).length
+    ? `\n\nתיוג דוברים:\n${Object.entries(args.speakerLabels)
+        .map(([i, l]) => `  דובר ${i}: ${l}`)
+        .join("\n")}`
+    : "";
+  const system = `אתה עוזר אישי שמנתח שיחות מתומללות בעברית ומפיק מסמכים מסודרים וארוכים.
+דרישות:
+- כתוב בעברית בלבד.
+- הפק מסמך מפורט ככל שנדרש — אל תקצר באופן מלאכותי. אורך של כמה עמודים תקין ואף רצוי כשהתוכן מצדיק זאת.
+- בנה את המסמך ב-Markdown: כותרות עם ## ו-###, רשימות עם - , והדגשות עם **טקסט**.
+- בסס הכל אך ורק על התמלול. אל תמציא עובדות. אם משהו לא ברור בתמלול, ציין זאת.
+- אל תכלול דברי נימוס או הקדמות מיותרות — התחל ישר מתוכן המסמך.`;
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "x-api-key": ANTHROPIC_API_KEY,
+      "anthropic-version": "2023-06-01",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      model: ANTHROPIC_MODEL,
+      max_tokens: DOCUMENT_MAX_TOKENS,
+      system,
+      messages: [
+        {
+          role: "user",
+          content: `כותרת ההקלטה: ${args.title ?? "ללא כותרת"}${speakerHint}\n\nתמלול:\n${t}\n\nבקשת המסמך: ${args.instruction}`,
+        },
+      ],
+    }),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`anthropic_${res.status}: ${text.slice(0, 500)}`);
+  }
+  const json = (await res.json()) as {
+    content?: Array<{ type: string; text?: string }>;
+  };
+  return json.content
+    ?.filter((b) => b.type === "text")
+    .map((b) => b.text ?? "")
+    .join("")
+    .trim() ?? "";
+}
+
 async function callClaudeFreeText(args: {
   title: string | null;
   transcript_text: string;
@@ -301,6 +364,7 @@ async function summarizeHandler(
         custom_prompt?: string;
         free_text?: string;
         clear_free_text?: boolean;
+        document_prompt?: string;
       }
     | null;
   if (!body?.recording_id) {
@@ -313,7 +377,7 @@ async function summarizeHandler(
   const { data: recording, error: recErr } = await ctx.serviceClient
     .from("recordings")
     .select(
-      "id, organization_id, status, title, transcript_text, transcript_json"
+      "id, organization_id, status, title, transcript_text, transcript_json, ai_output"
     )
     .eq("id", body.recording_id)
     .maybeSingle();
@@ -370,6 +434,35 @@ async function summarizeHandler(
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       return jsonResponse({ error: "free_text_failed", message: msg }, { status: 502, origin });
+    }
+  }
+
+  // Long-form document mode: generate a single multi-page Markdown document
+  // from a preset or free-form instruction. No DB write here — the client
+  // stores the result into `ai_output.documents` so it can be edited/exported.
+  if (body.document_prompt?.trim()) {
+    const { data: docSpeakers } = await ctx.serviceClient
+      .from("recording_speakers")
+      .select("speaker_index, label")
+      .eq("recording_id", recording.id);
+    const docSpeakerLabels: Record<number, string> = {};
+    for (const s of docSpeakers ?? []) {
+      if (s.label?.trim()) docSpeakerLabels[s.speaker_index] = s.label.trim();
+    }
+    try {
+      const document = await callClaudeDocument({
+        title: recording.title,
+        transcript_text: recording.transcript_text,
+        instruction: body.document_prompt.trim(),
+        speakerLabels: docSpeakerLabels,
+      });
+      return jsonResponse({ document }, { origin });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return jsonResponse(
+        { error: "document_failed", message: msg },
+        { status: 502, origin }
+      );
     }
   }
 
@@ -438,10 +531,22 @@ async function summarizeHandler(
     });
   }
 
+  // Preserve client-managed fields that live alongside the structured output
+  // in the same JSON column (generated documents) so a re-run doesn't wipe them.
+  const existingAi = (recording.ai_output ?? null) as
+    | { documents?: unknown }
+    | null;
+  const mergedAi: Record<string, unknown> = {
+    ...(aiOutput as unknown as Record<string, unknown>),
+    ...(Array.isArray(existingAi?.documents)
+      ? { documents: existingAi!.documents }
+      : {}),
+  };
+
   const { data: updated, error: updErr } = await ctx.serviceClient
     .from("recordings")
     .update({
-      ai_output: aiOutput as unknown as Record<string, unknown>,
+      ai_output: mergedAi,
       ai_output_at: new Date().toISOString(),
       ai_status: "ready",
       status: "processed",

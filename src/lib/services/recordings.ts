@@ -294,6 +294,22 @@ function estimateDurationFromUtterances(rec: Recording): number {
 
 // AI processing ------------------------------------------------------------
 
+/**
+ * A long-form document generated on demand from the transcript (a "very
+ * detailed summary" preset, or a free-prompt request). Stored as Markdown
+ * inside `ai_output.documents` so it survives reloads and AI re-runs, and can
+ * be edited and exported.
+ */
+export interface RecordingGeneratedDoc {
+  id: string;
+  title: string;
+  /** The instruction that produced this document (editable / re-runnable). */
+  prompt: string;
+  /** Markdown body. */
+  content: string;
+  created_at: string;
+}
+
 export interface RecordingAiOutput {
   /** 1–2 sentences. The "elevator pitch" for the call. */
   short_summary: string;
@@ -314,6 +330,8 @@ export interface RecordingAiOutput {
     duration_minutes?: number | null;
     speaker_name?: string | null;
   }>;
+  /** Long-form generated documents (detailed summaries / free-prompt docs). */
+  documents?: RecordingGeneratedDoc[];
 }
 
 /**
@@ -383,6 +401,36 @@ export async function askRecordingFreeText(
     response: json.response ?? "",
     history: Array.isArray(json.history) ? json.history : [],
   };
+}
+
+/**
+ * Generate a long-form Markdown document from the transcript via the
+ * `summarize` edge function's document mode. Returns the Markdown text only —
+ * persistence into `ai_output.documents` is handled by the caller so it can be
+ * edited before saving.
+ */
+export async function generateRecordingDocument(
+  recordingId: string,
+  prompt: string
+): Promise<string> {
+  const { data: session } = await supabase.auth.getSession();
+  const jwt = session.session?.access_token;
+  if (!jwt) throw new Error("not_authenticated");
+  const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/summarize`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${jwt}`,
+    },
+    body: JSON.stringify({ recording_id: recordingId, document_prompt: prompt }),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`document_${res.status}: ${detail.slice(0, 500)}`);
+  }
+  const json = (await res.json()) as { document?: string };
+  return json.document ?? "";
 }
 
 export async function clearRecordingFreeTextHistory(

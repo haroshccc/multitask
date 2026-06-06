@@ -59,6 +59,22 @@ const styles = StyleSheet.create({
     marginTop: 16,
     marginBottom: 6,
   },
+  subheading: {
+    fontSize: 12,
+    fontWeight: 700,
+    color: "#1F2937",
+    textAlign: "right",
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  subheading3: {
+    fontSize: 11,
+    fontWeight: 700,
+    color: "#374151",
+    textAlign: "right",
+    marginTop: 6,
+    marginBottom: 3,
+  },
   paragraph: { textAlign: "right", marginBottom: 6 },
   bulletRow: { flexDirection: "row-reverse", marginBottom: 3 },
   bulletDot: { width: 12, textAlign: "center" },
@@ -81,12 +97,25 @@ export async function renderPdf(doc: ExportDoc): Promise<Blob> {
         {doc.sections.map((section, si) => (
           <View key={si} wrap>
             <Text style={styles.heading}>{section.heading}</Text>
-            {section.blocks.map((block, bi) =>
-              block.type === "paragraph" ? (
-                <Text key={bi} style={styles.paragraph}>
-                  {block.text}
-                </Text>
-              ) : (
+            {section.blocks.map((block, bi) => {
+              if (block.type === "heading") {
+                return (
+                  <Text
+                    key={bi}
+                    style={block.level === 2 ? styles.subheading : styles.subheading3}
+                  >
+                    {block.text}
+                  </Text>
+                );
+              }
+              if (block.type === "paragraph") {
+                return (
+                  <Text key={bi} style={styles.paragraph}>
+                    {block.text}
+                  </Text>
+                );
+              }
+              return (
                 <View key={bi}>
                   {block.items.map((item, ii) => (
                     <View key={ii} style={styles.bulletRow} wrap={false}>
@@ -95,8 +124,8 @@ export async function renderPdf(doc: ExportDoc): Promise<Blob> {
                     </View>
                   ))}
                 </View>
-              ),
-            )}
+              );
+            })}
           </View>
         ))}
       </Page>

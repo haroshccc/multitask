@@ -4525,7 +4525,7 @@ export type Database = {
         | "image"
         | "link"
       billing_plan: "free" | "pro" | "enterprise"
-      custom_field_entity: "task" | "meeting" | "payment"
+      custom_field_entity: "task" | "meeting" | "payment" | "contact"
       custom_field_type:
         | "text"
         | "number"
@@ -4769,7 +4769,7 @@ export const Constants = {
         "link",
       ],
       billing_plan: ["free", "pro", "enterprise"],
-      custom_field_entity: ["task", "meeting", "payment"],
+      custom_field_entity: ["task", "meeting", "payment", "contact"],
       custom_field_type: [
         "text",
         "number",

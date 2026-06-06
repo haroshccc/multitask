@@ -25,6 +25,7 @@ import { ScreenScaffold } from "@/components/layout/ScreenScaffold";
 import { cn } from "@/lib/utils/cn";
 import { useOrgScope } from "@/lib/hooks/useOrgScope";
 import { usePlan, usePlanTasks, useUpdatePlan } from "@/lib/hooks/usePlans";
+import { useSharesForTaskLists } from "@/lib/hooks/useTaskLists";
 import {
   buildPlanTree,
   unassignedPlanTasks,
@@ -129,7 +130,14 @@ function PlanShellLoaded({
     try { localStorage.setItem(VIEW_KEY, v); } catch { /* ignore */ }
   };
 
-  const canEdit = plan.owner_id === userId;
+  // Edit access: the owner, or anyone granted a write-share on this plan
+  // (task_lists/tasks RLS honors write shares; shares "self read" lets the
+  // grantee see their own row so we can gate the UI accordingly).
+  const { data: planShares = [] } = useSharesForTaskLists([planId]);
+  const hasWriteShare = planShares.some(
+    (s) => s.user_id === userId && s.permission === "write"
+  );
+  const canEdit = plan.owner_id === userId || hasWriteShare;
   const tree = useMemo(() => buildPlanTree(tasks), [tasks]);
   const stages = useMemo(() => tree.map((s) => ({ id: s.id, title: s.title })), [tree]);
   const assignTree = useMemo(

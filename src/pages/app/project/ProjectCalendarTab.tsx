@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   CalendarRange,
@@ -48,7 +48,7 @@ import {
   startOfDay as ganttStartOfDay,
 } from "@/components/gantt/gantt-utils";
 
-import { useTaskLists, useCreateTaskList } from "@/lib/hooks/useTaskLists";
+import { useTaskLists } from "@/lib/hooks/useTaskLists";
 import { useTasks, useUpdateTask, useCreateTask } from "@/lib/hooks/useTasks";
 import { useEvents, useUpdateEvent, useCreateEvent } from "@/lib/hooks/useEvents";
 import { useEventCalendars } from "@/lib/hooks/useEventCalendars";
@@ -558,27 +558,6 @@ export function ProjectCalendarTab() {
   const [scheduling, setScheduling] = useState(false);
   const [panelMode, setPanelMode] = useState<"tasks" | "meetings">("tasks");
 
-  // New-list dialog (the "רשימה חדשה" action in the lists picker, scoped to
-  // this project).
-  const [newListDialogOpen, setNewListDialogOpen] = useState(false);
-  const [newListName, setNewListName] = useState("");
-  const createTaskList = useCreateTaskList();
-  const handleCreateList = () => {
-    setNewListName("");
-    setNewListDialogOpen(true);
-  };
-  const handleCreateListSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-    const name = newListName.trim();
-    if (!name) return;
-    setNewListDialogOpen(false);
-    await createTaskList.mutateAsync({
-      name,
-      kind: "custom",
-      project_id: projectId,
-    });
-  };
-
   // Scheduling chooser: a popover that lets the user pick task / event /
   // meeting for the clicked slot. Anchored at the cursor.
   const [chooser, setChooser] = useState<{
@@ -797,7 +776,6 @@ export function ProjectCalendarTab() {
             listSections={listSections}
             hiddenListIds={hiddenListIds}
             onToggleListVisibility={toggleVisibility}
-            onCreateList={handleCreateList}
             eventCalendars={unifiedCalendars}
             onToggleCalendarVisibility={toggleVisibility}
             filtersActiveCount={0}
@@ -950,45 +928,6 @@ export function ProjectCalendarTab() {
         />
       )}
 
-      {/* New-list dialog (scoped to this project) */}
-      {newListDialogOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40"
-          onClick={() => setNewListDialogOpen(false)}
-        >
-          <form
-            className="bg-white rounded-2xl shadow-lift p-6 w-80 flex flex-col gap-4"
-            onClick={(e) => e.stopPropagation()}
-            onSubmit={handleCreateListSubmit}
-          >
-            <h2 className="text-sm font-semibold text-ink-900">רשימה חדשה</h2>
-            <input
-              autoFocus
-              type="text"
-              className="input text-sm"
-              placeholder="שם הרשימה"
-              value={newListName}
-              onChange={(e) => setNewListName(e.target.value)}
-            />
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                className="btn-ghost text-sm"
-                onClick={() => setNewListDialogOpen(false)}
-              >
-                ביטול
-              </button>
-              <button
-                type="submit"
-                className="btn-dark text-sm"
-                disabled={!newListName.trim()}
-              >
-                יצירה
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
     </div>
   );
 }

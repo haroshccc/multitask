@@ -62,7 +62,9 @@ interface CalendarChromeProps {
   listSections?: ListSection[];
   hiddenListIds: Set<string>;
   onToggleListVisibility: (listId: string) => void;
-  onCreateList: () => void;
+  /** Optional — when omitted, the "new list" action is hidden (e.g. inside a
+   *  project calendar, where lists aren't created from the picker). */
+  onCreateList?: () => void;
 
   // Event calendars (sit next to lists in the same popover; visibility
   // shares the `hiddenListIds` set since UUIDs don't collide).
@@ -318,16 +320,18 @@ export function CalendarChrome(props: CalendarChromeProps) {
                     )}
                   </>
                 )}
-                <div className="border-t border-ink-100 mt-1 pt-1">
-                  <button
-                    onClick={onCreateList}
-                    className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-start text-primary-600 hover:bg-ink-50"
-                    type="button"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    רשימה חדשה
-                  </button>
-                </div>
+                {onCreateList && (
+                  <div className="border-t border-ink-100 mt-1 pt-1">
+                    <button
+                      onClick={onCreateList}
+                      className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-start text-primary-600 hover:bg-ink-50"
+                      type="button"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      רשימה חדשה
+                    </button>
+                  </div>
+                )}
 
                 {/* Event calendars — separate concept from task lists, but
                     share the same hidden-IDs set on the calendar screen. */}

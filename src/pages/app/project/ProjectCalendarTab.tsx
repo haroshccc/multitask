@@ -71,7 +71,7 @@ const DAY_HOUR_HEIGHT = 44;
 const WEEK_HOUR_HEIGHT = 40;
 
 export function ProjectCalendarTab() {
-  const { projectId } = useProjectContext();
+  const { projectId, project } = useProjectContext();
   const { user } = useAuth();
   const navigate = useNavigate();
 
@@ -196,6 +196,73 @@ export function ProjectCalendarTab() {
     [eventCalendars]
   );
 
+  // Grouped lists picker: the project first (labeled with the project name,
+  // checked by default), then other projects' lists, then the user's personal
+  // lists, then lists shared with the user. Empty groups are dropped.
+  const listSections = useMemo(() => {
+    const toUnified = (l: (typeof lists)[number]) => ({
+      id: l.id,
+      name: l.name,
+      emoji: l.emoji,
+      color: l.color,
+    });
+    const sections: { key: string; label: string | null; lists: typeof unifiedLists }[] =
+      [];
+
+    const projLists = lists.filter((l) => l.project_id === projectId);
+    if (projLists.length > 0) {
+      sections.push({
+        key: "project",
+        label: "פרויקט",
+        // Single list → show the project's name; multiple → keep list names.
+        lists: projLists.map((l) =>
+          projLists.length === 1 ? { ...toUnified(l), name: project.name } : toUnified(l)
+        ),
+      });
+    }
+
+    const otherProjectLists = lists.filter(
+      (l) => l.project_id && l.project_id !== projectId
+    );
+    if (otherProjectLists.length > 0) {
+      sections.push({
+        key: "other-projects",
+        label: "פרויקטים נוספים",
+        lists: otherProjectLists.map(toUnified),
+      });
+    }
+
+    const myLists = lists.filter(
+      (l) => !l.project_id && l.owner_id === user?.id
+    );
+    if (myLists.length > 0) {
+      sections.push({
+        key: "mine",
+        label: "רשימות אישיות שלי",
+        lists: myLists.map(toUnified),
+      });
+    }
+
+    const sharedLists = lists.filter(
+      (l) => !l.project_id && l.owner_id !== user?.id
+    );
+    if (sharedLists.length > 0) {
+      sections.push({
+        key: "shared",
+        label: "רשימות ששותפו איתי",
+        lists: sharedLists.map(toUnified),
+      });
+    }
+
+    return sections;
+  }, [lists, unifiedLists, projectId, project.name, user?.id]);
+
+  // The project meetings/events follow the project's own list visibility (the
+  // first "פרויקט" entry in the picker). No project list → always shown.
+  const projectVisible =
+    projectListIds.size === 0 ||
+    [...projectListIds].some((id) => isVisible(id));
+
   const listColorById = useMemo(() => {
     const m = new Map<string, string | null>();
     for (const l of lists) m.set(l.id, l.color);
@@ -283,11 +350,16 @@ export function ProjectCalendarTab() {
     }
     if (layer !== "tasks") {
       for (const e of events) {
-        // Always show the project's own events (project_id match); show any
-        // other event only if its calendar was turned on in the picker.
+        // The project's own events (incl. meeting-synced ones) follow the
+        // project's list visibility; any other event shows only if its calendar
+        // was turned on in the picker.
         const belongsToProject =
           (e as { project_id?: string | null }).project_id === projectId;
-        if (!belongsToProject && !isVisible(e.calendar_id)) continue;
+        if (belongsToProject) {
+          if (!projectVisible) continue;
+        } else if (!isVisible(e.calendar_id)) {
+          continue;
+        }
         const base = eventToItem(e, calendarColorById);
         if (e.recurrence_rule) {
           const anchorStart = base.start;
@@ -335,6 +407,7 @@ export function ProjectCalendarTab() {
     user?.id,
     projectId,
     projectListIds,
+    projectVisible,
     vis,
   ]);
 
@@ -721,6 +794,7 @@ export function ProjectCalendarTab() {
             layer={layer}
             onLayerChange={setLayer}
             lists={unifiedLists}
+            listSections={listSections}
             hiddenListIds={hiddenListIds}
             onToggleListVisibility={toggleVisibility}
             onCreateList={handleCreateList}
@@ -746,7 +820,7 @@ export function ProjectCalendarTab() {
                   onOpenTask={(id) => setEditingTaskId(id)}
                   onContextMenu={(task: Task) => setEditingTaskId(task.id)}
                   onClose={() => setScheduling(false)}
-                  wide={view === "day" || view === "agenda"}
+                  wide
                 />
               ) : (
                 <MeetingSchedulingPanel
@@ -756,7 +830,7 @@ export function ProjectCalendarTab() {
                     navigate(`/app/projects/${projectId}/meetings`)
                   }
                   onClose={() => setScheduling(false)}
-                  wide={view === "day" || view === "agenda"}
+                  wide
                 />
               ))}
             <div className="flex-1 min-w-0">

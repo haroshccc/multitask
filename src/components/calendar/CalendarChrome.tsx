@@ -33,6 +33,16 @@ interface UnifiedList {
   color: string | null;
 }
 
+/** Optional grouping for the lists picker. Each section gets an optional
+ *  header; when `listSections` is supplied the picker renders these instead of
+ *  the flat `lists` array (used by the project calendar to separate the
+ *  project / other projects / personal / shared). */
+export interface ListSection {
+  key: string;
+  label: string | null;
+  lists: UnifiedList[];
+}
+
 interface CalendarChromeProps {
   view: CalendarView;
   onViewChange: (v: CalendarView) => void;
@@ -46,6 +56,10 @@ interface CalendarChromeProps {
 
   // Lists
   lists: UnifiedList[];
+  /** Optional grouped sections — when set, the picker renders these (with
+   *  headers) instead of the flat `lists`. `lists` is still used for the
+   *  visible-count label. */
+  listSections?: ListSection[];
   hiddenListIds: Set<string>;
   onToggleListVisibility: (listId: string) => void;
   onCreateList: () => void;
@@ -98,6 +112,7 @@ export function CalendarChrome(props: CalendarChromeProps) {
     layer,
     onLayerChange,
     lists,
+    listSections,
     hiddenListIds,
     onToggleListVisibility,
     onCreateList,
@@ -231,51 +246,77 @@ export function CalendarChrome(props: CalendarChromeProps) {
             badge={hiddenListIds.size > 0 ? `−${hiddenListIds.size}` : undefined}
             wide
           >
-            {() => (
-              <div className="py-1 max-h-72 overflow-y-auto">
-                <div className="text-[10px] font-semibold text-ink-400 uppercase tracking-wider px-3 py-1 border-b border-ink-100">
-                  רשימות פעילות בתצוגה
-                </div>
-                {lists.length === 0 ? (
-                  <p className="px-3 py-2 text-xs text-ink-500">
-                    עוד אין רשימות.
-                  </p>
-                ) : (
-                  lists.map((l) => {
-                    const hidden = hiddenListIds.has(l.id);
-                    return (
-                      <button
-                        key={l.id}
-                        onClick={() => onToggleListVisibility(l.id)}
-                        className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-start hover:bg-ink-50"
-                        type="button"
+            {() => {
+              const renderRow = (l: UnifiedList) => {
+                const hidden = hiddenListIds.has(l.id);
+                return (
+                  <button
+                    key={l.id}
+                    onClick={() => onToggleListVisibility(l.id)}
+                    className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-start hover:bg-ink-50"
+                    type="button"
+                  >
+                    <span
+                      className={cn(
+                        "w-3 h-3 rounded-sm border flex items-center justify-center shrink-0",
+                        hidden ? "border-ink-300 bg-white" : "border-transparent"
+                      )}
+                      style={hidden ? undefined : { backgroundColor: l.color ?? "#6b6b80" }}
+                    >
+                      {!hidden && <Check className="w-2.5 h-2.5 text-white" />}
+                    </span>
+                    {l.emoji && <ListIcon emoji={l.emoji} className="w-3.5 h-3.5" />}
+                    <span
+                      className={cn(
+                        "truncate flex-1",
+                        hidden ? "text-ink-500" : "text-ink-900"
+                      )}
+                    >
+                      {l.name}
+                    </span>
+                    {hidden ? (
+                      <EyeOff className="w-3 h-3 text-ink-400" />
+                    ) : (
+                      <Eye className="w-3 h-3 text-ink-400" />
+                    )}
+                  </button>
+                );
+              };
+              return (
+              <div className="py-1 max-h-[70vh] overflow-y-auto">
+                {listSections ? (
+                  listSections.length === 0 ? (
+                    <p className="px-3 py-2 text-xs text-ink-500">
+                      עוד אין רשימות.
+                    </p>
+                  ) : (
+                    listSections.map((sec) => (
+                      <div
+                        key={sec.key}
+                        className="border-b border-ink-100 last:border-b-0 pb-1 mb-1"
                       >
-                        <span
-                          className={cn(
-                            "w-3 h-3 rounded-sm border flex items-center justify-center shrink-0",
-                            hidden ? "border-ink-300 bg-white" : "border-transparent"
-                          )}
-                          style={hidden ? undefined : { backgroundColor: l.color ?? "#6b6b80" }}
-                        >
-                          {!hidden && <Check className="w-2.5 h-2.5 text-white" />}
-                        </span>
-                        {l.emoji && <ListIcon emoji={l.emoji} className="w-3.5 h-3.5" />}
-                        <span
-                          className={cn(
-                            "truncate flex-1",
-                            hidden ? "text-ink-500" : "text-ink-900"
-                          )}
-                        >
-                          {l.name}
-                        </span>
-                        {hidden ? (
-                          <EyeOff className="w-3 h-3 text-ink-400" />
-                        ) : (
-                          <Eye className="w-3 h-3 text-ink-400" />
+                        {sec.label && (
+                          <div className="text-[10px] font-semibold text-ink-400 uppercase tracking-wider px-3 py-1">
+                            {sec.label}
+                          </div>
                         )}
-                      </button>
-                    );
-                  })
+                        {sec.lists.map(renderRow)}
+                      </div>
+                    ))
+                  )
+                ) : (
+                  <>
+                    <div className="text-[10px] font-semibold text-ink-400 uppercase tracking-wider px-3 py-1 border-b border-ink-100">
+                      רשימות פעילות בתצוגה
+                    </div>
+                    {lists.length === 0 ? (
+                      <p className="px-3 py-2 text-xs text-ink-500">
+                        עוד אין רשימות.
+                      </p>
+                    ) : (
+                      lists.map(renderRow)
+                    )}
+                  </>
                 )}
                 <div className="border-t border-ink-100 mt-1 pt-1">
                   <button
@@ -368,7 +409,8 @@ export function CalendarChrome(props: CalendarChromeProps) {
                   )}
                 </div>
               </div>
-            )}
+              );
+            }}
           </PopoverButton>
 
           {/* Filter toggle */}

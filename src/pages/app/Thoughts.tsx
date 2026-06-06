@@ -63,7 +63,7 @@ function SubTab({
       className={cn(
         "px-4 py-2 text-sm font-medium flex items-center gap-1.5 border-b-2 -mb-px transition-colors",
         active
-          ? "border-primary-500 text-primary-700"
+          ? "border-ink-900 text-ink-900"
           : "border-transparent text-ink-500 hover:text-ink-800"
       )}
     >

@@ -219,7 +219,7 @@ export function ThoughtDevelopmentEditModal({
                   onClick={async () => {
                     await persist();
                   }}
-                  className="px-3 py-1.5 rounded-lg bg-primary-500 text-white text-sm font-medium flex items-center gap-1.5 hover:bg-primary-600 disabled:opacity-50"
+                  className="px-3 py-1.5 rounded-lg bg-ink-900 text-white text-sm font-medium flex items-center gap-1.5 hover:bg-ink-700 disabled:opacity-50"
                   disabled={update.isPending}
                   type="button"
                 >
@@ -387,7 +387,7 @@ function LinkPicker({
               className={cn(
                 "px-3 py-1.5 text-sm flex items-center gap-1.5",
                 linkKind === k
-                  ? "bg-primary-500 text-white"
+                  ? "bg-ink-900 text-white"
                   : "bg-white text-ink-700 hover:bg-ink-50"
               )}
             >
@@ -639,7 +639,7 @@ function ShareSection({ developmentId }: { developmentId: string }) {
                         className={cn(
                           "px-2 py-1",
                           active
-                            ? "bg-primary-500 text-white"
+                            ? "bg-ink-900 text-white"
                             : "bg-white text-ink-600 hover:bg-ink-50"
                         )}
                       >

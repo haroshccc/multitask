@@ -19,6 +19,7 @@ import {
   Square,
   Columns3,
   Rows3,
+  Share2,
 } from "lucide-react";
 import { ScreenScaffold } from "@/components/layout/ScreenScaffold";
 import { cn } from "@/lib/utils/cn";
@@ -34,6 +35,7 @@ import {
 } from "@/lib/types/plans";
 import { ClonePlanDialog } from "@/components/plans/ClonePlanDialog";
 import { ImportantThingsBanner } from "@/components/plans/ImportantThingsBanner";
+import { ShareListModal } from "@/components/tasks/ShareListModal";
 import { PlanTasksTable } from "@/components/plans/PlanTasksTable";
 import { PlanDecisionsTab } from "@/components/plans/PlanDecisionsTab";
 import { PlanImpactMatrix } from "@/components/plans/PlanImpactMatrix";
@@ -120,6 +122,7 @@ function PlanShellLoaded({
   const navigate = useNavigate();
   const updatePlan = useUpdatePlan();
   const [cloneOpen, setCloneOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>(() => readViewMode());
   const setViewModePersist = (v: ViewMode) => {
     setViewMode(v);
@@ -144,15 +147,26 @@ function PlanShellLoaded({
     <ScreenScaffold
       title=""
       actions={
-        <button
-          type="button"
-          disabled={!canEdit}
-          onClick={() => setCloneOpen(true)}
-          className="btn-ghost text-sm flex items-center gap-1.5 disabled:opacity-40"
-        >
-          <Copy className="w-4 h-4" />
-          שכפל לתוכנית קצרה
-        </button>
+        <>
+          <button
+            type="button"
+            disabled={!canEdit}
+            onClick={() => setShareOpen(true)}
+            className="btn-ghost text-sm flex items-center gap-1.5 disabled:opacity-40"
+          >
+            <Share2 className="w-4 h-4" />
+            שיתוף
+          </button>
+          <button
+            type="button"
+            disabled={!canEdit}
+            onClick={() => setCloneOpen(true)}
+            className="btn-ghost text-sm flex items-center gap-1.5 disabled:opacity-40"
+          >
+            <Copy className="w-4 h-4" />
+            שכפל לתוכנית קצרה
+          </button>
+        </>
       }
     >
       <PlanHeader plan={plan} planId={planId} canEdit={canEdit} onPatch={(p) => updatePlan.mutate({ planId, patch: p })} />
@@ -204,6 +218,8 @@ function PlanShellLoaded({
           }}
         />
       )}
+
+      {shareOpen && <ShareListModal list={plan} onClose={() => setShareOpen(false)} />}
     </ScreenScaffold>
   );
 }

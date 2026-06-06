@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ClipboardList,
   Plus,
@@ -21,10 +21,17 @@ import {
 import { formatPlanRange, addMonthsToDate, todayIso } from "./plan-format";
 import { PlanEditorModal } from "./PlanEditorModal";
 
-export function PlansSection() {
+export function PlansSection({ headerless = false }: { headerless?: boolean }) {
   const { data: plans = [], isLoading } = usePlans();
   const [editId, setEditId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+
+  // Allow the parent screen (Goals sub-page header) to trigger creation.
+  useEffect(() => {
+    const handler = () => setCreateOpen(true);
+    window.addEventListener("app:new-plan", handler);
+    return () => window.removeEventListener("app:new-plan", handler);
+  }, []);
 
   const nameById = useMemo(() => {
     const m = new Map<string, string>();
@@ -33,25 +40,27 @@ export function PlansSection() {
   }, [plans]);
 
   return (
-    <section className="mb-6">
-      <div className="flex items-center gap-2 mb-3">
-        <ClipboardList className="w-4 h-4 text-ink-600" />
-        <h2 className="text-sm font-semibold text-ink-800">תוכניות עבודה</h2>
-        {plans.length > 0 && (
-          <span className="text-[11px] bg-ink-100 text-ink-500 rounded-full px-1.5 py-0.5">
-            {plans.length}
-          </span>
-        )}
-        <div className="flex-1 h-px bg-ink-200" />
-        <button
-          type="button"
-          onClick={() => setCreateOpen(true)}
-          className="inline-flex items-center gap-1.5 text-xs text-primary-600 hover:text-primary-700"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          תוכנית חדשה
-        </button>
-      </div>
+    <section className={headerless ? undefined : "mb-6"}>
+      {!headerless && (
+        <div className="flex items-center gap-2 mb-3">
+          <ClipboardList className="w-4 h-4 text-ink-600" />
+          <h2 className="text-sm font-semibold text-ink-800">תוכניות עבודה</h2>
+          {plans.length > 0 && (
+            <span className="text-[11px] bg-ink-100 text-ink-500 rounded-full px-1.5 py-0.5">
+              {plans.length}
+            </span>
+          )}
+          <div className="flex-1 h-px bg-ink-200" />
+          <button
+            type="button"
+            onClick={() => setCreateOpen(true)}
+            className="inline-flex items-center gap-1.5 text-xs text-primary-600 hover:text-primary-700"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            תוכנית חדשה
+          </button>
+        </div>
+      )}
 
       {isLoading ? (
         <div className="card p-4 text-center text-ink-400 text-sm">טוען…</div>

@@ -138,7 +138,7 @@ export function ThoughtDevelopmentTab() {
           type="button"
           onClick={handleNew}
           disabled={create.isPending}
-          className="px-3 py-1.5 rounded-lg bg-brand-600 text-white text-sm font-medium flex items-center gap-1.5 hover:bg-brand-700 disabled:opacity-50"
+          className="px-3 py-1.5 rounded-lg bg-primary-500 text-white text-sm font-medium flex items-center gap-1.5 hover:bg-primary-600 disabled:opacity-50"
         >
           {create.isPending ? (
             <Loader2 className="w-4 h-4 animate-spin" />
@@ -165,7 +165,7 @@ export function ThoughtDevelopmentTab() {
               className={cn(
                 "px-2.5 py-1.5",
                 shareFilter === val
-                  ? "bg-brand-600 text-white"
+                  ? "bg-primary-500 text-white"
                   : "bg-white text-ink-700 hover:bg-ink-50"
               )}
             >
@@ -214,7 +214,7 @@ export function ThoughtDevelopmentTab() {
             className={cn(
               "px-2.5 py-1.5",
               layout === "cards"
-                ? "bg-brand-600 text-white"
+                ? "bg-primary-500 text-white"
                 : "bg-white text-ink-600 hover:bg-ink-50"
             )}
             title="כרטיסיות"
@@ -227,7 +227,7 @@ export function ThoughtDevelopmentTab() {
             className={cn(
               "px-2.5 py-1.5",
               layout === "table"
-                ? "bg-brand-600 text-white"
+                ? "bg-primary-500 text-white"
                 : "bg-white text-ink-600 hover:bg-ink-50"
             )}
             title="טבלה"

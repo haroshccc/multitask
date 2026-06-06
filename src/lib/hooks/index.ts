@@ -14,6 +14,7 @@ export * from "./useRecordings";
 export * from "./useRecordingLists";
 export * from "./useThoughts";
 export * from "./useThoughtLists";
+export * from "./useThoughtDevelopments";
 export * from "./useQuestions";
 export * from "./useTimer";
 export * from "./useProjectTemplates";

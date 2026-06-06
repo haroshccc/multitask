@@ -42,6 +42,18 @@ const Goals = lazy(() =>
 const Frameworks = lazy(() =>
   import("@/pages/app/Frameworks").then((m) => ({ default: m.Frameworks }))
 );
+const PlanShell = lazy(() =>
+  import("@/pages/app/PlanShell").then((m) => ({ default: m.PlanShell }))
+);
+const PlanConceptPage = lazy(() =>
+  import("@/pages/app/PlanShell").then((m) => ({ default: m.PlanConceptPage }))
+);
+const PlanTasksPage = lazy(() =>
+  import("@/pages/app/PlanShell").then((m) => ({ default: m.PlanTasksPage }))
+);
+const PlanImpactsPage = lazy(() =>
+  import("@/pages/app/PlanShell").then((m) => ({ default: m.PlanImpactsPage }))
+);
 const Contacts = lazy(() =>
   import("@/pages/app/Contacts").then((m) => ({ default: m.Contacts }))
 );
@@ -223,6 +235,40 @@ export default function App() {
             </Suspense>
           }
         />
+        <Route
+          path="goals/plan/:planId"
+          element={
+            <Suspense fallback={<LoadingShell />}>
+              <PlanShell />
+            </Suspense>
+          }
+        >
+          <Route index element={<Navigate to="concept" replace />} />
+          <Route
+            path="concept"
+            element={
+              <Suspense fallback={<LoadingShell />}>
+                <PlanConceptPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="tasks"
+            element={
+              <Suspense fallback={<LoadingShell />}>
+                <PlanTasksPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="impacts"
+            element={
+              <Suspense fallback={<LoadingShell />}>
+                <PlanImpactsPage />
+              </Suspense>
+            }
+          />
+        </Route>
         <Route
           path="frameworks"
           element={

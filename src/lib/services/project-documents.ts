@@ -17,6 +17,8 @@ export interface ProjectDocument {
   file_key: string | null;
   file_size: number | null;
   mime: string | null;
+  /** Doc-type tag (דרישת תשלום / חשבונית / קבלה / חוזה / אחר). */
+  category: string | null;
   sort_order: number;
   created_at: string;
   updated_at: string;
@@ -34,6 +36,7 @@ export type ProjectDocumentInsert = {
   file_key?: string | null;
   file_size?: number | null;
   mime?: string | null;
+  category?: string | null;
   sort_order?: number;
 };
 

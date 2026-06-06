@@ -53,6 +53,11 @@ import {
 } from "@/components/configurable-table/fieldCells";
 import type { CustomFieldType, TaskCustomField } from "@/lib/types/domain";
 import { cn } from "@/lib/utils/cn";
+import { LinkedDocumentsSection } from "@/components/projects/LinkedDocumentsSection";
+import {
+  AddDocumentModal,
+  type AddDocumentTarget,
+} from "@/components/projects/AddDocumentModal";
 
 const VIEW_KEY = "multitask.projectContacts.view";
 type ViewMode = "table" | "cards";
@@ -704,6 +709,11 @@ function ContactDetailModal({
   const [address, setAddress] = useState(contact.address ?? "");
   const [notes, setNotes] = useState(contact.notes ?? "");
   const [sharedWithOrg, setSharedWithOrg] = useState(contact.shared_with_org);
+  const [addOpen, setAddOpen] = useState(false);
+
+  const addTargets: AddDocumentTarget[] = [
+    { type: "contact", id: contact.id, label: "איש הקשר" },
+  ];
 
   const save = () => {
     updateContact.mutate({
@@ -848,6 +858,13 @@ function ContactDetailModal({
           <p className="text-[11px] text-ink-400 -mt-2">
             כשמסומן, כל חברי הארגון יכולים לראות את איש הקשר.
           </p>
+
+          <LinkedDocumentsSection
+            targetType="contact"
+            targetId={contact.id}
+            projectId={projectId}
+            onAttach={() => setAddOpen(true)}
+          />
         </div>
 
         <div className="px-5 py-3 bg-ink-50 border-t border-ink-200 flex items-center justify-between gap-2 shrink-0 flex-wrap">
@@ -895,6 +912,15 @@ function ContactDetailModal({
           </div>
         </div>
       </div>
+
+      {addOpen && (
+        <AddDocumentModal
+          projectId={projectId}
+          defaultFolderId={null}
+          targets={addTargets}
+          onClose={() => setAddOpen(false)}
+        />
+      )}
     </div>
   );
 }

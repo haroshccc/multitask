@@ -12,6 +12,13 @@ import {
 import { useProjectContext } from "@/pages/app/ProjectShell";
 import { useProjectContacts } from "@/lib/hooks/useContacts";
 import type { ProjectContact } from "@/lib/services/contacts";
+import { useOrgScope, assertOrgScope } from "@/lib/hooks/useOrgScope";
+import { findOrCreatePaymentsFolder } from "@/lib/services/document-links";
+import { LinkedDocumentsSection } from "@/components/projects/LinkedDocumentsSection";
+import {
+  AddDocumentModal,
+  type AddDocumentTarget,
+} from "@/components/projects/AddDocumentModal";
 import {
   useProjectPayments,
   useCreateProjectPayment,
@@ -792,10 +799,48 @@ function PaymentDetailModal({
   onClose: () => void;
 }) {
   const updatePayment = useUpdateProjectPayment();
+  const scope = useOrgScope();
 
   const [title, setTitle] = useState(payment.title);
   const [direction, setDirection] = useState(payment.direction);
   const [contactId, setContactId] = useState(payment.contact_id ?? "");
+
+  // "צרף מסמך" flow — the payments folder id is resolved lazily on open.
+  const [addOpen, setAddOpen] = useState(false);
+  const [addFolderId, setAddFolderId] = useState<string | null>(null);
+  const [addTargets, setAddTargets] = useState<AddDocumentTarget[]>([]);
+  const [openingAdd, setOpeningAdd] = useState(false);
+
+  const openAddDocument = async () => {
+    setOpeningAdd(true);
+    try {
+      const { organizationId, userId } = assertOrgScope(scope);
+      const folderId = await findOrCreatePaymentsFolder(
+        projectId,
+        organizationId,
+        userId
+      );
+      const targets: AddDocumentTarget[] = [
+        { type: "payment", id: payment.id, label: "התשלום" },
+        ...(payment.contact_id
+          ? [
+              {
+                type: "contact" as const,
+                id: payment.contact_id,
+                label: "איש הקשר",
+              },
+            ]
+          : []),
+      ];
+      setAddFolderId(folderId);
+      setAddTargets(targets);
+      setAddOpen(true);
+    } catch {
+      alert("שגיאה בפתיחת חלון הוספת המסמך");
+    } finally {
+      setOpeningAdd(false);
+    }
+  };
   const [amount, setAmount] = useState(
     payment.amount_cents ? String(payment.amount_cents / 100) : ""
   );
@@ -1041,6 +1086,15 @@ function PaymentDetailModal({
               className="field resize-y"
             />
           </div>
+
+          <LinkedDocumentsSection
+            targetType="payment"
+            targetId={payment.id}
+            projectId={projectId}
+            onAttach={() => {
+              if (!openingAdd) void openAddDocument();
+            }}
+          />
         </div>
 
         <div className="px-5 py-3 bg-ink-50 border-t border-ink-200 flex items-center justify-end gap-2 shrink-0">
@@ -1059,6 +1113,15 @@ function PaymentDetailModal({
           </button>
         </div>
       </div>
+
+      {addOpen && (
+        <AddDocumentModal
+          projectId={projectId}
+          defaultFolderId={addFolderId}
+          targets={addTargets}
+          onClose={() => setAddOpen(false)}
+        />
+      )}
     </div>
   );
 }

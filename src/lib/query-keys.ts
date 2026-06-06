@@ -75,6 +75,15 @@ export const queryKeys = {
   thoughtProcessings: (thoughtId: string) =>
     ["thought", thoughtId, "processings"] as const,
 
+  // Thought-developments (פיתוח מחשבה)
+  thoughtDevelopments: (orgId: string) =>
+    ["thought-developments", orgId] as const,
+  thoughtDevelopment: (id: string) => ["thought-development", id] as const,
+  thoughtDevelopmentFiles: (id: string) =>
+    ["thought-development", id, "files"] as const,
+  thoughtDevelopmentShares: (id: string) =>
+    ["thought-development", id, "shares"] as const,
+
   // Questions
   questions: (projectId: string) => ["questions", projectId] as const,
 
@@ -152,6 +161,10 @@ export const queryFamilies = {
   allEvents: (orgId: string) => ["events", orgId] as const,
   allRecordings: (orgId: string) => ["recordings", orgId] as const,
   allThoughts: (orgId: string) => ["thoughts", orgId] as const,
+  allThoughtDevelopments: (orgId: string) =>
+    ["thought-developments", orgId] as const,
+  thoughtDevelopmentFamily: (id: string) =>
+    ["thought-development", id] as const,
   allTaskLists: (orgId: string) => ["task-lists", orgId] as const,
   allThoughtLists: (orgId: string) => ["thought-lists", orgId] as const,
   allRecordingLists: (orgId: string) => ["recording-lists", orgId] as const,

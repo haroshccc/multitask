@@ -1,493 +1,74 @@
-import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useState } from "react";
+import { Lightbulb, FlaskConical } from "lucide-react";
 import { ScreenScaffold } from "@/components/layout/ScreenScaffold";
-import {
-  FilterBar,
-  useFiltersFromUrl,
-  type FilterField,
-} from "@/components/filters/FilterBar";
-import {
-  useThoughts,
-  useThoughtLists,
-  useCreateThought,
-  useBulkThoughtAssignments,
-  useBulkThoughtProcessingCounts,
-  useListVisibility,
-  useSetListVisibility,
-  useTriggerRecordingProcessing,
-} from "@/lib/hooks";
-import {
-  useUserThoughtPreferences,
-  useUpdateUserThoughtPreferences,
-} from "@/lib/hooks/useUserThoughtPreferences";
-import type { FilterConfig, Thought, ThoughtList } from "@/lib/types/domain";
-import {
-  ThoughtsChrome,
-  type ThoughtsDensity,
-  type ThoughtsLayout,
-  type ThoughtsSortMode,
-  type ThoughtsViewMode,
-} from "@/components/thoughts/ThoughtsChrome";
-import { ThoughtComposer } from "@/components/thoughts/ThoughtComposer";
-import { RecorderModal } from "@/components/recordings/RecorderModal";
-import { AiPromptsDialog } from "@/components/recordings/AiPromptsDialog";
-import { ThoughtCard } from "@/components/thoughts/ThoughtCard";
-import { ThoughtsListsView } from "@/components/thoughts/ThoughtsListsView";
-import { ThoughtEditModal } from "@/components/thoughts/ThoughtEditModal";
-import { ThoughtListEditDialog } from "@/components/thoughts/ThoughtListEditDialog";
-import { TaskEditModal } from "@/components/tasks/TaskEditModal";
-import { EventEditModal } from "@/components/calendar/EventEditModal";
-import { mockProvider } from "@/lib/ai/thought-suggestions";
-import { pushUndo } from "@/lib/undo/store";
+import { cn } from "@/lib/utils/cn";
+import { QuickThoughtsTab } from "@/components/thoughts/QuickThoughtsTab";
+import { ThoughtDevelopmentTab } from "@/components/thoughts/ThoughtDevelopmentTab";
 
-const VIEW_KEY = "multitask:thoughts:view";
-const SORT_KEY = "multitask:thoughts:sort";
-const DENSITY_KEY = "multitask:thoughts:density";
-const LAYOUT_KEY = "multitask:thoughts:layout";
-
-function readLS<T extends string>(key: string, fallback: T): T {
-  if (typeof window === "undefined") return fallback;
-  const v = window.localStorage.getItem(key);
-  return (v as T) || fallback;
-}
-function writeLS(key: string, value: string) {
-  if (typeof window !== "undefined") window.localStorage.setItem(key, value);
-}
+type ThoughtsTab = "quick" | "development";
+const TAB_KEY = "multitask:thoughts:tab";
 
 export function Thoughts() {
-  const [filters, setFilters] = useFiltersFromUrl();
-  const [filtersOpen, setFiltersOpen] = useState(false);
-  const [statsOpen, setStatsOpen] = useState(false);
-  const [archiveOpen, setArchiveOpen] = useState(false);
-  const [recorderOpen, setRecorderOpen] = useState(false);
-  const [aiPromptsOpen, setAiPromptsOpen] = useState(false);
-
-  const [viewMode, setViewModeState] = useState<ThoughtsViewMode>(() =>
-    readLS<ThoughtsViewMode>(VIEW_KEY, "all")
+  const [tab, setTab] = useState<ThoughtsTab>(() =>
+    typeof window !== "undefined" &&
+    window.localStorage.getItem(TAB_KEY) === "development"
+      ? "development"
+      : "quick"
   );
-  const [sortMode, setSortModeState] = useState<ThoughtsSortMode>(() =>
-    readLS<ThoughtsSortMode>(SORT_KEY, "newest")
-  );
-  const [density, setDensityState] = useState<ThoughtsDensity>(() =>
-    readLS<ThoughtsDensity>(DENSITY_KEY, "regular")
-  );
-  const [layout, setLayoutState] = useState<ThoughtsLayout>(() =>
-    readLS<ThoughtsLayout>(LAYOUT_KEY, "feed")
-  );
-  const setViewMode = (m: ThoughtsViewMode) => {
-    setViewModeState(m);
-    writeLS(VIEW_KEY, m);
+  const selectTab = (t: ThoughtsTab) => {
+    setTab(t);
+    if (typeof window !== "undefined") window.localStorage.setItem(TAB_KEY, t);
   };
-  const setSortMode = (m: ThoughtsSortMode) => {
-    setSortModeState(m);
-    writeLS(SORT_KEY, m);
-  };
-  const setDensity = (d: ThoughtsDensity) => {
-    setDensityState(d);
-    writeLS(DENSITY_KEY, d);
-  };
-  const setLayout = (l: ThoughtsLayout) => {
-    setLayoutState(l);
-    writeLS(LAYOUT_KEY, l);
-  };
-
-  const { data: thoughts = [] } = useThoughts({ includeArchived: archiveOpen });
-  const { data: lists = [] } = useThoughtLists();
-  const { data: visibility } = useListVisibility("thoughts");
-  const setListVisibility = useSetListVisibility();
-  const createThought = useCreateThought();
-
-  const { data: thoughtPrefs } = useUserThoughtPreferences();
-  const updateThoughtPrefs = useUpdateUserThoughtPreferences();
-  const autoTranscribeRecordedThoughts =
-    thoughtPrefs?.auto_transcribe_recorded_thoughts ?? true;
-  const triggerRecordingProcessing = useTriggerRecordingProcessing();
-
-  const thoughtIds = useMemo(() => thoughts.map((t) => t.id), [thoughts]);
-  const { data: assignments = [] } = useBulkThoughtAssignments(thoughtIds);
-  const { data: processingCounts } = useBulkThoughtProcessingCounts(thoughtIds);
-
-  const hiddenLists = useMemo(
-    () => new Set(visibility?.hidden_list_ids ?? []),
-    [visibility]
-  );
-
-  const assignmentsByThought = useMemo(() => {
-    const map = new Map<string, ThoughtList[]>();
-    const listById = new Map(lists.map((l) => [l.id, l] as const));
-    for (const a of assignments) {
-      const l = listById.get(a.list_id);
-      if (!l) continue;
-      const arr = map.get(a.thought_id) ?? [];
-      arr.push(l);
-      map.set(a.thought_id, arr);
-    }
-    return map;
-  }, [assignments, lists]);
-
-  const displayed = useMemo(() => {
-    let items: Thought[] = thoughts.slice();
-
-    // Archive toggle — the hook already filters to non-archived when
-    // `includeArchived=false`; when true, narrow to archive-only.
-    if (archiveOpen) {
-      items = items.filter((t) => t.status === "archived");
-    }
-
-    if (viewMode === "unprocessed") {
-      items = items.filter((t) => !t.processed_at);
-    } else if (viewMode === "unassigned") {
-      items = items.filter(
-        (t) => (assignmentsByThought.get(t.id)?.length ?? 0) === 0
-      );
-    }
-
-    if (hiddenLists.size > 0) {
-      items = items.filter((t) => {
-        const assigned = assignmentsByThought.get(t.id) ?? [];
-        if (assigned.length === 0) return true;
-        return assigned.some((l) => !hiddenLists.has(l.id));
-      });
-    }
-
-    const f = filters as FilterConfig;
-    if (f.tags && f.tags.length > 0) {
-      items = items.filter((t) => t.tags.some((x) => f.tags!.includes(x)));
-    }
-    if (f.sources && f.sources.length > 0) {
-      items = items.filter((t) => f.sources!.includes(t.source));
-    }
-
-    if (sortMode === "newest") {
-      items.sort(
-        (a, b) =>
-          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      );
-    } else if (sortMode === "oldest") {
-      items.sort(
-        (a, b) =>
-          new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-      );
-    } else if (sortMode === "unprocessed_first") {
-      items.sort((a, b) => {
-        const ap = a.processed_at ? 1 : 0;
-        const bp = b.processed_at ? 1 : 0;
-        if (ap !== bp) return ap - bp;
-        return (
-          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-        );
-      });
-    }
-
-    return items;
-  }, [
-    thoughts,
-    archiveOpen,
-    viewMode,
-    hiddenLists,
-    assignmentsByThought,
-    filters,
-    sortMode,
-  ]);
-
-  const fields: FilterField[] = useMemo(
-    () => [
-      {
-        key: "sources",
-        type: "multi-enum",
-        label: "מקור",
-        options: [
-          { value: "app_text", label: "אפליקציה · טקסט" },
-          { value: "app_audio", label: "אפליקציה · הקלטה" },
-          { value: "whatsapp_text", label: "WhatsApp · טקסט" },
-          { value: "whatsapp_audio", label: "WhatsApp · הקלטה" },
-          { value: "whatsapp_image", label: "WhatsApp · תמונה" },
-        ],
-      },
-      { key: "tags", type: "multi-text", label: "תגים" },
-    ],
-    []
-  );
-
-  const filtersActiveCount = useMemo(() => {
-    let n = 0;
-    Object.values(filters).forEach((v) => {
-      if (Array.isArray(v)) n += v.length;
-      else if (v !== undefined && v !== null && v !== "" && v !== false) n += 1;
-    });
-    return n;
-  }, [filters]);
-
-  const toggleListVisibility = (listId: string) => {
-    const current = visibility?.hidden_list_ids ?? [];
-    const next = current.includes(listId)
-      ? current.filter((id) => id !== listId)
-      : [...current, listId];
-    setListVisibility.mutate({ screenKey: "thoughts", hiddenListIds: next });
-  };
-
-  // List-edit dialog state. `null` = create mode; a list = edit mode.
-  const [listDialog, setListDialog] = useState<{
-    open: boolean;
-    list: ThoughtList | null;
-  }>({ open: false, list: null });
-  const openCreateListDialog = () => setListDialog({ open: true, list: null });
-  const openEditListDialog = (list: ThoughtList) =>
-    setListDialog({ open: true, list });
-  const closeListDialog = () => setListDialog((prev) => ({ ...prev, open: false }));
-
-  const unifiedLists = useMemo(
-    () =>
-      lists.map((l) => ({
-        id: l.id,
-        name: l.name,
-        emoji: l.emoji,
-        color: l.color,
-      })),
-    [lists]
-  );
-
-  const [composerKey, setComposerKey] = useState(0);
-
-  const handleCompose = async (text: string) => {
-    await createThought.mutateAsync({
-      source: "app_text",
-      text_content: text,
-      tags: [],
-    });
-    // Clear the composer after successful save.
-    setComposerKey((k) => k + 1);
-    // Reserved for the real provider hookup (see `src/lib/ai/thought-suggestions.ts`).
-    void mockProvider;
-  };
-
-  const [editingThoughtId, setEditingThoughtId] = useState<string | null>(null);
-  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
-  const [editingEventId, setEditingEventId] = useState<string | null>(null);
-
-  // Deep-link support: global search routes to `/app/thoughts?thought=<id>`.
-  const [searchParams, setSearchParams] = useSearchParams();
-  useEffect(() => {
-    const id = searchParams.get("thought");
-    if (id && thoughts.some((t) => t.id === id)) {
-      setEditingThoughtId(id);
-      // Remove the param so closing the modal doesn't re-open it.
-      const next = new URLSearchParams(searchParams);
-      next.delete("thought");
-      setSearchParams(next, { replace: true });
-    }
-  }, [searchParams, setSearchParams, thoughts]);
-
-  // Ctrl+N from AppShell focuses the composer textarea.
-  useEffect(() => {
-    const handler = () => {
-      const ta = document.querySelector<HTMLTextAreaElement>("[data-thought-composer]");
-      ta?.focus();
-    };
-    window.addEventListener("app:new-thought", handler);
-    return () => window.removeEventListener("app:new-thought", handler);
-  }, []);
-
-  // Ctrl+N from AppShell focuses the composer textarea.
-  useEffect(() => {
-    const handler = () => {
-      const ta = document.querySelector<HTMLTextAreaElement>("[data-thought-composer]");
-      ta?.focus();
-    };
-    window.addEventListener("app:new-thought", handler);
-    return () => window.removeEventListener("app:new-thought", handler);
-  }, []);
-
-  const stats = useMemo(() => {
-    const total = displayed.length;
-    const processed = displayed.filter((t) => t.processed_at).length;
-    const fromWhatsapp = displayed.filter((t) =>
-      t.source.startsWith("whatsapp")
-    ).length;
-    const audio = displayed.filter((t) => t.source.endsWith("audio")).length;
-    return { total, processed, fromWhatsapp, audio };
-  }, [displayed]);
 
   return (
     <ScreenScaffold title="מחשבות" subtitle="">
-      <div className="space-y-2">
-        <ThoughtsChrome
-          lists={unifiedLists}
-          hiddenListIds={hiddenLists}
-          onToggleListVisibility={toggleListVisibility}
-          onCreateList={openCreateListDialog}
-          filtersActiveCount={filtersActiveCount}
-          filtersOpen={filtersOpen}
-          onToggleFilters={() => setFiltersOpen((v) => !v)}
-          statsOpen={statsOpen}
-          onToggleStats={() => setStatsOpen((v) => !v)}
-          viewMode={viewMode}
-          onViewModeChange={setViewMode}
-          sortMode={sortMode}
-          onSortModeChange={setSortMode}
-          density={density}
-          onDensityChange={setDensity}
-          archiveOpen={archiveOpen}
-          onToggleArchive={() => setArchiveOpen((v) => !v)}
-          layout={layout}
-          onLayoutChange={setLayout}
-          autoTranscribeRecordedThoughts={autoTranscribeRecordedThoughts}
-          onAutoTranscribeChange={(next) => {
-            const prev = autoTranscribeRecordedThoughts;
-            updateThoughtPrefs.mutate({
-              auto_transcribe_recorded_thoughts: next,
-            });
-            pushUndo({
-              description: "שינוי תמלול אוטומטי",
-              undo: () =>
-                updateThoughtPrefs.mutate({
-                  auto_transcribe_recorded_thoughts: prev,
-                }),
-              redo: () =>
-                updateThoughtPrefs.mutate({
-                  auto_transcribe_recorded_thoughts: next,
-                }),
-            });
-          }}
-          onOpenAiPrompts={() => setAiPromptsOpen(true)}
-        />
-
-        <AiPromptsDialog
-          open={aiPromptsOpen}
-          onClose={() => setAiPromptsOpen(false)}
-        />
-
-        {filtersOpen && (
-          <FilterBar
-            screenKey="thoughts"
-            filters={filters}
-            onChange={setFilters}
-            fields={fields}
-            alwaysExpanded
+      <div className="space-y-3">
+        {/* Sub-screen tabs */}
+        <div className="flex items-center gap-1 border-b border-ink-200">
+          <SubTab
+            active={tab === "quick"}
+            onClick={() => selectTab("quick")}
+            icon={<Lightbulb className="w-4 h-4" />}
+            label="מחשבה מהירה"
           />
-        )}
-
-        {statsOpen && (
-          <div className="card px-3 py-2 flex flex-wrap gap-4 text-xs">
-            <Stat label="סה״כ" value={stats.total} />
-            <Stat
-              label="מעובדות"
-              value={`${stats.processed} / ${stats.total}`}
-            />
-            <Stat label="מוואטסאפ" value={stats.fromWhatsapp} />
-            <Stat label="אודיו" value={stats.audio} />
-          </div>
-        )}
-
-        <ThoughtComposer
-          key={composerKey}
-          onSubmit={handleCompose}
-          onRecordRequest={() => setRecorderOpen(true)}
-        />
-
-        <RecorderModal
-          open={recorderOpen}
-          onClose={() => setRecorderOpen(false)}
-          source="thought"
-          title="הקלטה חדשה למחשבות"
-          onSaved={async (recordingId) => {
-            // Mirror QuickCapture: pair the recording with an audio thought
-            // so it lands on this screen immediately.
-            try {
-              await createThought.mutateAsync({
-                source: "app_audio",
-                recording_id: recordingId,
-                text_content: null,
-              });
-              if (autoTranscribeRecordedThoughts) {
-                triggerRecordingProcessing.mutate(recordingId);
-              }
-            } catch (err) {
-              console.error("link audio thought after recording failed:", err);
-            }
-          }}
-        />
-
-        {layout === "feed" ? (
-          displayed.length === 0 ? (
-            <div className="card px-4 py-10 text-center text-sm text-ink-500">
-              {archiveOpen
-                ? "אין מחשבות בארכיון."
-                : "אין עדיין מחשבות. כתוב משהו למעלה ולחץ Enter."}
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-              {displayed.map((t) => (
-                <ThoughtCard
-                  key={t.id}
-                  thought={t}
-                  allLists={lists}
-                  assignedLists={assignmentsByThought.get(t.id) ?? []}
-                  processedCount={processingCounts?.get(t.id) ?? 0}
-                  compact={density === "compact"}
-                  onOpen={() => setEditingThoughtId(t.id)}
-                  onOpenTask={setEditingTaskId}
-                  onOpenEvent={setEditingEventId}
-                />
-              ))}
-            </div>
-          )
-        ) : (
-          <ThoughtsListsView
-            thoughts={displayed}
-            lists={lists}
-            hiddenLists={hiddenLists}
-            assignmentsByThought={assignmentsByThought}
-            processingCounts={processingCounts}
-            compact={density === "compact"}
-            onOpenThought={setEditingThoughtId}
-            onOpenTask={setEditingTaskId}
-            onOpenEvent={setEditingEventId}
-            onCreateList={openCreateListDialog}
-            onEditList={openEditListDialog}
+          <SubTab
+            active={tab === "development"}
+            onClick={() => selectTab("development")}
+            icon={<FlaskConical className="w-4 h-4" />}
+            label="פיתוח מחשבה"
           />
-        )}
+        </div>
+
+        {tab === "quick" ? <QuickThoughtsTab /> : <ThoughtDevelopmentTab />}
       </div>
-
-      <ThoughtEditModal
-        thoughtId={editingThoughtId}
-        onClose={() => setEditingThoughtId(null)}
-        onOpenTask={(id) => {
-          setEditingThoughtId(null);
-          setEditingTaskId(id);
-        }}
-        onOpenEvent={(id) => {
-          setEditingThoughtId(null);
-          setEditingEventId(id);
-        }}
-      />
-      <TaskEditModal
-        taskId={editingTaskId}
-        onClose={() => setEditingTaskId(null)}
-      />
-      <EventEditModal
-        open={!!editingEventId}
-        eventId={editingEventId}
-        onClose={() => setEditingEventId(null)}
-      />
-      <ThoughtListEditDialog
-        open={listDialog.open}
-        list={listDialog.list}
-        onClose={closeListDialog}
-      />
     </ScreenScaffold>
   );
 }
 
-function Stat({ label, value }: { label: string; value: number | string }) {
+function SubTab({
+  active,
+  onClick,
+  icon,
+  label,
+}: {
+  active: boolean;
+  onClick: () => void;
+  icon: React.ReactNode;
+  label: string;
+}) {
   return (
-    <div className="flex flex-col">
-      <span className="text-[10px] font-semibold text-ink-400 uppercase tracking-wider">
-        {label}
-      </span>
-      <span className="text-lg font-bold text-ink-900 tabular-nums">
-        {value}
-      </span>
-    </div>
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "px-4 py-2 text-sm font-medium flex items-center gap-1.5 border-b-2 -mb-px transition-colors",
+        active
+          ? "border-brand-600 text-brand-700"
+          : "border-transparent text-ink-500 hover:text-ink-800"
+      )}
+    >
+      {icon}
+      {label}
+    </button>
   );
 }

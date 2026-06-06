@@ -14,6 +14,21 @@ export function useProjectMeetings(projectId: string | null | undefined) {
   });
 }
 
+/**
+ * Meetings across many projects (the main calendar's meeting-scheduling panel).
+ * The query key is sorted so the cache is stable regardless of input order.
+ * `useSaveProjectMeeting` invalidates the `["project-meetings"]` prefix, which
+ * also covers this key, so a drag-to-schedule refreshes the panel.
+ */
+export function useMeetingsForProjects(projectIds: string[]) {
+  const sorted = [...projectIds].sort();
+  return useQuery({
+    queryKey: ["project-meetings", "multi", sorted],
+    queryFn: () => service.listMeetingsForProjects(sorted),
+    enabled: sorted.length > 0,
+  });
+}
+
 export function useCreateProjectMeeting() {
   const qc = useQueryClient();
   const scope = useOrgScope();
@@ -95,8 +110,10 @@ export function useSaveProjectMeeting() {
       });
       return eventId;
     },
-    onSuccess: (_d, vars) => {
-      qc.invalidateQueries({ queryKey: key(vars.projectId) });
+    onSuccess: () => {
+      // Broad prefix so both the single-project key and the cross-project
+      // ["project-meetings","multi",…] key (main calendar panel) refresh.
+      qc.invalidateQueries({ queryKey: ["project-meetings"] });
       qc.invalidateQueries({ queryKey: ["project-events"] });
       if (scope.organizationId) {
         qc.invalidateQueries({

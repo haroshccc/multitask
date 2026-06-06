@@ -16,6 +16,7 @@ import {
   FileText,
   AlignLeft,
   Trash2,
+  Download,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import {
@@ -35,6 +36,7 @@ import { useCreateEvent, useDeleteEvent } from "@/lib/hooks/useEvents";
 import type { Recording } from "@/lib/types/domain";
 import type { RecordingAiOutput } from "@/lib/services/recordings";
 import { pushUndo } from "@/lib/undo/store";
+import { ExportRecordingModal } from "./ExportRecordingModal";
 
 interface Props {
   recording: Recording;
@@ -106,6 +108,7 @@ export function AiInsights({ recording }: Props) {
     | "events"
     | "free_text";
   const [activeTab, setActiveTab] = useState<AiTab>("short_summary");
+  const [exportOpen, setExportOpen] = useState(false);
 
   const onTrigger = () =>
     trigger.mutate({ recordingId: recording.id });
@@ -192,8 +195,24 @@ export function AiInsights({ recording }: Props) {
               )}
               {recording.ai_output ? "עיבוד AI מחדש" : "הפעלת AI"}
             </button>
+          <button
+            type="button"
+            onClick={() => setExportOpen(true)}
+            className="btn-outline !py-1 !px-2 !text-[11px] inline-flex items-center gap-1"
+            title="ייצוא תמלול / סיכום / שאלות למסמך Word, PDF או PowerPoint"
+          >
+            <Download className="w-3 h-3" />
+            ייצוא
+          </button>
         </div>
       </div>
+
+      <ExportRecordingModal
+        open={exportOpen}
+        onClose={() => setExportOpen(false)}
+        recording={recording}
+        aiOutput={draft}
+      />
 
       {!recording.ai_output && aiStatus !== "pending" && (
         <p className="text-[11px] text-ink-500 leading-relaxed">

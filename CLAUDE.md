@@ -264,8 +264,9 @@ sensitive task-save path.
 
 - Types: `src/lib/types/plans.ts` (Plan/PlanTask/decision/impact shapes, statuses, horizons, `buildPlanTree`).
 - Service/hooks: `src/lib/services/plans.ts` + `src/lib/hooks/usePlans.ts`.
-- UI: `src/components/plans/` — `PlansSection` (cards+create; `headerless` when used as a sub-page), `PlanEditorModal` (tabs: רעיוני/משימות/השפעות + clone + calendar-viz), responsive `PlanTasksTable`, `PlanDecisionsTab`, `PlanImpactMatrix`.
-- `Goals.tsx` is a single screen with a **sub-page switcher** (segmented control): "יעדים" (goals/habits/frameworks + filters) and "תוכניות עבודה" (`<PlansSection headerless />`). Active sub-page persists in `localStorage` (`multitask:goals:subPage`); the header action + "תוכנית חדשה" create flow fire via the `app:new-plan` window event (mirrors `app:new-goal`).
+- UI: `src/components/plans/` — `PlansSection` (cards+create; `headerless` when used as a sub-page), `PlanTasksTable`, `PlanDecisionsTab`, `PlanImpactMatrix`, `ClonePlanDialog`, `CreatePlanDialog`.
+- **Editing a plan is a full routed page, not a modal** — `src/pages/app/PlanShell.tsx` mirrors `ProjectShell`: a back-link header (editable name / date range / general goal / calendar-viz + clone), URL-based tab nav, and an `<Outlet>` carrying `PlanOutletContext` ({plan, planId, tasks, stages, canEdit}). Routes: `/app/goals/plan/:planId` → `concept` (default) | `tasks` | `impacts` (the three exported page components wrap the tab components).
+- `Goals.tsx` is a single screen with a **sub-page switcher** (segmented control): "יעדים" (goals/habits/frameworks + filters) and "תוכניות עבודה" (`<PlansSection headerless />`, cards link to the plan page). Active sub-page persists in `localStorage` (`multitask:goals:subPage`); the header create action fires the `app:new-plan` window event (mirrors `app:new-goal`).
 - Clone: `duplicate_plan()` RPC — full copy + `parent_plan_id` link, no live sync.
 - Status is decoupled (`plan_status`: notstarted/inprogress/done/dropped); priority reuses `urgency`; metric/target/time-range are free text (faithful to the source Excel).
 

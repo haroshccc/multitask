@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   ClipboardList,
   Plus,
@@ -19,12 +20,12 @@ import {
   type CalendarDisplayMode,
 } from "@/lib/types/plans";
 import { formatPlanRange, addMonthsToDate, todayIso } from "./plan-format";
-import { PlanEditorModal } from "./PlanEditorModal";
 
 export function PlansSection({ headerless = false }: { headerless?: boolean }) {
   const { data: plans = [], isLoading } = usePlans();
-  const [editId, setEditId] = useState<string | null>(null);
+  const navigate = useNavigate();
   const [createOpen, setCreateOpen] = useState(false);
+  const openPlan = (id: string) => navigate(`/app/goals/plan/${id}`);
 
   // Allow the parent screen (Goals sub-page header) to trigger creation.
   useEffect(() => {
@@ -81,24 +82,18 @@ export function PlansSection({ headerless = false }: { headerless?: boolean }) {
               key={p.id}
               plan={p}
               parentName={p.parent_plan_id ? nameById.get(p.parent_plan_id) ?? null : null}
-              onOpen={() => setEditId(p.id)}
+              onOpen={() => openPlan(p.id)}
             />
           ))}
         </div>
       )}
-
-      <PlanEditorModal
-        planId={editId}
-        onClose={() => setEditId(null)}
-        onOpenPlan={(id) => setEditId(id)}
-      />
 
       {createOpen && (
         <CreatePlanDialog
           onClose={() => setCreateOpen(false)}
           onCreated={(id) => {
             setCreateOpen(false);
-            setEditId(id);
+            openPlan(id);
           }}
         />
       )}

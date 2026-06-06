@@ -8,6 +8,7 @@ import {
   Mic,
   Lightbulb,
   FolderKanban,
+  Contact as ContactIcon,
   Target,
   Frame,
   UtensilsCrossed,
@@ -59,6 +60,7 @@ const NAV: NavItem[] = [
   { to: "/app/recordings", label: "הקלטות", icon: Mic },
   { to: "/app/thoughts", label: "מחשבות", icon: Lightbulb },
   { to: "/app/projects", label: "פרויקטים", icon: FolderKanban },
+  { to: "/app/contacts", label: "אנשי קשר", icon: ContactIcon },
   { to: "/app/food", label: "אוכל", icon: UtensilsCrossed },
 ];
 

@@ -20,6 +20,7 @@ import { useProjectMeetings } from "@/lib/hooks/useProjectMeetings";
 import { useProjectPayments } from "@/lib/hooks/useProjectPayments";
 import { useProjectEvents } from "@/lib/hooks/useProjectEvents";
 import { useProjectDocuments } from "@/lib/hooks/useProjectDocuments";
+import { useProjectContacts } from "@/lib/hooks/useContacts";
 import { useProjectCustomFields } from "@/lib/hooks/useTaskCustomFields";
 import { useUpdateProject } from "@/lib/hooks/useProjects";
 import {
@@ -186,6 +187,7 @@ export function ProjectDashboardTab() {
 
   // ── Backup data sources ──────────────────────────────────────────────────
   const { data: documents = [] } = useProjectDocuments(projectId);
+  const { data: projectContacts = [] } = useProjectContacts(projectId);
   const { data: taskFields = [] } = useProjectCustomFields(projectId, "task");
   const { data: meetingFields = [] } = useProjectCustomFields(
     projectId,
@@ -224,7 +226,7 @@ export function ProjectDashboardTab() {
       const wb = buildWorkbook([
         buildTasksSheet(tasks, taskFields),
         buildMeetingsSheet(meetings, meetingFields),
-        buildPaymentsSheet(payments, paymentFields),
+        buildPaymentsSheet(payments, paymentFields, "תשלומים", projectContacts),
       ]);
       const xlsxArray = XLSX.write(wb, {
         type: "array",

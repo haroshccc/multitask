@@ -42,6 +42,9 @@ const Goals = lazy(() =>
 const Frameworks = lazy(() =>
   import("@/pages/app/Frameworks").then((m) => ({ default: m.Frameworks }))
 );
+const Contacts = lazy(() =>
+  import("@/pages/app/Contacts").then((m) => ({ default: m.Contacts }))
+);
 const ProjectShell = lazy(() =>
   import("@/pages/app/ProjectShell").then((m) => ({ default: m.ProjectShell }))
 );
@@ -68,6 +71,11 @@ const ProjectMeetingsTab = lazy(() =>
 const ProjectPaymentsTab = lazy(() =>
   import("@/pages/app/project/ProjectPaymentsTab").then((m) => ({
     default: m.ProjectPaymentsTab,
+  }))
+);
+const ProjectContactsTab = lazy(() =>
+  import("@/pages/app/project/ProjectContactsTab").then((m) => ({
+    default: m.ProjectContactsTab,
   }))
 );
 const ProjectDocumentsTab = lazy(() =>
@@ -224,6 +232,14 @@ export default function App() {
           }
         />
         <Route
+          path="contacts"
+          element={
+            <Suspense fallback={<LoadingShell />}>
+              <Contacts />
+            </Suspense>
+          }
+        />
+        <Route
           path="projects/:projectId"
           element={
             <Suspense fallback={<LoadingShell />}>
@@ -261,6 +277,14 @@ export default function App() {
             element={
               <Suspense fallback={<LoadingShell />}>
                 <ProjectPaymentsTab />
+              </Suspense>
+            }
+          />
+          <Route
+            path="contacts"
+            element={
+              <Suspense fallback={<LoadingShell />}>
+                <ProjectContactsTab />
               </Suspense>
             }
           />

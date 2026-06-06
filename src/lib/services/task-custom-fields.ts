@@ -5,11 +5,12 @@ import type {
   TaskCustomFieldUpdate,
 } from "@/lib/types/domain";
 
-// Custom fields are now entity-scoped (task / meeting / payment). The generated
-// types lag behind the entity_type column, so cast to `any` for those queries.
+// Custom fields are now entity-scoped (task / meeting / payment / contact). The
+// generated types lag behind the entity_type column, so cast to `any` for those
+// queries.
 const db = supabase as any;
 
-export type CustomFieldEntity = "task" | "meeting" | "payment";
+export type CustomFieldEntity = "task" | "meeting" | "payment" | "contact";
 
 export async function listProjectCustomFields(
   projectId: string,

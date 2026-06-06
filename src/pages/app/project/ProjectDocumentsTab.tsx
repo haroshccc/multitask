@@ -444,6 +444,11 @@ function DocRow({
             {doc.kind === "link" && (
               <ExternalLink className="inline-block w-3 h-3 ms-1 text-ink-400 align-text-bottom" />
             )}
+            {doc.category && (
+              <span className="chip text-[10px] bg-ink-100 text-ink-600 ms-1.5 align-middle">
+                {doc.category}
+              </span>
+            )}
           </span>
           {subtitle && (
             <span className="block truncate text-[11px] text-ink-400">

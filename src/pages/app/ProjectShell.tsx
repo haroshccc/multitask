@@ -19,6 +19,7 @@ import {
   CalendarClock,
   CalendarRange,
   Receipt,
+  Users,
   FolderOpen,
   FolderKanban,
   Share2,
@@ -57,6 +58,7 @@ const TABS: { to: string; label: string; icon: typeof ListTodo }[] = [
   { to: "calendar", label: "יומן", icon: CalendarRange },
   { to: "meetings", label: "פגישות", icon: CalendarClock },
   { to: "payments", label: "תשלומים", icon: Receipt },
+  { to: "contacts", label: "אנשי קשר", icon: Users },
   { to: "documents", label: "מסמכים", icon: FolderOpen },
   { to: "dashboard", label: "דשבורד", icon: LayoutDashboard },
 ];

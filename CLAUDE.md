@@ -254,3 +254,24 @@ A framework is an independent overlay on the calendar: per-day **labels** (כו�
 | File | Description |
 |---|---|
 | `20260603181000_frameworks_block_all_day.sql` | Adds `all_day` to `framework_blocks` (all-day occurrences) |
+
+## Goal plans (תוכניות עבודה)
+
+A **plan** is a `task_list` with `kind='plan'`. A **stage** (שלב) is a task with
+`is_phase=true`; plan **tasks** are its children. Built on the existing
+lists/tasks primitives plus a conceptual layer — does **not** touch the
+sensitive task-save path.
+
+- Types: `src/lib/types/plans.ts` (Plan/PlanTask/decision/impact shapes, statuses, horizons, `buildPlanTree`).
+- Service/hooks: `src/lib/services/plans.ts` + `src/lib/hooks/usePlans.ts`.
+- UI: `src/components/plans/` — `PlansSection` (cards+create, rendered in `Goals.tsx`), `PlanEditorModal` (tabs: רעיוני/משימות/השפעות + clone + calendar-viz), responsive `PlanTasksTable`, `PlanDecisionsTab`, `PlanImpactMatrix`.
+- Clone: `duplicate_plan()` RPC — full copy + `parent_plan_id` link, no live sync.
+- Status is decoupled (`plan_status`: notstarted/inprogress/done/dropped); priority reuses `urgency`; metric/target/time-range are free text (faithful to the source Excel).
+
+### Migrations applied (plans)
+
+| File | Description |
+|---|---|
+| `20260606000001_goal_plans_kind.sql` | Adds `'plan'` to the `task_list_kind` enum (separate tx) |
+| `20260606000002_goal_plans.sql` | Plan columns on `task_lists`/`tasks`, `plan_decisions` + `plan_decision_impacts` + `plan_stage_impacts` tables (org-member RLS), `duplicate_plan()` RPC |
+

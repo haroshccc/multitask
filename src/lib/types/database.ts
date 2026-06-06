@@ -52,6 +52,71 @@ export type Database = {
           },
         ]
       }
+      contacts: {
+        Row: {
+          address: string | null
+          company: string | null
+          created_at: string
+          custom_fields: Json
+          email: string | null
+          id: string
+          name: string
+          notes: string | null
+          organization_id: string
+          owner_id: string
+          phone: string | null
+          shared_with_org: boolean
+          sort_order: number
+          tax_id: string | null
+          type: string
+          updated_at: string
+        }
+        Insert: {
+          address?: string | null
+          company?: string | null
+          created_at?: string
+          custom_fields?: Json
+          email?: string | null
+          id?: string
+          name?: string
+          notes?: string | null
+          organization_id: string
+          owner_id?: string
+          phone?: string | null
+          shared_with_org?: boolean
+          sort_order?: number
+          tax_id?: string | null
+          type?: string
+          updated_at?: string
+        }
+        Update: {
+          address?: string | null
+          company?: string | null
+          created_at?: string
+          custom_fields?: Json
+          email?: string | null
+          id?: string
+          name?: string
+          notes?: string | null
+          organization_id?: string
+          owner_id?: string
+          phone?: string | null
+          shared_with_org?: boolean
+          sort_order?: number
+          tax_id?: string | null
+          type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contacts_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       daily_briefs: {
         Row: {
           anchor: string
@@ -101,6 +166,38 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      document_links: {
+        Row: {
+          created_at: string
+          document_id: string
+          id: string
+          target_id: string
+          target_type: string
+        }
+        Insert: {
+          created_at?: string
+          document_id: string
+          id?: string
+          target_id: string
+          target_type: string
+        }
+        Update: {
+          created_at?: string
+          document_id?: string
+          id?: string
+          target_id?: string
+          target_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "document_links_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "project_documents"
             referencedColumns: ["id"]
           },
         ]
@@ -216,6 +313,7 @@ export type Database = {
           location: string | null
           organization_id: string
           owner_id: string
+          project_id: string | null
           recurrence_ends_at: string | null
           recurrence_original_id: string | null
           recurrence_rule: string | null
@@ -243,6 +341,7 @@ export type Database = {
           location?: string | null
           organization_id: string
           owner_id: string
+          project_id?: string | null
           recurrence_ends_at?: string | null
           recurrence_original_id?: string | null
           recurrence_rule?: string | null
@@ -270,6 +369,7 @@ export type Database = {
           location?: string | null
           organization_id?: string
           owner_id?: string
+          project_id?: string | null
           recurrence_ends_at?: string | null
           recurrence_original_id?: string | null
           recurrence_rule?: string | null
@@ -301,6 +401,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "events_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "events_recurrence_original_id_fkey"
             columns: ["recurrence_original_id"]
             isOneToOne: false
@@ -326,6 +433,411 @@ export type Database = {
             columns: ["source_thought_id"]
             isOneToOne: false
             referencedRelation: "thoughts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      framework_block_occurrences: {
+        Row: {
+          block_id: string
+          created_at: string
+          framework_id: string
+          id: string
+          occ_date: string
+          organization_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          block_id: string
+          created_at?: string
+          framework_id: string
+          id?: string
+          occ_date: string
+          organization_id: string
+          status: string
+          updated_at?: string
+        }
+        Update: {
+          block_id?: string
+          created_at?: string
+          framework_id?: string
+          id?: string
+          occ_date?: string
+          organization_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "framework_block_occurrences_block_id_fkey"
+            columns: ["block_id"]
+            isOneToOne: false
+            referencedRelation: "framework_blocks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "framework_block_occurrences_framework_id_fkey"
+            columns: ["framework_id"]
+            isOneToOne: false
+            referencedRelation: "frameworks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "framework_block_occurrences_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      framework_blocks: {
+        Row: {
+          all_day: boolean
+          color: string | null
+          created_at: string
+          day_of_week: number | null
+          effective_from: string | null
+          effective_to: string | null
+          end_minute: number
+          framework_id: string
+          goal_min_streak_periods: number | null
+          goal_period: string | null
+          goal_started_on: string | null
+          goal_target: number | null
+          id: string
+          month_anchor: string | null
+          month_interval: number | null
+          organization_id: string
+          override_kind: string | null
+          period_unit: string
+          scope: string
+          sort_order: number
+          source_block_id: string | null
+          specific_date: string | null
+          start_minute: number
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          all_day?: boolean
+          color?: string | null
+          created_at?: string
+          day_of_week?: number | null
+          effective_from?: string | null
+          effective_to?: string | null
+          end_minute?: number
+          framework_id: string
+          goal_min_streak_periods?: number | null
+          goal_period?: string | null
+          goal_started_on?: string | null
+          goal_target?: number | null
+          id?: string
+          month_anchor?: string | null
+          month_interval?: number | null
+          organization_id: string
+          override_kind?: string | null
+          period_unit?: string
+          scope?: string
+          sort_order?: number
+          source_block_id?: string | null
+          specific_date?: string | null
+          start_minute?: number
+          title?: string
+          updated_at?: string
+        }
+        Update: {
+          all_day?: boolean
+          color?: string | null
+          created_at?: string
+          day_of_week?: number | null
+          effective_from?: string | null
+          effective_to?: string | null
+          end_minute?: number
+          framework_id?: string
+          goal_min_streak_periods?: number | null
+          goal_period?: string | null
+          goal_started_on?: string | null
+          goal_target?: number | null
+          id?: string
+          month_anchor?: string | null
+          month_interval?: number | null
+          organization_id?: string
+          override_kind?: string | null
+          period_unit?: string
+          scope?: string
+          sort_order?: number
+          source_block_id?: string | null
+          specific_date?: string | null
+          start_minute?: number
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "framework_blocks_framework_id_fkey"
+            columns: ["framework_id"]
+            isOneToOne: false
+            referencedRelation: "frameworks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "framework_blocks_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "framework_blocks_source_block_id_fkey"
+            columns: ["source_block_id"]
+            isOneToOne: false
+            referencedRelation: "framework_blocks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      framework_day_labels: {
+        Row: {
+          color: string | null
+          created_at: string
+          day_of_week: number | null
+          effective_from: string | null
+          effective_to: string | null
+          framework_id: string
+          id: string
+          label: string
+          month_anchor: string | null
+          month_interval: number | null
+          organization_id: string
+          period_unit: string
+          scope: string
+          specific_date: string | null
+          updated_at: string
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string
+          day_of_week?: number | null
+          effective_from?: string | null
+          effective_to?: string | null
+          framework_id: string
+          id?: string
+          label?: string
+          month_anchor?: string | null
+          month_interval?: number | null
+          organization_id: string
+          period_unit?: string
+          scope?: string
+          specific_date?: string | null
+          updated_at?: string
+        }
+        Update: {
+          color?: string | null
+          created_at?: string
+          day_of_week?: number | null
+          effective_from?: string | null
+          effective_to?: string | null
+          framework_id?: string
+          id?: string
+          label?: string
+          month_anchor?: string | null
+          month_interval?: number | null
+          organization_id?: string
+          period_unit?: string
+          scope?: string
+          specific_date?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "framework_day_labels_framework_id_fkey"
+            columns: ["framework_id"]
+            isOneToOne: false
+            referencedRelation: "frameworks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "framework_day_labels_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      framework_history: {
+        Row: {
+          action: string
+          actor_id: string | null
+          created_at: string
+          details: Json | null
+          entity_id: string | null
+          entity_type: string
+          framework_id: string
+          id: string
+          organization_id: string
+          summary: string | null
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          created_at?: string
+          details?: Json | null
+          entity_id?: string | null
+          entity_type: string
+          framework_id: string
+          id?: string
+          organization_id: string
+          summary?: string | null
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          created_at?: string
+          details?: Json | null
+          entity_id?: string | null
+          entity_type?: string
+          framework_id?: string
+          id?: string
+          organization_id?: string
+          summary?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "framework_history_framework_id_fkey"
+            columns: ["framework_id"]
+            isOneToOne: false
+            referencedRelation: "frameworks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "framework_history_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      framework_shares: {
+        Row: {
+          created_at: string
+          framework_id: string
+          granted_by: string | null
+          id: string
+          organization_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          framework_id: string
+          granted_by?: string | null
+          id?: string
+          organization_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          framework_id?: string
+          granted_by?: string | null
+          id?: string
+          organization_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "framework_shares_framework_id_fkey"
+            columns: ["framework_id"]
+            isOneToOne: false
+            referencedRelation: "frameworks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "framework_shares_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      framework_visibility: {
+        Row: {
+          framework_id: string
+          is_active: boolean
+          user_id: string
+        }
+        Insert: {
+          framework_id: string
+          is_active?: boolean
+          user_id: string
+        }
+        Update: {
+          framework_id?: string
+          is_active?: boolean
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "framework_visibility_framework_id_fkey"
+            columns: ["framework_id"]
+            isOneToOne: false
+            referencedRelation: "frameworks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      frameworks: {
+        Row: {
+          color: string | null
+          created_at: string
+          emoji: string | null
+          id: string
+          is_archived: boolean
+          name: string
+          organization_id: string
+          owner_id: string
+          run_end: string | null
+          run_start: string | null
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string
+          emoji?: string | null
+          id?: string
+          is_archived?: boolean
+          name: string
+          organization_id: string
+          owner_id?: string
+          run_end?: string | null
+          run_start?: string | null
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          color?: string | null
+          created_at?: string
+          emoji?: string | null
+          id?: string
+          is_archived?: boolean
+          name?: string
+          organization_id?: string
+          owner_id?: string
+          run_end?: string | null
+          run_start?: string | null
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "frameworks_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
@@ -925,6 +1437,52 @@ export type Database = {
           },
         ]
       }
+      meeting_task_links: {
+        Row: {
+          created_at: string
+          id: string
+          meeting_id: string
+          organization_id: string
+          task_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          meeting_id: string
+          organization_id: string
+          task_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          meeting_id?: string
+          organization_id?: string
+          task_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meeting_task_links_meeting_id_fkey"
+            columns: ["meeting_id"]
+            isOneToOne: false
+            referencedRelation: "project_meetings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meeting_task_links_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meeting_task_links_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notifications: {
         Row: {
           action_url: string | null
@@ -1120,6 +1678,181 @@ export type Database = {
         }
         Relationships: []
       }
+      plan_decision_impacts: {
+        Row: {
+          affected_stage_task_id: string | null
+          created_at: string
+          decision_id: string
+          id: string
+          note: string
+          organization_id: string
+          sort_order: number
+        }
+        Insert: {
+          affected_stage_task_id?: string | null
+          created_at?: string
+          decision_id: string
+          id?: string
+          note?: string
+          organization_id: string
+          sort_order?: number
+        }
+        Update: {
+          affected_stage_task_id?: string | null
+          created_at?: string
+          decision_id?: string
+          id?: string
+          note?: string
+          organization_id?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plan_decision_impacts_affected_stage_task_id_fkey"
+            columns: ["affected_stage_task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "plan_decision_impacts_decision_id_fkey"
+            columns: ["decision_id"]
+            isOneToOne: false
+            referencedRelation: "plan_decisions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "plan_decision_impacts_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      plan_decisions: {
+        Row: {
+          created_at: string
+          decision: string
+          id: string
+          organization_id: string
+          plan_id: string
+          question: string
+          sort_order: number
+          stage_task_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          decision?: string
+          id?: string
+          organization_id: string
+          plan_id: string
+          question?: string
+          sort_order?: number
+          stage_task_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          decision?: string
+          id?: string
+          organization_id?: string
+          plan_id?: string
+          question?: string
+          sort_order?: number
+          stage_task_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plan_decisions_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "plan_decisions_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "task_lists"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "plan_decisions_stage_task_id_fkey"
+            columns: ["stage_task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      plan_stage_impacts: {
+        Row: {
+          created_at: string
+          id: string
+          impact_level: number | null
+          note: string
+          organization_id: string
+          plan_id: string
+          source_stage_id: string
+          target_stage_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          impact_level?: number | null
+          note?: string
+          organization_id: string
+          plan_id: string
+          source_stage_id: string
+          target_stage_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          impact_level?: number | null
+          note?: string
+          organization_id?: string
+          plan_id?: string
+          source_stage_id?: string
+          target_stage_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plan_stage_impacts_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "plan_stage_impacts_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "task_lists"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "plan_stage_impacts_source_stage_id_fkey"
+            columns: ["source_stage_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "plan_stage_impacts_target_stage_id_fkey"
+            columns: ["target_stage_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           active_time_entry_id: string | null
@@ -1227,6 +1960,121 @@ export type Database = {
           },
         ]
       }
+      project_contacts: {
+        Row: {
+          contact_id: string
+          created_at: string
+          id: string
+          project_id: string
+        }
+        Insert: {
+          contact_id: string
+          created_at?: string
+          id?: string
+          project_id: string
+        }
+        Update: {
+          contact_id?: string
+          created_at?: string
+          id?: string
+          project_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_contacts_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_contacts_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      project_documents: {
+        Row: {
+          category: string | null
+          content: string | null
+          created_at: string
+          file_key: string | null
+          file_size: number | null
+          id: string
+          kind: string
+          mime: string | null
+          name: string
+          organization_id: string
+          owner_id: string
+          parent_id: string | null
+          project_id: string
+          sort_order: number
+          updated_at: string
+          url: string | null
+        }
+        Insert: {
+          category?: string | null
+          content?: string | null
+          created_at?: string
+          file_key?: string | null
+          file_size?: number | null
+          id?: string
+          kind?: string
+          mime?: string | null
+          name?: string
+          organization_id: string
+          owner_id?: string
+          parent_id?: string | null
+          project_id: string
+          sort_order?: number
+          updated_at?: string
+          url?: string | null
+        }
+        Update: {
+          category?: string | null
+          content?: string | null
+          created_at?: string
+          file_key?: string | null
+          file_size?: number | null
+          id?: string
+          kind?: string
+          mime?: string | null
+          name?: string
+          organization_id?: string
+          owner_id?: string
+          parent_id?: string | null
+          project_id?: string
+          sort_order?: number
+          updated_at?: string
+          url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_documents_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_documents_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "project_documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_documents_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       project_expenses: {
         Row: {
           amount_cents: number
@@ -1258,6 +2106,183 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "project_expenses_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      project_meetings: {
+        Row: {
+          all_day: boolean
+          created_at: string
+          custom_fields: Json
+          event_id: string | null
+          id: string
+          location: string | null
+          meeting_at: string | null
+          notes: string | null
+          organization_id: string
+          owner_id: string
+          project_id: string
+          recording_id: string | null
+          sort_order: number
+          status: string
+          summary: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          all_day?: boolean
+          created_at?: string
+          custom_fields?: Json
+          event_id?: string | null
+          id?: string
+          location?: string | null
+          meeting_at?: string | null
+          notes?: string | null
+          organization_id: string
+          owner_id: string
+          project_id: string
+          recording_id?: string | null
+          sort_order?: number
+          status?: string
+          summary?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Update: {
+          all_day?: boolean
+          created_at?: string
+          custom_fields?: Json
+          event_id?: string | null
+          id?: string
+          location?: string | null
+          meeting_at?: string | null
+          notes?: string | null
+          organization_id?: string
+          owner_id?: string
+          project_id?: string
+          recording_id?: string | null
+          sort_order?: number
+          status?: string
+          summary?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_meetings_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_meetings_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_meetings_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_meetings_recording_id_fkey"
+            columns: ["recording_id"]
+            isOneToOne: false
+            referencedRelation: "recordings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      project_payments: {
+        Row: {
+          amount_cents: number
+          contact_id: string | null
+          created_at: string
+          currency: string
+          custom_fields: Json
+          demand_date: string | null
+          direction: string
+          due_date: string | null
+          id: string
+          notes: string | null
+          organization_id: string
+          owner_id: string
+          paid_date: string | null
+          project_id: string
+          sort_order: number
+          status: string
+          terms_net_days: number | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          amount_cents?: number
+          contact_id?: string | null
+          created_at?: string
+          currency?: string
+          custom_fields?: Json
+          demand_date?: string | null
+          direction?: string
+          due_date?: string | null
+          id?: string
+          notes?: string | null
+          organization_id: string
+          owner_id?: string
+          paid_date?: string | null
+          project_id: string
+          sort_order?: number
+          status?: string
+          terms_net_days?: number | null
+          title?: string
+          updated_at?: string
+        }
+        Update: {
+          amount_cents?: number
+          contact_id?: string | null
+          created_at?: string
+          currency?: string
+          custom_fields?: Json
+          demand_date?: string | null
+          direction?: string
+          due_date?: string | null
+          id?: string
+          notes?: string | null
+          organization_id?: string
+          owner_id?: string
+          paid_date?: string | null
+          project_id?: string
+          sort_order?: number
+          status?: string
+          terms_net_days?: number | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_payments_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_payments_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_payments_project_id_fkey"
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
@@ -1326,9 +2351,13 @@ export type Database = {
           currency: string
           description: string | null
           emoji: string | null
+          entity_column_labels: Json
+          entity_column_order: Json
+          entity_hidden_columns: Json
           hourly_rate_cents: number | null
           id: string
           is_archived: boolean
+          last_backup_at: string | null
           name: string
           organization_id: string
           owner_id: string
@@ -1353,9 +2382,13 @@ export type Database = {
           currency?: string
           description?: string | null
           emoji?: string | null
+          entity_column_labels?: Json
+          entity_column_order?: Json
+          entity_hidden_columns?: Json
           hourly_rate_cents?: number | null
           id?: string
           is_archived?: boolean
+          last_backup_at?: string | null
           name: string
           organization_id: string
           owner_id: string
@@ -1380,9 +2413,13 @@ export type Database = {
           currency?: string
           description?: string | null
           emoji?: string | null
+          entity_column_labels?: Json
+          entity_column_order?: Json
+          entity_hidden_columns?: Json
           hourly_rate_cents?: number | null
           id?: string
           is_archived?: boolean
+          last_backup_at?: string | null
           name?: string
           organization_id?: string
           owner_id?: string
@@ -2282,6 +3319,7 @@ export type Database = {
       task_custom_fields: {
         Row: {
           created_at: string
+          entity_type: Database["public"]["Enums"]["custom_field_entity"]
           field_key: string
           field_label: string
           field_type: Database["public"]["Enums"]["custom_field_type"]
@@ -2294,6 +3332,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          entity_type?: Database["public"]["Enums"]["custom_field_entity"]
           field_key: string
           field_label: string
           field_type: Database["public"]["Enums"]["custom_field_type"]
@@ -2306,6 +3345,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          entity_type?: Database["public"]["Enums"]["custom_field_entity"]
           field_key?: string
           field_label?: string
           field_type?: Database["public"]["Enums"]["custom_field_type"]
@@ -2421,6 +3461,7 @@ export type Database = {
         Row: {
           archive_expires_at: string | null
           archived_at: string | null
+          calendar_display_mode: string
           color: string | null
           created_at: string
           emoji: string | null
@@ -2432,6 +3473,11 @@ export type Database = {
           name: string
           organization_id: string
           owner_id: string
+          parent_plan_id: string | null
+          plan_end_date: string | null
+          plan_general_goal: string | null
+          plan_horizon: string | null
+          plan_start_date: string | null
           project_id: string | null
           sort_order: number
           updated_at: string
@@ -2439,6 +3485,7 @@ export type Database = {
         Insert: {
           archive_expires_at?: string | null
           archived_at?: string | null
+          calendar_display_mode?: string
           color?: string | null
           created_at?: string
           emoji?: string | null
@@ -2450,6 +3497,11 @@ export type Database = {
           name: string
           organization_id: string
           owner_id: string
+          parent_plan_id?: string | null
+          plan_end_date?: string | null
+          plan_general_goal?: string | null
+          plan_horizon?: string | null
+          plan_start_date?: string | null
           project_id?: string | null
           sort_order?: number
           updated_at?: string
@@ -2457,6 +3509,7 @@ export type Database = {
         Update: {
           archive_expires_at?: string | null
           archived_at?: string | null
+          calendar_display_mode?: string
           color?: string | null
           created_at?: string
           emoji?: string | null
@@ -2468,6 +3521,11 @@ export type Database = {
           name?: string
           organization_id?: string
           owner_id?: string
+          parent_plan_id?: string | null
+          plan_end_date?: string | null
+          plan_general_goal?: string | null
+          plan_horizon?: string | null
+          plan_start_date?: string | null
           project_id?: string | null
           sort_order?: number
           updated_at?: string
@@ -2485,6 +3543,13 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_lists_parent_plan_id_fkey"
+            columns: ["parent_plan_id"]
+            isOneToOne: false
+            referencedRelation: "task_lists"
             referencedColumns: ["id"]
           },
           {
@@ -2536,6 +3601,10 @@ export type Database = {
           organization_id: string
           owner_id: string
           parent_task_id: string | null
+          plan_quant_target: string | null
+          plan_status: string | null
+          plan_success_metric: string | null
+          plan_time_range: string | null
           recurrence_ends_at: string | null
           recurrence_original_id: string | null
           recurrence_rule: string | null
@@ -2593,6 +3662,10 @@ export type Database = {
           organization_id: string
           owner_id: string
           parent_task_id?: string | null
+          plan_quant_target?: string | null
+          plan_status?: string | null
+          plan_success_metric?: string | null
+          plan_time_range?: string | null
           recurrence_ends_at?: string | null
           recurrence_original_id?: string | null
           recurrence_rule?: string | null
@@ -2650,6 +3723,10 @@ export type Database = {
           organization_id?: string
           owner_id?: string
           parent_task_id?: string | null
+          plan_quant_target?: string | null
+          plan_status?: string | null
+          plan_success_metric?: string | null
+          plan_time_range?: string | null
           recurrence_ends_at?: string | null
           recurrence_original_id?: string | null
           recurrence_rule?: string | null
@@ -3275,6 +4352,16 @@ export type Database = {
       }
       decline_org_invite: { Args: { p_token: string }; Returns: Json }
       delete_organization: { Args: { p_org_id: string }; Returns: undefined }
+      duplicate_plan: {
+        Args: {
+          p_end?: string
+          p_horizon?: string
+          p_new_name?: string
+          p_source_plan_id: string
+          p_start?: string
+        }
+        Returns: string
+      }
       duplicate_task_tree: {
         Args: {
           p_source_task_id: string
@@ -3395,6 +4482,14 @@ export type Database = {
         }
         Returns: Json
       }
+      user_can_access_document: {
+        Args: { p_doc_id: string; p_uid: string }
+        Returns: boolean
+      }
+      user_can_read_framework: {
+        Args: { p_framework_id: string }
+        Returns: boolean
+      }
       user_has_share: {
         Args: {
           p_entity_id: string
@@ -3412,6 +4507,14 @@ export type Database = {
         Returns: boolean
       }
       user_is_super_admin: { Args: { target_user: string }; Returns: boolean }
+      user_owns_framework: {
+        Args: { p_framework_id: string }
+        Returns: boolean
+      }
+      user_sees_contact_via_project: {
+        Args: { p_contact_id: string; p_uid: string }
+        Returns: boolean
+      }
     }
     Enums: {
       attachment_type:
@@ -3422,6 +4525,7 @@ export type Database = {
         | "image"
         | "link"
       billing_plan: "free" | "pro" | "enterprise"
+      custom_field_entity: "task" | "meeting" | "payment"
       custom_field_type:
         | "text"
         | "number"
@@ -3502,7 +4606,7 @@ export type Database = {
         | "past_due"
         | "canceled"
         | "incomplete"
-      task_list_kind: "project" | "custom"
+      task_list_kind: "project" | "custom" | "plan"
       task_status:
         | "todo"
         | "in_progress"
@@ -3665,6 +4769,7 @@ export const Constants = {
         "link",
       ],
       billing_plan: ["free", "pro", "enterprise"],
+      custom_field_entity: ["task", "meeting", "payment"],
       custom_field_type: [
         "text",
         "number",
@@ -3753,7 +4858,7 @@ export const Constants = {
         "canceled",
         "incomplete",
       ],
-      task_list_kind: ["project", "custom"],
+      task_list_kind: ["project", "custom", "plan"],
       task_status: [
         "todo",
         "in_progress",

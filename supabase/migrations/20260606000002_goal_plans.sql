@@ -11,15 +11,14 @@
 --   • clone-to-shorter-plan with a parent link (parent_plan_id) via duplicate_plan()
 --   • calendar visualization mode (off / list / framework)
 --
+-- The 'plan' value of task_list_kind is added in the companion migration
+-- 20260606000001_goal_plans_kind.sql (separate tx — Postgres forbids using a
+-- freshly-added enum value in the same transaction that adds it).
+--
 -- Deliberately does NOT touch the sensitive task-save path
 -- (TaskRow/TaskColumn/useTasks). Access model mirrors tasks/task_lists:
 -- org-member based (super_admin override).
 -- =============================================================================
-
--- 1. New list kind -----------------------------------------------------------
--- NOTE: only ADDING the enum value here; we do not reference it in this same
--- migration (Postgres forbids using a freshly-added enum value in the same tx).
-alter type public.task_list_kind add value if not exists 'plan';
 
 -- 2. Plan-level columns on task_lists ----------------------------------------
 alter table public.task_lists

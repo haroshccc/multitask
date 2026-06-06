@@ -42,6 +42,9 @@ const Goals = lazy(() =>
 const Frameworks = lazy(() =>
   import("@/pages/app/Frameworks").then((m) => ({ default: m.Frameworks }))
 );
+const Contacts = lazy(() =>
+  import("@/pages/app/Contacts").then((m) => ({ default: m.Contacts }))
+);
 const ProjectShell = lazy(() =>
   import("@/pages/app/ProjectShell").then((m) => ({ default: m.ProjectShell }))
 );
@@ -225,6 +228,14 @@ export default function App() {
           element={
             <Suspense fallback={<LoadingShell />}>
               <Frameworks />
+            </Suspense>
+          }
+        />
+        <Route
+          path="contacts"
+          element={
+            <Suspense fallback={<LoadingShell />}>
+              <Contacts />
             </Suspense>
           }
         />

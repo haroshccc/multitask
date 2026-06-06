@@ -15,6 +15,14 @@ export function useOrgContacts() {
   });
 }
 
+export function useContactProjects(contactId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["contact-projects", contactId ?? ""],
+    queryFn: () => service.listContactProjects(contactId!),
+    enabled: !!contactId,
+  });
+}
+
 export function useProjectContacts(projectId: string | null | undefined) {
   return useQuery({
     queryKey: projectKey(projectId ?? ""),

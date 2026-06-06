@@ -77,6 +77,20 @@ export async function listProjectContacts(
     ) as ProjectContact[];
 }
 
+/** Project names a contact is linked to (via `project_contacts`). */
+export async function listContactProjects(
+  contactId: string
+): Promise<{ id: string; name: string }[]> {
+  const { data, error } = await db
+    .from("project_contacts")
+    .select("project:projects!inner(id, name)")
+    .eq("contact_id", contactId);
+  if (error) throw error;
+  return (data ?? [])
+    .map((r: any) => r.project)
+    .filter(Boolean) as { id: string; name: string }[];
+}
+
 export async function createContact(payload: ContactInsert): Promise<Contact> {
   const { data, error } = await db
     .from("contacts")

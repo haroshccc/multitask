@@ -70,6 +70,8 @@ import {
   ColumnsMenu,
   type ColumnsMenuItem,
 } from "@/components/configurable-table/ColumnsMenu";
+import { ExportExcelButton } from "@/components/configurable-table/ExportExcelButton";
+import { buildTasksSheet } from "@/lib/export/projectSheets";
 import {
   DynCell,
   OptionsEditorModal,
@@ -733,6 +735,14 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
             onToggle={toggleHidden}
           />
         </div>
+        {tasks.length > 0 && (
+          <div className="shrink-0">
+            <ExportExcelButton
+              filename="משימות"
+              build={() => buildTasksSheet(tasks, customFields)}
+            />
+          </div>
+        )}
         <button
           type="button"
           onClick={handleAddTopLevel}

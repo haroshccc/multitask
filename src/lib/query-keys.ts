@@ -33,6 +33,13 @@ export const queryKeys = {
   taskLists: (orgId: string) => ["task-lists", orgId] as const,
   taskList: (listId: string) => ["task-list", listId] as const,
 
+  // Goal plans (תוכניות עבודה)
+  plans: (orgId: string) => ["plans", orgId] as const,
+  plan: (planId: string) => ["plan", planId] as const,
+  planTasks: (planId: string) => ["plan", planId, "tasks"] as const,
+  planDecisions: (planId: string) => ["plan", planId, "decisions"] as const,
+  planStageImpacts: (planId: string) => ["plan", planId, "impacts"] as const,
+
   // Projects
   projects: (orgId: string, filters?: FilterConfig) =>
     ["projects", orgId, filters ?? {}] as const,
@@ -167,4 +174,6 @@ export const queryFamilies = {
   shoppingRunFamily: (runId: string) => ["shopping-run", runId] as const,
   allFrameworks: (orgId: string) => ["frameworks", orgId] as const,
   frameworkFamily: (frameworkId: string) => ["framework", frameworkId] as const,
+  allPlans: (orgId: string) => ["plans", orgId] as const,
+  planFamily: (planId: string) => ["plan", planId] as const,
 } as const;

@@ -36,6 +36,7 @@ import {
 import type { Task, TimeEntry } from "@/lib/types/domain";
 import { TaskEditModal, type TaskCreateDraft } from "@/components/tasks/TaskEditModal";
 import { FrameworkGoalsSection } from "@/components/frameworks/FrameworkGoalsSection";
+import { PlansSection } from "@/components/plans/PlansSection";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -358,6 +359,9 @@ export function Goals() {
         </button>
       }
     >
+      {/* Work plans — separate area, self-contained. */}
+      <PlansSection />
+
       {/* Frameworks goals — separate area, self-contained. */}
       <FrameworkGoalsSection />
 

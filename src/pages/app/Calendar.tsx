@@ -618,6 +618,51 @@ export function Calendar() {
     [lists]
   );
 
+  // Grouped lists picker: my personal lists first, then lists shared with me,
+  // then project lists. Event calendars stay in their own section (rendered by
+  // CalendarChrome after these). Empty groups are dropped.
+  const listSections = useMemo(() => {
+    const toUnified = (l: (typeof lists)[number]) => ({
+      id: l.id,
+      name: l.name,
+      emoji: l.emoji,
+      color: l.color,
+    });
+    const sections: {
+      key: string;
+      label: string | null;
+      lists: typeof unifiedLists;
+    }[] = [];
+
+    const mine = lists.filter((l) => !l.project_id && l.owner_id === user?.id);
+    if (mine.length > 0)
+      sections.push({
+        key: "mine",
+        label: "רשימות אישיות שלי",
+        lists: mine.map(toUnified),
+      });
+
+    const shared = lists.filter(
+      (l) => !l.project_id && l.owner_id !== user?.id
+    );
+    if (shared.length > 0)
+      sections.push({
+        key: "shared",
+        label: "רשימות ששותפו איתי",
+        lists: shared.map(toUnified),
+      });
+
+    const projects = lists.filter((l) => l.project_id);
+    if (projects.length > 0)
+      sections.push({
+        key: "projects",
+        label: "פרויקטים",
+        lists: projects.map(toUnified),
+      });
+
+    return sections;
+  }, [lists, unifiedLists, user?.id]);
+
   const unifiedCalendars = useMemo(
     () =>
       eventCalendars.map((c) => ({
@@ -671,6 +716,7 @@ export function Calendar() {
           layer={layer}
           onLayerChange={setLayer}
           lists={unifiedLists}
+          listSections={listSections}
           hiddenListIds={hiddenLists}
           onToggleListVisibility={toggleListVisibility}
           onCreateList={handleCreateList}

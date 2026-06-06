@@ -46,6 +46,8 @@ import {
   ColumnsMenu,
   type ColumnsMenuItem,
 } from "@/components/configurable-table/ColumnsMenu";
+import { ExportExcelButton } from "@/components/configurable-table/ExportExcelButton";
+import { buildMeetingsSheet } from "@/lib/export/projectSheets";
 import {
   DynCell,
   OptionsEditorModal,
@@ -317,6 +319,12 @@ export function ProjectMeetingsTab() {
               items={columnMenuItems}
               hiddenIds={hiddenIds}
               onToggle={toggleHidden}
+            />
+          )}
+          {meetings.length > 0 && (
+            <ExportExcelButton
+              filename="פגישות"
+              build={() => buildMeetingsSheet(meetings, customFields)}
             />
           )}
           <button

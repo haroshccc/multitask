@@ -34,6 +34,8 @@ import {
   ColumnsMenu,
   type ColumnsMenuItem,
 } from "@/components/configurable-table/ColumnsMenu";
+import { ExportExcelButton } from "@/components/configurable-table/ExportExcelButton";
+import { buildPaymentsSheet } from "@/lib/export/projectSheets";
 import {
   DynCell,
   OptionsEditorModal,
@@ -326,6 +328,12 @@ export function ProjectPaymentsTab() {
             hiddenIds={hiddenIds}
             onToggle={toggleHidden}
           />
+          {payments.length > 0 && (
+            <ExportExcelButton
+              filename="תשלומים"
+              build={() => buildPaymentsSheet(payments, customFields)}
+            />
+          )}
           <button
             type="button"
             onClick={handleCreate}

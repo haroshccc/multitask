@@ -1,4 +1,5 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import JSZip from "jszip";
 import { Link } from "react-router-dom";
 import {
   ListTodo,
@@ -10,12 +11,26 @@ import {
   AlertTriangle,
   ArrowDownLeft,
   ArrowUpRight,
+  DownloadCloud,
+  Loader2,
 } from "lucide-react";
 import { useProjectContext } from "@/pages/app/ProjectShell";
 import { useTasksByProject } from "@/lib/hooks/useTasks";
 import { useProjectMeetings } from "@/lib/hooks/useProjectMeetings";
 import { useProjectPayments } from "@/lib/hooks/useProjectPayments";
 import { useProjectEvents } from "@/lib/hooks/useProjectEvents";
+import { useProjectDocuments } from "@/lib/hooks/useProjectDocuments";
+import { useProjectCustomFields } from "@/lib/hooks/useTaskCustomFields";
+import { useUpdateProject } from "@/lib/hooks/useProjects";
+import {
+  buildTasksSheet,
+  buildMeetingsSheet,
+  buildPaymentsSheet,
+} from "@/lib/export/projectSheets";
+import { buildWorkbook } from "@/lib/export/xlsx";
+import { buildDocsZip, fetchFileByKey } from "@/lib/export/zip";
+import { downloadBlob } from "@/lib/export/download";
+import * as XLSX from "xlsx";
 import { cn } from "@/lib/utils/cn";
 
 // ── Local format helpers (mirrors ProjectPaymentsTab) ────────────────────────
@@ -124,8 +139,33 @@ function EmptyHint({ children }: { children: React.ReactNode }) {
 
 // ── Main component ───────────────────────────────────────────────────────────
 
+/** "לפני X" relative phrasing for a past timestamp (backup age). */
+function formatBackupAge(iso: string | null): string {
+  if (!iso) return "מעולם לא גובה";
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return "מעולם לא גובה";
+  const diffMs = Date.now() - then;
+  const days = Math.floor(diffMs / MS_PER_DAY);
+  if (days <= 0) {
+    const hours = Math.floor(diffMs / (60 * 60 * 1000));
+    if (hours <= 0) return "גובה לאחרונה: ממש עכשיו";
+    return `גובה לאחרונה: לפני ${hours} שעות`;
+  }
+  if (days === 1) return "גובה לאחרונה: אתמול";
+  if (days < 30) return `גובה לאחרונה: לפני ${days} ימים`;
+  return `גובה לאחרונה: ${formatDate(iso)}`;
+}
+
+/** Days since the last backup, or null if never backed up. */
+function backupAgeDays(iso: string | null): number | null {
+  if (!iso) return null;
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return null;
+  return Math.floor((Date.now() - then) / MS_PER_DAY);
+}
+
 export function ProjectDashboardTab() {
-  const { projectId } = useProjectContext();
+  const { project, projectId } = useProjectContext();
 
   const eventsRange = useMemo(() => {
     const now = new Date();
@@ -143,6 +183,69 @@ export function ProjectDashboardTab() {
     projectId,
     eventsRange
   );
+
+  // ── Backup data sources ──────────────────────────────────────────────────
+  const { data: documents = [] } = useProjectDocuments(projectId);
+  const { data: taskFields = [] } = useProjectCustomFields(projectId, "task");
+  const { data: meetingFields = [] } = useProjectCustomFields(
+    projectId,
+    "meeting"
+  );
+  const { data: paymentFields = [] } = useProjectCustomFields(
+    projectId,
+    "payment"
+  );
+  const updateProject = useUpdateProject();
+  const [isBackingUp, setIsBackingUp] = useState(false);
+
+  const lastBackupAt = (project as { last_backup_at?: string | null })
+    .last_backup_at ?? null;
+  const ageDays = backupAgeDays(lastBackupAt);
+  const needsBackup = ageDays === null || ageDays >= 7;
+
+  const projectName = project.name?.trim() || "פרויקט";
+
+  const handleBackup = async () => {
+    setIsBackingUp(true);
+    try {
+      const zip = new JSZip();
+      const root = zip.folder(projectName) ?? zip;
+
+      // 1 — full documents tree under /<project>/מסמכים/…
+      await buildDocsZip(
+        root.folder("מסמכים") ?? root,
+        "",
+        documents,
+        null,
+        fetchFileByKey
+      );
+
+      // 2 — one workbook with all three tables under /<project>/טבלאות.xlsx
+      const wb = buildWorkbook([
+        buildTasksSheet(tasks, taskFields),
+        buildMeetingsSheet(meetings, meetingFields),
+        buildPaymentsSheet(payments, paymentFields),
+      ]);
+      const xlsxArray = XLSX.write(wb, {
+        type: "array",
+        bookType: "xlsx",
+      }) as ArrayBuffer;
+      root.file("טבלאות.xlsx", xlsxArray);
+
+      const blob = await zip.generateAsync({ type: "blob" });
+      const stamp = new Date().toISOString().slice(0, 10);
+      downloadBlob(`${projectName} - גיבוי ${stamp}.zip`, blob);
+
+      await updateProject.mutateAsync({
+        projectId,
+        patch: { last_backup_at: new Date().toISOString() } as any,
+      });
+    } catch {
+      alert("שגיאה ביצירת הגיבוי");
+    } finally {
+      setIsBackingUp(false);
+    }
+  };
 
   const nowMs = Date.now();
 
@@ -216,8 +319,57 @@ export function ProjectDashboardTab() {
   }, [events, nowMs]);
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-      {/* 1 — Tasks */}
+    <div className="space-y-3">
+      {/* Backup & download everything */}
+      <div
+        className={cn(
+          "card p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3",
+          needsBackup && "border-amber-300 bg-amber-50/60"
+        )}
+      >
+        <div className="min-w-0">
+          <h3 className="flex items-center gap-2 text-sm font-semibold text-ink-900">
+            <DownloadCloud className="w-4 h-4 text-primary-600" />
+            גיבוי והורדה
+          </h3>
+          <p className="text-xs text-ink-500 mt-1">
+            הורדת כל מסמכי הפרויקט והטבלאות (משימות, פגישות, תשלומים) כקובץ ZIP
+            אחד.
+          </p>
+          <div className="mt-1.5 text-[11px]">
+            <span className="text-ink-500">{formatBackupAge(lastBackupAt)}</span>
+            {needsBackup && (
+              <span className="inline-flex items-center gap-1 ms-2 text-amber-700 font-medium">
+                <AlertTriangle className="w-3.5 h-3.5" />
+                {ageDays === null
+                  ? "מומלץ לגבות — עוד לא בוצע גיבוי"
+                  : `מומלץ לגבות — עברו ${ageDays} ימים`}
+              </span>
+            )}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={handleBackup}
+          disabled={isBackingUp}
+          className="btn-accent text-sm inline-flex items-center gap-2 shrink-0 disabled:opacity-60"
+        >
+          {isBackingUp ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              מגבה…
+            </>
+          ) : (
+            <>
+              <DownloadCloud className="w-4 h-4" />
+              גבי והורידי הכל
+            </>
+          )}
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {/* 1 — Tasks */}
       <Card title="משימות" icon={ListTodo} to="../tasks" linkLabel="לכל המשימות">
         {tasksLoading ? (
           <SkeletonLines />
@@ -413,6 +565,7 @@ export function ProjectDashboardTab() {
           </div>
         )}
       </Card>
+      </div>
     </div>
   );
 }

@@ -70,6 +70,11 @@ const ProjectPaymentsTab = lazy(() =>
     default: m.ProjectPaymentsTab,
   }))
 );
+const ProjectContactsTab = lazy(() =>
+  import("@/pages/app/project/ProjectContactsTab").then((m) => ({
+    default: m.ProjectContactsTab,
+  }))
+);
 const ProjectDocumentsTab = lazy(() =>
   import("@/pages/app/project/ProjectDocumentsTab").then((m) => ({
     default: m.ProjectDocumentsTab,
@@ -261,6 +266,14 @@ export default function App() {
             element={
               <Suspense fallback={<LoadingShell />}>
                 <ProjectPaymentsTab />
+              </Suspense>
+            }
+          />
+          <Route
+            path="contacts"
+            element={
+              <Suspense fallback={<LoadingShell />}>
+                <ProjectContactsTab />
               </Suspense>
             }
           />

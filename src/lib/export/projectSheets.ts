@@ -13,6 +13,7 @@ import type { TaskCustomField } from "@/lib/types/domain";
 import type { Task } from "@/lib/types/domain";
 import type { ProjectMeeting } from "@/lib/services/project-meetings";
 import type { ProjectPayment } from "@/lib/services/project-payments";
+import type { Contact } from "@/lib/services/contacts";
 
 // ── Shared formatting helpers ────────────────────────────────────────────────
 
@@ -194,6 +195,46 @@ export function buildMeetingsSheet(
       m.summary ?? "",
     ];
     return [...fixed, ...customCells(m, customFields)];
+  });
+  return { name: sheetName, headers, rows };
+}
+
+// ── Contacts ─────────────────────────────────────────────────────────────────
+
+const CONTACT_FIXED_HEADERS = [
+  "שם",
+  "סוג",
+  "חברה",
+  "ח.פ / ע.מ",
+  "אימייל",
+  "טלפון",
+  "כתובת",
+  "הערות",
+];
+
+const CONTACT_TYPE_LABEL: Record<string, string> = {
+  customer: "לקוח",
+  supplier: "ספק",
+};
+
+export function buildContactsSheet(
+  contacts: Contact[],
+  customFields: TaskCustomField[],
+  sheetName = "אנשי קשר"
+): ExportSheet {
+  const headers = [...CONTACT_FIXED_HEADERS, ...customHeaders(customFields)];
+  const rows = contacts.map((c) => {
+    const fixed: (string | number | null)[] = [
+      c.name?.trim() || "",
+      CONTACT_TYPE_LABEL[c.type] ?? c.type ?? "",
+      c.company ?? "",
+      c.tax_id ?? "",
+      c.email ?? "",
+      c.phone ?? "",
+      c.address ?? "",
+      c.notes ?? "",
+    ];
+    return [...fixed, ...customCells(c, customFields)];
   });
   return { name: sheetName, headers, rows };
 }

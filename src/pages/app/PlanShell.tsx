@@ -19,11 +19,13 @@ import {
   Square,
   Columns3,
   Rows3,
+  Share2,
 } from "lucide-react";
 import { ScreenScaffold } from "@/components/layout/ScreenScaffold";
 import { cn } from "@/lib/utils/cn";
 import { useOrgScope } from "@/lib/hooks/useOrgScope";
 import { usePlan, usePlanTasks, useUpdatePlan } from "@/lib/hooks/usePlans";
+import { useSharesForTaskLists } from "@/lib/hooks/useTaskLists";
 import {
   buildPlanTree,
   unassignedPlanTasks,
@@ -34,6 +36,7 @@ import {
 } from "@/lib/types/plans";
 import { ClonePlanDialog } from "@/components/plans/ClonePlanDialog";
 import { ImportantThingsBanner } from "@/components/plans/ImportantThingsBanner";
+import { ShareListModal } from "@/components/tasks/ShareListModal";
 import { PlanTasksTable } from "@/components/plans/PlanTasksTable";
 import { PlanDecisionsTab } from "@/components/plans/PlanDecisionsTab";
 import { PlanImpactMatrix } from "@/components/plans/PlanImpactMatrix";
@@ -120,16 +123,31 @@ function PlanShellLoaded({
   const navigate = useNavigate();
   const updatePlan = useUpdatePlan();
   const [cloneOpen, setCloneOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>(() => readViewMode());
   const setViewModePersist = (v: ViewMode) => {
     setViewMode(v);
     try { localStorage.setItem(VIEW_KEY, v); } catch { /* ignore */ }
   };
 
-  const canEdit = plan.owner_id === userId;
-  const stages = useMemo(
-    () => buildPlanTree(tasks).map((s) => ({ id: s.id, title: s.title })),
-    [tasks]
+  // Edit access: the owner, or anyone granted a write-share on this plan
+  // (task_lists/tasks RLS honors write shares; shares "self read" lets the
+  // grantee see their own row so we can gate the UI accordingly).
+  const { data: planShares = [] } = useSharesForTaskLists([planId]);
+  const hasWriteShare = planShares.some(
+    (s) => s.user_id === userId && s.permission === "write"
+  );
+  const canEdit = plan.owner_id === userId || hasWriteShare;
+  const tree = useMemo(() => buildPlanTree(tasks), [tasks]);
+  const stages = useMemo(() => tree.map((s) => ({ id: s.id, title: s.title })), [tree]);
+  const assignTree = useMemo(
+    () =>
+      tree.map((s) => ({
+        id: s.id,
+        title: s.title,
+        goals: s.goals.map((g) => ({ id: g.id, title: g.title })),
+      })),
+    [tree]
   );
   const importantItems = useMemo(() => unassignedPlanTasks(tasks), [tasks]);
 
@@ -137,21 +155,32 @@ function PlanShellLoaded({
     <ScreenScaffold
       title=""
       actions={
-        <button
-          type="button"
-          disabled={!canEdit}
-          onClick={() => setCloneOpen(true)}
-          className="btn-ghost text-sm flex items-center gap-1.5 disabled:opacity-40"
-        >
-          <Copy className="w-4 h-4" />
-          שכפל לתוכנית קצרה
-        </button>
+        <>
+          <button
+            type="button"
+            disabled={!canEdit}
+            onClick={() => setShareOpen(true)}
+            className="btn-ghost text-sm flex items-center gap-1.5 disabled:opacity-40"
+          >
+            <Share2 className="w-4 h-4" />
+            שיתוף
+          </button>
+          <button
+            type="button"
+            disabled={!canEdit}
+            onClick={() => setCloneOpen(true)}
+            className="btn-ghost text-sm flex items-center gap-1.5 disabled:opacity-40"
+          >
+            <Copy className="w-4 h-4" />
+            שכפל לתוכנית קצרה
+          </button>
+        </>
       }
     >
       <PlanHeader plan={plan} planId={planId} canEdit={canEdit} onPatch={(p) => updatePlan.mutate({ planId, patch: p })} />
 
       <div className="mt-4">
-        <ImportantThingsBanner planId={planId} items={importantItems} stages={stages} canEdit={canEdit} />
+        <ImportantThingsBanner planId={planId} items={importantItems} assignTree={assignTree} canEdit={canEdit} />
       </div>
 
       <div className="mt-2 flex items-center justify-end">
@@ -197,6 +226,8 @@ function PlanShellLoaded({
           }}
         />
       )}
+
+      {shareOpen && <ShareListModal list={plan} onClose={() => setShareOpen(false)} />}
     </ScreenScaffold>
   );
 }

@@ -88,9 +88,52 @@ export interface PlanTask extends Task {
   plan_status: PlanStatus | null;
 }
 
-/** A stage (is_phase) with its child plan-tasks attached. */
+/** A goal/aspiration (יעד/שאיפה) — child of a stage — with its small tasks. */
+export interface PlanGoalNode extends PlanTask {
+  tasks: PlanTask[];
+}
+
+/** A stage (שלב/קטגוריה) with its goals; each goal owns its tasks.
+ *  Hierarchy: stage (is_phase) → goal → task. */
 export interface PlanStageNode extends PlanTask {
-  children: PlanTask[];
+  goals: PlanGoalNode[];
+}
+
+/** "Things important to me" — loose plan tasks not yet under any stage/goal
+ *  (no parent, not a stage). They live only in the banner until assigned. */
+export function unassignedPlanTasks(tasks: PlanTask[]): PlanTask[] {
+  return tasks
+    .filter((t) => !t.is_phase && !t.parent_task_id)
+    .sort((a, b) => a.sort_order - b.sort_order);
+}
+
+/** Group a flat list of plan tasks into the 3-level tree:
+ *  stage (is_phase) → goal (parent = stage) → task (parent = goal).
+ *  Loose items (no parent) are excluded — they belong in the banner. */
+export function buildPlanTree(tasks: PlanTask[]): PlanStageNode[] {
+  const sortFn = (a: PlanTask, b: PlanTask) => a.sort_order - b.sort_order;
+  const childrenOf = new Map<string, PlanTask[]>();
+  for (const t of tasks) {
+    if (t.is_phase || !t.parent_task_id) continue;
+    const arr = childrenOf.get(t.parent_task_id) ?? [];
+    arr.push(t);
+    childrenOf.set(t.parent_task_id, arr);
+  }
+  const stages = tasks.filter((t) => t.is_phase).sort(sortFn);
+  return stages.map((stage) => ({
+    ...stage,
+    goals: (childrenOf.get(stage.id) ?? []).sort(sortFn).map((goal) => ({
+      ...goal,
+      tasks: (childrenOf.get(goal.id) ?? []).slice().sort(sortFn),
+    })),
+  }));
+}
+
+/** Progress 0..1 across a stage's goals (a goal done = plan_status 'done'). */
+export function stageProgress(stage: PlanStageNode): number {
+  if (stage.goals.length === 0) return stage.plan_status === "done" ? 1 : 0;
+  const done = stage.goals.filter((g) => g.plan_status === "done").length;
+  return done / stage.goals.length;
 }
 
 export interface PlanDecision {
@@ -129,40 +172,4 @@ export interface PlanStageImpact {
   note: string;
   created_at: string;
   updated_at: string;
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/** Group a flat list of plan tasks into stages → children, preserving
- *  sort_order at both levels. Tasks whose parent is missing are skipped. */
-export function buildPlanTree(tasks: PlanTask[]): PlanStageNode[] {
-  const stages = tasks
-    .filter((t) => t.is_phase)
-    .sort((a, b) => a.sort_order - b.sort_order)
-    .map((s) => ({ ...s, children: [] as PlanTask[] }));
-  const byId = new Map(stages.map((s) => [s.id, s]));
-  for (const t of tasks) {
-    if (t.is_phase || !t.parent_task_id) continue;
-    const stage = byId.get(t.parent_task_id);
-    if (stage) stage.children.push(t);
-  }
-  for (const s of stages) s.children.sort((a, b) => a.sort_order - b.sort_order);
-  return stages;
-}
-
-/** "Things important to us" — loose plan tasks not yet under any stage
- *  (no parent, not a stage). They live only in the banner until assigned. */
-export function unassignedPlanTasks(tasks: PlanTask[]): PlanTask[] {
-  return tasks
-    .filter((t) => !t.is_phase && !t.parent_task_id)
-    .sort((a, b) => a.sort_order - b.sort_order);
-}
-
-/** Progress 0..1 across a stage's children (done counts as complete). */
-export function stageProgress(stage: PlanStageNode): number {
-  if (stage.children.length === 0) return stage.plan_status === "done" ? 1 : 0;
-  const done = stage.children.filter((c) => c.plan_status === "done").length;
-  return done / stage.children.length;
 }

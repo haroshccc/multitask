@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   HelpCircle,
   CheckCircle2,
@@ -5,6 +6,8 @@ import {
   Plus,
   Trash2,
   Layers,
+  ChevronDown,
+  ChevronLeft,
 } from "lucide-react";
 import {
   usePlanDecisions,
@@ -127,10 +130,57 @@ function DecisionCard({
   // Impacts are on OTHER stages — exclude this decision's own stage.
   const otherStages = stages.filter((s) => s.id !== decision.stage_task_id);
 
+  // Auto-minimize: a decision that's already been made (has decision text)
+  // starts collapsed; ones still needing a decision stay open.
+  const resolved = (decision.decision ?? "").trim().length > 0;
+  const [open, setOpen] = useState(!resolved);
+
   return (
-    <div className="card p-3 space-y-2">
+    <div className="card p-3">
+      {/* Header — click to expand/collapse */}
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          className="p-0.5 rounded hover:bg-ink-100 text-ink-400 shrink-0"
+          aria-label={open ? "כווץ" : "הרחב"}
+        >
+          {open ? <ChevronDown className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+        </button>
+        <HelpCircle className="w-4 h-4 text-amber-500 shrink-0" />
+        {open ? (
+          <span className="flex-1" />
+        ) : (
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            className="flex-1 min-w-0 text-start truncate text-sm text-ink-700"
+            title={decision.question || undefined}
+          >
+            {decision.question?.trim() || "החלטה חדשה"}
+          </button>
+        )}
+        {!open && resolved && (
+          <span title="הוחלט" className="shrink-0">
+            <CheckCircle2 className="w-4 h-4 text-success-500" />
+          </span>
+        )}
+        {canEdit && (
+          <button
+            type="button"
+            onClick={() => deleteDecision.mutate({ planId, decisionId: decision.id })}
+            className="p-1 rounded hover:bg-rose-50 text-ink-300 hover:text-rose-600 shrink-0"
+            title="מחק החלטה"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
+
+      {!open ? null : (
+      <div className="space-y-2 mt-2">
       <div className="flex items-start gap-2">
-        <HelpCircle className="w-4 h-4 text-amber-500 mt-1.5 shrink-0" />
+        <HelpCircle className="w-4 h-4 text-amber-400 mt-1.5 shrink-0" />
         <div className="flex-1 min-w-0">
           <PlanInlineText
             value={decision.question}
@@ -142,16 +192,6 @@ function DecisionCard({
             }
           />
         </div>
-        {canEdit && (
-          <button
-            type="button"
-            onClick={() => deleteDecision.mutate({ planId, decisionId: decision.id })}
-            className="p-1 rounded hover:bg-rose-50 text-ink-300 hover:text-rose-600 shrink-0"
-            title="מחק החלטה"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
-        )}
       </div>
 
       <div className="flex items-start gap-2">
@@ -226,6 +266,8 @@ function DecisionCard({
           </button>
         )}
       </div>
+      </div>
+      )}
     </div>
   );
 }

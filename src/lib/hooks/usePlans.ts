@@ -182,11 +182,11 @@ export function useCreatePlanTask() {
   return useMutation({
     mutationFn: ({
       planId,
-      stageId,
+      parentId,
       title,
     }: {
       planId: string;
-      stageId: string;
+      parentId: string;
       title: string;
     }) => {
       const { organizationId, userId } = assertOrgScope(scope);
@@ -194,7 +194,7 @@ export function useCreatePlanTask() {
         organization_id: organizationId,
         owner_id: userId,
         plan_id: planId,
-        stage_id: stageId,
+        parent_id: parentId,
         title,
       });
     },

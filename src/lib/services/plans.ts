@@ -190,11 +190,11 @@ export async function createPlanTask(input: {
   organization_id: string;
   owner_id: string;
   plan_id: string;
-  stage_id: string;
+  parent_id: string;
   title: string;
 }): Promise<PlanTask> {
   const sort_order = await nextSortOrder(input.organization_id, {
-    parent_task_id: input.stage_id,
+    parent_task_id: input.parent_id,
     task_list_id: input.plan_id,
   });
   const { data, error } = await db
@@ -203,7 +203,7 @@ export async function createPlanTask(input: {
       organization_id: input.organization_id,
       owner_id: input.owner_id,
       task_list_id: input.plan_id,
-      parent_task_id: input.stage_id,
+      parent_task_id: input.parent_id,
       is_phase: false,
       title: input.title,
       status: "todo",

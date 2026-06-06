@@ -5,12 +5,15 @@ import {
   Plus,
   Trash2,
   Layers,
+  Target,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import {
   buildPlanTree,
   stageProgress,
   type PlanTask,
+  type PlanGoalNode,
+  type PlanStageNode,
 } from "@/lib/types/plans";
 import {
   useCreateStage,
@@ -23,9 +26,10 @@ import type { PlanRowPatch } from "@/lib/services/plans";
 import { PlanInlineText, PlanStatusChip } from "./plan-bits";
 import { PLAN_ITEM_DND } from "./ImportantThingsBanner";
 
-const COLS = "minmax(9rem,1.4fr) minmax(9rem,1.4fr) minmax(5rem,0.8fr) minmax(7rem,1.1fr) minmax(6rem,0.9fr) auto auto";
-
-const COL_LABELS = ["שם", "יעד / שאיפה", "טווח זמן", "מדד הצלחה", "יעד כמותי", "סטטוס", ""];
+// columns shared by goal + task rows: [name] [time] [metric] [quant] [status] [actions]
+const COLS =
+  "minmax(11rem,2fr) minmax(5rem,0.8fr) minmax(7rem,1.1fr) minmax(6rem,0.9fr) auto auto";
+const COL_LABELS = ["שם", "טווח זמן", "מדד הצלחה", "יעד כמותי", "סטטוס", ""];
 
 export function PlanTasksTable({
   planId,
@@ -55,7 +59,7 @@ export function PlanTasksTable({
 
       {stages.length === 0 && (
         <div className="card p-6 text-center text-ink-500 text-sm">
-          עדיין אין שלבים בתוכנית. הוסיפי שלב ראשון למטה.
+          עדיין אין שלבים בתוכנית. הוסיפי שלב ראשון למטה, ואז כתבי תחתיו יעדים/שאיפות.
         </div>
       )}
 
@@ -83,19 +87,21 @@ export function PlanTasksTable({
   );
 }
 
+// ─── Stage (שלב) ─────────────────────────────────────────────────────────────
+
 function StageBlock({
   planId,
   stage,
   canEdit,
 }: {
   planId: string;
-  stage: ReturnType<typeof buildPlanTree>[number];
+  stage: PlanStageNode;
   canEdit: boolean;
 }) {
   const [open, setOpen] = useState(true);
-  const [newTask, setNewTask] = useState("");
+  const [newGoal, setNewGoal] = useState("");
   const [dropActive, setDropActive] = useState(false);
-  const createTask = useCreatePlanTask();
+  const createGoal = useCreatePlanTask();
   const updateRow = useUpdatePlanRow();
   const deleteRow = useDeletePlanRow();
   const assign = useAssignTaskToStage();
@@ -104,28 +110,26 @@ function StageBlock({
   const patch = (taskId: string, p: PlanRowPatch) =>
     updateRow.mutate({ planId, taskId, patch: p });
 
-  const addTask = () => {
-    const title = newTask.trim();
+  const addGoal = () => {
+    const title = newGoal.trim();
     if (!title) return;
-    createTask.mutate({ planId, stageId: stage.id, title });
-    setNewTask("");
+    createGoal.mutate({ planId, parentId: stage.id, title });
+    setNewGoal("");
   };
 
   return (
     <div className={cn("card overflow-hidden", dropActive && "ring-2 ring-amber-400")}>
-      {/* Stage header — also a drop target for "important things" items */}
+      {/* Stage header — drop target: banner item → becomes a goal under this stage */}
       <div
         className={cn(
           "flex items-center gap-2 px-3 py-2 border-b border-ink-100 transition-colors",
           dropActive ? "bg-amber-100" : "bg-ink-50/60"
         )}
         onDragOver={(e) => {
-          if (!canEdit) return;
-          if (e.dataTransfer.types.includes(PLAN_ITEM_DND)) {
-            e.preventDefault();
-            e.dataTransfer.dropEffect = "move";
-            setDropActive(true);
-          }
+          if (!canEdit || !e.dataTransfer.types.includes(PLAN_ITEM_DND)) return;
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "move";
+          setDropActive(true);
         }}
         onDragLeave={() => setDropActive(false)}
         onDrop={(e) => {
@@ -156,38 +160,25 @@ function StageBlock({
           />
         </div>
 
-        {/* priority stepper (urgency 0-3) */}
         <div className="hidden sm:flex items-center gap-1 shrink-0" title="תיעדוף">
           <span className="text-[11px] text-ink-400">תיעדוף</span>
-          <UrgencyDots
-            value={stage.urgency ?? 0}
-            disabled={!canEdit}
-            onChange={(v) => patch(stage.id, { urgency: v })}
-          />
+          <UrgencyDots value={stage.urgency ?? 0} disabled={!canEdit} onChange={(v) => patch(stage.id, { urgency: v })} />
         </div>
 
-        {/* progress */}
         <div className="hidden md:flex items-center gap-2 w-32 shrink-0">
           <div className="h-2 flex-1 rounded-full bg-ink-100 overflow-hidden">
-            <div
-              className={cn("h-full rounded-full", pct === 100 ? "bg-success-500" : "bg-primary-500")}
-              style={{ width: `${pct}%` }}
-            />
+            <div className={cn("h-full rounded-full", pct === 100 ? "bg-success-500" : "bg-primary-500")} style={{ width: `${pct}%` }} />
           </div>
           <span className="text-[11px] text-ink-500 tabular-nums w-8 text-end">{pct}%</span>
         </div>
 
-        <PlanStatusChip
-          value={stage.plan_status}
-          disabled={!canEdit}
-          onChange={(v) => patch(stage.id, { plan_status: v })}
-        />
+        <PlanStatusChip value={stage.plan_status} disabled={!canEdit} onChange={(v) => patch(stage.id, { plan_status: v })} />
 
         {canEdit && (
           <button
             type="button"
             onClick={() => {
-              if (confirm(`למחוק את השלב "${stage.title}" וכל המשימות שתחתיו?`)) {
+              if (confirm(`למחוק את השלב "${stage.title}" וכל היעדים והמשימות שתחתיו?`)) {
                 deleteRow.mutate({ planId, taskId: stage.id });
               }
             }}
@@ -200,61 +191,34 @@ function StageBlock({
       </div>
 
       {open && (
-        <div>
-          {/* Desktop table */}
-          <div className="hidden sm:block">
-            {stage.children.length > 0 && (
-              <div
-                className="grid items-center gap-x-2 px-3 py-1.5 text-[11px] font-medium text-ink-400 border-b border-ink-100"
-                style={{ gridTemplateColumns: COLS }}
-              >
-                {COL_LABELS.map((l, i) => (
-                  <span key={i} className={i >= 5 ? "text-center" : ""}>{l}</span>
-                ))}
-              </div>
-            )}
-            {stage.children.map((task) => (
-              <div
-                key={task.id}
-                className="grid items-center gap-x-2 px-3 py-1 border-b border-ink-50 last:border-b-0 hover:bg-ink-50/40"
-                style={{ gridTemplateColumns: COLS }}
-              >
-                <PlanInlineText value={task.title} disabled={!canEdit} onCommit={(v) => patch(task.id, { title: v })} placeholder="שם המשימה" className="text-ink-800" />
-                <PlanInlineText value={task.description ?? ""} disabled={!canEdit} onCommit={(v) => patch(task.id, { description: v })} placeholder="—" />
-                <PlanInlineText value={task.plan_time_range ?? ""} disabled={!canEdit} onCommit={(v) => patch(task.id, { plan_time_range: v })} placeholder="—" />
-                <PlanInlineText value={task.plan_success_metric ?? ""} disabled={!canEdit} onCommit={(v) => patch(task.id, { plan_success_metric: v })} placeholder="—" />
-                <PlanInlineText value={task.plan_quant_target ?? ""} disabled={!canEdit} onCommit={(v) => patch(task.id, { plan_quant_target: v })} placeholder="—" />
-                <div className="flex justify-center">
-                  <PlanStatusChip value={task.plan_status} disabled={!canEdit} onChange={(v) => patch(task.id, { plan_status: v })} />
-                </div>
-                {canEdit ? (
-                  <button type="button" onClick={() => deleteRow.mutate({ planId, taskId: task.id })} className="p-1 rounded hover:bg-rose-50 text-ink-300 hover:text-rose-600" title="מחק משימה">
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                ) : <span />}
-              </div>
-            ))}
-          </div>
+        <div className="overflow-x-auto">
+          {stage.goals.length > 0 && (
+            <div
+              className="grid items-center gap-x-2 px-3 py-1.5 text-[11px] font-medium text-ink-400 border-b border-ink-100 min-w-[40rem]"
+              style={{ gridTemplateColumns: COLS }}
+            >
+              {COL_LABELS.map((l, i) => (
+                <span key={i} className={i === 4 ? "text-center" : ""}>{l}</span>
+              ))}
+            </div>
+          )}
 
-          {/* Mobile cards */}
-          <div className="sm:hidden divide-y divide-ink-50">
-            {stage.children.map((task) => (
-              <MobileTaskCard key={task.id} task={task} canEdit={canEdit} onPatch={(p) => patch(task.id, p)} onDelete={() => deleteRow.mutate({ planId, taskId: task.id })} />
-            ))}
-          </div>
+          {stage.goals.map((goal) => (
+            <GoalBlock key={goal.id} planId={planId} goal={goal} canEdit={canEdit} />
+          ))}
 
           {canEdit && (
             <div className="flex items-center gap-2 px-3 py-2">
               <input
-                value={newTask}
-                onChange={(e) => setNewTask(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && addTask()}
-                placeholder="הוסף משימה…"
+                value={newGoal}
+                onChange={(e) => setNewGoal(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && addGoal()}
+                placeholder="הוסף יעד / שאיפה…"
                 className="field text-sm py-1 flex-1 max-w-sm"
               />
-              <button type="button" onClick={addTask} disabled={!newTask.trim()} className="inline-flex items-center gap-1 text-sm text-primary-600 hover:text-primary-700 disabled:opacity-40">
+              <button type="button" onClick={addGoal} disabled={!newGoal.trim()} className="inline-flex items-center gap-1 text-sm text-primary-600 hover:text-primary-700 disabled:opacity-40">
                 <Plus className="w-4 h-4" />
-                הוסף
+                הוסף יעד
               </button>
             </div>
           )}
@@ -264,42 +228,129 @@ function StageBlock({
   );
 }
 
-function MobileTaskCard({
-  task,
+// ─── Goal / aspiration (יעד/שאיפה) ───────────────────────────────────────────
+
+function GoalBlock({
+  planId,
+  goal,
   canEdit,
-  onPatch,
-  onDelete,
 }: {
-  task: PlanTask;
+  planId: string;
+  goal: PlanGoalNode;
   canEdit: boolean;
-  onPatch: (p: PlanRowPatch) => void;
-  onDelete: () => void;
 }) {
-  const Field = ({ label, value, onCommit, placeholder }: { label: string; value: string; onCommit: (v: string) => void; placeholder?: string }) => (
-    <div className="flex items-baseline gap-2">
-      <span className="text-[11px] text-ink-400 w-20 shrink-0">{label}</span>
-      <div className="flex-1 min-w-0">
-        <PlanInlineText value={value} disabled={!canEdit} onCommit={onCommit} placeholder={placeholder ?? "—"} />
-      </div>
-    </div>
-  );
+  const [open, setOpen] = useState(true);
+  const [newTask, setNewTask] = useState("");
+  const [dropActive, setDropActive] = useState(false);
+  const createTask = useCreatePlanTask();
+  const updateRow = useUpdatePlanRow();
+  const deleteRow = useDeletePlanRow();
+  const assign = useAssignTaskToStage();
+
+  const patch = (taskId: string, p: PlanRowPatch) =>
+    updateRow.mutate({ planId, taskId, patch: p });
+
+  const addTask = () => {
+    const title = newTask.trim();
+    if (!title) return;
+    createTask.mutate({ planId, parentId: goal.id, title });
+    setNewTask("");
+  };
+
   return (
-    <div className="p-3 space-y-1.5">
-      <div className="flex items-center gap-2">
-        <div className="flex-1 min-w-0">
-          <PlanInlineText value={task.title} disabled={!canEdit} onCommit={(v) => onPatch({ title: v })} placeholder="שם המשימה" className="font-medium text-ink-900" />
+    <div className={cn("border-b border-ink-50 last:border-b-0", dropActive && "bg-amber-50")}>
+      {/* Goal row — drop target: banner item → becomes a task under this goal */}
+      <div
+        className="grid items-center gap-x-2 px-3 py-1 hover:bg-ink-50/40 min-w-[40rem]"
+        style={{ gridTemplateColumns: COLS }}
+        onDragOver={(e) => {
+          if (!canEdit || !e.dataTransfer.types.includes(PLAN_ITEM_DND)) return;
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "move";
+          setDropActive(true);
+        }}
+        onDragLeave={() => setDropActive(false)}
+        onDrop={(e) => {
+          setDropActive(false);
+          const id = e.dataTransfer.getData(PLAN_ITEM_DND);
+          if (id) {
+            e.preventDefault();
+            assign.mutate({ planId, taskId: id, stageId: goal.id });
+          }
+        }}
+      >
+        <div className="flex items-center gap-1 min-w-0">
+          <button
+            type="button"
+            onClick={() => setOpen((o) => !o)}
+            className="p-0.5 rounded hover:bg-ink-100 text-ink-400 shrink-0"
+            aria-label={open ? "כווץ" : "הרחב"}
+          >
+            {open ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
+          </button>
+          <Target className="w-3.5 h-3.5 text-primary-500 shrink-0" />
+          <div className="min-w-0 flex-1">
+            <PlanInlineText value={goal.title} disabled={!canEdit} onCommit={(v) => patch(goal.id, { title: v })} placeholder="יעד / שאיפה" className="font-medium text-ink-900" />
+          </div>
         </div>
-        <PlanStatusChip value={task.plan_status} disabled={!canEdit} onChange={(v) => onPatch({ plan_status: v })} />
-        {canEdit && (
-          <button type="button" onClick={onDelete} className="p-1 rounded hover:bg-rose-50 text-ink-300 hover:text-rose-600">
+        <PlanInlineText value={goal.plan_time_range ?? ""} disabled={!canEdit} onCommit={(v) => patch(goal.id, { plan_time_range: v })} placeholder="—" />
+        <PlanInlineText value={goal.plan_success_metric ?? ""} disabled={!canEdit} onCommit={(v) => patch(goal.id, { plan_success_metric: v })} placeholder="—" />
+        <PlanInlineText value={goal.plan_quant_target ?? ""} disabled={!canEdit} onCommit={(v) => patch(goal.id, { plan_quant_target: v })} placeholder="—" />
+        <div className="flex justify-center">
+          <PlanStatusChip value={goal.plan_status} disabled={!canEdit} onChange={(v) => patch(goal.id, { plan_status: v })} />
+        </div>
+        {canEdit ? (
+          <button type="button" onClick={() => deleteRow.mutate({ planId, taskId: goal.id })} className="p-1 rounded hover:bg-rose-50 text-ink-300 hover:text-rose-600" title="מחק יעד">
             <Trash2 className="w-3.5 h-3.5" />
           </button>
-        )}
+        ) : <span />}
       </div>
-      <Field label="יעד / שאיפה" value={task.description ?? ""} onCommit={(v) => onPatch({ description: v })} />
-      <Field label="טווח זמן" value={task.plan_time_range ?? ""} onCommit={(v) => onPatch({ plan_time_range: v })} />
-      <Field label="מדד הצלחה" value={task.plan_success_metric ?? ""} onCommit={(v) => onPatch({ plan_success_metric: v })} />
-      <Field label="יעד כמותי" value={task.plan_quant_target ?? ""} onCommit={(v) => onPatch({ plan_quant_target: v })} />
+
+      {open && (
+        <div className="min-w-[40rem]">
+          {goal.tasks.map((task) => (
+            <div
+              key={task.id}
+              className="grid items-center gap-x-2 px-3 py-1 hover:bg-ink-50/40"
+              style={{ gridTemplateColumns: COLS }}
+            >
+              <div className="flex items-center gap-1 min-w-0 ps-9">
+                <span className="w-1 h-1 rounded-full bg-ink-300 shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <PlanInlineText value={task.title} disabled={!canEdit} onCommit={(v) => patch(task.id, { title: v })} placeholder="משימה" className="text-ink-700" />
+                </div>
+              </div>
+              <PlanInlineText value={task.plan_time_range ?? ""} disabled={!canEdit} onCommit={(v) => patch(task.id, { plan_time_range: v })} placeholder="—" />
+              <PlanInlineText value={task.plan_success_metric ?? ""} disabled={!canEdit} onCommit={(v) => patch(task.id, { plan_success_metric: v })} placeholder="—" />
+              <PlanInlineText value={task.plan_quant_target ?? ""} disabled={!canEdit} onCommit={(v) => patch(task.id, { plan_quant_target: v })} placeholder="—" />
+              <div className="flex justify-center">
+                <PlanStatusChip value={task.plan_status} disabled={!canEdit} onChange={(v) => patch(task.id, { plan_status: v })} />
+              </div>
+              {canEdit ? (
+                <button type="button" onClick={() => deleteRow.mutate({ planId, taskId: task.id })} className="p-1 rounded hover:bg-rose-50 text-ink-300 hover:text-rose-600" title="מחק משימה">
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              ) : <span />}
+            </div>
+          ))}
+
+          {canEdit && (
+            <div className="flex items-center gap-2 px-3 py-1.5 ps-12">
+              <input
+                value={newTask}
+                onChange={(e) => setNewTask(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && addTask()}
+                placeholder="פרקי למשימה קטנה…"
+                className="field text-sm py-1 flex-1 max-w-xs"
+              />
+              <button type="button" onClick={addTask} disabled={!newTask.trim()} className="inline-flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 disabled:opacity-40">
+                <Plus className="w-3.5 h-3.5" />
+                משימה
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

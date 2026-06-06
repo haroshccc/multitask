@@ -127,9 +127,16 @@ function PlanShellLoaded({
   };
 
   const canEdit = plan.owner_id === userId;
-  const stages = useMemo(
-    () => buildPlanTree(tasks).map((s) => ({ id: s.id, title: s.title })),
-    [tasks]
+  const tree = useMemo(() => buildPlanTree(tasks), [tasks]);
+  const stages = useMemo(() => tree.map((s) => ({ id: s.id, title: s.title })), [tree]);
+  const assignTree = useMemo(
+    () =>
+      tree.map((s) => ({
+        id: s.id,
+        title: s.title,
+        goals: s.goals.map((g) => ({ id: g.id, title: g.title })),
+      })),
+    [tree]
   );
   const importantItems = useMemo(() => unassignedPlanTasks(tasks), [tasks]);
 
@@ -151,7 +158,7 @@ function PlanShellLoaded({
       <PlanHeader plan={plan} planId={planId} canEdit={canEdit} onPatch={(p) => updatePlan.mutate({ planId, patch: p })} />
 
       <div className="mt-4">
-        <ImportantThingsBanner planId={planId} items={importantItems} stages={stages} canEdit={canEdit} />
+        <ImportantThingsBanner planId={planId} items={importantItems} assignTree={assignTree} canEdit={canEdit} />
       </div>
 
       <div className="mt-2 flex items-center justify-end">

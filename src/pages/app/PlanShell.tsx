@@ -16,6 +16,9 @@ import {
   Network,
   Copy,
   CalendarRange,
+  Square,
+  Columns3,
+  Rows3,
 } from "lucide-react";
 import { ScreenScaffold } from "@/components/layout/ScreenScaffold";
 import { cn } from "@/lib/utils/cn";
@@ -56,6 +59,16 @@ const TABS: { to: string; label: string; icon: typeof ListChecks }[] = [
   { to: "tasks", label: "משימות", icon: ListChecks },
   { to: "impacts", label: "השפעות", icon: Network },
 ];
+
+type ViewMode = "single" | "columns" | "rows";
+const VIEW_KEY = "multitask:plan:viewMode";
+function readViewMode(): ViewMode {
+  try {
+    const v = localStorage.getItem(VIEW_KEY);
+    if (v === "single" || v === "columns" || v === "rows") return v;
+  } catch { /* ignore */ }
+  return "single";
+}
 
 // ---------------------------------------------------------------------------
 // Shell
@@ -107,6 +120,11 @@ function PlanShellLoaded({
   const navigate = useNavigate();
   const updatePlan = useUpdatePlan();
   const [cloneOpen, setCloneOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>(() => readViewMode());
+  const setViewModePersist = (v: ViewMode) => {
+    setViewMode(v);
+    try { localStorage.setItem(VIEW_KEY, v); } catch { /* ignore */ }
+  };
 
   const canEdit = plan.owner_id === userId;
   const stages = useMemo(
@@ -136,11 +154,37 @@ function PlanShellLoaded({
         <ImportantThingsBanner planId={planId} items={importantItems} stages={stages} canEdit={canEdit} />
       </div>
 
-      <PlanTabsNav />
-
-      <div className="mt-4">
-        <Outlet context={{ plan, planId, tasks, stages, canEdit } satisfies PlanOutletContext} />
+      <div className="mt-2 flex items-center justify-end">
+        <ViewModeToggle mode={viewMode} onChange={setViewModePersist} />
       </div>
+
+      {viewMode === "single" ? (
+        <>
+          <PlanTabsNav />
+          <div className="mt-4">
+            <Outlet context={{ plan, planId, tasks, stages, canEdit } satisfies PlanOutletContext} />
+          </div>
+        </>
+      ) : (
+        <div
+          className={cn(
+            "mt-3",
+            viewMode === "columns"
+              ? "grid grid-cols-1 xl:grid-cols-3 gap-4 items-start"
+              : "space-y-4"
+          )}
+        >
+          <SectionPanel icon={<Lightbulb className="w-4 h-4 text-primary-600" />} title="רעיוני">
+            <PlanDecisionsTab planId={planId} stages={stages} canEdit={canEdit} />
+          </SectionPanel>
+          <SectionPanel icon={<ListChecks className="w-4 h-4 text-primary-600" />} title="משימות">
+            <PlanTasksTable planId={planId} tasks={tasks} canEdit={canEdit} />
+          </SectionPanel>
+          <SectionPanel icon={<Network className="w-4 h-4 text-primary-600" />} title="השפעות">
+            <PlanImpactMatrix planId={planId} stages={stages} canEdit={canEdit} />
+          </SectionPanel>
+        </div>
+      )}
 
       {cloneOpen && (
         <ClonePlanDialog
@@ -154,6 +198,59 @@ function PlanShellLoaded({
         />
       )}
     </ScreenScaffold>
+  );
+}
+
+function ViewModeToggle({
+  mode,
+  onChange,
+}: {
+  mode: ViewMode;
+  onChange: (m: ViewMode) => void;
+}) {
+  const opts: { id: ViewMode; label: string; icon: typeof Square }[] = [
+    { id: "single", label: "אחד", icon: Square },
+    { id: "columns", label: "זה לצד זה", icon: Columns3 },
+    { id: "rows", label: "מתחת", icon: Rows3 },
+  ];
+  return (
+    <div className="inline-flex rounded-lg border border-ink-200 overflow-hidden text-sm">
+      {opts.map(({ id, label, icon: Icon }) => (
+        <button
+          key={id}
+          type="button"
+          onClick={() => onChange(id)}
+          className={cn(
+            "flex items-center gap-1.5 px-2.5 py-1.5 transition-colors border-e border-ink-200 last:border-e-0",
+            mode === id ? "bg-primary-600 text-white" : "bg-white text-ink-500 hover:bg-ink-50"
+          )}
+          title={label}
+        >
+          <Icon className="w-3.5 h-3.5" />
+          <span className="hidden sm:inline">{label}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function SectionPanel({
+  icon,
+  title,
+  children,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="card p-4">
+      <div className="flex items-center gap-2 mb-3 pb-2 border-b border-ink-100">
+        {icon}
+        <h3 className="text-sm font-semibold text-ink-800">{title}</h3>
+      </div>
+      {children}
+    </section>
   );
 }
 

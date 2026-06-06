@@ -244,9 +244,12 @@ export function buildContactsSheet(
 const PAYMENT_FIXED_HEADERS = [
   "תיאור",
   "סוג",
+  "איש קשר",
   "סכום",
   "מטבע",
   "סטטוס",
+  "תנאי תשלום",
+  "תאריך דרישה",
   "לתשלום עד",
   "שולם בתאריך",
   "הערות",
@@ -257,26 +260,62 @@ const PAYMENT_DIRECTION_LABEL: Record<string, string> = {
   out: "תשלום",
 };
 
-const PAYMENT_STATUS_LABEL: Record<string, string> = {
-  pending: "ממתין",
-  paid: "שולם",
-  overdue: "באיחור",
-  cancelled: "בוטל",
-};
+/** Terms label (שוטף+N). null/0 → מיידי. */
+function paymentTermsLabel(netDays: number | null | undefined): string {
+  if (!netDays || netDays <= 0) return "מיידי";
+  return `שוטף+${netDays}`;
+}
+
+/**
+ * Derived status text matching the table/cards: a 'demand' whose due_date is in
+ * the past renders as "באיחור".
+ */
+function paymentDerivedStatusText(
+  status: string,
+  direction: string,
+  dueDate: string | null
+): string {
+  if (status === "demand" && dueDate) {
+    const due = new Date(dueDate);
+    if (!Number.isNaN(due.getTime())) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      due.setHours(0, 0, 0, 0);
+      if (today.getTime() > due.getTime()) return "באיחור";
+    }
+  }
+  switch (status) {
+    case "draft":
+      return "צפוי";
+    case "demand":
+      return direction === "in" ? "דרישה נשלחה" : "דרישה התקבלה";
+    case "paid":
+      return direction === "in" ? "התקבל" : "שולם";
+    case "cancelled":
+      return "בוטל";
+    default:
+      return status ?? "";
+  }
+}
 
 export function buildPaymentsSheet(
   payments: ProjectPayment[],
   customFields: TaskCustomField[],
-  sheetName = "תשלומים"
+  sheetName = "תשלומים",
+  contacts: Contact[] = []
 ): ExportSheet {
+  const contactName = new Map(contacts.map((c) => [c.id, c.name?.trim() || ""]));
   const headers = [...PAYMENT_FIXED_HEADERS, ...customHeaders(customFields)];
   const rows = payments.map((p) => {
     const fixed: (string | number | null)[] = [
       p.title?.trim() || "",
       PAYMENT_DIRECTION_LABEL[p.direction] ?? p.direction ?? "",
+      p.contact_id ? contactName.get(p.contact_id) ?? "" : "",
       (p.amount_cents ?? 0) / 100,
       p.currency ?? "",
-      PAYMENT_STATUS_LABEL[p.status] ?? p.status ?? "",
+      paymentDerivedStatusText(p.status, p.direction, p.due_date),
+      paymentTermsLabel(p.terms_net_days),
+      formatDate(p.demand_date),
       formatDate(p.due_date),
       formatDate(p.paid_date),
       p.notes ?? "",

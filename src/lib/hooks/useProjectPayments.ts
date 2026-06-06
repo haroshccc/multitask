@@ -34,7 +34,7 @@ export function useCreateProjectPayment() {
         direction: input.direction ?? "in",
         amount_cents: input.amount_cents ?? 0,
         currency: input.currency ?? "ILS",
-        status: input.status ?? "pending",
+        status: input.status ?? "draft",
       });
     },
     onSuccess: (_d, vars) =>

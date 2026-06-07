@@ -9,6 +9,8 @@ interface ImportMetaEnv {
   readonly VITE_FEATURE_TRANSCRIPTION?: string;
   readonly VITE_FEATURE_AI_EXTRACTION?: string;
   readonly VITE_FEATURE_PUSH_NOTIFICATIONS?: string;
+  readonly VITE_FEATURE_SHOPPING_CART?: string;
+  readonly VITE_FEATURE_AI_ASSISTANT?: string;
   readonly VITE_ONESIGNAL_APP_ID?: string;
 }
 

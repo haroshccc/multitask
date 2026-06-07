@@ -35,6 +35,11 @@ import { CalendarBlock } from "./CalendarDayView";
 import { RecurringMarker } from "./RecurringMarker";
 import { DayNoteSlot } from "./DayNoteSlot";
 import { TaskCheckButton } from "./TaskCheckButton";
+import { FrameworkBlockChip, FrameworkInlineChip } from "./FrameworkBlockChip";
+import type {
+  FrameworkBlockOccurrenceView,
+  FrameworkDayLabelView,
+} from "@/lib/types/frameworks";
 
 /** yyyy-mm-dd in local time — same shape as `dateKey()` in the service. */
 function dayNoteKey(d: Date): string {
@@ -71,6 +76,18 @@ interface CalendarWeekViewProps {
   /** When true, recurring task items render as a flat deadline-style marker
    *  (repeat glyph + start time + underline) instead of a bordered block. */
   recurringAsMarker?: boolean;
+  /** Framework time-blocks (faded background layer), already projected to dates. */
+  frameworkBlocks?: FrameworkBlockOccurrenceView[];
+  /** Per-day framework labels (yyyy-mm-dd → labels), shown under each date. */
+  frameworkLabelsByDate?: Map<string, FrameworkDayLabelView[]>;
+  /** Left-click a framework block → cycle its check state. */
+  onFrameworkBlockClick?: (occ: FrameworkBlockOccurrenceView) => void;
+  /** Right-click a framework block → move gesture (single/future prompt). */
+  onFrameworkBlockContextMenu?: (
+    occ: FrameworkBlockOccurrenceView,
+    x: number,
+    y: number
+  ) => void;
 }
 
 export function CalendarWeekView({
@@ -89,6 +106,10 @@ export function CalendarWeekView({
   onDateNoteClick,
   readOnly,
   recurringAsMarker,
+  frameworkBlocks,
+  frameworkLabelsByDate,
+  onFrameworkBlockClick,
+  onFrameworkBlockContextMenu,
 }: CalendarWeekViewProps) {
   const { prefs } = useCalendarPrefs();
   const weekStart = startOfWeek(anchor);
@@ -171,6 +192,14 @@ export function CalendarWeekView({
   );
   const gridHeight = (hourEnd - hourStart) * hourHeight;
   const now = new Date();
+
+  // All-day framework occurrences per day-column → shown in the "ללא שעה" row.
+  const frameworkAllDayByDay = days.map((day) =>
+    (frameworkBlocks ?? []).filter((b) => b.date === dayNoteKey(day) && b.allDay)
+  );
+  const hasHourlessRow =
+    hourlessByDay.some((col) => col.length > 0) ||
+    frameworkAllDayByDay.some((col) => col.length > 0);
 
   const handleColClick = (dayStart: Date, e: React.MouseEvent<HTMLDivElement>) => {
     if (e.target !== e.currentTarget) return;
@@ -332,11 +361,11 @@ export function CalendarWeekView({
                 past && !today && "bg-ink-100/60"
               )}
             >
-              <div className="flex items-start justify-between gap-1 min-w-0">
+              <div className="min-w-0">
                 <button
                   onClick={() => onDateNoteClick?.(day)}
                   className={cn(
-                    "text-end shrink-0 rounded-md px-1 hover:bg-ink-100",
+                    "w-full text-start rounded-md px-1 hover:bg-ink-100",
                     today ? "text-primary-700" : past ? "text-ink-500" : "text-ink-900"
                   )}
                   title="לחצי לעריכת הערה ליום"
@@ -346,12 +375,25 @@ export function CalendarWeekView({
                     <span className="sm:hidden">{DAY_NAMES_SHORT[day.getDay()]}</span>
                     <span className="hidden sm:inline">{DAY_NAMES[day.getDay()]}</span>
                   </div>
-                  <div className="text-sm font-semibold">{day.getDate()}</div>
+                  {/* date + framework header on the same line */}
+                  <div className="text-sm font-semibold flex items-baseline gap-1 min-w-0">
+                    <span className="shrink-0">{day.getDate()}</span>
+                    {(frameworkLabelsByDate?.get(dayNoteKey(day)) ?? []).map((lbl, i) => (
+                      <span
+                        key={i}
+                        className="text-[10px] font-bold truncate min-w-0"
+                        style={{ color: lbl.color ?? "#6366f1" }}
+                        title={lbl.label}
+                      >
+                        {lbl.label}
+                      </span>
+                    ))}
+                  </div>
                 </button>
                 <DayNoteSlot
                   body={noteBody}
                   textColor={noteColorsByDate?.get(dayNoteKey(day))}
-                  className="flex-1 text-end"
+                  className="block text-end truncate"
                 />
               </div>
             </div>
@@ -418,7 +460,7 @@ export function CalendarWeekView({
 
       {/* Hourless tasks row — daily tasks with no specific time appear here,
           above the timed grid, one chip per task per day-column. */}
-      {hourlessByDay.some((col) => col.length > 0) && (
+      {hasHourlessRow && (
         <div
           className="grid border-b border-ink-200 bg-white"
           style={headerGrid()}
@@ -432,6 +474,9 @@ export function CalendarWeekView({
                 key={i}
                 className="border-s border-ink-100/60 px-0.5 py-1 flex flex-col gap-0.5 min-h-[28px]"
               >
+                {frameworkAllDayByDay[i]!.map((occ) => (
+                  <FrameworkInlineChip key={occ.id} occ={occ} onClick={onFrameworkBlockClick} />
+                ))}
                 {dayItems.map((item) => {
                   const isTask = item.kind === "task";
                   if (recurringAsMarker && isTask && item.recurring) {
@@ -558,6 +603,20 @@ export function CalendarWeekView({
                 />
               ))}
 
+              {/* Framework background blocks (faded) — behind planned items */}
+              {(frameworkBlocks ?? [])
+                .filter((b) => b.date === dayNoteKey(day) && !b.allDay)
+                .map((b) => (
+                  <FrameworkBlockChip
+                    key={b.id}
+                    occ={b}
+                    top={percentFor(b.start, dayStart)}
+                    height={durationPercentFor(b.end.getTime() - b.start.getTime())}
+                    onClick={onFrameworkBlockClick}
+                    onContextMenu={onFrameworkBlockContextMenu}
+                  />
+                ))}
+
               {/* Planned blocks with actual overlays */}
               {layout.map(({ item, column, columns }) => {
                 const top = percentFor(item.start, dayStart);
@@ -566,6 +625,17 @@ export function CalendarWeekView({
                 );
                 const widthPct = 100 / columns;
                 const leftPct = column * widthPct;
+
+                // If a framework background block shares this slot, reserve a
+                // small strip on the start side (right in RTL) so the framework
+                // stays visible instead of being fully covered by the task.
+                const overlapsFramework = (frameworkBlocks ?? []).some(
+                  (b) =>
+                    b.date === dayNoteKey(day) &&
+                    !b.allDay &&
+                    b.start.getTime() < item.end.getTime() &&
+                    b.end.getTime() > item.start.getTime()
+                );
 
                 const taskActuals =
                   item.kind === "task"
@@ -603,6 +673,7 @@ export function CalendarWeekView({
                     compact
                     readOnly={readOnly}
                     recurringAsMarker={recurringAsMarker}
+                    startReservePx={overlapsFramework ? 16 : 0}
                   />
                 );
               })}
@@ -755,6 +826,9 @@ function MultiDayBand({
           onDragRecognised: () => {
             touchDragRef.current = true;
           },
+          onLongPress: onContextMenu
+            ? (x, y) => onContextMenu(x, y)
+            : undefined,
         });
       }}
       onClick={() => {

@@ -39,8 +39,61 @@ const Food = lazy(() =>
 const Goals = lazy(() =>
   import("@/pages/app/Goals").then((m) => ({ default: m.Goals }))
 );
-const ProjectDetail = lazy(() =>
-  import("@/pages/app/ProjectDetail").then((m) => ({ default: m.ProjectDetail }))
+const Frameworks = lazy(() =>
+  import("@/pages/app/Frameworks").then((m) => ({ default: m.Frameworks }))
+);
+const PlanShell = lazy(() =>
+  import("@/pages/app/PlanShell").then((m) => ({ default: m.PlanShell }))
+);
+const PlanConceptPage = lazy(() =>
+  import("@/pages/app/PlanShell").then((m) => ({ default: m.PlanConceptPage }))
+);
+const PlanTasksPage = lazy(() =>
+  import("@/pages/app/PlanShell").then((m) => ({ default: m.PlanTasksPage }))
+);
+const PlanImpactsPage = lazy(() =>
+  import("@/pages/app/PlanShell").then((m) => ({ default: m.PlanImpactsPage }))
+);
+const Contacts = lazy(() =>
+  import("@/pages/app/Contacts").then((m) => ({ default: m.Contacts }))
+);
+const ProjectShell = lazy(() =>
+  import("@/pages/app/ProjectShell").then((m) => ({ default: m.ProjectShell }))
+);
+const ProjectTasksTab = lazy(() =>
+  import("@/pages/app/project/ProjectTasksTab").then((m) => ({
+    default: m.ProjectTasksTab,
+  }))
+);
+const ProjectDashboardTab = lazy(() =>
+  import("@/pages/app/project/ProjectDashboardTab").then((m) => ({
+    default: m.ProjectDashboardTab,
+  }))
+);
+const ProjectCalendarTab = lazy(() =>
+  import("@/pages/app/project/ProjectCalendarTab").then((m) => ({
+    default: m.ProjectCalendarTab,
+  }))
+);
+const ProjectMeetingsTab = lazy(() =>
+  import("@/pages/app/project/ProjectMeetingsTab").then((m) => ({
+    default: m.ProjectMeetingsTab,
+  }))
+);
+const ProjectPaymentsTab = lazy(() =>
+  import("@/pages/app/project/ProjectPaymentsTab").then((m) => ({
+    default: m.ProjectPaymentsTab,
+  }))
+);
+const ProjectContactsTab = lazy(() =>
+  import("@/pages/app/project/ProjectContactsTab").then((m) => ({
+    default: m.ProjectContactsTab,
+  }))
+);
+const ProjectDocumentsTab = lazy(() =>
+  import("@/pages/app/project/ProjectDocumentsTab").then((m) => ({
+    default: m.ProjectDocumentsTab,
+  }))
 );
 const Settings = lazy(() =>
   import("@/pages/app/Settings").then((m) => ({ default: m.Settings }))
@@ -183,13 +236,121 @@ export default function App() {
           }
         />
         <Route
-          path="projects/:projectId"
+          path="goals/plan/:planId"
           element={
             <Suspense fallback={<LoadingShell />}>
-              <ProjectDetail />
+              <PlanShell />
+            </Suspense>
+          }
+        >
+          <Route index element={<Navigate to="concept" replace />} />
+          <Route
+            path="concept"
+            element={
+              <Suspense fallback={<LoadingShell />}>
+                <PlanConceptPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="tasks"
+            element={
+              <Suspense fallback={<LoadingShell />}>
+                <PlanTasksPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="impacts"
+            element={
+              <Suspense fallback={<LoadingShell />}>
+                <PlanImpactsPage />
+              </Suspense>
+            }
+          />
+        </Route>
+        <Route
+          path="frameworks"
+          element={
+            <Suspense fallback={<LoadingShell />}>
+              <Frameworks />
             </Suspense>
           }
         />
+        <Route
+          path="contacts"
+          element={
+            <Suspense fallback={<LoadingShell />}>
+              <Contacts />
+            </Suspense>
+          }
+        />
+        <Route
+          path="projects/:projectId"
+          element={
+            <Suspense fallback={<LoadingShell />}>
+              <ProjectShell />
+            </Suspense>
+          }
+        >
+          <Route index element={<Navigate to="tasks" replace />} />
+          <Route
+            path="tasks"
+            element={
+              <Suspense fallback={<LoadingShell />}>
+                <ProjectTasksTab />
+              </Suspense>
+            }
+          />
+          <Route
+            path="calendar"
+            element={
+              <Suspense fallback={<LoadingShell />}>
+                <ProjectCalendarTab />
+              </Suspense>
+            }
+          />
+          <Route
+            path="meetings"
+            element={
+              <Suspense fallback={<LoadingShell />}>
+                <ProjectMeetingsTab />
+              </Suspense>
+            }
+          />
+          <Route
+            path="payments"
+            element={
+              <Suspense fallback={<LoadingShell />}>
+                <ProjectPaymentsTab />
+              </Suspense>
+            }
+          />
+          <Route
+            path="contacts"
+            element={
+              <Suspense fallback={<LoadingShell />}>
+                <ProjectContactsTab />
+              </Suspense>
+            }
+          />
+          <Route
+            path="documents"
+            element={
+              <Suspense fallback={<LoadingShell />}>
+                <ProjectDocumentsTab />
+              </Suspense>
+            }
+          />
+          <Route
+            path="dashboard"
+            element={
+              <Suspense fallback={<LoadingShell />}>
+                <ProjectDashboardTab />
+              </Suspense>
+            }
+          />
+        </Route>
         <Route
           path="settings"
           element={

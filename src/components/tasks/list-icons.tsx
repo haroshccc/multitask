@@ -115,9 +115,16 @@ export interface ListIconProps {
   /** Fallback icon when the stored value is empty */
   fallback?: LucideIcon;
   className?: string;
+  /** Sizing for the legacy raw-emoji span (e.g. "text-3xl" in a header) */
+  emojiClassName?: string;
 }
 
-export function ListIcon({ emoji, fallback, className = "w-4 h-4" }: ListIconProps) {
+export function ListIcon({
+  emoji,
+  fallback,
+  className = "w-4 h-4",
+  emojiClassName = "text-base leading-none",
+}: ListIconProps) {
   if (emoji && emoji.startsWith("icon:")) {
     const key = emoji.slice(5);
     const preset = BY_KEY[key];
@@ -128,7 +135,7 @@ export function ListIcon({ emoji, fallback, className = "w-4 h-4" }: ListIconPro
   }
   if (emoji && emoji.length > 0) {
     // Legacy: raw emoji character stored directly.
-    return <span className="text-base leading-none">{emoji}</span>;
+    return <span className={emojiClassName}>{emoji}</span>;
   }
   if (fallback) {
     const F = fallback;

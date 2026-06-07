@@ -35,6 +35,11 @@ import { DayNoteSlot } from "./DayNoteSlot";
 import { TaskCheckButton } from "./TaskCheckButton";
 import { HalfCheckIcon } from "@/components/ui/HalfCheckIcon";
 import { RecurringMarker } from "./RecurringMarker";
+import { FrameworkBlockChip, FrameworkInlineChip } from "./FrameworkBlockChip";
+import type {
+  FrameworkBlockOccurrenceView,
+  FrameworkDayLabelView,
+} from "@/lib/types/frameworks";
 
 interface CalendarDayViewProps {
   date: Date;
@@ -56,6 +61,18 @@ interface CalendarDayViewProps {
   dayNoteColor?: string | null;
   /** Click on the date digit → open the per-day note editor. */
   onDateNoteClick?: (date: Date) => void;
+  /** Framework time-blocks (faded background layer), already projected to dates. */
+  frameworkBlocks?: FrameworkBlockOccurrenceView[];
+  /** Per-day framework labels (yyyy-mm-dd → labels), shown under the date. */
+  frameworkLabelsByDate?: Map<string, FrameworkDayLabelView[]>;
+  /** Left-click a framework block → cycle its check state. */
+  onFrameworkBlockClick?: (occ: FrameworkBlockOccurrenceView) => void;
+  /** Right-click a framework block → move gesture (single/future prompt). */
+  onFrameworkBlockContextMenu?: (
+    occ: FrameworkBlockOccurrenceView,
+    x: number,
+    y: number
+  ) => void;
 }
 
 export function CalendarDayView({
@@ -72,11 +89,20 @@ export function CalendarDayView({
   dayNote,
   dayNoteColor,
   onDateNoteClick,
+  frameworkBlocks,
+  frameworkLabelsByDate,
+  onFrameworkBlockClick,
+  onFrameworkBlockContextMenu,
 }: CalendarDayViewProps) {
   const dayStart = startOfDay(date);
   const dayEnd = new Date(dayStart.getTime() + 24 * HOUR);
   const now = new Date();
   const isToday = isSameDay(date, now);
+  const dayKey = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  const dayFrameworkLabels = frameworkLabelsByDate?.get(dayKey) ?? [];
+  const dayFrameworkAll = (frameworkBlocks ?? []).filter((b) => b.date === dayKey);
+  const dayFrameworkBlocks = dayFrameworkAll.filter((b) => !b.allDay);
+  const dayFrameworkAllDay = dayFrameworkAll.filter((b) => b.allDay);
 
   const { allDay, timed } = useMemo(() => {
     const allDay: CalendarItem[] = [];
@@ -212,30 +238,47 @@ export function CalendarDayView({
 
   return (
     <div className="card overflow-hidden">
-      {/* Date header — date number on the start side, day note slot to its
-          left (per spec). Clicking the digit opens the note editor. */}
+      {/* Date header — date + framework label always on the start (right in
+          RTL), regular note fills the end (left in RTL). */}
       <div className="px-3 py-1.5 border-b border-ink-200 bg-white flex items-center gap-2">
-        <button
-          onClick={() => onDateNoteClick?.(date)}
-          className={cn(
-            "text-base font-bold tabular-nums px-1 rounded-md hover:bg-ink-100 shrink-0",
-            isToday ? "text-primary-700" : "text-ink-900"
-          )}
-          type="button"
-          title="לחצי לעריכת הערה ליום"
-        >
-          {date.getDate()}
-        </button>
-        <DayNoteSlot body={dayNote} textColor={dayNoteColor} />
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            onClick={() => onDateNoteClick?.(date)}
+            className={cn(
+              "text-base font-bold tabular-nums px-1 rounded-md hover:bg-ink-100",
+              isToday ? "text-primary-700" : "text-ink-900"
+            )}
+            type="button"
+            title="לחצי לעריכת הערה ליום"
+          >
+            {date.getDate()}
+          </button>
+          {dayFrameworkLabels.map((lbl, i) => (
+            <span
+              key={i}
+              className="text-[13px] font-bold"
+              style={{ color: lbl.color ?? "#6366f1" }}
+              title={lbl.label}
+            >
+              {lbl.label}
+            </span>
+          ))}
+        </div>
+        <DayNoteSlot body={dayNote} textColor={dayNoteColor} className="flex-1" />
       </div>
 
       {/* All-day strip */}
-      {allDay.length > 0 && (
+      {(allDay.length > 0 || dayFrameworkAllDay.length > 0) && (
         <div className="px-3 py-2 border-b border-ink-200 bg-ink-50/60">
           <div className="eyebrow mb-1">כל היום</div>
           <div className="flex flex-wrap gap-1">
             {allDay.map((it) => (
               <AllDayChip key={it.id} item={it} now={now} onClick={() => onItemClick(it)} />
+            ))}
+            {dayFrameworkAllDay.map((occ) => (
+              <div key={occ.id} className="min-w-[120px] max-w-[200px]">
+                <FrameworkInlineChip occ={occ} onClick={onFrameworkBlockClick} />
+              </div>
             ))}
           </div>
         </div>
@@ -284,12 +327,44 @@ export function CalendarDayView({
             />
           ))}
 
+          {/* Framework background blocks (faded) — behind planned items */}
+          {dayFrameworkBlocks.map((b) => {
+            const fwTop = Math.max(0, toPercent(b.start));
+            const fwEnd = Math.min(100, toPercent(b.end));
+            if (fwEnd - fwTop <= 0) return null;
+            return (
+              <FrameworkBlockChip
+                key={b.id}
+                occ={b}
+                top={fwTop}
+                height={fwEnd - fwTop}
+                onClick={onFrameworkBlockClick}
+                onContextMenu={onFrameworkBlockContextMenu}
+              />
+            );
+          })}
+
           {/* Planned blocks */}
           {laidOut.map(({ item, column, columns }) => {
-            const top = toPercent(item.start);
-            const height = toDurationPercent(item.end.getTime() - item.start.getTime());
+            // Clamp to the visible window so a block that starts before
+            // hourStart (or ends after hourEnd) is cut at the grid edge
+            // instead of overflowing up into the date/framework header.
+            const clampedTop = Math.max(0, toPercent(item.start));
+            const clampedEnd = Math.min(100, toPercent(item.end));
+            const top = clampedTop;
+            const height = clampedEnd - clampedTop;
+            if (height <= 0) return null;
             const widthPct = 100 / columns;
             const leftPct = column * widthPct;
+
+            // If a framework background block shares this slot, reserve a strip
+            // on the start side (right in RTL) so the framework stays visible
+            // instead of being fully hidden by the task.
+            const overlapsFramework = dayFrameworkBlocks.some(
+              (b) =>
+                b.start.getTime() < item.end.getTime() &&
+                b.end.getTime() > item.start.getTime()
+            );
 
             // Actual stripes for this task (if it's a task).
             const taskActuals =
@@ -328,6 +403,7 @@ export function CalendarDayView({
                     : undefined
                 }
                 onItemDrop={onItemDrop}
+                startReservePx={overlapsFramework ? 86 : 0}
               />
             );
           })}
@@ -372,6 +448,7 @@ export function CalendarBlock({
   compact,
   readOnly,
   recurringAsMarker,
+  startReservePx = 0,
 }: {
   item: CalendarItem;
   now: Date;
@@ -393,6 +470,10 @@ export function CalendarBlock({
   /** When true, a recurring task renders as a flat deadline-style marker
    *  (repeat glyph + start time + underline) instead of a bordered block. */
   recurringAsMarker?: boolean;
+  /** Reserve this many px on the start side (right in RTL) so a framework
+   *  background block sharing this time slot stays visible behind/beside the
+   *  task instead of being fully covered. */
+  startReservePx?: number;
 }) {
   const { prefs } = useCalendarPrefs();
   const tz = prefs.timezone;
@@ -556,6 +637,9 @@ export function CalendarBlock({
           onDragRecognised: () => {
             touchDragRef.current = true;
           },
+          onLongPress: onContextMenu
+            ? (x, y) => onContextMenu(x, y)
+            : undefined,
         });
       }}
       onClick={(e) => {
@@ -627,8 +711,8 @@ export function CalendarBlock({
       style={{
         top: `${top}%`,
         height: `${Math.max(height, 1.5)}%`,
-        insetInlineStart: `calc(${leftPct}% + 2px)`,
-        width: `calc(${widthPct}% - 4px)`,
+        insetInlineStart: `calc(${leftPct}% + ${2 + startReservePx}px)`,
+        width: `calc(${widthPct}% - ${4 + startReservePx}px)`,
         // Touch/pen: claim the gesture for our manual move drag instead of
         // letting the browser scroll. Mouse uses native DnD (unaffected).
         touchAction: draggable ? "none" : undefined,

@@ -30,6 +30,11 @@ import { useCalendarPrefs } from "@/lib/hooks/useCalendarPrefs";
 import { DayNoteSlot } from "./DayNoteSlot";
 import { TaskCheckButton } from "./TaskCheckButton";
 import { RecurringMarker } from "./RecurringMarker";
+import { FrameworkInlineChip } from "./FrameworkBlockChip";
+import type {
+  FrameworkBlockOccurrenceView,
+  FrameworkDayLabelView,
+} from "@/lib/types/frameworks";
 
 /** yyyy-mm-dd in local time. */
 function monthDayKey(d: Date): string {
@@ -63,6 +68,14 @@ interface CalendarMonthViewProps {
   /** When true, recurring task items render as a flat deadline-style marker
    *  (repeat glyph + start time + underline) instead of a bordered chip. */
   recurringAsMarker?: boolean;
+  /** Framework occurrences (only all-day ones render in month cells). */
+  frameworkBlocks?: FrameworkBlockOccurrenceView[];
+  /** Per-day framework headers (yyyy-mm-dd → labels). */
+  frameworkLabelsByDate?: Map<string, FrameworkDayLabelView[]>;
+  /** Left-click a framework occurrence → cycle its check state. */
+  onFrameworkBlockClick?: (occ: FrameworkBlockOccurrenceView) => void;
+  /** Right-click a task chip → open the actions menu. */
+  onItemContextMenu?: (item: CalendarItem, x: number, y: number) => void;
 }
 
 export function CalendarMonthView({
@@ -76,6 +89,10 @@ export function CalendarMonthView({
   noteColorsByDate,
   readOnly,
   recurringAsMarker,
+  frameworkBlocks,
+  frameworkLabelsByDate,
+  onFrameworkBlockClick,
+  onItemContextMenu,
 }: CalendarMonthViewProps) {
   // "+ עוד N" popover — opens with the full list of single-day items for that
   // day so the user can reach the overflow without losing the cell's context.
@@ -308,43 +325,69 @@ export function CalendarMonthView({
                       )}
                       style={{ paddingTop: 4 + bandAreaHeight }}
                     >
-                      {/* Date number first (= right edge in RTL) and note
-                          slot expands to its left. Per user spec:
-                          "משמאל למספר". */}
-                      <div className="flex items-center justify-between gap-1 mb-0.5 min-w-0">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onDayClick(day);
-                          }}
-                          className={cn(
-                            "text-[11px] font-semibold px-1 py-0.5 rounded-sm hover:bg-ink-100 transition-colors shrink-0",
-                            today
-                              ? "text-primary-700"
-                              : past
-                              ? "text-ink-500"
-                              : inMonth
-                              ? "text-ink-900"
-                              : "text-ink-400"
-                          )}
-                          title="לחצי לעריכת הערה ליום"
-                          type="button"
-                        >
-                          {day.getDate()}
-                        </button>
+                      {/* Cell header: date + framework label always on the
+                          start (right in RTL), regular note fills to the end
+                          (left in RTL). */}
+                      <div className="flex items-center gap-1 mb-0.5 min-w-0">
+                        <div className="flex items-center gap-0.5 shrink-0">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onDayClick(day);
+                            }}
+                            className={cn(
+                              "text-[11px] font-semibold px-1 py-0.5 rounded-sm hover:bg-ink-100 transition-colors",
+                              today
+                                ? "text-primary-700"
+                                : past
+                                ? "text-ink-500"
+                                : inMonth
+                                ? "text-ink-900"
+                                : "text-ink-400"
+                            )}
+                            title="לחצי לעריכת הערה ליום"
+                            type="button"
+                          >
+                            {day.getDate()}
+                          </button>
+                          {(frameworkLabelsByDate?.get(monthDayKey(day)) ?? []).map((lbl, i) => (
+                            <span
+                              key={i}
+                              className="text-[10px] font-bold"
+                              style={{ color: lbl.color ?? "#6366f1" }}
+                              title={lbl.label}
+                            >
+                              {lbl.label}
+                            </span>
+                          ))}
+                        </div>
                         <DayNoteSlot
                           body={notesByDate?.get(monthDayKey(day))}
                           textColor={noteColorsByDate?.get(monthDayKey(day))}
-                          className="flex-1 text-end"
+                          className="flex-1 text-end min-w-0"
                         />
                       </div>
                       <div className="space-y-0.5">
+                        {(frameworkBlocks ?? [])
+                          .filter((b) => b.date === monthDayKey(day) && b.allDay)
+                          .map((occ) => (
+                            <FrameworkInlineChip
+                              key={occ.id}
+                              occ={occ}
+                              onClick={onFrameworkBlockClick}
+                            />
+                          ))}
                         {visible.map((it) => (
                           <MonthItemChip
                             key={it.id}
                             item={it}
                             now={now}
                             onClick={() => onItemClick(it)}
+                            onContextMenu={
+                              onItemContextMenu
+                                ? (x, y) => onItemContextMenu(it, x, y)
+                                : undefined
+                            }
                             readOnly={readOnly}
                             recurringAsMarker={recurringAsMarker}
                           />
@@ -682,12 +725,14 @@ function MonthItemChip({
   item,
   now,
   onClick,
+  onContextMenu,
   readOnly,
   recurringAsMarker,
 }: {
   item: CalendarItem;
   now: Date;
   onClick: () => void;
+  onContextMenu?: (x: number, y: number) => void;
   readOnly?: boolean;
   recurringAsMarker?: boolean;
 }) {
@@ -761,6 +806,11 @@ function MonthItemChip({
         tabIndex={0}
         data-cal-band
         onClick={onClick}
+        onContextMenu={
+          onContextMenu
+            ? (e) => { e.preventDefault(); e.stopPropagation(); onContextMenu(e.clientX, e.clientY); }
+            : undefined
+        }
         onKeyDown={handleKeyDown}
         draggable={draggable}
         onDragStart={onDragStart}
@@ -793,6 +843,11 @@ function MonthItemChip({
       tabIndex={0}
       data-cal-band
       onClick={onClick}
+      onContextMenu={
+        onContextMenu
+          ? (e) => { e.preventDefault(); e.stopPropagation(); onContextMenu(e.clientX, e.clientY); }
+          : undefined
+      }
       onKeyDown={handleKeyDown}
       draggable={draggable}
       onDragStart={onDragStart}

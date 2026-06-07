@@ -2,18 +2,13 @@ import { useState, useRef, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { MoreHorizontal, Archive, ArchiveRestore } from "lucide-react";
 import { useArchiveProject, useRestoreProject } from "@/lib/hooks/useProjects";
-import type { Project, ProjectPricingMode } from "@/lib/types/domain";
+import type { Project } from "@/lib/types/domain";
 import { pushUndo } from "@/lib/undo/store";
+import { ListIcon } from "@/components/tasks/list-icons";
 
 interface Props {
   project: Project;
 }
-
-const PRICING_LABEL: Record<ProjectPricingMode, string> = {
-  hourly: "שעתי",
-  fixed_price: "מחיר סופי",
-  quote: "הצעת מחיר",
-};
 
 const STATUS_LABEL: Record<string, string> = {
   active: "פעיל",
@@ -84,8 +79,12 @@ export function ProjectCard({ project }: Props) {
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="flex items-center gap-2 min-w-0">
           {project.emoji && (
-            <span className="text-xl shrink-0" aria-hidden>
-              {project.emoji}
+            <span className="shrink-0 inline-flex text-ink-700" aria-hidden>
+              <ListIcon
+                emoji={project.emoji}
+                className="w-5 h-5"
+                emojiClassName="text-xl leading-none"
+              />
             </span>
           )}
           <h3 className="text-base font-semibold text-ink-900 truncate">
@@ -140,7 +139,6 @@ export function ProjectCard({ project }: Props) {
       )}
 
       <div className="flex items-center gap-1.5 flex-wrap">
-        <span className="chip">{PRICING_LABEL[project.pricing_mode]}</span>
         {project.status && project.status !== "active" && (
           <span className="chip">{STATUS_LABEL[project.status] ?? project.status}</span>
         )}

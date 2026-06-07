@@ -225,6 +225,15 @@ export function useAskRecordingFreeText() {
   });
 }
 
+export function useGenerateRecordingDocument() {
+  // Returns Markdown text only; the caller persists it into ai_output.documents
+  // via useUpdateRecording, so no cache writes happen here.
+  return useMutation({
+    mutationFn: ({ recordingId, prompt }: { recordingId: string; prompt: string }) =>
+      service.generateRecordingDocument(recordingId, prompt),
+  });
+}
+
 export function useClearRecordingFreeTextHistory() {
   const qc = useQueryClient();
   return useMutation({

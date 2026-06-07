@@ -109,6 +109,75 @@ export type MealPlanShareInsert = Tables["meal_plan_shares"]["Insert"];
 export const MEAL_PLAN_DAY_STATUSES = ["planned", "eaten", "skipped"] as const;
 export type MealPlanDayStatus = (typeof MEAL_PLAN_DAY_STATUSES)[number];
 
+// Shopping — household staples, store connections, runs ------------------------
+export type HouseholdStaple = Tables["household_staples"]["Row"];
+export type HouseholdStapleInsert = Tables["household_staples"]["Insert"];
+export type HouseholdStapleUpdate = Tables["household_staples"]["Update"];
+
+export type StoreConnection = Tables["store_connections"]["Row"];
+export type StoreConnectionInsert = Tables["store_connections"]["Insert"];
+export type StoreConnectionUpdate = Tables["store_connections"]["Update"];
+
+export type ShoppingRun = Tables["shopping_runs"]["Row"];
+export type ShoppingRunInsert = Tables["shopping_runs"]["Insert"];
+export type ShoppingRunUpdate = Tables["shopping_runs"]["Update"];
+
+export type ShoppingRunItem = Tables["shopping_run_items"]["Row"];
+export type ShoppingRunItemInsert = Tables["shopping_run_items"]["Insert"];
+export type ShoppingRunItemUpdate = Tables["shopping_run_items"]["Update"];
+
+/** How a store connection hands off a shopping run. */
+export const STORE_CONNECTION_KINDS = ["export", "deeplink", "cart_api"] as const;
+export type StoreConnectionKind = (typeof STORE_CONNECTION_KINDS)[number];
+
+export const STORE_CONNECTION_KIND_LABELS: Record<StoreConnectionKind, string> = {
+  export: "ייצוא (וואטסאפ / העתקה)",
+  deeplink: "קישור לאתר החנות",
+  cart_api: "הוספה לסל (בקרוב)",
+};
+
+/** Shopping-run lifecycle. */
+export const SHOPPING_RUN_STATUSES = [
+  "open",
+  "sent",
+  "ordered",
+  "reconciling",
+  "closed",
+] as const;
+export type ShoppingRunStatus = (typeof SHOPPING_RUN_STATUSES)[number];
+
+export const SHOPPING_RUN_STATUS_LABELS: Record<ShoppingRunStatus, string> = {
+  open: "פתוח",
+  sent: "נשלח",
+  ordered: "הוזמן",
+  reconciling: "בבדיקת הגעה",
+  closed: "סגור",
+};
+
+/** Where a run item came from. */
+export const SHOPPING_ITEM_SOURCES = ["menu", "staple", "manual", "carryover"] as const;
+export type ShoppingItemSource = (typeof SHOPPING_ITEM_SOURCES)[number];
+
+/** Per-item tracking status within a run. */
+export const SHOPPING_ITEM_STATUSES = [
+  "needed",
+  "in_cart",
+  "ordered",
+  "received",
+  "missing",
+  "moved",
+] as const;
+export type ShoppingItemStatus = (typeof SHOPPING_ITEM_STATUSES)[number];
+
+export const SHOPPING_ITEM_STATUS_LABELS: Record<ShoppingItemStatus, string> = {
+  needed: "חסר",
+  in_cart: "בסל",
+  ordered: "הוזמן",
+  received: "התקבל",
+  missing: "לא הגיע",
+  moved: "הועבר",
+};
+
 /** 0 = Sunday, … 6 = Saturday (ISO/JS Date.getDay() convention). */
 export const DAY_OF_WEEK_KEYS = [0, 1, 2, 3, 4, 5, 6] as const;
 export type DayOfWeek = (typeof DAY_OF_WEEK_KEYS)[number];

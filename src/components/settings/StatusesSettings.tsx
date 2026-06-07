@@ -13,6 +13,7 @@ import {
   slugifyStatusKey,
 } from "@/lib/services/user-task-statuses";
 import { pushUndo } from "@/lib/undo/store";
+import { useTaskFormPrefs } from "@/lib/hooks/useTaskFormPrefs";
 import type { UserTaskStatus } from "@/lib/types/domain";
 
 const COLOR_PRESETS = [
@@ -31,6 +32,7 @@ export function StatusesSettings() {
   const [draftLabel, setDraftLabel] = useState("");
   const [draftColor, setDraftColor] = useState(COLOR_PRESETS[3]);
   const [confirmReset, setConfirmReset] = useState(false);
+  const { prefs: taskFormPrefs, setShowStatus } = useTaskFormPrefs();
 
   const handleAdd = async () => {
     const label = draftLabel.trim();
@@ -75,6 +77,36 @@ export function StatusesSettings() {
 
   return (
     <div className="space-y-4">
+      {/* Show-status-on-create toggle */}
+      <div className="card p-4">
+        <label className="flex items-start justify-between gap-3 cursor-pointer">
+          <div>
+            <div className="font-semibold text-ink-900 text-sm">הצגת סטטוס ביצירת משימה</div>
+            <p className="text-xs text-ink-500 mt-0.5 leading-relaxed">
+              כברירת מחדל שדה הסטטוס מוסתר ביצירת/עריכת משימה. הפעלה כאן תציג אותו
+              בכל המסכים שיוצרים משימה.
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={taskFormPrefs.showStatus}
+            onClick={() => setShowStatus(!taskFormPrefs.showStatus)}
+            className={cn(
+              "relative w-11 h-6 rounded-full transition-colors shrink-0 mt-0.5",
+              taskFormPrefs.showStatus ? "bg-primary-500" : "bg-ink-300"
+            )}
+          >
+            <span
+              className={cn(
+                "absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all",
+                taskFormPrefs.showStatus ? "start-0.5" : "end-0.5"
+              )}
+            />
+          </button>
+        </label>
+      </div>
+
       <div className="card p-4">
         <div className="flex items-start justify-between gap-3 mb-3">
           <div>

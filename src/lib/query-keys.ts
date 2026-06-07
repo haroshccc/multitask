@@ -33,6 +33,13 @@ export const queryKeys = {
   taskLists: (orgId: string) => ["task-lists", orgId] as const,
   taskList: (listId: string) => ["task-list", listId] as const,
 
+  // Goal plans (תוכניות עבודה)
+  plans: (orgId: string) => ["plans", orgId] as const,
+  plan: (planId: string) => ["plan", planId] as const,
+  planTasks: (planId: string) => ["plan", planId, "tasks"] as const,
+  planDecisions: (planId: string) => ["plan", planId, "decisions"] as const,
+  planStageImpacts: (planId: string) => ["plan", planId, "impacts"] as const,
+
   // Projects
   projects: (orgId: string, filters?: FilterConfig) =>
     ["projects", orgId, filters ?? {}] as const,
@@ -67,6 +74,15 @@ export const queryKeys = {
   thoughtLists: (orgId: string) => ["thought-lists", orgId] as const,
   thoughtProcessings: (thoughtId: string) =>
     ["thought", thoughtId, "processings"] as const,
+
+  // Thought-developments (פיתוח מחשבה)
+  thoughtDevelopments: (orgId: string) =>
+    ["thought-developments", orgId] as const,
+  thoughtDevelopment: (id: string) => ["thought-development", id] as const,
+  thoughtDevelopmentFiles: (id: string) =>
+    ["thought-development", id, "files"] as const,
+  thoughtDevelopmentShares: (id: string) =>
+    ["thought-development", id, "shares"] as const,
 
   // Questions
   questions: (projectId: string) => ["questions", projectId] as const,
@@ -113,6 +129,24 @@ export const queryKeys = {
   mealPlanDays: (orgId: string, from: string, to: string) =>
     ["meal-plan-days", orgId, from, to] as const,
   mealPlanShares: (orgId: string) => ["meal-plan-shares", orgId] as const,
+
+  // Shopping — staples, store connections, runs
+  householdStaples: (orgId: string) => ["household-staples", orgId] as const,
+  storeConnections: (orgId: string) => ["store-connections", orgId] as const,
+  shoppingRuns: (orgId: string) => ["shopping-runs", orgId] as const,
+  shoppingRun: (runId: string) => ["shopping-run", runId] as const,
+
+  // Frameworks ("מסגרת")
+  frameworks: (orgId: string) => ["frameworks", orgId] as const,
+  framework: (frameworkId: string) => ["framework", frameworkId] as const,
+  frameworkContent: (frameworkId: string) =>
+    ["framework", frameworkId, "content"] as const,
+  frameworkShares: (frameworkId: string) =>
+    ["framework", frameworkId, "shares"] as const,
+  frameworkHistory: (frameworkId: string) =>
+    ["framework", frameworkId, "history"] as const,
+  frameworkVisibility: (userId: string, orgId: string) =>
+    ["framework-visibility", userId, orgId] as const,
 } as const;
 
 /**
@@ -127,6 +161,10 @@ export const queryFamilies = {
   allEvents: (orgId: string) => ["events", orgId] as const,
   allRecordings: (orgId: string) => ["recordings", orgId] as const,
   allThoughts: (orgId: string) => ["thoughts", orgId] as const,
+  allThoughtDevelopments: (orgId: string) =>
+    ["thought-developments", orgId] as const,
+  thoughtDevelopmentFamily: (id: string) =>
+    ["thought-development", id] as const,
   allTaskLists: (orgId: string) => ["task-lists", orgId] as const,
   allThoughtLists: (orgId: string) => ["thought-lists", orgId] as const,
   allRecordingLists: (orgId: string) => ["recording-lists", orgId] as const,
@@ -143,4 +181,12 @@ export const queryFamilies = {
   allMealPlanTemplate: (orgId: string) => ["meal-plan-template", orgId] as const,
   allMealPlanDays: (orgId: string) => ["meal-plan-days", orgId] as const,
   allMealPlanShares: (orgId: string) => ["meal-plan-shares", orgId] as const,
+  allHouseholdStaples: (orgId: string) => ["household-staples", orgId] as const,
+  allStoreConnections: (orgId: string) => ["store-connections", orgId] as const,
+  allShoppingRuns: (orgId: string) => ["shopping-runs", orgId] as const,
+  shoppingRunFamily: (runId: string) => ["shopping-run", runId] as const,
+  allFrameworks: (orgId: string) => ["frameworks", orgId] as const,
+  frameworkFamily: (frameworkId: string) => ["framework", frameworkId] as const,
+  allPlans: (orgId: string) => ["plans", orgId] as const,
+  planFamily: (planId: string) => ["plan", planId] as const,
 } as const;

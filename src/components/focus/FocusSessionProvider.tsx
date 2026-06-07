@@ -87,6 +87,12 @@ interface FocusContextValue {
   /** Absorb the current overrun into the task block + push the rest of the day
    *  forward by that amount, keep working, and arm the finish follow-up. */
   pushByOverrun: () => void;
+  /** Set when the user tries to finish/pause while past the planned end without
+   *  having pushed — we ask whether to grow the task block by the overrun. */
+  overrunPrompt: { kind: "finish" | "pause"; overrunMin: number } | null;
+  /** Resolve the overrun prompt: `true` grows the block (undoable), `false`
+   *  leaves the block as planned. Either way the finish/pause proceeds. */
+  resolveOverrunPrompt: (grow: boolean) => void;
   // conflict actions
   resolveConflictShorten: () => void;
   resolveConflictPush: () => void;
@@ -159,6 +165,10 @@ export function FocusSessionProvider({ children }: { children: React.ReactNode }
   const [conflict, setConflict] = useState<ConflictInfo | null>(null);
   const [latePrompt, setLatePrompt] = useState<LatePromptInfo | null>(null);
   const [overrunArmed, setOverrunArmed] = useState(false);
+  const [overrunPrompt, setOverrunPrompt] = useState<{
+    kind: "finish" | "pause";
+    overrunMin: number;
+  } | null>(null);
   const [reminder, setReminder] = useState<ReminderInfo | null>(null);
   const [endWarning, setEndWarning] = useState<{ minutesLeft: number } | null>(
     null
@@ -172,6 +182,11 @@ export function FocusSessionProvider({ children }: { children: React.ReactNode }
   // it doesn't re-fire every tick. Reset whenever endsAt changes (extend /
   // resume) or the session clears.
   const endWarnedRef = useRef(false);
+  // Authoritative planned duration (minutes) for the current session task. We
+  // mutate this locally on every extend / absorb so cumulative growth never
+  // relies on a possibly-stale `taskById` read (which caused lost time when a
+  // push was immediately followed by finish).
+  const plannedDurationRef = useRef(0);
 
   const taskById = useMemo(() => {
     const m = new Map<string, Task>();
@@ -226,6 +241,8 @@ export function FocusSessionProvider({ children }: { children: React.ReactNode }
     restoredRef.current = true;
     const s = loadSession();
     if (!s || !taskById.has(s.taskId)) return;
+    plannedDurationRef.current =
+      taskById.get(s.taskId)?.duration_minutes ?? prefs.defaultDurationMin;
     setSessionTaskId(s.taskId);
     setEndsAt(s.endsAt);
     if (s.status === "paused") {
@@ -236,7 +253,7 @@ export function FocusSessionProvider({ children }: { children: React.ReactNode }
     } else {
       setSessionStatus("running");
     }
-  }, [tasks.length, taskById]);
+  }, [tasks.length, taskById, prefs.defaultDurationMin]);
 
   const status: Status = sessionStatus
     ? sessionStatus
@@ -342,7 +359,13 @@ export function FocusSessionProvider({ children }: { children: React.ReactNode }
   const shiftSchedule = useCallback(
     (shiftMin: number, fromTs: number, excludeId: string) => {
       if (shiftMin <= 0) return;
-      const dayEnd = new Date();
+      // Bound the selection to the calendar day of `fromTs` (the overrun /
+      // late-start anchor), NOT "today by wall clock" — so a session that runs
+      // past midnight never sweeps in tasks that are scheduled to start the
+      // next day. Tasks already scheduled at e.g. 00:01 stay put even if an
+      // earlier task now ends after them; only same-day tasks shift (and they
+      // may legitimately spill past midnight as a result).
+      const dayEnd = new Date(fromTs);
       dayEnd.setHours(23, 59, 59, 999);
       const toShift = tasks.filter(
         (t) =>
@@ -383,8 +406,9 @@ export function FocusSessionProvider({ children }: { children: React.ReactNode }
       void ensureNotificationPermission();
       startTimer.mutate({ taskId: task.id });
       const now = Date.now();
+      plannedDurationRef.current = durationMinOf(task, prefs.defaultDurationMin);
       setSessionTaskId(task.id);
-      setEndsAt(now + durationMinOf(task, prefs.defaultDurationMin) * 60_000);
+      setEndsAt(now + plannedDurationRef.current * 60_000);
       setSessionStatus("running");
       setAlertTaskId(null);
       setAlertMinimized(false);
@@ -439,11 +463,32 @@ export function FocusSessionProvider({ children }: { children: React.ReactNode }
   const minimizeAlert = useCallback(() => setAlertMinimized(true), []);
   const restoreAlert = useCallback(() => setAlertMinimized(false), []);
 
-  const pauseSession = useCallback(() => {
+  // Stop the timer and move the session into the paused state, freezing the
+  // remaining time. Shared by the pause action and the pause-overrun prompt.
+  const finalizePause = useCallback(() => {
     stopTimer.mutate();
     setPausedRemainingMs(endsAt != null ? Math.max(0, endsAt - Date.now()) : 0);
     setSessionStatus("paused");
   }, [stopTimer, endsAt]);
+
+  // Current overrun in whole minutes (>=1), or 0 when not past the end yet.
+  const currentOverrunMin = useCallback(() => {
+    if (endsAt == null) return 0;
+    const now = Date.now();
+    if (now <= endsAt) return 0;
+    return Math.max(1, Math.ceil((now - endsAt) / 60_000));
+  }, [endsAt]);
+
+  const pauseSession = useCallback(() => {
+    // If we're past the planned end and the user hasn't already pushed, ask
+    // whether to grow the calendar block to match the time actually worked.
+    const over = currentOverrunMin();
+    if (!overrunArmed && over > 0) {
+      setOverrunPrompt({ kind: "pause", overrunMin: over });
+      return;
+    }
+    finalizePause();
+  }, [overrunArmed, currentOverrunMin, finalizePause]);
 
   const resumeSession = useCallback(() => {
     if (!sessionTaskId) return;
@@ -462,6 +507,7 @@ export function FocusSessionProvider({ children }: { children: React.ReactNode }
     setReminder(null);
     setEndWarning(null);
     setOverrunArmed(false);
+    setOverrunPrompt(null);
     remindedRef.current.clear();
   }, []);
 
@@ -470,29 +516,56 @@ export function FocusSessionProvider({ children }: { children: React.ReactNode }
   // the overrun applied (0 when there's none). Does NOT reset `endsAt`.
   const absorbOverrunNow = useCallback(() => {
     if (endsAt == null || !sessionTaskId) return 0;
-    const now = Date.now();
-    if (now <= endsAt) return 0;
-    const overrunMin = Math.max(1, Math.ceil((now - endsAt) / 60_000));
-    const t = taskById.get(sessionTaskId);
-    if (t) {
-      const curMin = t.duration_minutes ?? prefs.defaultDurationMin;
-      updateTask.mutate({
-        taskId: sessionTaskId,
-        patch: { duration_minutes: curMin + overrunMin },
-      });
-    }
+    const overrunMin = currentOverrunMin();
+    if (overrunMin <= 0) return 0;
+    plannedDurationRef.current += overrunMin;
+    updateTask.mutate({
+      taskId: sessionTaskId,
+      patch: { duration_minutes: plannedDurationRef.current },
+    });
     shiftSchedule(overrunMin, endsAt, sessionTaskId);
     return overrunMin;
-  }, [
-    endsAt,
-    sessionTaskId,
-    taskById,
-    updateTask,
-    prefs.defaultDurationMin,
-    shiftSchedule,
-  ]);
+  }, [endsAt, sessionTaskId, currentOverrunMin, updateTask, shiftSchedule]);
+
+  // Grow ONLY the current task's block by the overrun, with undo — used by the
+  // finish/pause prompt. Unlike `absorbOverrunNow` it does not push the rest of
+  // the day (the user didn't ask to reshuffle, just to record the extra time).
+  const growBlockByOverrun = useCallback(() => {
+    if (!sessionTaskId) return;
+    const overrunMin = currentOverrunMin();
+    if (overrunMin <= 0) return;
+    const prevDur = plannedDurationRef.current;
+    const nextDur = prevDur + overrunMin;
+    plannedDurationRef.current = nextDur;
+    updateTask.mutate({
+      taskId: sessionTaskId,
+      patch: { duration_minutes: nextDur },
+    });
+    pushUndo({
+      description: `הארכת המשימה ב-${overrunMin} דק׳`,
+      undo: () => {
+        plannedDurationRef.current = prevDur;
+        updateTask.mutate({
+          taskId: sessionTaskId,
+          patch: { duration_minutes: prevDur },
+        });
+      },
+      redo: () => {
+        plannedDurationRef.current = nextDur;
+        updateTask.mutate({
+          taskId: sessionTaskId,
+          patch: { duration_minutes: nextDur },
+        });
+      },
+    });
+  }, [sessionTaskId, currentOverrunMin, updateTask]);
 
   const finishSession = useCallback(() => {
+    // Past the end and not yet pushed → ask whether to grow the block first.
+    if (!overrunArmed && currentOverrunMin() > 0) {
+      setOverrunPrompt({ kind: "finish", overrunMin: currentOverrunMin() });
+      return;
+    }
     // If the user armed "push by overrun", absorb the remaining difference that
     // accrued since the last push before finishing. `endsAt` was reset to the
     // last push moment, so this only counts the new diff — no double-pushing.
@@ -500,7 +573,7 @@ export function FocusSessionProvider({ children }: { children: React.ReactNode }
     setOverrunArmed(false);
     stopTimer.mutate();
     clearSession();
-  }, [overrunArmed, absorbOverrunNow, stopTimer, clearSession]);
+  }, [overrunArmed, currentOverrunMin, absorbOverrunNow, stopTimer, clearSession]);
 
   const pushByOverrun = useCallback(() => {
     if (absorbOverrunNow() <= 0) return;
@@ -509,6 +582,26 @@ export function FocusSessionProvider({ children }: { children: React.ReactNode }
     setEndsAt(Date.now());
     setOverrunArmed(true);
   }, [absorbOverrunNow]);
+
+  // Resolve the finish/pause overrun prompt. `grow` records the extra worked
+  // time into the task block (undoable); either way the original finish/pause
+  // intent then proceeds.
+  const resolveOverrunPrompt = useCallback(
+    (grow: boolean) => {
+      const p = overrunPrompt;
+      if (!p) return;
+      if (grow) growBlockByOverrun();
+      setOverrunPrompt(null);
+      setOverrunArmed(false);
+      if (p.kind === "finish") {
+        stopTimer.mutate();
+        clearSession();
+      } else {
+        finalizePause();
+      }
+    },
+    [overrunPrompt, growBlockByOverrun, stopTimer, clearSession, finalizePause]
+  );
 
   // X on the paused banner — the timer is already stopped.
   const closeSession = useCallback(() => {
@@ -562,14 +655,11 @@ export function FocusSessionProvider({ children }: { children: React.ReactNode }
       // finished early keeps its original block (the actual-time overlay shows
       // the shorter worked span inside it).
       if (sessionTaskId) {
-        const t = taskById.get(sessionTaskId);
-        if (t) {
-          const curMin = t.duration_minutes ?? prefs.defaultDurationMin;
-          updateTask.mutate({
-            taskId: sessionTaskId,
-            patch: { duration_minutes: curMin + minutes },
-          });
-        }
+        plannedDurationRef.current += minutes;
+        updateTask.mutate({
+          taskId: sessionTaskId,
+          patch: { duration_minutes: plannedDurationRef.current },
+        });
       }
       checkConflict(newEndsAt);
     },
@@ -580,9 +670,7 @@ export function FocusSessionProvider({ children }: { children: React.ReactNode }
       sessionTaskId,
       startTimer,
       checkConflict,
-      taskById,
       updateTask,
-      prefs.defaultDurationMin,
     ]
   );
 
@@ -617,8 +705,9 @@ export function FocusSessionProvider({ children }: { children: React.ReactNode }
     const fromTs = new Date(
       taskById.get(conflict.nextTaskId)?.scheduled_at ?? Date.now()
     ).getTime();
-    // Push the conflicting task and every later visible scheduled task today.
-    const dayEnd = new Date();
+    // Push the conflicting task and every later visible scheduled task on the
+    // same calendar day as the conflict (never next-day-start tasks).
+    const dayEnd = new Date(fromTs);
     dayEnd.setHours(23, 59, 59, 999);
     const toShift = tasks.filter(
       (t) =>
@@ -759,6 +848,8 @@ export function FocusSessionProvider({ children }: { children: React.ReactNode }
     overrunMs,
     overrunArmed,
     pushByOverrun,
+    overrunPrompt,
+    resolveOverrunPrompt,
     resolveConflictShorten,
     resolveConflictPush,
     dismissConflict,

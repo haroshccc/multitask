@@ -8,7 +8,9 @@ import {
   Mic,
   Lightbulb,
   FolderKanban,
+  Contact as ContactIcon,
   Target,
+  Frame,
   UtensilsCrossed,
   Settings as SettingsIcon,
   Shield,
@@ -21,6 +23,7 @@ import {
   Undo2,
   Redo2,
   Keyboard,
+  Sparkles,
 } from "lucide-react";
 import { useUndoStore, useCanUndo, useCanRedo } from "@/lib/undo/store";
 import { useAuth } from "@/lib/auth/AuthContext";
@@ -37,6 +40,8 @@ import { FocusSessionLayer } from "@/components/focus/FocusSessionLayer";
 import { PendingInviteBanner } from "@/components/org/PendingInviteBanner";
 import { KeyboardShortcutsPanel } from "@/components/ui/KeyboardShortcutsPanel";
 import { ToastRegion } from "@/components/ui/Toast";
+import { AssistantPanel } from "@/components/ai/AssistantPanel";
+import { useAssistantUi } from "@/lib/ai/store";
 
 interface NavItem {
   to: string;
@@ -49,11 +54,13 @@ const NAV: NavItem[] = [
   { to: "/app", label: "דשבורד", icon: Home, end: true },
   { to: "/app/tasks", label: "משימות", icon: CheckSquare },
   { to: "/app/goals", label: "יעדים", icon: Target },
+  { to: "/app/frameworks", label: "מסגרות", icon: Frame },
   { to: "/app/calendar", label: "יומן", icon: CalendarIcon },
   { to: "/app/gantt", label: "Gantt", icon: BarChart3 },
   { to: "/app/recordings", label: "הקלטות", icon: Mic },
   { to: "/app/thoughts", label: "מחשבות", icon: Lightbulb },
   { to: "/app/projects", label: "פרויקטים", icon: FolderKanban },
+  { to: "/app/contacts", label: "אנשי קשר", icon: ContactIcon },
   { to: "/app/food", label: "אוכל", icon: UtensilsCrossed },
 ];
 
@@ -61,6 +68,7 @@ const NAV: NavItem[] = [
 const G_NAV: Record<string, string> = {
   KeyT: "/app/tasks",
   KeyG: "/app/goals",
+  KeyM: "/app/frameworks",
   KeyC: "/app/calendar",
   KeyR: "/app/recordings",
   KeyH: "/app/thoughts",
@@ -77,6 +85,9 @@ export function AppShell() {
   const [captureOpen, setCaptureOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const assistantUi = useAssistantUi();
+  // On by default; set VITE_FEATURE_AI_ASSISTANT=false to hide it.
+  const assistantEnabled = import.meta.env.VITE_FEATURE_AI_ASSISTANT !== "false";
 
   // Ref so keyboard handler always sees the latest pathname without re-registering.
   const pathnameRef = useRef(location.pathname);
@@ -226,12 +237,15 @@ export function AppShell() {
         <div className="flex items-center gap-2 min-w-0">
           <button
             onClick={() => setSidebarOpen((v) => !v)}
-            className="md:hidden p-2 rounded-xl hover:bg-ink-100"
+            className="md:hidden p-2 rounded-xl hover:bg-ink-100 shrink-0"
             aria-label="פתח תפריט"
           >
             {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
-          <Logo markSize={28} className="min-w-0" idKey="shellLogo" />
+          {/* Mobile: mark only (the wordmark is wide and crowded the menu
+              button). Desktop: full wordmark. */}
+          <Logo markSize={26} markOnly className="md:hidden shrink-0" idKey="shellLogoM" />
+          <Logo markSize={28} className="hidden md:flex min-w-0" idKey="shellLogo" />
         </div>
 
         {/* Horizontal nav (desktop) */}
@@ -495,6 +509,23 @@ export function AppShell() {
 
       <FloatingTimerBanner />
       <FocusSessionLayer />
+
+      {assistantEnabled && (
+        <>
+          {!assistantUi.open && (
+            <button
+              type="button"
+              onClick={() => assistantUi.setOpen(true)}
+              className="ai-launcher fixed bottom-20 md:bottom-4 start-4 z-40 w-16 h-16 rounded-full text-white flex items-center justify-center transition-transform hover:scale-110"
+              aria-label="עוזר AI"
+              title="עוזר AI"
+            >
+              <Sparkles className="ai-launcher-icon w-7 h-7" />
+            </button>
+          )}
+          <AssistantPanel />
+        </>
+      )}
     </div>
     </FocusSessionProvider>
   );

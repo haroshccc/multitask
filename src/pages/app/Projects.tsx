@@ -20,12 +20,6 @@ const STATUS_OPTIONS = [
   { value: "completed", label: "הושלם" },
 ];
 
-const PRICING_OPTIONS = [
-  { value: "hourly", label: "שעתי" },
-  { value: "fixed_price", label: "מחיר סופי" },
-  { value: "quote", label: "הצעת מחיר" },
-];
-
 export function Projects() {
   const [filters, setFilters] = useFiltersFromUrl();
   const [showArchived, setShowArchived] = useState(false);
@@ -59,12 +53,6 @@ export function Projects() {
       if (filters.statuses?.length && !filters.statuses.includes(p.status)) {
         return false;
       }
-      if (
-        filters.pricingModes?.length &&
-        !filters.pricingModes.includes(p.pricing_mode)
-      ) {
-        return false;
-      }
       if (filters.tags?.length) {
         const tagSet = new Set(p.tags ?? []);
         if (!filters.tags.some((t) => tagSet.has(t))) return false;
@@ -80,8 +68,8 @@ export function Projects() {
 
   return (
     <ScreenScaffold
-      title="פרויקטים ותמחור"
-      subtitle="כל פרויקט = דשבורד עם טבלת משימות, מחשבון תמחור, הוצאות, שאלות וסטטיסטיקות."
+      title="פרויקטים"
+      subtitle="כל פרויקט = מרחב עבודה עם משימות, פגישות, תשלומים ומסמכים — משותף לבחירתך."
       actions={
         <span className="inline-flex items-center gap-2">
           <ViewToggle view={view} onChange={setView} />
@@ -112,12 +100,6 @@ export function Projects() {
               type: "multi-enum",
               label: "סטטוס",
               options: STATUS_OPTIONS,
-            },
-            {
-              key: "pricingModes",
-              type: "multi-enum",
-              label: "תמחור",
-              options: PRICING_OPTIONS,
             },
             { key: "tags", type: "multi-text", label: "תגים" },
           ]}
@@ -228,7 +210,7 @@ function EmptyState({
       <div className="text-4xl mb-3">📁</div>
       <h3 className="text-base font-semibold text-ink-900 mb-1">עוד אין פרויקטים</h3>
       <p className="text-xs text-ink-500 mb-4 max-w-sm mx-auto">
-        כל פרויקט הוא דשבורד נפרד עם משימות, תמחור, הוצאות ותבנית לשימוש חוזר.
+        כל פרויקט הוא מרחב עבודה נפרד עם משימות, פגישות, תשלומים ומסמכים.
       </p>
       <button
         type="button"

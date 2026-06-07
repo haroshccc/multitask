@@ -6,6 +6,7 @@ import {
   Columns3,
   CheckCircle2,
   Circle,
+  ClipboardList,
   Flag,
   Flame,
   LayoutGrid,
@@ -35,6 +36,8 @@ import {
 } from "@/lib/goals/computation";
 import type { Task, TimeEntry } from "@/lib/types/domain";
 import { TaskEditModal, type TaskCreateDraft } from "@/components/tasks/TaskEditModal";
+import { FrameworkGoalsSection } from "@/components/frameworks/FrameworkGoalsSection";
+import { PlansSection } from "@/components/plans/PlansSection";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -43,6 +46,7 @@ import { TaskEditModal, type TaskCreateDraft } from "@/components/tasks/TaskEdit
 type GoalTypeFilter = "all" | "achievement" | "habit";
 type GoalLayout = "grid" | "columns";
 type ScopeFilter = "all" | "mine" | "shared" | "others";
+type GoalSubPage = "goals" | "plans";
 
 /** How the current user relates to this goal's sharing state */
 type ShareKind =
@@ -59,6 +63,7 @@ type ShareKind =
 const LAYOUT_KEY = "multitask:goals:layout";
 const TYPE_FILTER_KEY = "multitask:goals:typeFilter";
 const SCOPE_FILTER_KEY = "multitask:goals:scopeFilter";
+const SUBPAGE_KEY = "multitask:goals:subPage";
 
 function readLS<T>(key: string, fallback: T): T {
   try {
@@ -227,9 +232,19 @@ export function Goals() {
     readLS<ScopeFilter>(SCOPE_FILTER_KEY, "all")
   );
   const [userFilter, setUserFilter] = useState<string | null>(null);
+  const [subPage, setSubPage] = useState<GoalSubPage>(() =>
+    readLS<GoalSubPage>(SUBPAGE_KEY, "goals")
+  );
+  const setSubPagePersist = (v: GoalSubPage) => {
+    setSubPage(v);
+    localStorage.setItem(SUBPAGE_KEY, JSON.stringify(v));
+  };
 
   useEffect(() => {
-    const handler = () => setCreateDraft({ goalEnabled: true });
+    const handler = () => {
+      setSubPagePersist("goals");
+      setCreateDraft({ goalEnabled: true });
+    };
     window.addEventListener("app:new-goal", handler);
     return () => window.removeEventListener("app:new-goal", handler);
   }, []);
@@ -346,17 +361,63 @@ export function Goals() {
   return (
     <ScreenScaffold
       title="יעדים"
-      subtitle="הישגים חד-פעמיים והרגלים מחזוריים — מעקב סטריק, התקדמות ושיאים."
+      subtitle={
+        subPage === "plans"
+          ? "תוכניות עבודה לעמידה ביעדים — שלבים, משימות, החלטות ויעדים כמותיים."
+          : "הישגים חד-פעמיים והרגלים מחזוריים — מעקב סטריק, התקדמות ושיאים."
+      }
       actions={
-        <button
-          onClick={() => setCreateDraft({ goalEnabled: true })}
-          className="btn-primary flex items-center gap-1.5"
-        >
-          <Plus className="w-4 h-4" />
-          יעד חדש
-        </button>
+        subPage === "plans" ? (
+          <button
+            onClick={() => window.dispatchEvent(new Event("app:new-plan"))}
+            className="btn-primary flex items-center gap-1.5"
+          >
+            <Plus className="w-4 h-4" />
+            תוכנית חדשה
+          </button>
+        ) : (
+          <button
+            onClick={() => setCreateDraft({ goalEnabled: true })}
+            className="btn-primary flex items-center gap-1.5"
+          >
+            <Plus className="w-4 h-4" />
+            יעד חדש
+          </button>
+        )
       }
     >
+      {/* Sub-page switcher: goals vs. work plans */}
+      <div className="inline-flex rounded-lg border border-ink-200 overflow-hidden text-sm mb-4">
+        {(
+          [
+            { id: "goals", label: "יעדים", icon: <Target className="w-3.5 h-3.5" /> },
+            { id: "plans", label: "תוכניות עבודה", icon: <ClipboardList className="w-3.5 h-3.5" /> },
+          ] as { id: GoalSubPage; label: string; icon: React.ReactNode }[]
+        ).map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => setSubPagePersist(tab.id)}
+            className={cn(
+              "flex items-center gap-1.5 px-4 py-2 transition-colors border-e border-ink-200 last:border-e-0",
+              subPage === tab.id
+                ? "bg-primary-600 text-white"
+                : "bg-white text-ink-600 hover:bg-ink-50"
+            )}
+          >
+            {tab.icon}
+            <span>{tab.label}</span>
+          </button>
+        ))}
+      </div>
+
+      {subPage === "plans" ? (
+        <PlansSection headerless />
+      ) : (
+        <>
+      {/* Frameworks goals — separate area, self-contained. */}
+      <FrameworkGoalsSection />
+
       {!isLoading && goalTasks.length > 0 && (
         <div className="flex flex-col gap-3 mb-4">
           {/* Row 1: scope filter */}
@@ -567,6 +628,9 @@ export function Goals() {
             );
           })}
         </div>
+      )}
+
+        </>
       )}
 
       <TaskEditModal

@@ -26,6 +26,7 @@ export function TaskSchedulingPanel({
   onOpenTask,
   onContextMenu,
   onClose,
+  wide,
 }: {
   tasks: Task[];
   taskLists: TaskList[];
@@ -39,6 +40,9 @@ export function TaskSchedulingPanel({
   /** Right-click a task → open the actions menu at the cursor. */
   onContextMenu: (task: Task, x: number, y: number) => void;
   onClose: () => void;
+  /** Wider panel — used in day/agenda views where the grid leaves more
+   *  horizontal room, so the task list is roomier and easier to scan. */
+  wide?: boolean;
 }) {
   // Schedulable tasks: open (not completed) and not phases (phases are
   // background bands, not time blocks), grouped by their list.
@@ -58,7 +62,12 @@ export function TaskSchedulingPanel({
   const visibleLists = taskLists.filter((l) => !hiddenListIds.has(l.id));
 
   return (
-    <aside className="w-72 shrink-0 card overflow-hidden flex flex-col max-h-[calc(100vh-220px)]">
+    <aside
+      className={cn(
+        "shrink-0 card overflow-hidden flex flex-col max-h-[calc(100vh-220px)]",
+        wide ? "w-80 sm:w-96 lg:w-[28rem]" : "w-72"
+      )}
+    >
       <header className="px-3 py-2 border-b border-ink-200 flex items-center justify-between bg-ink-50/60">
         <span className="text-sm font-semibold text-ink-900">שיבוץ משימות</span>
         <button

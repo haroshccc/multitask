@@ -110,7 +110,8 @@ async function pollHandler(req: Request, ctx: MembershipContext): Promise<Respon
         status: "error",
         error_message: `gladia_error_polled: ${payload.error_code ?? "unknown"}`,
       })
-      .eq("id", recording.id);
+      .eq("id", recording.id)
+      .eq("status", "transcribing");
     return jsonResponse({ ok: true, status: "error", gladia_status: gStatus }, { origin });
   }
 
@@ -133,7 +134,10 @@ async function pollHandler(req: Request, ctx: MembershipContext): Promise<Respon
   }
   const speakersCount = speakerIndices.size;
 
-  const { error: updErr } = await ctx.serviceClient
+  // Conditional on status = 'transcribing' so a racing webhook/poll can't
+  // double-write the transcript or double-append it to linked thoughts — only
+  // the writer that performs the transcribing → ready transition does work.
+  const { data: updated, error: updErr } = await ctx.serviceClient
     .from("recordings")
     .update({
       status: "ready",
@@ -142,10 +146,20 @@ async function pollHandler(req: Request, ctx: MembershipContext): Promise<Respon
       speakers_count: speakersCount,
       error_message: null,
     })
-    .eq("id", recording.id);
+    .eq("id", recording.id)
+    .eq("status", "transcribing")
+    .select("id");
 
   if (updErr) {
     return jsonResponse({ error: "db_update_failed", detail: updErr.message }, { status: 500, origin });
+  }
+
+  // Another writer already finalized this recording — ack and stop.
+  if (!updated || updated.length === 0) {
+    return jsonResponse(
+      { ok: true, status: "ready", gladia_status: gStatus, no_op: "already_finalized" },
+      { origin }
+    );
   }
 
   if (speakersCount > 0) {
@@ -171,6 +185,8 @@ async function pollHandler(req: Request, ctx: MembershipContext): Promise<Respon
     if (linkedThoughts && linkedThoughts.length > 0) {
       for (const t of linkedThoughts) {
         const existing = (t.text_content ?? "").trim();
+        // Idempotency guard: never append the same transcript twice.
+        if (existing.includes(transcriptText.trim())) continue;
         const merged = existing
           ? `${t.text_content}\n\n---\n${transcriptText}`
           : transcriptText;

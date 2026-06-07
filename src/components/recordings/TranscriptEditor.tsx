@@ -53,6 +53,11 @@ export function TranscriptEditor({ recording, audioElement, className }: Props) 
   const [drafts, setDrafts] = useState<Record<number, string>>({});
   const draftsRef = useRef(drafts);
   draftsRef.current = drafts;
+  // Keep the latest mutation handle in a ref so the debounced-save effect can
+  // read `isPending` without listing `save` as a dependency — `save` changes
+  // identity on every render, which would re-arm the debounce timer constantly.
+  const saveRef = useRef(save);
+  saveRef.current = save;
   const [savedFlash, setSavedFlash] = useState(false);
 
   // Audio time tracking for active-row highlighting.
@@ -88,6 +93,10 @@ export function TranscriptEditor({ recording, audioElement, className }: Props) 
 
   // Compute display blocks from raw utterances.
   const blocks = useMemo(() => groupUtterances(utterances), [utterances]);
+  // Ref mirror so the debounced-save timer reads the freshest blocks without
+  // depending on `blocks` (a new array on every refetch) re-arming the timer.
+  const blocksRef = useRef(blocks);
+  blocksRef.current = blocks;
 
   // Drop drafts whose block index no longer exists (e.g. after a save we
   // collapsed N utterances into 1 and the block count dropped).
@@ -133,17 +142,31 @@ export function TranscriptEditor({ recording, audioElement, className }: Props) 
   // underlying utterances array — the first source utterance gets the new
   // edited text, the rest are blanked so the next render's grouping still
   // joins them into one block (just from one populated source instead of N).
+  //
+  // This effect deliberately depends ONLY on `drafts` + `recording.id`: a save
+  // is a reaction to the user *changing* a draft, not to incidental re-renders.
+  // `save` and `blocks` are read through refs. Two guards prevent a runaway
+  // write-storm we hit in production:
+  //   1. `isPending` — never launch a second save while one is in flight, so a
+  //      slow save can't pile concurrent UPDATEs onto the same (large) row.
+  //   2. drafts are cleared only on success, so a *failed* save leaves them
+  //      dirty — but because we don't depend on `save`/`blocks`, a failure no
+  //      longer re-arms the timer on its own. The next user edit retries.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (Object.keys(drafts).length === 0) return;
     const handle = window.setTimeout(() => {
+      const mutation = saveRef.current;
+      if (mutation.isPending) return; // a save is already in flight — don't pile on
+      const currentBlocks = blocksRef.current;
       const snapshot = draftsRef.current;
       const blockEdits = Object.entries(snapshot)
         .map(([k, v]) => ({ blockIndex: Number(k), text: v }))
-        .filter((e) => e.blockIndex < blocks.length);
+        .filter((e) => e.blockIndex < currentBlocks.length);
       if (blockEdits.length === 0) return;
       const utteranceEdits: { index: number; text: string }[] = [];
       for (const e of blockEdits) {
-        const block = blocks[e.blockIndex];
+        const block = currentBlocks[e.blockIndex];
         if (!block) continue;
         for (let i = 0; i < block.source.length; i++) {
           utteranceEdits.push({
@@ -152,7 +175,7 @@ export function TranscriptEditor({ recording, audioElement, className }: Props) 
           });
         }
       }
-      save.mutate(
+      mutation.mutate(
         { recordingId: recording.id, edits: utteranceEdits },
         {
           onSuccess: () => {
@@ -170,7 +193,7 @@ export function TranscriptEditor({ recording, audioElement, className }: Props) 
       );
     }, SAVE_DEBOUNCE_MS);
     return () => window.clearTimeout(handle);
-  }, [drafts, recording.id, save, blocks]);
+  }, [drafts, recording.id]);
 
   const seekTo = (seconds: number) => {
     if (!audioElement) return;

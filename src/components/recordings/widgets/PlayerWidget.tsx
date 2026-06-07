@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { Mic, ArrowLeft } from "lucide-react";
 import { RecordingPlayer } from "@/components/recordings/RecordingPlayer";
+import { useRecording } from "@/lib/hooks/useRecordings";
 import { useRecordingsPageCtx } from "./context";
 
 /**
@@ -10,11 +11,17 @@ import { useRecordingsPageCtx } from "./context";
  */
 export function PlayerWidget() {
   const ctx = useRecordingsPageCtx();
-  const selected = useMemo(
+  // The list rows are intentionally light (no `transcript_json` — see
+  // `listRecordings`). The detail view needs the full row, so fetch it by id.
+  // We fall back to the light list row while that fetch is in flight so the
+  // player still renders immediately on selection.
+  const listRow = useMemo(
     () =>
       ctx.filteredRecordings.find((r) => r.id === ctx.selectedId) ?? null,
     [ctx.filteredRecordings, ctx.selectedId],
   );
+  const { data: full } = useRecording(ctx.selectedId);
+  const selected = full ?? listRow;
 
   if (ctx.isLoading) {
     return (

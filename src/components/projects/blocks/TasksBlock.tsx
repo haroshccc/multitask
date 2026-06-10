@@ -366,6 +366,52 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
     [tree, search, sortKey, sortDir]
   );
 
+  // Roll-up sums for phase rows + the grand-total summary row. A phase shows
+  // the sum of its descendants; the grand total sums every *non-phase* task
+  // exactly once (so phase rows — which are themselves aggregates — never
+  // double-count). Both estimate (hours) and actual (seconds) are summed.
+  const { phaseEst, phaseActual, totalEst, totalActual, totalSpare } = useMemo(() => {
+    const byId = new Map(tasks.map((t) => [t.id, t]));
+    const childrenBy = new Map<string | null, Task[]>();
+    for (const t of tasks) {
+      const arr = childrenBy.get(t.parent_task_id) ?? [];
+      arr.push(t);
+      childrenBy.set(t.parent_task_id, arr);
+    }
+    const estMap = new Map<string, number>();
+    const actMap = new Map<string, number>();
+    const calc = (id: string): [number, number] => {
+      const t = byId.get(id);
+      let e = t && !t.is_phase ? t.estimated_hours ?? 0 : 0;
+      let a = t && !t.is_phase ? t.actual_seconds ?? 0 : 0;
+      for (const c of childrenBy.get(id) ?? []) {
+        const [ce, ca] = calc(c.id);
+        e += ce;
+        a += ca;
+      }
+      estMap.set(id, e);
+      actMap.set(id, a);
+      return [e, a];
+    };
+    for (const t of tasks) if (!estMap.has(t.id)) calc(t.id);
+    let te = 0;
+    let ta = 0;
+    let ts = 0;
+    for (const t of tasks) {
+      if (t.is_phase) continue;
+      te += t.estimated_hours ?? 0;
+      ta += t.actual_seconds ?? 0;
+      ts += t.spare_hours ?? 0;
+    }
+    return {
+      phaseEst: estMap,
+      phaseActual: actMap,
+      totalEst: te,
+      totalActual: ta,
+      totalSpare: ts,
+    };
+  }, [tasks]);
+
   const handleHeaderSort = (key: string) => {
     setSortKey((prev) => {
       if (prev !== key) {
@@ -793,6 +839,8 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
               orderedFixedKeys={visibleFixedKeys}
               questionsByTaskId={questionsByTaskId}
               onReorder={handleReorderTopLevel}
+              phaseEst={phaseEst}
+              phaseActual={phaseActual}
               onUpdate={handleTaskUpdate}
               onComplete={handleCompleteWithUndo}
               onDelete={(id) => del.mutate(id)}
@@ -806,6 +854,14 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
               onAddAfter={handleAddAfter}
               onIndent={handleIndentWithUndo}
               onOutdent={handleOutdentWithUndo}
+            />
+            <SummaryRow
+              gridCols={gridCols}
+              orderedFixedKeys={visibleFixedKeys}
+              dynCount={visibleFields.length}
+              totalEst={totalEst}
+              totalSpare={totalSpare}
+              totalActual={totalActual}
             />
           </div>
         )}
@@ -827,6 +883,11 @@ interface RowHandlers {
   onAddAfter: (current: Task) => void;
   onIndent: (current: Task) => void;
   onOutdent: (current: Task) => void;
+  /** Sum of all descendant (non-phase) estimated_hours, keyed by task id —
+   *  used to display a rolled-up total on phase rows. */
+  phaseEst: Map<string, number>;
+  /** Sum of all descendant (non-phase) actual_seconds, keyed by task id. */
+  phaseActual: Map<string, number>;
 }
 
 interface TaskListProps {
@@ -1077,7 +1138,6 @@ function TaskItem({
 
 function TaskRow({
   task,
-  level,
   expanded,
   hasChildren,
   activeTimer,
@@ -1099,6 +1159,8 @@ function TaskRow({
   onAddAfter,
   onIndent,
   onOutdent,
+  phaseEst,
+  phaseActual,
 }: {
   task: Task;
   level: number;
@@ -1117,12 +1179,12 @@ function TaskRow({
   const isDone = task.status === "done" || !!task.completed_at;
   const isTimerActive = activeTimer?.task_id === task.id;
   const liveSeconds = useLiveActualSeconds(task, activeTimer);
-  // Per-level indent shifts the entire row's content (drag, checkbox, title,
-  // dynamic cells) inward from the start edge, so a sub-task's checkbox
-  // visibly nests under its parent — the previous title-cell-only padding
-  // left the checkbox at the same x as the parent's, which made hierarchy
-  // hard to read. Bumped to 24px per level for clearer visual separation.
-  const indentPx = level * 24;
+  const isPhase = task.is_phase === true;
+  const accent = task.accent_color ?? "#6b6b80";
+  // In the project table, phases and sub-tasks are aligned flush (no indent
+  // push) — hierarchy is shown by color, not indentation: phase rows get a
+  // clear tinted background + start border, regular rows stay flush.
+  const indentPx = 0;
 
   const renderFixedCell = (key: FixedColumnKey): React.ReactNode => {
     switch (key) {
@@ -1142,11 +1204,17 @@ function TaskRow({
           </div>
         );
       case "estimated_hours":
-        return (
-          <NumberCell
-            title="שעות"
+        return isPhase ? (
+          <div
+            title="סך הערכת השעות בשלב (מחושב מתתי-המשימות)"
+            className="text-xs font-semibold tabular-nums text-end px-1 text-ink-700"
+          >
+            {fmtHoursClock(phaseEst.get(task.id) ?? 0)}
+          </div>
+        ) : (
+          <DurationCell
+            title="הערכת שעות (שעה:דקות, למשל 1:30)"
             value={task.estimated_hours}
-            suffix="ש"
             onSave={(v) => onUpdate(task.id, { estimated_hours: v })}
           />
         );
@@ -1192,7 +1260,14 @@ function TaskRow({
           </div>
         );
       case "actual_seconds":
-        return (
+        return isPhase ? (
+          <div
+            title="סך הזמן בפועל בשלב (מחושב מתתי-המשימות)"
+            className="text-xs font-semibold tabular-nums text-end px-1 text-ink-700"
+          >
+            {fmtSecondsClock(phaseActual.get(task.id) ?? 0)}
+          </div>
+        ) : (
           <button
             type="button"
             onClick={() => onOpenLog(task.id)}
@@ -1206,7 +1281,7 @@ function TaskRow({
             }
             title="היסטוריית סטופר"
           >
-            {fmtHours(liveSeconds)}
+            {fmtSecondsClock(liveSeconds)}
           </button>
         );
       case "notes":
@@ -1230,10 +1305,21 @@ function TaskRow({
 
   return (
     <div
-      className="group/row grid items-center gap-1 py-1 hover:bg-ink-50 px-1.5 transition-colors border-b border-ink-200"
+      className={
+        "group/row grid items-center gap-1 py-1 px-1.5 transition-colors border-b " +
+        (isPhase
+          ? "border-s-4 border-b-ink-300 font-semibold text-ink-900"
+          : "hover:bg-ink-50 border-ink-200")
+      }
       style={{
         gridTemplateColumns: gridCols,
         paddingInlineStart: `calc(0.375rem + ${indentPx}px)`,
+        ...(isPhase
+          ? {
+              backgroundColor: `${accent}1f`,
+              borderInlineStartColor: accent,
+            }
+          : {}),
       }}
     >
       {/* Drag handle (top-level only — sub-tasks get an empty cell) */}
@@ -1536,6 +1622,127 @@ function NumberCell({
 }
 
 /**
+ * Duration cell editing decimal hours but displaying/parsing as "H:MM" clock
+ * format (1.5 ↔ "1:30"). Accepts either "H:MM" or a plain decimal on input.
+ */
+function DurationCell({
+  title,
+  value,
+  onSave,
+}: {
+  title: string;
+  value: number | null;
+  onSave: (v: number | null) => void;
+}) {
+  const [focused, setFocused] = useState(false);
+  const [draft, setDraft] = useState("");
+  const committed = useRef(false);
+  const display = value != null && value !== 0 ? fmtHoursClock(value) : "";
+  const commit = () => {
+    if (committed.current) return;
+    committed.current = true;
+    const parsed = parseHoursInput(draft);
+    if (parsed !== value) onSave(parsed);
+  };
+  return (
+    <div title={title} className="flex items-baseline justify-end">
+      <input
+        type="text"
+        inputMode="numeric"
+        value={focused ? draft : display}
+        onFocus={() => {
+          committed.current = false;
+          setFocused(true);
+          setDraft(display);
+        }}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => {
+          setFocused(false);
+          commit();
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            commit();
+            (e.target as HTMLInputElement).blur();
+          } else if (e.key === "Escape") {
+            committed.current = true;
+            (e.target as HTMLInputElement).blur();
+          }
+        }}
+        placeholder="0:00"
+        className="w-12 bg-transparent border-0 outline-none text-xs tabular-nums text-end px-1 py-0.5 rounded hover:bg-white focus:bg-white focus:ring-1 focus:ring-primary-500/40 transition-colors"
+      />
+    </div>
+  );
+}
+
+/**
+ * Bold grand-total row pinned at the bottom of the project task table. Sums
+ * every *non-phase* task once (phase rows are themselves roll-ups, so this
+ * never double-counts). Rendered with the same grid template as the data rows
+ * so the totals line up under their columns.
+ */
+function SummaryRow({
+  gridCols,
+  orderedFixedKeys,
+  dynCount,
+  totalEst,
+  totalSpare,
+  totalActual,
+}: {
+  gridCols: string;
+  orderedFixedKeys: FixedColumnKey[];
+  dynCount: number;
+  totalEst: number;
+  totalSpare: number;
+  totalActual: number;
+}) {
+  const cell = (key: FixedColumnKey): React.ReactNode => {
+    switch (key) {
+      case "title":
+        return <span className="text-xs font-bold">סה״כ פרויקט</span>;
+      case "estimated_hours":
+        return (
+          <span className="text-xs font-bold tabular-nums text-end block">
+            {fmtHoursClock(totalEst)}
+          </span>
+        );
+      case "spare_hours":
+        return (
+          <span className="text-xs font-bold tabular-nums text-end block">
+            {totalSpare ? fmtHoursClock(totalSpare) : ""}
+          </span>
+        );
+      case "actual_seconds":
+        return (
+          <span className="text-xs font-bold tabular-nums text-end block">
+            {fmtSecondsClock(totalActual)}
+          </span>
+        );
+      default:
+        return null;
+    }
+  };
+  return (
+    <div
+      className="grid items-center gap-1 py-2 px-1.5 bg-primary-600 text-white rounded-b-md"
+      style={{ gridTemplateColumns: gridCols }}
+    >
+      <span />
+      <span />
+      <span />
+      {orderedFixedKeys.map((k) => (
+        <Fragment key={k}>{cell(k) ?? <span />}</Fragment>
+      ))}
+      {Array.from({ length: dynCount }).map((_, i) => (
+        <span key={i} />
+      ))}
+      <span />
+    </div>
+  );
+}
+
+/**
  * 3-bar urgency control matching the pattern in `TaskRow.tsx`. Click cycles
  * 0→1→2→3→0; bars fill bottom-up.
  */
@@ -1603,11 +1810,37 @@ function EmptyState({
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-function fmtHours(seconds: number): string {
+/** Decimal hours → "H:MM" clock format (1.5 → "1:30"). */
+function fmtHoursClock(hours: number | null | undefined): string {
+  if (!hours) return "—";
+  const totalMin = Math.round(hours * 60);
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  return `${h}:${String(m).padStart(2, "0")}`;
+}
+
+/** Seconds → "H:MM" clock format. */
+function fmtSecondsClock(seconds: number | null | undefined): string {
   if (!seconds) return "—";
-  const h = seconds / 3600;
-  if (h < 1) return `${Math.round(h * 60)}ד'`;
-  return `${h.toFixed(1)}ש`;
+  const totalMin = Math.round(seconds / 60);
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  return `${h}:${String(m).padStart(2, "0")}`;
+}
+
+/** Parse a duration the user typed — accepts "H:MM" (1:30) or decimal (1.5). */
+function parseHoursInput(s: string): number | null {
+  const t = s.trim();
+  if (t === "") return null;
+  if (t.includes(":")) {
+    const [hStr, mStr = "0"] = t.split(":");
+    const h = parseInt(hStr || "0", 10);
+    const m = parseInt(mStr || "0", 10);
+    if (!isFinite(h) || !isFinite(m)) return null;
+    return h + m / 60;
+  }
+  const n = parseFloat(t);
+  return isFinite(n) ? n : null;
 }
 
 /**

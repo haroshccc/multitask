@@ -11,6 +11,7 @@ import {
   Square,
   GripVertical,
   CalendarPlus,
+  Wand2,
 } from "lucide-react";
 import {
   DndContext,
@@ -343,6 +344,9 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
   );
   const [optionsFieldId, setOptionsFieldId] = useState<string | null>(null);
   const [editTaskId, setEditTaskId] = useState<string | null>(null);
+  const [spareOpen, setSpareOpen] = useState(false);
+  const [spareMode, setSpareMode] = useState<"percent" | "fixed">("percent");
+  const [spareValue, setSpareValue] = useState("");
 
   const { data: questions = [] } = useProjectQuestions(projectId);
   const questionsByTaskId = useMemo(() => {
@@ -450,6 +454,33 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
       return;
     }
     setFocusCell(null);
+  };
+
+  // Collectively set the spare on every (non-phase) task — either as a
+  // percentage of each task's estimate, or a fixed number of hours. Each cell
+  // stays individually editable afterwards; the whole batch is one undo entry.
+  const applySpareAuto = (mode: "percent" | "fixed", value: number) => {
+    const targets = tasks.filter((t) => !t.is_phase);
+    if (targets.length === 0) return;
+    const before = targets.map((t) => ({ id: t.id, spare: t.spare_hours ?? null }));
+    const after = targets.map((t) => {
+      const spare =
+        mode === "percent"
+          ? Math.round((t.estimated_hours ?? 0) * value) / 100
+          : value;
+      return { id: t.id, spare };
+    });
+    const applyAfter = () =>
+      after.forEach((a) => update.mutate({ taskId: a.id, patch: { spare_hours: a.spare } }));
+    applyAfter();
+    pushUndo({
+      description: `ספייר אוטומטי (${targets.length})`,
+      undo: () =>
+        before.forEach((b) =>
+          update.mutate({ taskId: b.id, patch: { spare_hours: b.spare } })
+        ),
+      redo: applyAfter,
+    });
   };
 
   const handleHeaderSort = (key: string) => {
@@ -814,6 +845,86 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
             className="field py-1.5 ps-7 text-xs"
           />
         </div>
+        {tasks.length > 0 && (
+          <div className="relative shrink-0">
+            <button
+              type="button"
+              onClick={() => setSpareOpen((v) => !v)}
+              className="text-xs inline-flex items-center gap-1 rounded-md border border-ink-200 bg-white px-2 py-1.5 text-ink-600 hover:bg-ink-50"
+              title="קביעת ספייר אוטומטי לכל המשימות"
+            >
+              <Wand2 className="w-3.5 h-3.5" />
+              ספייר אוטומטי
+            </button>
+            {spareOpen && (
+              <>
+                <div
+                  className="fixed inset-0 z-30"
+                  onClick={() => setSpareOpen(false)}
+                />
+                <div className="absolute top-full mt-1 end-0 z-40 bg-white border border-ink-200 rounded-xl shadow-lift p-3 w-64 space-y-2 text-ink-900">
+                  <p className="text-xs font-semibold">ספייר אוטומטי לכל המשימות</p>
+                  <div className="inline-flex rounded-md border border-ink-200 overflow-hidden text-xs w-full">
+                    <button
+                      type="button"
+                      onClick={() => setSpareMode("percent")}
+                      className={
+                        "flex-1 px-2 py-1 " +
+                        (spareMode === "percent"
+                          ? "bg-ink-900 text-white"
+                          : "text-ink-600 hover:bg-ink-50")
+                      }
+                    >
+                      אחוז מההערכה
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSpareMode("fixed")}
+                      className={
+                        "flex-1 px-2 py-1 " +
+                        (spareMode === "fixed"
+                          ? "bg-ink-900 text-white"
+                          : "text-ink-600 hover:bg-ink-50")
+                      }
+                    >
+                      מספר קבוע
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      value={spareValue}
+                      onChange={(e) => setSpareValue(e.target.value)}
+                      placeholder={spareMode === "percent" ? "אחוז" : "שעות"}
+                      className="field text-sm w-full"
+                    />
+                    <span className="text-xs text-ink-400 select-none">
+                      {spareMode === "percent" ? "%" : "ש"}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-ink-400 leading-snug">
+                    יוחל על כל המשימות (לא על שורות שלב). אפשר לערוך כל תא ידנית אחר כך.
+                  </p>
+                  <button
+                    type="button"
+                    disabled={spareValue === "" || !isFinite(parseFloat(spareValue))}
+                    onClick={() => {
+                      const v = parseFloat(spareValue);
+                      if (isFinite(v)) {
+                        applySpareAuto(spareMode, v);
+                        setSpareOpen(false);
+                      }
+                    }}
+                    className="btn-primary text-xs w-full disabled:opacity-50"
+                  >
+                    החל על הכל
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
         <div className="shrink-0">
           <ColumnsMenu
             items={columnMenuItems}

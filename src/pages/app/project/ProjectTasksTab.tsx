@@ -119,7 +119,7 @@ function PhaseListsView({
 
   return (
     <>
-      <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin items-start">
+      <div className="flex gap-3 overflow-x-auto overscroll-x-contain pb-2 scrollbar-thin items-start">
         {/* Loose tasks (no phase) */}
         {looseRoots.length > 0 && (
           <PhaseColumn
@@ -208,7 +208,7 @@ function PhaseColumn({
 
   return (
     <div
-      className="shrink-0 w-72 self-start flex flex-col bg-white border border-ink-200 rounded-xl shadow-soft"
+      className="shrink-0 w-[36rem] max-w-[calc(100vw-2rem)] self-start flex flex-col bg-white border border-ink-200 rounded-xl shadow-soft"
       style={{ ["--list-color" as string]: accent } as React.CSSProperties}
     >
       <div

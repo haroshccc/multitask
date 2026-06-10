@@ -23,6 +23,9 @@ import {
   FolderOpen,
   FolderKanban,
   Share2,
+  MoreHorizontal,
+  Check,
+  Palette,
 } from "lucide-react";
 import { ListIcon } from "@/components/tasks/list-icons";
 import { ScreenScaffold } from "@/components/layout/ScreenScaffold";
@@ -31,11 +34,25 @@ import {
   useArchiveProject,
   useRestoreProject,
   useDebouncedProjectUpdate,
+  useUpdateProject,
 } from "@/lib/hooks/useProjects";
+import { useTaskLists, useUpdateTaskList } from "@/lib/hooks/useTaskLists";
 import type { Project } from "@/lib/types/domain";
 import { ShareProjectModal } from "@/components/projects/ShareProjectModal";
 import { cn } from "@/lib/utils/cn";
 import { pushUndo } from "@/lib/undo/store";
+
+/** Preset palette for project / list colour (mirrors the phase presets). */
+const PROJECT_COLOR_PRESETS = [
+  "#6b6b80",
+  "#3b82f6",
+  "#14b8a6",
+  "#10b981",
+  "#f59e0b",
+  "#ef4444",
+  "#8b5cf6",
+  "#ec4899",
+];
 
 const STATUS_LABEL: Record<string, string> = {
   active: "פעיל",
@@ -162,6 +179,7 @@ function ProjectShellLoaded({
               ארכבי
             </button>
           )}
+          <ProjectKebabMenu project={project} projectId={projectId} />
         </>
       }
     >
@@ -177,6 +195,124 @@ function ProjectShellLoaded({
         <ShareProjectModal project={project} onClose={() => setShareOpen(false)} />
       )}
     </ScreenScaffold>
+  );
+}
+
+// ─── Project kebab menu (colour editor) ──────────────────────────────────────
+
+/**
+ * Three-dots menu on the project header. Hosts a colour editor that keeps the
+ * project colour and its task-list colour in sync — changing one changes the
+ * other, so the project's colour always reflects its list's colour.
+ */
+function ProjectKebabMenu({
+  project,
+  projectId,
+}: {
+  project: Project;
+  projectId: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const updateProject = useUpdateProject();
+  const updateList = useUpdateTaskList();
+  const { data: lists = [] } = useTaskLists();
+  const projectList = lists.find((l) => l.project_id === projectId) ?? null;
+  const current = project.color ?? null;
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [open]);
+
+  const applyColor = (color: string | null) => {
+    const prevProject = project.color ?? null;
+    const prevList = projectList?.color ?? null;
+    const set = (c: string | null) => {
+      updateProject.mutate({ projectId, patch: { color: c } });
+      if (projectList) updateList.mutate({ listId: projectList.id, patch: { color: c } });
+    };
+    set(color);
+    pushUndo({
+      description: "שינוי צבע פרויקט",
+      undo: () => {
+        updateProject.mutate({ projectId, patch: { color: prevProject } });
+        if (projectList)
+          updateList.mutate({ listId: projectList.id, patch: { color: prevList } });
+      },
+      redo: () => set(color),
+    });
+  };
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="btn-ghost text-sm flex items-center justify-center w-9 px-0"
+        aria-label="עוד פעולות"
+        title="עוד פעולות"
+      >
+        <MoreHorizontal className="w-4 h-4" />
+      </button>
+      {open && (
+        <div className="absolute end-0 top-full mt-1 z-30 w-56 bg-white border border-ink-200 rounded-xl shadow-lift p-3 space-y-2">
+          <p className="text-xs font-semibold text-ink-700 inline-flex items-center gap-1.5">
+            <Palette className="w-3.5 h-3.5" />
+            צבע הפרויקט
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {PROJECT_COLOR_PRESETS.map((c) => {
+              const selected = current?.toLowerCase() === c.toLowerCase();
+              return (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => applyColor(c)}
+                  className={cn(
+                    "w-6 h-6 rounded-full flex items-center justify-center transition-transform hover:scale-110",
+                    selected && "ring-2 ring-offset-1 ring-ink-400"
+                  )}
+                  style={{ backgroundColor: c }}
+                  aria-label={`בחרי צבע ${c}`}
+                >
+                  {selected && <Check className="w-3 h-3 text-white" />}
+                </button>
+              );
+            })}
+          </div>
+          <div className="flex items-center justify-between gap-2 pt-1">
+            <label className="text-xs text-ink-500 inline-flex items-center gap-1.5 cursor-pointer">
+              <input
+                type="color"
+                value={current ?? "#6b6b80"}
+                onChange={(e) => applyColor(e.target.value)}
+                className="w-6 h-6 rounded cursor-pointer border border-ink-200 bg-transparent p-0"
+              />
+              צבע מותאם
+            </label>
+            {current && (
+              <button
+                type="button"
+                onClick={() => applyColor(null)}
+                className="text-xs text-ink-400 hover:text-danger-500"
+              >
+                איפוס
+              </button>
+            )}
+          </div>
+          {!projectList && (
+            <p className="text-[11px] text-ink-400 leading-snug">
+              לפרויקט עדיין אין רשימת משימות — הצבע יחול גם עליה כשתיווצר.
+            </p>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 

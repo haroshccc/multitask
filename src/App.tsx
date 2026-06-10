@@ -42,6 +42,21 @@ const Goals = lazy(() =>
 const Frameworks = lazy(() =>
   import("@/pages/app/Frameworks").then((m) => ({ default: m.Frameworks }))
 );
+const PlanShell = lazy(() =>
+  import("@/pages/app/PlanShell").then((m) => ({ default: m.PlanShell }))
+);
+const PlanConceptPage = lazy(() =>
+  import("@/pages/app/PlanShell").then((m) => ({ default: m.PlanConceptPage }))
+);
+const PlanTasksPage = lazy(() =>
+  import("@/pages/app/PlanShell").then((m) => ({ default: m.PlanTasksPage }))
+);
+const PlanImpactsPage = lazy(() =>
+  import("@/pages/app/PlanShell").then((m) => ({ default: m.PlanImpactsPage }))
+);
+const Contacts = lazy(() =>
+  import("@/pages/app/Contacts").then((m) => ({ default: m.Contacts }))
+);
 const ProjectShell = lazy(() =>
   import("@/pages/app/ProjectShell").then((m) => ({ default: m.ProjectShell }))
 );
@@ -68,6 +83,11 @@ const ProjectMeetingsTab = lazy(() =>
 const ProjectPaymentsTab = lazy(() =>
   import("@/pages/app/project/ProjectPaymentsTab").then((m) => ({
     default: m.ProjectPaymentsTab,
+  }))
+);
+const ProjectContactsTab = lazy(() =>
+  import("@/pages/app/project/ProjectContactsTab").then((m) => ({
+    default: m.ProjectContactsTab,
   }))
 );
 const ProjectDocumentsTab = lazy(() =>
@@ -216,10 +236,52 @@ export default function App() {
           }
         />
         <Route
+          path="goals/plan/:planId"
+          element={
+            <Suspense fallback={<LoadingShell />}>
+              <PlanShell />
+            </Suspense>
+          }
+        >
+          <Route index element={<Navigate to="concept" replace />} />
+          <Route
+            path="concept"
+            element={
+              <Suspense fallback={<LoadingShell />}>
+                <PlanConceptPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="tasks"
+            element={
+              <Suspense fallback={<LoadingShell />}>
+                <PlanTasksPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="impacts"
+            element={
+              <Suspense fallback={<LoadingShell />}>
+                <PlanImpactsPage />
+              </Suspense>
+            }
+          />
+        </Route>
+        <Route
           path="frameworks"
           element={
             <Suspense fallback={<LoadingShell />}>
               <Frameworks />
+            </Suspense>
+          }
+        />
+        <Route
+          path="contacts"
+          element={
+            <Suspense fallback={<LoadingShell />}>
+              <Contacts />
             </Suspense>
           }
         />
@@ -261,6 +323,14 @@ export default function App() {
             element={
               <Suspense fallback={<LoadingShell />}>
                 <ProjectPaymentsTab />
+              </Suspense>
+            }
+          />
+          <Route
+            path="contacts"
+            element={
+              <Suspense fallback={<LoadingShell />}>
+                <ProjectContactsTab />
               </Suspense>
             }
           />

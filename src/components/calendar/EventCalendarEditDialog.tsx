@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Check, Trash2, Link2 } from "lucide-react";
+import { X, Check, Trash2, Link2, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import {
   useCreateEventCalendar,
@@ -9,7 +9,7 @@ import {
   useLinkCalendarToList,
   useTaskLists,
 } from "@/lib/hooks";
-import type { EventCalendar } from "@/lib/types/domain";
+import type { EventCalendar, TaskList } from "@/lib/types/domain";
 import { LIST_ICON_PRESETS, ListIcon } from "@/components/tasks/list-icons";
 import { pushUndo } from "@/lib/undo/store";
 
@@ -287,20 +287,11 @@ export function EventCalendarEditDialog({
                   בחירה כאן תקשר ביניהם — צבע אחיד, ובהמשך נוכל להוסיף
                   שיתופי פעולה נוספים.
                 </p>
-                <select
-                  value={linkedTaskListId ?? ""}
-                  onChange={(e) =>
-                    setLinkedTaskListId(e.target.value || null)
-                  }
-                  className="field text-sm"
-                >
-                  <option value="">ללא קישור</option>
-                  {taskLists.map((l) => (
-                    <option key={l.id} value={l.id}>
-                      {l.name}
-                    </option>
-                  ))}
-                </select>
+                <LinkedListSelect
+                  taskLists={taskLists}
+                  value={linkedTaskListId}
+                  onChange={setLinkedTaskListId}
+                />
               </div>
 
               {error && (
@@ -376,5 +367,113 @@ export function EventCalendarEditDialog({
         </motion.div>
       )}
     </AnimatePresence>
+  );
+}
+
+/**
+ * Linked-task-list picker. A custom dropdown (not a native <select>) so each
+ * list can render in its own color with its icon beside it. Opens upward to
+ * stay inside the dialog's `overflow-hidden` box (the field sits near the
+ * bottom).
+ */
+function LinkedListSelect({
+  taskLists,
+  value,
+  onChange,
+}: {
+  taskLists: TaskList[];
+  value: string | null;
+  onChange: (id: string | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node))
+        setOpen(false);
+    };
+    window.addEventListener("mousedown", onDown);
+    return () => window.removeEventListener("mousedown", onDown);
+  }, [open]);
+
+  const selected = taskLists.find((l) => l.id === value) ?? null;
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="field text-sm flex items-center gap-2 text-start"
+      >
+        {selected ? (
+          <>
+            <span
+              className="w-3 h-3 rounded-sm shrink-0"
+              style={{ backgroundColor: selected.color ?? "#6b6b80" }}
+            />
+            {selected.emoji && (
+              <ListIcon emoji={selected.emoji} className="w-4 h-4" />
+            )}
+            <span
+              className="truncate flex-1"
+              style={{ color: selected.color ?? undefined }}
+            >
+              {selected.name}
+            </span>
+          </>
+        ) : (
+          <span className="truncate flex-1 text-ink-500">ללא קישור</span>
+        )}
+        <ChevronDown className="w-4 h-4 text-ink-400 shrink-0" />
+      </button>
+
+      {open && (
+        <div className="absolute z-10 bottom-full mb-1 w-full bg-white rounded-lg shadow-lift border border-ink-200 py-1 max-h-56 overflow-y-auto">
+          <button
+            type="button"
+            onClick={() => {
+              onChange(null);
+              setOpen(false);
+            }}
+            className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-start hover:bg-ink-50"
+          >
+            <span className="w-3 h-3 shrink-0" />
+            <span className="flex-1 text-ink-500">ללא קישור</span>
+            {value === null && <Check className="w-3.5 h-3.5 text-ink-500" />}
+          </button>
+          {taskLists.map((l) => (
+            <button
+              key={l.id}
+              type="button"
+              onClick={() => {
+                onChange(l.id);
+                setOpen(false);
+              }}
+              className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-start hover:bg-ink-50"
+            >
+              <span
+                className="w-3 h-3 rounded-sm shrink-0"
+                style={{ backgroundColor: l.color ?? "#6b6b80" }}
+              />
+              {l.emoji && <ListIcon emoji={l.emoji} className="w-4 h-4" />}
+              <span
+                className="truncate flex-1"
+                style={{ color: l.color ?? undefined }}
+              >
+                {l.name}
+              </span>
+              {value === l.id && (
+                <Check
+                  className="w-3.5 h-3.5 shrink-0"
+                  style={{ color: l.color ?? undefined }}
+                />
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

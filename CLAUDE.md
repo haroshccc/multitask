@@ -254,3 +254,30 @@ A framework is an independent overlay on the calendar: per-day **labels** (כו�
 | File | Description |
 |---|---|
 | `20260603181000_frameworks_block_all_day.sql` | Adds `all_day` to `framework_blocks` (all-day occurrences) |
+
+## Goal plans (תוכניות עבודה)
+
+A **plan** is a `task_list` with `kind='plan'`. A **stage** (שלב) is a task with
+`is_phase=true`; plan **tasks** are its children. Built on the existing
+lists/tasks primitives plus a conceptual layer — does **not** touch the
+sensitive task-save path.
+
+- Types: `src/lib/types/plans.ts` (Plan/PlanTask/decision/impact shapes, statuses, horizons, `buildPlanTree`).
+- Service/hooks: `src/lib/services/plans.ts` + `src/lib/hooks/usePlans.ts`.
+- UI: `src/components/plans/` — `PlansSection` (cards+create; `headerless` when used as a sub-page), `PlanTasksTable`, `PlanDecisionsTab`, `PlanImpactMatrix`, `ClonePlanDialog`, `CreatePlanDialog`.
+- **Editing a plan is a full routed page, not a modal** — `src/pages/app/PlanShell.tsx` mirrors `ProjectShell`: a back-link header (editable name / date range / general goal / calendar-viz + clone), URL-based tab nav, and an `<Outlet>` carrying `PlanOutletContext` ({plan, planId, tasks, stages, canEdit}). Routes: `/app/goals/plan/:planId` → `concept` (default) | `tasks` | `impacts` (the three exported page components wrap the tab components).
+- **View modes** (`ViewModeToggle`, persisted `multitask:plan:viewMode`): `single` = the URL tabs + `<Outlet>` (one at a time); `columns` = the three sections side-by-side (`xl:grid-cols-3`); `rows` = stacked. In split modes the three section components render directly (no `<Outlet>`), each wrapped in a `SectionPanel`.
+- **Decisions always belong to a stage** (`PlanDecisionsTab` groups by stage only; no plan-level group). The per-stage "+ הוסף החלטה לשלב זה" button sits at the bottom of each stage's list. A decision's impacts target **other** stages only (the affected-stage `<select>` excludes the decision's own stage).
+- `Goals.tsx` is a single screen with a **sub-page switcher** (segmented control): "יעדים" (goals/habits/frameworks + filters) and "תוכניות עבודה" (`<PlansSection headerless />`, cards link to the plan page). Active sub-page persists in `localStorage` (`multitask:goals:subPage`); the header create action fires the `app:new-plan` window event (mirrors `app:new-goal`).
+- **"דברים שחשובים לנו" banner** (`ImportantThingsBanner`, shown in `PlanShell` above the tabs): loose plan tasks with `parent_task_id = null` and `is_phase = false` — i.e. tasks in the plan not yet under any stage. `unassignedPlanTasks(tasks)` derives them; they appear ONLY in the banner. Assign to a stage by **drag** (native HTML5 DnD, `PLAN_ITEM_DND` key → stage header is the drop target in `PlanTasksTable`) or **right-click** → stage menu. Both call `setPlanTaskParent` (`useAssignTaskToStage`); once assigned they leave the banner and render under the stage.
+- Date range is validated in `PlanShell` (end can't precede start, via input min/max + clamp on change); the card range is wrapped in `dir="ltr"` so it renders correctly in RTL.
+- Clone: `duplicate_plan()` RPC — full copy + `parent_plan_id` link, no live sync.
+- Status is decoupled (`plan_status`: notstarted/inprogress/done/dropped); priority reuses `urgency`; metric/target/time-range are free text (faithful to the source Excel).
+
+### Migrations applied (plans)
+
+| File | Description |
+|---|---|
+| `20260606000001_goal_plans_kind.sql` | Adds `'plan'` to the `task_list_kind` enum (separate tx) |
+| `20260606000002_goal_plans.sql` | Plan columns on `task_lists`/`tasks`, `plan_decisions` + `plan_decision_impacts` + `plan_stage_impacts` tables (org-member RLS), `duplicate_plan()` RPC |
+

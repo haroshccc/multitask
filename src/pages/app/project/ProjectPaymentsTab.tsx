@@ -7,8 +7,18 @@ import {
   X,
   ArrowDownLeft,
   ArrowUpRight,
+  AlertTriangle,
 } from "lucide-react";
 import { useProjectContext } from "@/pages/app/ProjectShell";
+import { useProjectContacts } from "@/lib/hooks/useContacts";
+import type { ProjectContact } from "@/lib/services/contacts";
+import { useOrgScope, assertOrgScope } from "@/lib/hooks/useOrgScope";
+import { findOrCreatePaymentsFolder } from "@/lib/services/document-links";
+import { LinkedDocumentsSection } from "@/components/projects/LinkedDocumentsSection";
+import {
+  AddDocumentModal,
+  type AddDocumentTarget,
+} from "@/components/projects/AddDocumentModal";
 import {
   useProjectPayments,
   useCreateProjectPayment,
@@ -34,6 +44,8 @@ import {
   ColumnsMenu,
   type ColumnsMenuItem,
 } from "@/components/configurable-table/ColumnsMenu";
+import { ExportExcelButton } from "@/components/configurable-table/ExportExcelButton";
+import { buildPaymentsSheet } from "@/lib/export/projectSheets";
 import {
   DynCell,
   OptionsEditorModal,
@@ -49,21 +61,85 @@ const DIRECTION_OPTIONS: { value: string; label: string }[] = [
   { value: "out", label: "תשלום" },
 ];
 
-const STATUS_OPTIONS: { value: string; label: string }[] = [
-  { value: "pending", label: "ממתין" },
-  { value: "paid", label: "שולם" },
-  { value: "overdue", label: "באיחור" },
-  { value: "cancelled", label: "בוטל" },
-];
-const STATUS_LABEL = Object.fromEntries(
-  STATUS_OPTIONS.map((o) => [o.value, o.label])
-);
+// New status model: draft | demand | paid | cancelled. Labels are
+// direction-aware (in = תקבול / customer owes us, out = תשלום / we owe a
+// supplier). "באיחור" is *derived* (not a stored status) — see isOverdue.
+const STATUS_VALUES = ["draft", "demand", "paid", "cancelled"] as const;
+
+function paymentStatusLabel(status: string, direction: string): string {
+  switch (status) {
+    case "draft":
+      return "צפוי";
+    case "demand":
+      return direction === "in" ? "דרישה נשלחה" : "דרישה התקבלה";
+    case "paid":
+      return direction === "in" ? "התקבל" : "שולם";
+    case "cancelled":
+      return "בוטל";
+    default:
+      return status;
+  }
+}
+
 const STATUS_CLASS: Record<string, string> = {
-  pending: "bg-amber-100 text-amber-700",
+  draft: "bg-ink-100 text-ink-600",
+  demand: "bg-amber-100 text-amber-700",
   paid: "bg-emerald-100 text-emerald-700",
-  overdue: "bg-rose-100 text-rose-700",
   cancelled: "bg-ink-100 text-ink-500",
 };
+
+/** Today (local) at midnight, as `yyyy-mm-dd`. */
+function todayKey(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+/** Derived overdue: a 'demand' whose due_date is strictly before today. */
+function isOverdue(p: {
+  status: string;
+  due_date: string | null;
+}): boolean {
+  if (p.status !== "demand" || !p.due_date) return false;
+  return todayKey() > p.due_date.slice(0, 10);
+}
+
+/** An "open" payment counts toward the to-collect / to-pay totals. */
+function isOpenStatus(status: string): boolean {
+  return status === "draft" || status === "demand";
+}
+
+// Payment terms (שוטף+N). null/0 = מיידי. "custom" is a UI-only sentinel.
+const TERMS_PRESETS: { value: string; label: string }[] = [
+  { value: "0", label: "מיידי" },
+  { value: "30", label: "שוטף+30" },
+  { value: "60", label: "שוטף+60" },
+  { value: "90", label: "שוטף+90" },
+  { value: "custom", label: "מותאם" },
+];
+
+function termsLabel(netDays: number | null): string {
+  if (!netDays || netDays <= 0) return "מיידי";
+  return `שוטף+${netDays}`;
+}
+
+/** due_date = demand_date + netDays (מיידי → demand_date). Returns yyyy-mm-dd. */
+function computeDueDate(
+  demandDate: string,
+  netDays: number | null
+): string | null {
+  if (!demandDate) return null;
+  const base = new Date(demandDate + "T00:00:00");
+  if (Number.isNaN(base.getTime())) return null;
+  const days = netDays && netDays > 0 ? netDays : 0;
+  base.setDate(base.getDate() + days);
+  const y = base.getFullYear();
+  const m = String(base.getMonth() + 1).padStart(2, "0");
+  const d = String(base.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
 
 const CURRENCY_SYMBOL: Record<string, string> = {
   ILS: "₪",
@@ -92,6 +168,16 @@ function formatDate(d: string | null): string {
   });
 }
 
+/** Compact DD/MM for inline hints. */
+function formatDayMonth(d: string | null): string {
+  if (!d) return "";
+  const dt = new Date(d + (d.length === 10 ? "T00:00:00" : ""));
+  if (Number.isNaN(dt.getTime())) return "";
+  const day = String(dt.getDate()).padStart(2, "0");
+  const month = String(dt.getMonth() + 1).padStart(2, "0");
+  return `${day}/${month}`;
+}
+
 // ── Configurable-table column model for the payments table view ──────────────
 // Mirrors the meetings table: same CSS-grid configurable table, no control
 // columns, a small actions column for delete, fixed columns renamable/reorderable
@@ -99,6 +185,7 @@ function formatDate(d: string | null): string {
 type PaymentFixedKey =
   | "title"
   | "direction"
+  | "contact"
   | "amount"
   | "status"
   | "due_date"
@@ -117,6 +204,14 @@ const PAYMENT_FIXED_DESCRIPTORS: FixedColumnDescriptor<PaymentFixedKey>[] = [
     key: "direction",
     width: "90px",
     defaultLabel: "סוג",
+    align: "start",
+    sortable: false,
+    sortKey: null,
+  },
+  {
+    key: "contact",
+    width: "minmax(120px, 0.7fr)",
+    defaultLabel: "איש קשר",
     align: "start",
     sortable: false,
     sortKey: null,
@@ -167,8 +262,17 @@ const PAYMENT_CONTROL_AND_ACTIONS_WIDTH = 40;
 export function ProjectPaymentsTab() {
   const { projectId } = useProjectContext();
   const { data: payments = [], isLoading } = useProjectPayments(projectId);
+  const { data: projectContacts = [] } = useProjectContacts(projectId);
   const createPayment = useCreateProjectPayment();
   const [openId, setOpenId] = useState<string | null>(null);
+  const [demandsOnly, setDemandsOnly] = useState(false);
+
+  // Map contact id → name for table/card rendering.
+  const contactName = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const c of projectContacts) m.set(c.id, c.name?.trim() || "");
+    return m;
+  }, [projectContacts]);
 
   // Configurable custom columns (payment entity).
   const { data: customFields = [] } = useProjectCustomFields(
@@ -281,19 +385,29 @@ export function ProjectPaymentsTab() {
     setOptionsFieldId(null);
   };
 
-  // Summary: income / expense / balance (cancelled excluded from totals).
+  // Summary: open to-collect (in) / open to-pay (out) / overdue count.
+  // "Open" = draft|demand (not paid, not cancelled). Net balance = collect − pay.
   const summary = useMemo(() => {
-    let income = 0;
-    let expense = 0;
+    let toCollect = 0;
+    let toPay = 0;
+    let overdue = 0;
     for (const p of payments) {
-      if (p.status === "cancelled") continue;
-      if (p.direction === "in") income += p.amount_cents ?? 0;
-      else if (p.direction === "out") expense += p.amount_cents ?? 0;
+      if (isOverdue(p)) overdue += 1;
+      if (!isOpenStatus(p.status)) continue;
+      if (p.direction === "in") toCollect += p.amount_cents ?? 0;
+      else if (p.direction === "out") toPay += p.amount_cents ?? 0;
     }
-    return { income, expense, balance: income - expense };
+    return { toCollect, toPay, overdue, balance: toCollect - toPay };
   }, [payments]);
 
   const summaryCurrency = payments[0]?.currency ?? "ILS";
+
+  // Open-demands segment: only unpaid 'demand' rows when the toggle is on.
+  const visiblePayments = useMemo(
+    () =>
+      demandsOnly ? payments.filter((p) => p.status === "demand") : payments,
+    [payments, demandsOnly]
+  );
 
   const openPayment = payments.find((p) => p.id === openId) ?? null;
 
@@ -315,17 +429,42 @@ export function ProjectPaymentsTab() {
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <SummaryStrip
-          income={summary.income}
-          expense={summary.expense}
+          toCollect={summary.toCollect}
+          toPay={summary.toPay}
+          overdue={summary.overdue}
           balance={summary.balance}
           currency={summaryCurrency}
         />
         <div className="inline-flex items-center gap-2">
+          {payments.some((p) => p.status === "demand") && (
+            <label className="inline-flex items-center gap-1.5 text-xs text-ink-600 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={demandsOnly}
+                onChange={(e) => setDemandsOnly(e.target.checked)}
+                className="accent-primary-600"
+              />
+              רק דרישות פתוחות
+            </label>
+          )}
           <ColumnsMenu
             items={columnMenuItems}
             hiddenIds={hiddenIds}
             onToggle={toggleHidden}
           />
+          {payments.length > 0 && (
+            <ExportExcelButton
+              filename="תשלומים"
+              build={() =>
+                buildPaymentsSheet(
+                  payments,
+                  customFields,
+                  "תשלומים",
+                  projectContacts
+                )
+              }
+            />
+          )}
           <button
             type="button"
             onClick={handleCreate}
@@ -369,11 +508,19 @@ export function ProjectPaymentsTab() {
                 onReorderFields={handleReorderFields}
                 onEditFieldOptions={(fieldId) => setOptionsFieldId(fieldId)}
               />
-              {payments.map((p) => (
+              {visiblePayments.length === 0 ? (
+                <div className="px-4 py-6 text-center text-xs text-ink-500">
+                  אין דרישות פתוחות
+                </div>
+              ) : (
+                visiblePayments.map((p) => (
                 <PaymentRow
                   key={p.id}
                   payment={p}
                   projectId={projectId}
+                  contactName={
+                    p.contact_id ? contactName.get(p.contact_id) ?? null : null
+                  }
                   gridCols={gridCols}
                   orderedKeys={visibleKeys}
                   customFields={visibleFields}
@@ -392,7 +539,8 @@ export function ProjectPaymentsTab() {
                   }
                   onOpen={() => setOpenId(p.id)}
                 />
-              ))}
+                ))
+              )}
             </div>
           </div>
         </div>
@@ -402,6 +550,7 @@ export function ProjectPaymentsTab() {
         <PaymentDetailModal
           payment={openPayment}
           projectId={projectId}
+          contacts={projectContacts}
           onClose={() => setOpenId(null)}
         />
       )}
@@ -410,28 +559,32 @@ export function ProjectPaymentsTab() {
 }
 
 function SummaryStrip({
-  income,
-  expense,
+  toCollect,
+  toPay,
+  overdue,
   balance,
   currency,
 }: {
-  income: number;
-  expense: number;
+  toCollect: number;
+  toPay: number;
+  overdue: number;
   balance: number;
   currency: string;
 }) {
   return (
     <div className="inline-flex items-center gap-2 flex-wrap">
       <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5">
-        <div className="text-[10px] text-emerald-700 font-medium">תקבולים</div>
+        <div className="text-[10px] text-emerald-700 font-medium">
+          לקבל (פתוח)
+        </div>
         <div className="text-sm font-semibold text-emerald-800">
-          {formatMoney(income, currency)}
+          {formatMoney(toCollect, currency)}
         </div>
       </div>
       <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-1.5">
-        <div className="text-[10px] text-rose-700 font-medium">תשלומים</div>
+        <div className="text-[10px] text-rose-700 font-medium">לשלם (פתוח)</div>
         <div className="text-sm font-semibold text-rose-800">
-          {formatMoney(expense, currency)}
+          {formatMoney(toPay, currency)}
         </div>
       </div>
       <div
@@ -451,6 +604,18 @@ function SummaryStrip({
         >
           {formatMoney(balance, currency)}
         </div>
+      </div>
+      <div
+        className={cn(
+          "inline-flex items-center gap-1 rounded-xl border px-3 py-1.5",
+          overdue > 0
+            ? "border-rose-200 bg-rose-50 text-rose-700"
+            : "border-ink-200 bg-ink-50 text-ink-500"
+        )}
+      >
+        <AlertTriangle className="w-3.5 h-3.5" />
+        <span className="text-[10px] font-medium">באיחור:</span>
+        <span className="text-sm font-semibold tabular-nums">{overdue}</span>
       </div>
     </div>
   );
@@ -501,6 +666,7 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
 function PaymentRow({
   payment,
   projectId,
+  contactName,
   gridCols,
   orderedKeys,
   customFields,
@@ -509,6 +675,7 @@ function PaymentRow({
 }: {
   payment: ProjectPayment;
   projectId: string;
+  contactName: string | null;
   gridCols: string;
   orderedKeys: PaymentFixedKey[];
   customFields: TaskCustomField[];
@@ -531,6 +698,12 @@ function PaymentRow({
         );
       case "direction":
         return <DirectionChip direction={payment.direction} />;
+      case "contact":
+        return (
+          <span className="text-xs text-ink-700 truncate">
+            {contactName?.trim() || "—"}
+          </span>
+        );
       case "amount":
         return (
           <span
@@ -542,7 +715,14 @@ function PaymentRow({
             {formatMoney(payment.amount_cents, payment.currency)}
           </span>
         );
-      case "status":
+      case "status": {
+        if (isOverdue(payment)) {
+          return (
+            <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-rose-100 text-rose-700">
+              באיחור
+            </span>
+          );
+        }
         return (
           <span
             className={cn(
@@ -550,9 +730,10 @@ function PaymentRow({
               STATUS_CLASS[payment.status] ?? "bg-ink-100 text-ink-600"
             )}
           >
-            {STATUS_LABEL[payment.status] ?? payment.status}
+            {paymentStatusLabel(payment.status, payment.direction)}
           </span>
         );
+      }
       case "due_date":
         return (
           <span className="text-xs text-ink-600 truncate">
@@ -609,39 +790,113 @@ function PaymentRow({
 function PaymentDetailModal({
   payment,
   projectId,
+  contacts,
   onClose,
 }: {
   payment: ProjectPayment;
   projectId: string;
+  contacts: ProjectContact[];
   onClose: () => void;
 }) {
   const updatePayment = useUpdateProjectPayment();
+  const scope = useOrgScope();
 
   const [title, setTitle] = useState(payment.title);
   const [direction, setDirection] = useState(payment.direction);
+  const [contactId, setContactId] = useState(payment.contact_id ?? "");
+
+  // "צרף מסמך" flow — the payments folder id is resolved lazily on open.
+  const [addOpen, setAddOpen] = useState(false);
+  const [addFolderId, setAddFolderId] = useState<string | null>(null);
+  const [addTargets, setAddTargets] = useState<AddDocumentTarget[]>([]);
+  const [openingAdd, setOpeningAdd] = useState(false);
+
+  const openAddDocument = async () => {
+    setOpeningAdd(true);
+    try {
+      const { organizationId, userId } = assertOrgScope(scope);
+      const folderId = await findOrCreatePaymentsFolder(
+        projectId,
+        organizationId,
+        userId
+      );
+      const targets: AddDocumentTarget[] = [
+        { type: "payment", id: payment.id, label: "התשלום" },
+        ...(payment.contact_id
+          ? [
+              {
+                type: "contact" as const,
+                id: payment.contact_id,
+                label: "איש הקשר",
+              },
+            ]
+          : []),
+      ];
+      setAddFolderId(folderId);
+      setAddTargets(targets);
+      setAddOpen(true);
+    } catch {
+      alert("שגיאה בפתיחת חלון הוספת המסמך");
+    } finally {
+      setOpeningAdd(false);
+    }
+  };
   const [amount, setAmount] = useState(
     payment.amount_cents ? String(payment.amount_cents / 100) : ""
   );
   const [currency, setCurrency] = useState(payment.currency || "ILS");
   const [status, setStatus] = useState(payment.status);
-  const [dueDate, setDueDate] = useState(payment.due_date ?? "");
+
+  // Terms: preset select ("0"|"30"|"60"|"90"|"custom") + custom number input.
+  const initialNet = payment.terms_net_days ?? 0;
+  const isPreset = ["0", "30", "60", "90"].includes(String(initialNet));
+  const [termsPreset, setTermsPreset] = useState(
+    isPreset ? String(initialNet) : "custom"
+  );
+  const [customDays, setCustomDays] = useState(
+    isPreset ? "" : String(initialNet)
+  );
+  const [demandDate, setDemandDate] = useState(payment.demand_date ?? "");
   const [paidDate, setPaidDate] = useState(payment.paid_date ?? "");
   const [notes, setNotes] = useState(payment.notes ?? "");
+
+  // Resolve the effective net days from preset/custom.
+  const netDays =
+    termsPreset === "custom"
+      ? Math.max(0, parseInt(customDays, 10) || 0)
+      : parseInt(termsPreset, 10) || 0;
+
+  const computedDue = computeDueDate(demandDate, netDays);
+
+  // Contacts filtered by direction: in → customers, out → suppliers.
+  const filteredContacts = useMemo(
+    () =>
+      contacts.filter((c) =>
+        direction === "in" ? c.type === "customer" : c.type === "supplier"
+      ),
+    [contacts, direction]
+  );
 
   const save = () => {
     const parsed = parseFloat(amount);
     const amountCents = Number.isFinite(parsed) ? Math.round(parsed * 100) : 0;
+    // Setting status to paid fills paid_date (default today if empty).
+    const nextPaidDate =
+      status === "paid" ? paidDate || todayKey() : paidDate || null;
     updatePayment.mutate({
       id: payment.id,
       projectId,
       patch: {
         title: title.trim(),
         direction,
+        contact_id: contactId || null,
         amount_cents: amountCents,
         currency,
         status,
-        due_date: dueDate || null,
-        paid_date: paidDate || null,
+        terms_net_days: netDays > 0 ? netDays : 0,
+        demand_date: demandDate || null,
+        due_date: computedDue,
+        paid_date: nextPaidDate,
         notes: notes.trim() || null,
       },
     });
@@ -684,7 +939,10 @@ function PaymentDetailModal({
               <label className="eyebrow mb-1.5 block">סוג</label>
               <select
                 value={direction}
-                onChange={(e) => setDirection(e.target.value)}
+                onChange={(e) => {
+                  setDirection(e.target.value);
+                  setContactId(""); // contact list is direction-specific
+                }}
                 className="field"
               >
                 {DIRECTION_OPTIONS.map((o) => (
@@ -701,13 +959,38 @@ function PaymentDetailModal({
                 onChange={(e) => setStatus(e.target.value)}
                 className="field"
               >
-                {STATUS_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
+                {STATUS_VALUES.map((v) => (
+                  <option key={v} value={v}>
+                    {paymentStatusLabel(v, direction)}
                   </option>
                 ))}
               </select>
             </div>
+          </div>
+
+          <div>
+            <label className="eyebrow mb-1.5 block">
+              {direction === "in" ? "לקוח" : "ספק"}
+            </label>
+            <select
+              value={contactId}
+              onChange={(e) => setContactId(e.target.value)}
+              className="field"
+            >
+              <option value="">— ללא —</option>
+              {filteredContacts.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name?.trim() || "ללא שם"}
+                </option>
+              ))}
+            </select>
+            {filteredContacts.length === 0 && (
+              <p className="text-[11px] text-ink-400 mt-1">
+                {direction === "in"
+                  ? "אין לקוחות מקושרים לפרויקט"
+                  : "אין ספקים מקושרים לפרויקט"}
+              </p>
+            )}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -739,23 +1022,58 @@ function PaymentDetailModal({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="eyebrow mb-1.5 block">לתשלום עד</label>
-              <input
-                type="date"
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
-                className="field"
-              />
+              <label className="eyebrow mb-1.5 block">תנאי תשלום</label>
+              <div className="inline-flex items-center gap-2 w-full">
+                <select
+                  value={termsPreset}
+                  onChange={(e) => setTermsPreset(e.target.value)}
+                  className="field"
+                >
+                  {TERMS_PRESETS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+                {termsPreset === "custom" && (
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={customDays}
+                    onChange={(e) => setCustomDays(e.target.value)}
+                    placeholder="ימים"
+                    className="field w-24 shrink-0"
+                  />
+                )}
+              </div>
             </div>
             <div>
-              <label className="eyebrow mb-1.5 block">שולם בתאריך</label>
+              <label className="eyebrow mb-1.5 block">תאריך דרישה</label>
               <input
                 type="date"
-                value={paidDate}
-                onChange={(e) => setPaidDate(e.target.value)}
+                value={demandDate}
+                onChange={(e) => setDemandDate(e.target.value)}
                 className="field"
               />
             </div>
+          </div>
+
+          <div className="flex items-center justify-between gap-2 -mt-1">
+            <p className="text-[11px] text-ink-500">
+              {termsLabel(netDays)}
+              {computedDue ? ` · ליעד ${formatDayMonth(computedDue)}` : ""}
+            </p>
+          </div>
+
+          <div>
+            <label className="eyebrow mb-1.5 block">שולם בתאריך</label>
+            <input
+              type="date"
+              value={paidDate}
+              onChange={(e) => setPaidDate(e.target.value)}
+              className="field"
+            />
           </div>
 
           <div>
@@ -768,6 +1086,15 @@ function PaymentDetailModal({
               className="field resize-y"
             />
           </div>
+
+          <LinkedDocumentsSection
+            targetType="payment"
+            targetId={payment.id}
+            projectId={projectId}
+            onAttach={() => {
+              if (!openingAdd) void openAddDocument();
+            }}
+          />
         </div>
 
         <div className="px-5 py-3 bg-ink-50 border-t border-ink-200 flex items-center justify-end gap-2 shrink-0">
@@ -786,6 +1113,15 @@ function PaymentDetailModal({
           </button>
         </div>
       </div>
+
+      {addOpen && (
+        <AddDocumentModal
+          projectId={projectId}
+          defaultFolderId={addFolderId}
+          targets={addTargets}
+          onClose={() => setAddOpen(false)}
+        />
+      )}
     </div>
   );
 }

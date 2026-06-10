@@ -11,7 +11,10 @@ export interface ProjectPayment {
   direction: string; // 'in' | 'out'
   amount_cents: number;
   currency: string;
-  status: string; // 'pending' | 'paid' | 'overdue' | 'cancelled'
+  status: string; // 'draft' | 'demand' | 'paid' | 'cancelled'
+  contact_id: string | null;
+  terms_net_days: number | null; // null/0 = מיידי
+  demand_date: string | null;
   due_date: string | null;
   paid_date: string | null;
   notes: string | null;
@@ -30,6 +33,9 @@ export type ProjectPaymentInsert = {
   amount_cents?: number;
   currency?: string;
   status?: string;
+  contact_id?: string | null;
+  terms_net_days?: number | null;
+  demand_date?: string | null;
   due_date?: string | null;
   paid_date?: string | null;
   notes?: string | null;

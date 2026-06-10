@@ -14,20 +14,31 @@ import type {
  */
 const STORAGE_BUCKET = "recordings";
 
+/**
+ * Columns fetched for LIST views. We deliberately EXCLUDE the heavy JSON blobs
+ * `transcript_json` (up to a few hundred KB/row) and `free_text_qa` — they are
+ * only needed in the single-recording detail view, which fetches the full row
+ * via `getRecording`. Keeping them out of the list keeps list refetches cheap
+ * (the list is invalidated on every realtime `recordings` change). When a list
+ * view needs a new column, add it here.
+ */
+const LIST_COLUMNS =
+  "id, organization_id, owner_id, title, source, source_custom, storage_key, storage_provider, mime_type, size_bytes, duration_seconds, language, status, provider, provider_job_id, error_message, transcript_text, summary, speakers_count, retention_days, archive_audio_at, audio_archived, tags, project_id, task_list_id, event_calendar_id, merged_into, ai_output, ai_output_at, ai_status, multipart_upload_id, created_at, updated_at";
+
 export async function listRecordings(
   organizationId: string,
   options: { includeArchived?: boolean; source?: RecordingSource } = {}
 ): Promise<Recording[]> {
   let query = supabase
     .from("recordings")
-    .select("*")
+    .select(LIST_COLUMNS)
     .eq("organization_id", organizationId)
     .order("created_at", { ascending: false });
   if (!options.includeArchived) query = query.eq("audio_archived", false);
   if (options.source) query = query.eq("source", options.source);
   const { data, error } = await query;
   if (error) throw error;
-  return data ?? [];
+  return (data ?? []) as unknown as Recording[];
 }
 
 export async function getRecording(
@@ -294,6 +305,22 @@ function estimateDurationFromUtterances(rec: Recording): number {
 
 // AI processing ------------------------------------------------------------
 
+/**
+ * A long-form document generated on demand from the transcript (a "very
+ * detailed summary" preset, or a free-prompt request). Stored as Markdown
+ * inside `ai_output.documents` so it survives reloads and AI re-runs, and can
+ * be edited and exported.
+ */
+export interface RecordingGeneratedDoc {
+  id: string;
+  title: string;
+  /** The instruction that produced this document (editable / re-runnable). */
+  prompt: string;
+  /** Markdown body. */
+  content: string;
+  created_at: string;
+}
+
 export interface RecordingAiOutput {
   /** 1–2 sentences. The "elevator pitch" for the call. */
   short_summary: string;
@@ -314,6 +341,8 @@ export interface RecordingAiOutput {
     duration_minutes?: number | null;
     speaker_name?: string | null;
   }>;
+  /** Long-form generated documents (detailed summaries / free-prompt docs). */
+  documents?: RecordingGeneratedDoc[];
 }
 
 /**
@@ -383,6 +412,36 @@ export async function askRecordingFreeText(
     response: json.response ?? "",
     history: Array.isArray(json.history) ? json.history : [],
   };
+}
+
+/**
+ * Generate a long-form Markdown document from the transcript via the
+ * `summarize` edge function's document mode. Returns the Markdown text only —
+ * persistence into `ai_output.documents` is handled by the caller so it can be
+ * edited before saving.
+ */
+export async function generateRecordingDocument(
+  recordingId: string,
+  prompt: string
+): Promise<string> {
+  const { data: session } = await supabase.auth.getSession();
+  const jwt = session.session?.access_token;
+  if (!jwt) throw new Error("not_authenticated");
+  const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/summarize`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${jwt}`,
+    },
+    body: JSON.stringify({ recording_id: recordingId, document_prompt: prompt }),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`document_${res.status}: ${detail.slice(0, 500)}`);
+  }
+  const json = (await res.json()) as { document?: string };
+  return json.document ?? "";
 }
 
 export async function clearRecordingFreeTextHistory(

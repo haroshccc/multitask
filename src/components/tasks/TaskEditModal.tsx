@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   X,
@@ -25,6 +25,8 @@ import {
   Repeat,
   Share2,
   UserPlus,
+  Loader2,
+  Search,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import {
@@ -35,7 +37,17 @@ import {
   useDeleteTask,
 } from "@/lib/hooks/useTasks";
 import { pushUndo } from "@/lib/undo/store";
-import { useThought } from "@/lib/hooks/useThoughts";
+import { useThought, useThoughts } from "@/lib/hooks/useThoughts";
+import { useRecordings, useRecording } from "@/lib/hooks/useRecordings";
+import { useEvents, useEvent } from "@/lib/hooks/useEvents";
+import { useFileUpload } from "@/lib/hooks/useFileUpload";
+import { presignDownload } from "@/lib/services/storage";
+import {
+  useTaskAttachments,
+  useCreateTaskAttachment,
+  useDeleteTaskAttachment,
+} from "@/lib/hooks/useTaskAttachments";
+import type { TaskAttachmentPayload } from "@/lib/services/taskAttachments";
 import { ThoughtEditModal } from "@/components/thoughts/ThoughtEditModal";
 import { RrulePicker } from "@/components/calendar/RrulePicker";
 import {
@@ -71,7 +83,11 @@ import {
 } from "@/lib/hooks/useTaskAssignees";
 import { useAuth } from "@/lib/auth/AuthContext";
 import { useTaskEdits, type TaskEditEntry } from "@/lib/hooks/useTaskEdits";
-import type { TimeEntry, UserTaskStatus } from "@/lib/types/domain";
+import type {
+  TimeEntry,
+  UserTaskStatus,
+  TaskAttachment,
+} from "@/lib/types/domain";
 import { DateTimePicker } from "@/components/ui/DateTimePicker";
 import {
   DurationInput,
@@ -1107,7 +1123,14 @@ export function TaskEditModal({
                 <TaskEditHistoryTab taskId={task.id} />
               )}
 
-              {tab === "attachments" && <AttachmentsTab />}
+              {tab === "attachments" && (
+                <AttachmentsTab
+                  taskId={task?.id ?? null}
+                  organizationId={task?.organization_id ?? activeOrganizationId ?? null}
+                  createdBy={user?.id ?? null}
+                  canEdit={!isReadView}
+                />
+              )}
             </div>
             </fieldset>
 
@@ -1900,23 +1923,438 @@ function UnitSwitch({ value, onChange }: { value: TimeUnit; onChange: (v: TimeUn
   );
 }
 
-function AttachmentsTab() {
-  return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-        <AttachmentSlot icon={<Mic className="w-4 h-4" />} label="הקלטה" />
-        <AttachmentSlot icon={<Lightbulb className="w-4 h-4" />} label="מחשבה" />
-        <AttachmentSlot icon={<FileText className="w-4 h-4" />} label="קובץ" />
-        <AttachmentSlot icon={<LinkIcon className="w-4 h-4" />} label="קישור" />
-        <AttachmentSlot icon={<MapPin className="w-4 h-4" />} label="מיקום" />
-        <AttachmentSlot icon={<CalendarIcon className="w-4 h-4" />} label="אירוע" />
-      </div>
+type AttachMode = "recording" | "thought" | "event" | "link" | "file";
+
+function AttachmentsTab({
+  taskId,
+  organizationId,
+  createdBy,
+  canEdit,
+}: {
+  taskId: string | null;
+  organizationId: string | null;
+  createdBy: string | null;
+  canEdit: boolean;
+}) {
+  const { data: attachments = [], isLoading } = useTaskAttachments(taskId);
+  const createAttachment = useCreateTaskAttachment();
+  const deleteAttachment = useDeleteTaskAttachment();
+  const upload = useFileUpload();
+
+  const [mode, setMode] = useState<AttachMode | null>(null);
+  const [linkUrl, setLinkUrl] = useState("");
+  const [linkLabel, setLinkLabel] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const canAttach = canEdit && !!taskId && !!organizationId && !!createdBy;
+
+  const submit = async (payload: TaskAttachmentPayload) => {
+    if (!canAttach) return;
+    setError(null);
+    try {
+      await createAttachment.mutateAsync({
+        taskId: taskId!,
+        organizationId: organizationId!,
+        createdBy: createdBy!,
+        ...payload,
+      });
+      setMode(null);
+      setLinkUrl("");
+      setLinkLabel("");
+    } catch {
+      setError("שמירת הצירוף נכשלה. נסי שוב.");
+    }
+  };
+
+  const submitLink = () => {
+    const u = linkUrl.trim();
+    if (!u) return;
+    submit({ attachment_type: "link", url: u, filename: linkLabel.trim() || null });
+  };
+
+  const handleFile = async (list: FileList | null) => {
+    const f = list?.[0];
+    if (!f || !canAttach) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const safeName = f.name.replace(/[^\w.-]+/g, "_");
+      const keySuffix = `tasks/${taskId}/attachments/${Date.now()}-${safeName}`;
+      const { key } = await upload.upload(f, {
+        keySuffix,
+        contentType: f.type || "application/octet-stream",
+        totalBytes: f.size,
+      });
+      await createAttachment.mutateAsync({
+        taskId: taskId!,
+        organizationId: organizationId!,
+        createdBy: createdBy!,
+        attachment_type: (f.type || "").startsWith("image/") ? "image" : "file",
+        storage_key: key,
+        filename: f.name,
+        mime_type: f.type || "application/octet-stream",
+        size_bytes: f.size,
+      });
+      setMode(null);
+    } catch {
+      setError("העלאת הקובץ נכשלה. נסי שוב.");
+    } finally {
+      setBusy(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  if (!taskId) {
+    return (
       <div className="rounded-xl border border-dashed border-ink-300 bg-ink-50/60 p-6 text-center">
         <Paperclip className="w-5 h-5 mx-auto text-ink-400 mb-1.5" />
-        <p className="text-sm text-ink-600">אין צירופים למשימה הזו עדיין.</p>
-        <p className="text-xs text-ink-400 mt-0.5">לחצי על אחד מהטיפוסים למעלה כדי לצרף.</p>
+        <p className="text-sm text-ink-600">שמרי את המשימה כדי לצרף קבצים והקלטות.</p>
+      </div>
+    );
+  }
+
+  const toggle = (m: AttachMode) => setMode((cur) => (cur === m ? null : m));
+
+  return (
+    <div className="space-y-4">
+      <input
+        ref={fileInputRef}
+        type="file"
+        className="hidden"
+        onChange={(e) => handleFile(e.target.files)}
+      />
+
+      {canEdit && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          <AttachmentSlot
+            icon={busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
+            label="קובץ"
+            disabled={!canAttach || busy}
+            onClick={() => fileInputRef.current?.click()}
+          />
+          <AttachmentSlot
+            icon={<Mic className="w-4 h-4" />}
+            label="הקלטה"
+            active={mode === "recording"}
+            disabled={!canAttach}
+            onClick={() => toggle("recording")}
+          />
+          <AttachmentSlot
+            icon={<LinkIcon className="w-4 h-4" />}
+            label="קישור"
+            active={mode === "link"}
+            disabled={!canAttach}
+            onClick={() => toggle("link")}
+          />
+          <AttachmentSlot
+            icon={<Lightbulb className="w-4 h-4" />}
+            label="מחשבה"
+            active={mode === "thought"}
+            disabled={!canAttach}
+            onClick={() => toggle("thought")}
+          />
+          <AttachmentSlot
+            icon={<CalendarIcon className="w-4 h-4" />}
+            label="אירוע"
+            active={mode === "event"}
+            disabled={!canAttach}
+            onClick={() => toggle("event")}
+          />
+          <AttachmentSlot
+            icon={<MapPin className="w-4 h-4" />}
+            label="מיקום"
+            comingSoon
+          />
+        </div>
+      )}
+
+      {error && <p className="text-xs text-danger-600">{error}</p>}
+
+      {/* Picker / input panel for the active mode */}
+      {mode === "link" && (
+        <div className="rounded-xl border border-ink-200 bg-white p-3 space-y-2">
+          <input
+            value={linkUrl}
+            onChange={(e) => setLinkUrl(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") submitLink(); }}
+            placeholder="https://…"
+            className="field"
+            dir="ltr"
+            autoFocus
+          />
+          <input
+            value={linkLabel}
+            onChange={(e) => setLinkLabel(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") submitLink(); }}
+            placeholder="כותרת (לא חובה)"
+            className="field"
+          />
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={() => setMode(null)} className="btn-ghost text-sm">
+              ביטול
+            </button>
+            <button
+              type="button"
+              onClick={submitLink}
+              disabled={!linkUrl.trim() || createAttachment.isPending}
+              className="btn-accent text-sm disabled:opacity-50"
+            >
+              צירוף
+            </button>
+          </div>
+        </div>
+      )}
+      {mode === "recording" && (
+        <RecordingPickerPanel onPick={(id) => submit({ attachment_type: "recording", recording_id: id })} />
+      )}
+      {mode === "thought" && (
+        <ThoughtPickerPanel onPick={(id) => submit({ attachment_type: "thought", thought_id: id })} />
+      )}
+      {mode === "event" && (
+        <EventPickerPanel onPick={(id) => submit({ attachment_type: "event", event_id: id })} />
+      )}
+
+      {/* Existing attachments */}
+      {isLoading ? (
+        <div className="flex items-center justify-center py-6 text-ink-400">
+          <Loader2 className="w-4 h-4 animate-spin" />
+        </div>
+      ) : attachments.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-ink-300 bg-ink-50/60 p-6 text-center">
+          <Paperclip className="w-5 h-5 mx-auto text-ink-400 mb-1.5" />
+          <p className="text-sm text-ink-600">אין צירופים למשימה הזו עדיין.</p>
+          {canEdit && (
+            <p className="text-xs text-ink-400 mt-0.5">לחצי על אחד מהטיפוסים למעלה כדי לצרף.</p>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-1.5">
+          {attachments.map((att) => (
+            <AttachmentRow
+              key={att.id}
+              attachment={att}
+              canEdit={canEdit}
+              onDelete={() =>
+                deleteAttachment.mutate({ id: att.id, taskId: taskId! })
+              }
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const ATTACHMENT_ICON: Record<string, React.ReactNode> = {
+  recording: <Mic className="w-4 h-4" />,
+  thought: <Lightbulb className="w-4 h-4" />,
+  event: <CalendarIcon className="w-4 h-4" />,
+  file: <FileText className="w-4 h-4" />,
+  image: <FileText className="w-4 h-4" />,
+  link: <LinkIcon className="w-4 h-4" />,
+};
+
+function AttachmentRow({
+  attachment,
+  canEdit,
+  onDelete,
+}: {
+  attachment: TaskAttachment;
+  canEdit: boolean;
+  onDelete: () => void;
+}) {
+  const { data: rec } = useRecording(
+    attachment.attachment_type === "recording" ? attachment.recording_id : null
+  );
+  const { data: thought } = useThought(
+    attachment.attachment_type === "thought" ? attachment.thought_id : null
+  );
+  const { data: ev } = useEvent(
+    attachment.attachment_type === "event" ? attachment.event_id : null
+  );
+
+  let label = "צירוף";
+  let openHref: string | null = null;
+  let openFile = false;
+  switch (attachment.attachment_type) {
+    case "recording":
+      label = rec?.title?.trim() || "הקלטה";
+      break;
+    case "thought":
+      label =
+        thought?.ai_generated_title?.trim() ||
+        thought?.text_content?.trim().slice(0, 60) ||
+        "מחשבה";
+      break;
+    case "event":
+      label = ev?.title?.trim() || "אירוע";
+      break;
+    case "link":
+      label = attachment.filename?.trim() || attachment.url || "קישור";
+      openHref = attachment.url;
+      break;
+    case "file":
+    case "image":
+      label = attachment.filename?.trim() || "קובץ";
+      openFile = true;
+      break;
+  }
+
+  const handleOpenFile = async () => {
+    if (!attachment.storage_key) return;
+    try {
+      const { url } = await presignDownload(attachment.storage_key);
+      window.open(url, "_blank", "noopener");
+    } catch {
+      // ignore — user can retry
+    }
+  };
+
+  const clickable = !!openHref || openFile;
+  const Inner = (
+    <>
+      <span className="text-ink-500 shrink-0">
+        {ATTACHMENT_ICON[attachment.attachment_type] ?? <Paperclip className="w-4 h-4" />}
+      </span>
+      <span className="truncate text-sm text-ink-800 flex-1 min-w-0" dir="auto">
+        {label}
+      </span>
+      {clickable && <ExternalLink className="w-3.5 h-3.5 text-ink-400 shrink-0" />}
+    </>
+  );
+
+  return (
+    <div className="group flex items-center gap-2 rounded-xl border border-ink-200 bg-white px-3 py-2">
+      {openHref ? (
+        <a
+          href={openHref}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-2 flex-1 min-w-0 hover:opacity-80"
+        >
+          {Inner}
+        </a>
+      ) : openFile ? (
+        <button
+          type="button"
+          onClick={handleOpenFile}
+          className="flex items-center gap-2 flex-1 min-w-0 text-start hover:opacity-80"
+        >
+          {Inner}
+        </button>
+      ) : (
+        <div className="flex items-center gap-2 flex-1 min-w-0">{Inner}</div>
+      )}
+      {canEdit && (
+        <button
+          type="button"
+          onClick={onDelete}
+          className="p-1 rounded-lg text-ink-400 hover:text-danger-600 hover:bg-danger-50 shrink-0"
+          title="הסרת צירוף"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+      )}
+    </div>
+  );
+}
+
+function EntityPickerList({
+  loading,
+  items,
+  emptyText,
+  onPick,
+}: {
+  loading: boolean;
+  items: { id: string; title: string; subtitle?: string }[];
+  emptyText: string;
+  onPick: (id: string) => void;
+}) {
+  const [q, setQ] = useState("");
+  const needle = q.trim().toLowerCase();
+  const filtered = needle
+    ? items.filter((i) => i.title.toLowerCase().includes(needle))
+    : items;
+
+  return (
+    <div className="rounded-xl border border-ink-200 bg-white p-2 space-y-2">
+      <div className="relative">
+        <Search className="w-3.5 h-3.5 text-ink-400 absolute top-1/2 -translate-y-1/2 end-2.5" />
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="חיפוש…"
+          className="field pe-8"
+          autoFocus
+        />
+      </div>
+      <div className="max-h-56 overflow-y-auto space-y-1">
+        {loading ? (
+          <div className="flex items-center justify-center py-4 text-ink-400">
+            <Loader2 className="w-4 h-4 animate-spin" />
+          </div>
+        ) : filtered.length === 0 ? (
+          <p className="text-xs text-ink-400 text-center py-4">{emptyText}</p>
+        ) : (
+          filtered.map((i) => (
+            <button
+              key={i.id}
+              type="button"
+              onClick={() => onPick(i.id)}
+              className="w-full text-start px-2.5 py-2 rounded-lg hover:bg-ink-50 flex flex-col gap-0.5"
+            >
+              <span className="text-sm text-ink-800 truncate" dir="auto">
+                {i.title}
+              </span>
+              {i.subtitle && (
+                <span className="text-[11px] text-ink-400">{i.subtitle}</span>
+              )}
+            </button>
+          ))
+        )}
       </div>
     </div>
+  );
+}
+
+function RecordingPickerPanel({ onPick }: { onPick: (id: string) => void }) {
+  const { data = [], isLoading } = useRecordings();
+  const items = data.map((r) => ({
+    id: r.id,
+    title: r.title?.trim() || "הקלטה ללא שם",
+    subtitle: new Date(r.created_at).toLocaleDateString("he-IL"),
+  }));
+  return (
+    <EntityPickerList loading={isLoading} items={items} emptyText="אין הקלטות" onPick={onPick} />
+  );
+}
+
+function ThoughtPickerPanel({ onPick }: { onPick: (id: string) => void }) {
+  const { data = [], isLoading } = useThoughts();
+  const items = data.map((t) => ({
+    id: t.id,
+    title:
+      t.ai_generated_title?.trim() ||
+      t.text_content?.trim().slice(0, 60) ||
+      "מחשבה ללא טקסט",
+    subtitle: new Date(t.created_at).toLocaleDateString("he-IL"),
+  }));
+  return (
+    <EntityPickerList loading={isLoading} items={items} emptyText="אין מחשבות" onPick={onPick} />
+  );
+}
+
+function EventPickerPanel({ onPick }: { onPick: (id: string) => void }) {
+  const { data = [], isLoading } = useEvents();
+  const items = data.map((e) => ({
+    id: e.id,
+    title: e.title?.trim() || "אירוע ללא כותרת",
+    subtitle: new Date(e.starts_at).toLocaleDateString("he-IL"),
+  }));
+  return (
+    <EntityPickerList loading={isLoading} items={items} emptyText="אין אירועים" onPick={onPick} />
   );
 }
 
@@ -2034,12 +2472,37 @@ function StatusPickerRow({ status, selected, editing, onSelect, onStartEdit, onS
   );
 }
 
-function AttachmentSlot({ icon, label }: { icon: React.ReactNode; label: string }) {
+function AttachmentSlot({
+  icon,
+  label,
+  active = false,
+  disabled = false,
+  comingSoon = false,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  active?: boolean;
+  disabled?: boolean;
+  comingSoon?: boolean;
+  onClick?: () => void;
+}) {
+  const isDisabled = disabled || comingSoon;
   return (
-    <button type="button" disabled
-      className="group flex items-center gap-2 rounded-xl border border-ink-200 bg-white px-3 py-2.5 text-sm text-ink-700 cursor-not-allowed opacity-70"
-      title="בקרוב">
-      <span className="text-ink-700">{icon}</span>
+    <button
+      type="button"
+      disabled={isDisabled}
+      onClick={onClick}
+      title={comingSoon ? "בקרוב" : undefined}
+      className={cn(
+        "group flex items-center gap-2 rounded-xl border px-3 py-2.5 text-sm transition-colors",
+        active
+          ? "border-primary-500 bg-primary-50 text-primary-700 ring-1 ring-primary-500/25"
+          : "border-ink-200 bg-white text-ink-700 hover:border-ink-400",
+        isDisabled && "cursor-not-allowed opacity-70 hover:border-ink-200"
+      )}
+    >
+      <span className={active ? "text-primary-600" : "text-ink-700"}>{icon}</span>
       <span className="font-medium">{label}</span>
       <Plus className="w-3.5 h-3.5 ms-auto text-ink-400" />
     </button>

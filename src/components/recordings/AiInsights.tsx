@@ -16,6 +16,9 @@ import {
   FileText,
   AlignLeft,
   Trash2,
+  Download,
+  ScrollText,
+  Plus,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import {
@@ -24,6 +27,7 @@ import {
   useAskRecordingFreeText,
   useClearRecordingFreeTextHistory,
   useRecordingFreeTextHistory,
+  useGenerateRecordingDocument,
 } from "@/lib/hooks/useRecordings";
 import {
   TaskEditModal,
@@ -33,8 +37,12 @@ import { useCreateTask, useDeleteTask } from "@/lib/hooks/useTasks";
 import { useTaskLists } from "@/lib/hooks/useTaskLists";
 import { useCreateEvent, useDeleteEvent } from "@/lib/hooks/useEvents";
 import type { Recording } from "@/lib/types/domain";
-import type { RecordingAiOutput } from "@/lib/services/recordings";
+import type {
+  RecordingAiOutput,
+  RecordingGeneratedDoc,
+} from "@/lib/services/recordings";
 import { pushUndo } from "@/lib/undo/store";
+import { ExportRecordingModal } from "./ExportRecordingModal";
 
 interface Props {
   recording: Recording;
@@ -75,10 +83,15 @@ export function AiInsights({ recording }: Props) {
       },
       tasks: raw.tasks ?? [],
       events: raw.events ?? [],
+      documents: raw.documents ?? [],
     };
   }, [recording.ai_output, recording.id]);
 
   const [draft, setDraft] = useState<RecordingAiOutput>(serverOutput);
+  // Always-fresh draft for async callbacks (document generation can take ~20s,
+  // during which other sections may be edited — don't clobber those).
+  const draftRef = useRef<RecordingAiOutput>(serverOutput);
+  draftRef.current = draft;
   const lastServerRef = useRef<RecordingAiOutput>(serverOutput);
   useEffect(() => {
     // Adopt new server values only when the user hasn't started editing.
@@ -104,8 +117,27 @@ export function AiInsights({ recording }: Props) {
     | "email"
     | "tasks"
     | "events"
+    | "documents"
     | "free_text";
   const [activeTab, setActiveTab] = useState<AiTab>("short_summary");
+  const [exportOpen, setExportOpen] = useState(false);
+
+  // Generated documents live inside the same ai_output draft. Structural
+  // changes (generate/delete) persist immediately so a long generation isn't
+  // lost; text edits flow through the normal dirty → "שמירה" path.
+  const setDocuments = (
+    next: RecordingGeneratedDoc[],
+    persist = false,
+  ) => {
+    const nextDraft = { ...draftRef.current, documents: next };
+    setDraft(nextDraft);
+    if (persist) {
+      updateRecording.mutate({
+        recordingId: recording.id,
+        patch: { ai_output: nextDraft as unknown as Recording["ai_output"] },
+      });
+    }
+  };
 
   const onTrigger = () =>
     trigger.mutate({ recordingId: recording.id });
@@ -192,8 +224,24 @@ export function AiInsights({ recording }: Props) {
               )}
               {recording.ai_output ? "עיבוד AI מחדש" : "הפעלת AI"}
             </button>
+          <button
+            type="button"
+            onClick={() => setExportOpen(true)}
+            className="btn-outline !py-1 !px-2 !text-[11px] inline-flex items-center gap-1"
+            title="ייצוא תמלול / סיכום / שאלות למסמך Word, PDF או PowerPoint"
+          >
+            <Download className="w-3 h-3" />
+            ייצוא
+          </button>
         </div>
       </div>
+
+      <ExportRecordingModal
+        open={exportOpen}
+        onClose={() => setExportOpen(false)}
+        recording={recording}
+        aiOutput={draft}
+      />
 
       {!recording.ai_output && aiStatus !== "pending" && (
         <p className="text-[11px] text-ink-500 leading-relaxed">
@@ -252,6 +300,14 @@ export function AiInsights({ recording }: Props) {
           onClick={() => setActiveTab("events")}
         />
         <AiTabButton
+          icon={<ScrollText className="w-3.5 h-3.5" />}
+          label="מסמך מפורט"
+          count={(draft.documents ?? []).length}
+          active={activeTab === "documents"}
+          filled={(draft.documents ?? []).length > 0}
+          onClick={() => setActiveTab("documents")}
+        />
+        <AiTabButton
           icon={<Sparkles className="w-3.5 h-3.5" />}
           label="שאלה חופשית"
           active={activeTab === "free_text"}
@@ -305,6 +361,14 @@ export function AiInsights({ recording }: Props) {
           recording={recording}
           items={draft.events}
           onChange={(items) => setDraft((d) => ({ ...d, events: items }))}
+        />
+      )}
+      {activeTab === "documents" && (
+        <DocumentsSection
+          recordingId={recording.id}
+          hasTranscript={!!recording.transcript_text}
+          documents={draft.documents ?? []}
+          onChange={setDocuments}
         />
       )}
       {activeTab === "free_text" && (
@@ -1652,6 +1716,200 @@ function formatRelative(iso: string): string {
   if (hours < 24) return `לפני ${hours} שעות`;
   const days = Math.floor(hours / 24);
   return `לפני ${days} ימים`;
+}
+
+const DETAILED_SUMMARY_PROMPT =
+  "כתוב/כתבי סיכום פגישה מפורט מאוד, באורך של כמה עמודים אם התוכן מצדיק. חלק/י את המסמך לכותרות לפי נושאים (##), ותחת כל נושא פרט/י את עיקרי הדיון, ההחלטות שהתקבלו, הנקודות הפתוחות והנימוקים. הוסף/י בסוף סעיף 'צעדים הבאים' עם רשימת משימות. השתמש/י ברשימות היכן שמתאים. בסס/י הכל על התמלול בלבד.";
+
+function DocumentsSection({
+  recordingId,
+  hasTranscript,
+  documents,
+  onChange,
+}: {
+  recordingId: string;
+  hasTranscript: boolean;
+  documents: RecordingGeneratedDoc[];
+  onChange: (next: RecordingGeneratedDoc[], persist?: boolean) => void;
+}) {
+  const gen = useGenerateRecordingDocument();
+  const [prompt, setPrompt] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [pendingKind, setPendingKind] = useState<"preset" | "free" | null>(null);
+  const promptRef = useRef<HTMLTextAreaElement>(null);
+
+  const onFreeClick = () => {
+    if (!prompt.trim()) {
+      setError("כתבי בקשה חופשית בתיבה כדי ליצור מסמך.");
+      promptRef.current?.focus();
+      return;
+    }
+    generate(prompt, titleFromPrompt(prompt), "free");
+  };
+
+  const generate = async (
+    instruction: string,
+    title: string,
+    kind: "preset" | "free",
+  ) => {
+    if (!instruction.trim() || pendingKind) return;
+    setError(null);
+    setPendingKind(kind);
+    try {
+      const content = await gen.mutateAsync({ recordingId, prompt: instruction });
+      if (!content.trim()) throw new Error("המסמך חזר ריק");
+      const doc: RecordingGeneratedDoc = {
+        id: crypto.randomUUID(),
+        title,
+        prompt: instruction,
+        content,
+        created_at: new Date().toISOString(),
+      };
+      // Persist immediately so a long generation can't be lost before "שמירה".
+      onChange([...documents, doc], true);
+      if (kind === "free") setPrompt("");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setPendingKind(null);
+    }
+  };
+
+  const updateDoc = (id: string, patch: Partial<RecordingGeneratedDoc>) =>
+    onChange(documents.map((d) => (d.id === id ? { ...d, ...patch } : d)));
+
+  const deleteDoc = (id: string) => {
+    if (!window.confirm("למחוק את המסמך? פעולה זו אינה ניתנת לשחזור.")) return;
+    onChange(
+      documents.filter((d) => d.id !== id),
+      true,
+    );
+  };
+
+  return (
+    <Pane
+      icon={<ScrollText className="w-3.5 h-3.5 text-primary-600" />}
+      label="מסמך מפורט"
+    >
+      <div className="space-y-3">
+        <p className="text-[11px] text-ink-500 leading-relaxed">
+          יצירת מסמך ארוך ומפורט מהתמלול (ללא הגבלת אורך). הטקסט נשמר, ניתן
+          לעריכה, וזמין לייצוא ל-Word / PDF / PowerPoint דרך כפתור "ייצוא".
+        </p>
+
+        <div className="rounded-md border border-ink-200 bg-ink-50/40 px-3 py-2 space-y-2">
+          <button
+            type="button"
+            onClick={() =>
+              generate(DETAILED_SUMMARY_PROMPT, "סיכום מפורט", "preset")
+            }
+            disabled={!hasTranscript || pendingKind !== null}
+            className="btn-primary !py-1.5 !px-3 text-xs inline-flex items-center gap-1.5"
+            title={!hasTranscript ? "צריך תמלול לפני יצירת מסמך" : ""}
+          >
+            {pendingKind === "preset" ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Sparkles className="w-3.5 h-3.5" />
+            )}
+            צור סיכום מפורט מאוד
+          </button>
+
+          <div className="space-y-1.5">
+            <textarea
+              ref={promptRef}
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              rows={2}
+              dir="auto"
+              className="field text-xs resize-y w-full"
+              placeholder="או בקשה חופשית — למשל: 'סיכום ארוך עם פירוק לשאלות וכותרות'"
+              disabled={pendingKind !== null}
+            />
+            <button
+              type="button"
+              onClick={onFreeClick}
+              disabled={!hasTranscript || pendingKind !== null}
+              title={
+                !hasTranscript
+                  ? "צריך תמלול לפני יצירת מסמך"
+                  : "כתבי בקשה בתיבה ואז לחצי"
+              }
+              className="btn-outline !py-1 !px-2.5 text-xs inline-flex items-center gap-1"
+            >
+              {pendingKind === "free" ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : (
+                <Plus className="w-3 h-3" />
+              )}
+              צור מסמך מבקשה חופשית
+            </button>
+          </div>
+
+          {error && (
+            <div className="rounded-md border border-danger-200 bg-danger-50 px-2.5 py-1.5 text-[11px] text-danger-700 inline-flex items-start gap-1.5">
+              <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+              <span className="break-words">{error}</span>
+            </div>
+          )}
+        </div>
+
+        {documents.length === 0 ? (
+          <p className="text-[11px] text-ink-400">
+            עדיין אין מסמכים. צרי סיכום מפורט או מסמך מבקשה חופשית.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {documents.map((doc) => (
+              <div
+                key={doc.id}
+                className="rounded-md border border-ink-200 px-3 py-2 space-y-1.5"
+              >
+                <div className="flex items-center gap-2">
+                  <input
+                    value={doc.title}
+                    onChange={(e) => updateDoc(doc.id, { title: e.target.value })}
+                    dir="auto"
+                    className="field !py-1 text-xs font-semibold flex-1 min-w-0"
+                    placeholder="כותרת המסמך"
+                  />
+                  <span className="text-[10px] text-ink-400 shrink-0">
+                    {formatRelative(doc.created_at)}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => deleteDoc(doc.id)}
+                    className="p-1 rounded hover:bg-danger-50 text-ink-400 hover:text-danger-600 shrink-0"
+                    title="מחיקת המסמך"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                <textarea
+                  value={doc.content}
+                  onChange={(e) => updateDoc(doc.id, { content: e.target.value })}
+                  rows={Math.max(8, Math.min(40, Math.ceil(doc.content.length / 70)))}
+                  dir="auto"
+                  className="field text-xs resize-y w-full font-mono leading-relaxed"
+                  placeholder="תוכן המסמך (Markdown)"
+                />
+              </div>
+            ))}
+            <p className="text-[10px] text-ink-400 leading-relaxed">
+              עריכות בתוכן נשמרות בלחיצה על "שמירה" למעלה. הפורמט הוא Markdown
+              (כותרות עם ##, רשימות עם -).
+            </p>
+          </div>
+        )}
+      </div>
+    </Pane>
+  );
+}
+
+function titleFromPrompt(p: string): string {
+  const first = p.trim().split("\n")[0].trim();
+  if (!first) return "מסמך";
+  return first.length > 40 ? first.slice(0, 40) + "…" : first;
 }
 
 function sameOutput(a: RecordingAiOutput, b: RecordingAiOutput): boolean {

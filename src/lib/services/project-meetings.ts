@@ -54,6 +54,25 @@ export async function listProjectMeetings(
   return (data ?? []) as ProjectMeeting[];
 }
 
+/**
+ * List meetings across several projects in one round-trip. Used by the main
+ * calendar's meeting-scheduling panel, which shows meetings from every project
+ * currently visible on the calendar (not a single project).
+ */
+export async function listMeetingsForProjects(
+  projectIds: string[]
+): Promise<ProjectMeeting[]> {
+  if (projectIds.length === 0) return [];
+  const { data, error } = await db
+    .from("project_meetings")
+    .select("*")
+    .in("project_id", projectIds)
+    .order("meeting_at", { ascending: false, nullsFirst: false })
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as ProjectMeeting[];
+}
+
 export async function createProjectMeeting(
   payload: ProjectMeetingInsert
 ): Promise<ProjectMeeting> {

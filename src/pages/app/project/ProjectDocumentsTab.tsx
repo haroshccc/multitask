@@ -26,7 +26,9 @@ import {
 } from "@/lib/hooks/useProjectDocuments";
 import { useFileUpload } from "@/lib/hooks/useFileUpload";
 import { presignDownload } from "@/lib/services/storage";
+import { downloadFolderZip, fetchFileByKey } from "@/lib/export/zip";
 import { cn } from "@/lib/utils/cn";
+import { FileArchive } from "lucide-react";
 
 function formatSize(bytes: number | null): string {
   if (!bytes || bytes <= 0) return "";
@@ -48,6 +50,7 @@ export function ProjectDocumentsTab() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const upload = useFileUpload();
   const [isUploading, setIsUploading] = useState(false);
+  const [zippingId, setZippingId] = useState<string | "__current__" | null>(null);
 
   const byId = useMemo(() => {
     const m = new Map<string, ProjectDocument>();
@@ -160,6 +163,24 @@ export function ProjectDocumentsTab() {
     }
   };
 
+  const handleDownloadZip = async (
+    folderId: string | null,
+    folderName: string,
+    busyKey: string
+  ) => {
+    setZippingId(busyKey);
+    try {
+      await downloadFolderZip(folderName, docs, folderId, fetchFileByKey);
+    } catch {
+      alert("שגיאה ביצירת קובץ ה-ZIP");
+    } finally {
+      setZippingId(null);
+    }
+  };
+
+  const currentFolderName =
+    (currentFolderId ? byId.get(currentFolderId)?.name : null) || "מסמכים";
+
   const openItem = (doc: ProjectDocument) => {
     switch (doc.kind) {
       case "folder":
@@ -195,6 +216,28 @@ export function ProjectDocumentsTab() {
           onNavigate={(id) => setCurrentFolderId(id)}
         />
         <div className="inline-flex items-center gap-1.5 flex-wrap">
+          {children.length > 0 && (
+            <button
+              type="button"
+              onClick={() =>
+                handleDownloadZip(
+                  currentFolderId,
+                  currentFolderName,
+                  "__current__"
+                )
+              }
+              disabled={zippingId !== null}
+              className="btn-ghost text-xs inline-flex items-center gap-1.5 disabled:opacity-50"
+              title="הורדת התיקייה הנוכחית כקובץ ZIP"
+            >
+              {zippingId === "__current__" ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <FileArchive className="w-4 h-4" />
+              )}
+              הורד כ‑ZIP
+            </button>
+          )}
           <button
             type="button"
             onClick={handleNewFolder}
@@ -259,6 +302,8 @@ export function ProjectDocumentsTab() {
               onRename={() => handleRename(doc)}
               onDelete={() => handleDelete(doc)}
               onDownload={null}
+              onZip={() => handleDownloadZip(doc.id, doc.name || "תיקייה", doc.id)}
+              zipping={zippingId === doc.id}
             />
           ))}
           {files.map((doc) => (
@@ -269,6 +314,8 @@ export function ProjectDocumentsTab() {
               onRename={() => handleRename(doc)}
               onDelete={() => handleDelete(doc)}
               onDownload={doc.kind === "file" ? () => handleDownload(doc) : null}
+              onZip={null}
+              zipping={false}
             />
           ))}
         </div>
@@ -364,12 +411,16 @@ function DocRow({
   onRename,
   onDelete,
   onDownload,
+  onZip,
+  zipping,
 }: {
   doc: ProjectDocument;
   onOpen: () => void;
   onRename: () => void;
   onDelete: () => void;
   onDownload: (() => void) | null;
+  onZip: (() => void) | null;
+  zipping: boolean;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const subtitle =
@@ -392,6 +443,11 @@ function DocRow({
             {doc.name || (doc.kind === "folder" ? "תיקייה" : "ללא שם")}
             {doc.kind === "link" && (
               <ExternalLink className="inline-block w-3 h-3 ms-1 text-ink-400 align-text-bottom" />
+            )}
+            {doc.category && (
+              <span className="chip text-[10px] bg-ink-100 text-ink-600 ms-1.5 align-middle">
+                {doc.category}
+              </span>
             )}
           </span>
           {subtitle && (
@@ -430,6 +486,24 @@ function DocRow({
                 >
                   <Download className="w-3.5 h-3.5" />
                   הורדה
+                </button>
+              )}
+              {onZip && (
+                <button
+                  type="button"
+                  disabled={zipping}
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onZip();
+                  }}
+                  className="w-full text-start px-3 py-1.5 hover:bg-ink-50 inline-flex items-center gap-2 disabled:opacity-50"
+                >
+                  {zipping ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <FileArchive className="w-3.5 h-3.5" />
+                  )}
+                  הורד כ‑ZIP
                 </button>
               )}
               <button

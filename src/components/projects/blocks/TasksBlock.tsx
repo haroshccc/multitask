@@ -331,6 +331,9 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
 
   const [search, setSearch] = useState("");
   const [focusTaskId, setFocusTaskId] = useState<string | null>(null);
+  const [focusCell, setFocusCell] = useState<{ taskId: string; col: string } | null>(
+    null
+  );
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [logTaskId, setLogTaskId] = useState<string | null>(null);
@@ -411,6 +414,43 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
       totalSpare: ts,
     };
   }, [tasks]);
+
+  // Flat top-to-bottom order of the visible rows, so Enter in a data cell can
+  // move focus to the same column one row down.
+  const flatVisibleIds = useMemo(() => {
+    const ids: string[] = [];
+    const walk = (nodes: TaskNode[]) => {
+      for (const n of nodes) {
+        ids.push(n.task.id);
+        walk(n.children);
+      }
+    };
+    walk(filteredTree);
+    return ids;
+  }, [filteredTree]);
+
+  const phaseIds = useMemo(
+    () => new Set(tasks.filter((t) => t.is_phase).map((t) => t.id)),
+    [tasks]
+  );
+
+  const handleEnterNavigate = (taskId: string, col: string) => {
+    const i = flatVisibleIds.indexOf(taskId);
+    if (i < 0) {
+      setFocusCell(null);
+      return;
+    }
+    // estimate/spare are read-only on phase rows, so skip them when stepping
+    // down those columns; notes exists on every row.
+    const skipPhases = col === "estimated_hours" || col === "spare_hours";
+    for (let j = i + 1; j < flatVisibleIds.length; j++) {
+      const nid = flatVisibleIds[j]!;
+      if (skipPhases && phaseIds.has(nid)) continue;
+      setFocusCell({ taskId: nid, col });
+      return;
+    }
+    setFocusCell(null);
+  };
 
   const handleHeaderSort = (key: string) => {
     setSortKey((prev) => {
@@ -841,6 +881,9 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
               onReorder={handleReorderTopLevel}
               phaseEst={phaseEst}
               phaseActual={phaseActual}
+              focusCell={focusCell}
+              onCellFocused={() => setFocusCell(null)}
+              onEnterNavigate={handleEnterNavigate}
               onUpdate={handleTaskUpdate}
               onComplete={handleCompleteWithUndo}
               onDelete={(id) => del.mutate(id)}
@@ -888,6 +931,13 @@ interface RowHandlers {
   phaseEst: Map<string, number>;
   /** Sum of all descendant (non-phase) actual_seconds, keyed by task id. */
   phaseActual: Map<string, number>;
+  /** Which cell should grab focus next render — `{taskId, col}`. Drives the
+   *  Enter-moves-down-the-same-column behaviour in editable data cells. */
+  focusCell: { taskId: string; col: string } | null;
+  /** Called by a cell once it has consumed its focus request. */
+  onCellFocused: () => void;
+  /** Enter in a data cell → move focus to the same column one row down. */
+  onEnterNavigate: (taskId: string, col: string) => void;
 }
 
 interface TaskListProps {
@@ -1161,6 +1211,9 @@ function TaskRow({
   onOutdent,
   phaseEst,
   phaseActual,
+  focusCell,
+  onCellFocused,
+  onEnterNavigate,
 }: {
   task: Task;
   level: number;
@@ -1216,6 +1269,11 @@ function TaskRow({
             title="הערכת שעות (שעה:דקות, למשל 1:30)"
             value={task.estimated_hours}
             onSave={(v) => onUpdate(task.id, { estimated_hours: v })}
+            shouldFocus={
+              focusCell?.taskId === task.id && focusCell.col === "estimated_hours"
+            }
+            onFocusHandled={onCellFocused}
+            onEnter={() => onEnterNavigate(task.id, "estimated_hours")}
           />
         );
       case "spare_hours":
@@ -1225,6 +1283,11 @@ function TaskRow({
             value={task.spare_hours}
             suffix="ס"
             onSave={(v) => onUpdate(task.id, { spare_hours: v })}
+            shouldFocus={
+              focusCell?.taskId === task.id && focusCell.col === "spare_hours"
+            }
+            onFocusHandled={onCellFocused}
+            onEnter={() => onEnterNavigate(task.id, "spare_hours")}
           />
         );
       case "urgency":
@@ -1289,6 +1352,11 @@ function TaskRow({
           <NotesCell
             value={task.notes ?? ""}
             onSave={(v) => onUpdate(task.id, { notes: v || null })}
+            shouldFocus={
+              focusCell?.taskId === task.id && focusCell.col === "notes"
+            }
+            onFocusHandled={onCellFocused}
+            onEnter={() => onEnterNavigate(task.id, "notes")}
           />
         );
       case "questions":
@@ -1464,24 +1532,43 @@ function QuestionsCountCell({
 function NotesCell({
   value,
   onSave,
+  shouldFocus,
+  onFocusHandled,
+  onEnter,
 }: {
   value: string;
   onSave: (v: string) => void;
+  shouldFocus?: boolean;
+  onFocusHandled?: () => void;
+  onEnter?: () => void;
 }) {
   const [draft, setDraft] = useState(value);
+  const ref = useRef<HTMLInputElement>(null);
   useEffect(() => {
     setDraft(value);
   }, [value]);
+  useEffect(() => {
+    if (shouldFocus) {
+      ref.current?.focus();
+      ref.current?.select();
+      onFocusHandled?.();
+    }
+  }, [shouldFocus, onFocusHandled]);
   const commit = () => {
     if (draft !== value) onSave(draft);
   };
   return (
     <input
+      ref={ref}
       value={draft}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={commit}
       onKeyDown={(e) => {
-        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+        if (e.key === "Enter") {
+          e.preventDefault();
+          (e.target as HTMLInputElement).blur();
+          onEnter?.();
+        }
         if (e.key === "Escape") {
           setDraft(value);
           (e.target as HTMLInputElement).blur();
@@ -1572,16 +1659,30 @@ function NumberCell({
   value,
   suffix,
   onSave,
+  shouldFocus,
+  onFocusHandled,
+  onEnter,
 }: {
   title: string;
   value: number | null;
   suffix?: string;
   onSave: (v: number | null) => void;
+  shouldFocus?: boolean;
+  onFocusHandled?: () => void;
+  onEnter?: () => void;
 }) {
   const [draft, setDraft] = useState(value?.toString() ?? "");
+  const ref = useRef<HTMLInputElement>(null);
   useEffect(() => {
     setDraft(value?.toString() ?? "");
   }, [value]);
+  useEffect(() => {
+    if (shouldFocus) {
+      ref.current?.focus();
+      ref.current?.select();
+      onFocusHandled?.();
+    }
+  }, [shouldFocus, onFocusHandled]);
 
   const commit = () => {
     if (draft === "") {
@@ -1599,13 +1700,18 @@ function NumberCell({
   return (
     <div title={title} className="flex items-baseline gap-0.5 justify-end">
       <input
+        ref={ref}
         type="text"
         inputMode="decimal"
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={commit}
         onKeyDown={(e) => {
-          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+          if (e.key === "Enter") {
+            e.preventDefault();
+            (e.target as HTMLInputElement).blur();
+            onEnter?.();
+          }
           if (e.key === "Escape") {
             setDraft(value?.toString() ?? "");
             (e.target as HTMLInputElement).blur();
@@ -1629,14 +1735,21 @@ function DurationCell({
   title,
   value,
   onSave,
+  shouldFocus,
+  onFocusHandled,
+  onEnter,
 }: {
   title: string;
   value: number | null;
   onSave: (v: number | null) => void;
+  shouldFocus?: boolean;
+  onFocusHandled?: () => void;
+  onEnter?: () => void;
 }) {
   const [focused, setFocused] = useState(false);
   const [draft, setDraft] = useState("");
   const committed = useRef(false);
+  const ref = useRef<HTMLInputElement>(null);
   const display = value != null && value !== 0 ? fmtHoursClock(value) : "";
   const commit = () => {
     if (committed.current) return;
@@ -1644,9 +1757,17 @@ function DurationCell({
     const parsed = parseHoursInput(draft);
     if (parsed !== value) onSave(parsed);
   };
+  useEffect(() => {
+    if (shouldFocus) {
+      ref.current?.focus();
+      ref.current?.select();
+      onFocusHandled?.();
+    }
+  }, [shouldFocus, onFocusHandled]);
   return (
     <div title={title} className="flex items-baseline justify-end">
       <input
+        ref={ref}
         type="text"
         inputMode="numeric"
         value={focused ? draft : display}
@@ -1662,8 +1783,10 @@ function DurationCell({
         }}
         onKeyDown={(e) => {
           if (e.key === "Enter") {
+            e.preventDefault();
             commit();
             (e.target as HTMLInputElement).blur();
+            onEnter?.();
           } else if (e.key === "Escape") {
             committed.current = true;
             (e.target as HTMLInputElement).blur();

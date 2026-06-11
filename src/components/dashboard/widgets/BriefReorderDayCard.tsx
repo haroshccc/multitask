@@ -5,13 +5,13 @@ import {
   Loader2,
   GitBranch,
   ArrowLeft,
-  Clock,
 } from "lucide-react";
 import {
   useUpdateTask,
   useRecordProposalDecision,
 } from "@/lib/hooks";
 import { cn } from "@/lib/utils/cn";
+import { DateTimeField } from "@/components/ui/DateField";
 import type {
   DailyBrief,
   Proposal,
@@ -304,15 +304,15 @@ function ReorderRow({
           ) : null}
         </div>
       </div>
-      <div className="shrink-0 flex items-center gap-1">
-        <Clock className="w-3 h-3 text-ink-400" />
-        <input
-          type="datetime-local"
+      <div
+        className="shrink-0 flex items-center gap-1"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <DateTimeField
           value={toLocalInput(row.new_scheduled_at)}
-          onChange={(e) => onTimeChange(fromLocalInput(e.target.value))}
-          onClick={(e) => e.stopPropagation()}
+          onChange={(v) => onTimeChange(fromLocalInput(v))}
           disabled={!row.selected}
-          className="text-[10px] border border-ink-200 rounded px-1.5 py-0.5 bg-white"
+          className="w-44"
         />
       </div>
     </label>

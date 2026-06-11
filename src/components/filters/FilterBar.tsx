@@ -16,6 +16,7 @@ import {
   useDeleteSavedFilter,
 } from "@/lib/hooks/useSavedFilters";
 import type { DashboardScreen, FilterConfig } from "@/lib/types/domain";
+import { DateField } from "@/components/ui/DateField";
 
 /**
  * FilterBar — shared across all work screens.
@@ -430,32 +431,34 @@ function FieldEditor({
       <div>
         <label className="eyebrow mb-1.5 block">{field.label}</label>
         <div className="flex items-center gap-2">
-          <input
-            type="date"
+          <DateField
             value={from?.slice(0, 10) ?? ""}
-            onChange={(e) =>
+            max={to?.slice(0, 10) || undefined}
+            onChange={(v) =>
               onChange({
                 ...value,
-                [field.fromKey]: e.target.value
-                  ? (e.target.value as FilterConfig[typeof field.fromKey])
+                [field.fromKey]: v
+                  ? (v as FilterConfig[typeof field.fromKey])
                   : (undefined as FilterConfig[typeof field.fromKey]),
               })
             }
-            className="field text-sm"
+            className="flex-1"
+            label="מתאריך"
           />
           <span className="text-ink-400">—</span>
-          <input
-            type="date"
+          <DateField
             value={to?.slice(0, 10) ?? ""}
-            onChange={(e) =>
+            min={from?.slice(0, 10) || undefined}
+            onChange={(v) =>
               onChange({
                 ...value,
-                [field.toKey]: e.target.value
-                  ? (e.target.value as FilterConfig[typeof field.toKey])
+                [field.toKey]: v
+                  ? (v as FilterConfig[typeof field.toKey])
                   : (undefined as FilterConfig[typeof field.toKey]),
               })
             }
-            className="field text-sm"
+            className="flex-1"
+            label="עד תאריך"
           />
         </div>
       </div>

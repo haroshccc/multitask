@@ -89,6 +89,7 @@ import type {
   TaskAttachment,
 } from "@/lib/types/domain";
 import { DateTimePicker } from "@/components/ui/DateTimePicker";
+import { DateField, DateTimeField } from "@/components/ui/DateField";
 import {
   DurationInput,
   hoursToMinutes,
@@ -1366,11 +1367,11 @@ function GoalConfigSection(props: {
                 </p>
                 <div className="flex items-center gap-2 text-sm flex-wrap">
                   <span className="text-ink-700">דד-ליין (אופציונלי):</span>
-                  <input
-                    type="date"
+                  <DateField
                     value={goalDeadline ?? ""}
-                    onChange={(e) => setGoalDeadline(e.target.value || null)}
-                    className="field text-sm py-1.5 w-auto"
+                    onChange={(v) => setGoalDeadline(v || null)}
+                    className="w-40"
+                    label="דד-ליין ליעד"
                   />
                   {goalDeadline && (
                     <button
@@ -1424,7 +1425,7 @@ function GoalConfigSection(props: {
                 </div>
                 <div className="flex items-center gap-2 flex-wrap text-sm">
                   <span className="text-ink-700">התחלת מעקב:</span>
-                  <input type="date" value={startedOn ?? ""} onChange={(e) => setStartedOn(e.target.value || null)} className="field text-sm py-1.5 w-auto" placeholder="היום" />
+                  <DateField value={startedOn ?? ""} onChange={(v) => setStartedOn(v || null)} className="w-40" placeholder="היום" label="תאריך התחלת מעקב" />
                   <span className="text-[11px] text-ink-400">ריק = יישמר היום אוטומטית</span>
                 </div>
                 <label className="inline-flex items-center gap-2 text-sm cursor-pointer select-none">
@@ -1829,8 +1830,8 @@ function TimeEntriesTab({ task }: { task: { id: string; actual_seconds: number; 
         {showManual && (
           <div className="card p-3 space-y-2 mb-2">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <input type="datetime-local" value={manualStart} onChange={(e) => setManualStart(e.target.value)} className="field text-sm" />
-              <input type="datetime-local" value={manualEnd} onChange={(e) => setManualEnd(e.target.value)} className="field text-sm" />
+              <DateTimeField value={manualStart} onChange={setManualStart} placeholder="התחלה" />
+              <DateTimeField value={manualEnd} onChange={setManualEnd} placeholder="סיום" />
             </div>
             <input value={manualNote} onChange={(e) => setManualNote(e.target.value)} placeholder="הערה (אופציונלי)" className="field text-sm" />
             <div className="flex justify-end gap-2">
@@ -1866,8 +1867,8 @@ function EntryRow({ entry, onUpdate, onDelete }: { entry: TimeEntry; onUpdate: (
     return (
       <li className="py-2 space-y-2">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          <input type="datetime-local" value={start} onChange={(e) => setStart(e.target.value)} className="field text-sm" />
-          <input type="datetime-local" value={end} onChange={(e) => setEnd(e.target.value)} className="field text-sm" />
+          <DateTimeField value={start} onChange={setStart} placeholder="התחלה" />
+          <DateTimeField value={end} onChange={setEnd} placeholder="סיום" />
         </div>
         <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="הערה" className="field text-sm" />
         <div className="flex justify-end gap-2">

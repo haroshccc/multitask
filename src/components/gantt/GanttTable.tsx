@@ -25,6 +25,7 @@ import {
   useTaskSelectionStore,
 } from "@/lib/selection/store";
 import { pushUndo } from "@/lib/undo/store";
+import { DateField } from "@/components/ui/DateField";
 import type { Task, TaskCustomField, TaskDependency } from "@/lib/types/domain";
 import type { GanttRow } from "./gantt-utils";
 
@@ -703,18 +704,18 @@ function TitleCell({ task, onCommit }: { task: Task; onCommit: (next: string) =>
 }
 
 function DateOnlyCell({ value, onCommit }: { value: string | null; onCommit: (next: string | null) => void }) {
-  const toDateInput = (iso: string | null) => iso ? iso.slice(0, 10) : "";
-  const [draft, setDraft] = useState(toDateInput(value));
-  useEffect(() => setDraft(toDateInput(value)), [value]);
   return (
-    <input type="date" value={draft} onChange={(e) => setDraft(e.target.value)}
-      onBlur={() => {
-        if (!draft) { if (value !== null) onCommit(null); return; }
-        if (value && value.slice(0, 10) === draft) return;
-        const nextISO = value ? draft + value.slice(10) : draft + "T00:00:00.000Z";
+    <DateField
+      variant="ghost"
+      value={value ? value.slice(0, 10) : ""}
+      onChange={(next) => {
+        if (!next) { if (value !== null) onCommit(null); return; }
+        if (value && value.slice(0, 10) === next) return;
+        // Preserve the original time portion when one exists.
+        const nextISO = value ? next + value.slice(10) : next + "T00:00:00.000Z";
         if (nextISO !== value) onCommit(nextISO);
       }}
-      className="text-[11px] bg-transparent border border-transparent hover:border-ink-200 focus:border-primary-400 outline-none rounded-sm px-1 py-0.5 w-full"
+      label="תאריך התחלה"
     />
   );
 }
@@ -724,14 +725,14 @@ function EndDateCell({ task, onCommit }: { task: Task; onCommit: (patch: Partial
     if (!task.scheduled_at || task.duration_minutes == null) return "";
     return new Date(new Date(task.scheduled_at).getTime() + task.duration_minutes * 60_000).toISOString().slice(0, 10);
   }, [task.scheduled_at, task.duration_minutes]);
-  const [draft, setDraft] = useState(endDateStr);
-  useEffect(() => setDraft(endDateStr), [endDateStr]);
   return (
-    <input type="date" value={draft} onChange={(e) => setDraft(e.target.value)}
-      onBlur={() => {
-        if (draft === endDateStr) return;
-        if (!draft) { onCommit({ duration_minutes: null }); return; }
-        const endDay = new Date(draft + "T00:00:00");
+    <DateField
+      variant="ghost"
+      value={endDateStr}
+      onChange={(next) => {
+        if (next === endDateStr) return;
+        if (!next) { onCommit({ duration_minutes: null }); return; }
+        const endDay = new Date(next + "T00:00:00");
         if (task.scheduled_at) {
           const startDay = new Date(task.scheduled_at.slice(0, 10) + "T00:00:00");
           const daysDiff = Math.round((endDay.getTime() - startDay.getTime()) / (1440 * 60_000));
@@ -741,7 +742,7 @@ function EndDateCell({ task, onCommit }: { task: Task; onCommit: (patch: Partial
           onCommit({ scheduled_at: new Date(endDay.getTime() - task.duration_minutes * 60_000).toISOString() });
         }
       }}
-      className="text-[11px] bg-transparent border border-transparent hover:border-ink-200 focus:border-primary-400 outline-none rounded-sm px-1 py-0.5 w-full"
+      label="תאריך סיום"
     />
   );
 }
@@ -1000,7 +1001,5 @@ function GanttCfNumberCell({ value, onSave }: { value: number | null; onSave: (v
 
 function GanttCfDateCell({ value, onSave }: { value: string; onSave: (v: string | null) => void }) {
   const toDateInput = (iso: string) => { if (!iso) return ""; try { return new Date(iso).toISOString().slice(0, 10); } catch { return ""; } };
-  const [draft, setDraft] = useState(toDateInput(value));
-  useEffect(() => setDraft(toDateInput(value)), [value]);
-  return <input type="date" value={draft} onChange={(e) => setDraft(e.target.value)} onBlur={() => { const next = draft ? new Date(draft).toISOString() : null; if (next !== (value || null)) onSave(next); }} className="text-[10px] bg-transparent border border-transparent hover:border-ink-200 focus:border-primary-400 outline-none rounded-sm px-1 py-0.5 w-full" />;
+  return <DateField variant="ghost" value={toDateInput(value)} onChange={(next) => { const nextIso = next ? new Date(next).toISOString() : null; if (nextIso !== (value || null)) onSave(nextIso); }} label="תאריך" />;
 }

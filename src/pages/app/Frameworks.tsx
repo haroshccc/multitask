@@ -21,6 +21,7 @@ import { FrameworkMonthGrid } from "@/components/frameworks/FrameworkMonthGrid";
 import { ShareFrameworkModal } from "@/components/frameworks/ShareFrameworkModal";
 import { FrameworkHistoryModal } from "@/components/frameworks/FrameworkHistoryModal";
 import type { Framework } from "@/lib/types/frameworks";
+import { DateField } from "@/components/ui/DateField";
 
 const PALETTE = [
   "#6366f1",
@@ -234,28 +235,30 @@ function FrameworkEditorPane({
           {showRange && (
             <div className="mt-2 flex items-center gap-2 text-xs text-ink-600">
               <span>מ־</span>
-              <input
-                type="date"
-                className="field !py-1 !text-xs"
+              <DateField
+                className="w-36"
                 value={framework.run_start ?? ""}
-                onChange={(e) =>
+                max={framework.run_end ?? undefined}
+                onChange={(v) =>
                   updateFramework.mutate({
                     id: framework.id,
-                    patch: { run_start: e.target.value || null },
+                    patch: { run_start: v || null },
                   })
                 }
+                label="תחילת תקופה"
               />
               <span>עד</span>
-              <input
-                type="date"
-                className="field !py-1 !text-xs"
+              <DateField
+                className="w-36"
                 value={framework.run_end ?? ""}
-                onChange={(e) =>
+                min={framework.run_start ?? undefined}
+                onChange={(v) =>
                   updateFramework.mutate({
                     id: framework.id,
-                    patch: { run_end: e.target.value || null },
+                    patch: { run_end: v || null },
                   })
                 }
+                label="סוף תקופה"
               />
             </div>
           )}

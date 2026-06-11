@@ -7,6 +7,7 @@ import type { Config } from "tailwindcss";
  */
 const config: Config = {
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
+  darkMode: "class",
   theme: {
     extend: {
       fontFamily: {
@@ -15,17 +16,20 @@ const config: Config = {
       },
       colors: {
         // Neutral ink scale (cool, slight violet tint) ------------------------
+        // Backed by CSS variables (see index.css :root / .dark) so the whole
+        // neutral surface/text system flips in dark mode without touching
+        // call sites. Light values match the original hex tokens exactly.
         ink: {
-          0: "#ffffff",
-          50: "#fafafa",   // page background
-          100: "#f4f4f6",  // bg2
-          150: "#f0f0f5",  // ink6 (very light chips)
-          200: "#ededf0",  // bg3
-          300: "#e2e2ea",  // ink5 (borders)
-          400: "#a8a8bc",  // ink4 (disabled / meta)
-          500: "#6b6b80",  // ink3 (secondary text)
-          700: "#2d2d3a",  // ink2
-          900: "#111118",  // ink (primary text)
+          0: "rgb(var(--ink-0) / <alpha-value>)",
+          50: "rgb(var(--ink-50) / <alpha-value>)",   // page background
+          100: "rgb(var(--ink-100) / <alpha-value>)", // bg2
+          150: "rgb(var(--ink-150) / <alpha-value>)", // ink6 (very light chips)
+          200: "rgb(var(--ink-200) / <alpha-value>)", // bg3
+          300: "rgb(var(--ink-300) / <alpha-value>)", // ink5 (borders)
+          400: "rgb(var(--ink-400) / <alpha-value>)", // ink4 (disabled / meta)
+          500: "rgb(var(--ink-500) / <alpha-value>)", // ink3 (secondary text)
+          700: "rgb(var(--ink-700) / <alpha-value>)", // ink2
+          900: "rgb(var(--ink-900) / <alpha-value>)", // ink (primary text)
         },
         // Brand accent — amber is the singleton primary (gradient handles the
         // richer variants). Keep a numeric scale for compatibility with Tailwind

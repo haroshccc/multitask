@@ -20,6 +20,14 @@
     />
   </head>
   <body>
+    <script>
+      // Apply the saved theme before first paint (avoids a light flash).
+      try {
+        if (localStorage.getItem("multitask:theme") === "dark") {
+          document.documentElement.classList.add("dark");
+        }
+      } catch (e) {}
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

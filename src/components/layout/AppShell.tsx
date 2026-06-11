@@ -22,6 +22,8 @@ import {
   X,
   Undo2,
   Redo2,
+  Moon,
+  Sun,
   Keyboard,
   Sparkles,
 } from "lucide-react";
@@ -29,6 +31,7 @@ import { useUndoStore, useCanUndo, useCanRedo } from "@/lib/undo/store";
 import { useAuth } from "@/lib/auth/AuthContext";
 import { useRealtimeSync } from "@/lib/hooks/useRealtimeSync";
 import { useEventReminders } from "@/lib/hooks/useEventReminders";
+import { useTheme } from "@/lib/hooks/useTheme";
 import { useUnreadNotificationsCount } from "@/lib/hooks/useNotifications";
 import { cn } from "@/lib/utils/cn";
 import { QuickCapture } from "@/components/capture/QuickCapture";
@@ -107,6 +110,8 @@ export function AppShell() {
 
   // Event-start reminders (system notifications) — app-wide, like realtime.
   useEventReminders();
+
+  const { theme, toggle: toggleTheme } = useTheme();
 
   const canUndo = useCanUndo();
   const canRedo = useCanRedo();
@@ -276,6 +281,18 @@ export function AppShell() {
 
         {/* Right actions */}
         <div className="flex items-center gap-1">
+          <button
+            onClick={toggleTheme}
+            className="inline-flex p-2 rounded-xl hover:bg-ink-100"
+            aria-label={theme === "dark" ? "מצב בהיר" : "מצב כהה"}
+            title={theme === "dark" ? "מצב בהיר" : "מצב כהה (בטא)"}
+          >
+            {theme === "dark" ? (
+              <Sun className="w-5 h-5 text-ink-600" />
+            ) : (
+              <Moon className="w-5 h-5 text-ink-600" />
+            )}
+          </button>
           <button
             onClick={() => useUndoStore.getState().undo()}
             disabled={!canUndo}

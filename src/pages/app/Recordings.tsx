@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Settings as SettingsIcon } from "lucide-react";
+import { Settings as SettingsIcon, LayoutGrid, Sparkles } from "lucide-react";
 import { ScreenScaffold } from "@/components/layout/ScreenScaffold";
+import { cn } from "@/lib/utils/cn";
 import {
   DashboardGrid,
   type WidgetDefinition,
@@ -28,6 +29,23 @@ import { FiltersAndListWidget } from "@/components/recordings/widgets/FiltersAnd
 import { QuickRecordTallWidget } from "@/components/recordings/widgets/QuickRecordTallWidget";
 import { UploadTallWidget } from "@/components/recordings/widgets/UploadTallWidget";
 import { PlayerWidget } from "@/components/recordings/widgets/PlayerWidget";
+import { InsightsFeed } from "@/components/recordings/insights/InsightsFeed";
+import { useAutoSummarize } from "@/lib/hooks/useAutoSummarize";
+
+type RecordingsViewMode = "insights" | "files";
+const VIEW_MODE_KEY = "multitask:recordings:viewMode";
+
+function readViewMode(): RecordingsViewMode {
+  try {
+    const v = localStorage.getItem(VIEW_MODE_KEY);
+    // Default to the classic files dashboard until the insights view has been
+    // verified in production; the user can switch to "תובנות" via the toggle
+    // and that choice is then remembered.
+    return v === "files" || v === "insights" ? v : "files";
+  } catch {
+    return "files";
+  }
+}
 
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(
@@ -107,6 +125,19 @@ export function Recordings() {
     includeArchived: true,
   });
   const { data: assignments = [] } = useAllRecordingAssignments();
+
+  const [viewMode, setViewMode] = useState<RecordingsViewMode>(readViewMode);
+  const setViewModePersist = (m: RecordingsViewMode) => {
+    setViewMode(m);
+    try {
+      localStorage.setItem(VIEW_MODE_KEY, m);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  // Auto-summarize finished transcriptions (runs in either view mode).
+  useAutoSummarize(allRecordings);
 
   const listsByRecording = useMemo(() => {
     const m = new Map<string, Set<string>>();
@@ -202,6 +233,20 @@ export function Recordings() {
         subtitle="הקלטה ישירה, גרירת קובץ, ניגון, הורדה ושיוך לפרויקט."
         actions={
           <span className="inline-flex items-center gap-2">
+            <div className="inline-flex rounded-md bg-ink-100 p-0.5">
+              <ViewModeTab
+                icon={Sparkles}
+                label="תובנות"
+                active={viewMode === "insights"}
+                onClick={() => setViewModePersist("insights")}
+              />
+              <ViewModeTab
+                icon={LayoutGrid}
+                label="קבצים"
+                active={viewMode === "files"}
+                onClick={() => setViewModePersist("files")}
+              />
+            </div>
             {allRecordings.length > 0 && (
               <span className="chip">
                 {allRecordings.length} הקלטות · {formatTotal(totalSeconds)}
@@ -231,7 +276,9 @@ export function Recordings() {
           source="other"
         />
 
-        {isMobile ? (
+        {viewMode === "insights" ? (
+          <InsightsFeed />
+        ) : isMobile ? (
           <div className="mt-5 flex flex-col gap-2">
             <FiltersAndListWidget />
             <div className="grid grid-cols-2 gap-2 h-14">
@@ -252,6 +299,34 @@ export function Recordings() {
         )}
       </ScreenScaffold>
     </RecordingsPageContext.Provider>
+  );
+}
+
+function ViewModeTab({
+  icon: Icon,
+  label,
+  active,
+  onClick,
+}: {
+  icon: typeof LayoutGrid;
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "inline-flex items-center gap-1 rounded px-2.5 py-1 text-xs transition-colors",
+        active
+          ? "bg-white text-ink-900 shadow-soft font-medium"
+          : "text-ink-600 hover:text-ink-900",
+      )}
+    >
+      <Icon className="w-3.5 h-3.5" />
+      {label}
+    </button>
   );
 }
 

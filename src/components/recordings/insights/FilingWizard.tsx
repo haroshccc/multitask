@@ -12,14 +12,16 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
-import { useUpdateRecording, useRecordingSpeakers, useUpsertRecordingSpeakerLabel, useSpeakerLabelSuggestions } from "@/lib/hooks/useRecordings";
-import { useProjects, useCreateProject } from "@/lib/hooks/useProjects";
+import {
+  useRecordingSpeakers,
+  useSpeakerLabelSuggestions,
+} from "@/lib/hooks/useRecordings";
+import { useProjects } from "@/lib/hooks/useProjects";
 import {
   useRecordingLists,
   useRecordingListAssignments,
-  useAssignRecordingToList,
-  useCreateRecordingList,
 } from "@/lib/hooks/useRecordingLists";
+import { useApplyFiling, type FilingSel } from "@/lib/hooks/useApplyFiling";
 import { mapSuggestedName } from "@/lib/utils/filing-suggestions";
 import type { RecordingAiOutput } from "@/lib/services/recordings";
 import type { Recording, RecordingSource } from "@/lib/types/domain";
@@ -29,10 +31,7 @@ interface Props {
   onClose: () => void;
 }
 
-type Sel =
-  | { kind: "none" }
-  | { kind: "existing"; id: string }
-  | { kind: "new"; name: string };
+type Sel = FilingSel;
 
 const STEPS = ["title", "speakers", "filing", "tags", "review"] as const;
 type StepId = (typeof STEPS)[number];
@@ -64,11 +63,7 @@ export function FilingWizard({ recording, onClose }: Props) {
   const { data: speakers = [] } = useRecordingSpeakers(recording.id);
   const { data: labelSuggestions = [] } = useSpeakerLabelSuggestions(recording.project_id);
 
-  const update = useUpdateRecording();
-  const createProject = useCreateProject();
-  const createList = useCreateRecordingList();
-  const assignToList = useAssignRecordingToList();
-  const upsertSpeaker = useUpsertRecordingSpeakerLabel();
+  const applyFiling = useApplyFiling();
 
   // --- Initial values from AI suggestions (falling back to current row) ------
   const [title, setTitle] = useState(
@@ -147,50 +142,22 @@ export function FilingWizard({ recording, onClose }: Props) {
   const finish = async () => {
     setSaving(true);
     try {
-      // 1) Resolve the project link first (create if new) so it goes into the
-      // single recording patch below — one write, no intermediate races.
-      let projectId: string | null | undefined;
-      if (project.kind === "new" && project.name.trim()) {
-        const created = await createProject.mutateAsync({ name: project.name.trim() });
-        projectId = created?.id ?? undefined;
-      } else if (project.kind === "existing") {
-        projectId = project.id;
-      } else if (project.kind === "none") {
-        projectId = recording.project_id ? null : undefined; // clear only if set
-      }
-
-      // 2) One recording patch with all the row-level fields.
-      await update.mutateAsync({
-        recordingId: recording.id,
-        patch: {
+      await applyFiling(
+        recording,
+        {
           title: title.trim() || null,
           source,
-          source_custom: source === "other" ? sourceCustom.trim() || null : null,
+          sourceCustom,
           tags,
-          ...(projectId !== undefined ? { project_id: projectId } : {}),
+          project,
+          list,
+          speakerLabels,
         },
-      });
-
-      // 3) recording list (create if new, then assign)
-      if (list.kind === "new" && list.name.trim()) {
-        const created = await createList.mutateAsync({ name: list.name.trim() });
-        if (created?.id)
-          await assignToList.mutateAsync({ recordingId: recording.id, listId: created.id });
-      } else if (list.kind === "existing") {
-        if (!assignments.some((a) => a.list_id === list.id))
-          await assignToList.mutateAsync({ recordingId: recording.id, listId: list.id });
-      }
-      // 4) speaker labels (only changed ones)
-      for (const s of speakers) {
-        const next = speakerLabels[s.speaker_index]?.trim() ?? "";
-        if (next && next !== (s.label?.trim() ?? "")) {
-          await upsertSpeaker.mutateAsync({
-            recordingId: recording.id,
-            speakerIndex: s.speaker_index,
-            label: next,
-          });
-        }
-      }
+        {
+          existingAssignments: assignments.map((a) => a.list_id),
+          existingSpeakers: speakers,
+        },
+      );
       onClose();
     } catch (err) {
       console.error("filing wizard save failed:", err);

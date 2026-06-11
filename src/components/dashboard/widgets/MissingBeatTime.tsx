@@ -70,6 +70,10 @@ export function MissingBeatTime() {
     return out;
   }, [tasks, entries]);
 
+  // Nothing pending → the card disappears entirely instead of occupying
+  // dashboard space with an "all synced" message.
+  if (beats.length === 0) return null;
+
   return (
     <div className="card p-3 h-full flex flex-col overflow-hidden">
       <header className="flex items-center justify-between gap-2 mb-2">
@@ -77,27 +81,19 @@ export function MissingBeatTime() {
           <Clock className="w-3.5 h-3.5 text-amber-600" />
           פעימות בלי זמן
         </h3>
-        {beats.length > 0 && (
-          <span className="text-[11px] text-ink-500">
-            {beats.length} פעימות ממתינות
-          </span>
-        )}
+        <span className="text-[11px] text-ink-500">
+          {beats.length} פעימות ממתינות
+        </span>
       </header>
 
-      {beats.length === 0 ? (
-        <div className="flex-1 flex items-center justify-center text-center text-xs text-ink-500 px-3">
-          הכל מסונכרן — כל פעימה של היעדים שלך תועדה גם בזמן.
-        </div>
-      ) : (
-        <ul className="flex-1 overflow-y-auto -mx-1 px-1 divide-y divide-ink-100">
-          {beats.map((b) => (
-            <BeatRowItem
-              key={`${b.task.id}:${b.beatAt.getTime()}`}
-              row={b}
-            />
-          ))}
-        </ul>
-      )}
+      <ul className="flex-1 overflow-y-auto -mx-1 px-1 divide-y divide-ink-100">
+        {beats.map((b) => (
+          <BeatRowItem
+            key={`${b.task.id}:${b.beatAt.getTime()}`}
+            row={b}
+          />
+        ))}
+      </ul>
     </div>
   );
 }

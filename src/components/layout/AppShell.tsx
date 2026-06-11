@@ -28,6 +28,7 @@ import {
 import { useUndoStore, useCanUndo, useCanRedo } from "@/lib/undo/store";
 import { useAuth } from "@/lib/auth/AuthContext";
 import { useRealtimeSync } from "@/lib/hooks/useRealtimeSync";
+import { useEventReminders } from "@/lib/hooks/useEventReminders";
 import { useUnreadNotificationsCount } from "@/lib/hooks/useNotifications";
 import { cn } from "@/lib/utils/cn";
 import { QuickCapture } from "@/components/capture/QuickCapture";
@@ -103,6 +104,9 @@ export function AppShell() {
   // Subscribe the whole session to Realtime invalidations for the active org.
   // Must stay mounted at AppShell level — DO NOT move into individual screens.
   useRealtimeSync();
+
+  // Event-start reminders (system notifications) — app-wide, like realtime.
+  useEventReminders();
 
   const canUndo = useCanUndo();
   const canRedo = useCanRedo();

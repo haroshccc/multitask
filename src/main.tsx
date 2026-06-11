@@ -27,3 +27,14 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     </QueryClientProvider>
   </React.StrictMode>
 );
+
+// PWA: register the service worker in production builds only (a dev SW
+// would fight Vite's module server and serve stale modules).
+if (import.meta.env.PROD && "serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch(() => {
+      // Registration failing (old browser, private mode) is non-fatal —
+      // the app simply runs without offline support.
+    });
+  });
+}

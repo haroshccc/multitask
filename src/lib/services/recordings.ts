@@ -343,6 +343,27 @@ export interface RecordingAiOutput {
   }>;
   /** Long-form generated documents (detailed summaries / free-prompt docs). */
   documents?: RecordingGeneratedDoc[];
+
+  // --- AI filing suggestions (consumed by the insights view's FilingWizard) ---
+  // All optional: older rows and the free-text/document modes never set them,
+  // and existing consumers (AiInsights) ignore them.
+  /** A concise title proposal for the recording. */
+  suggested_title?: string;
+  /** Best-fit source/type from the recording_source enum. */
+  suggested_source?: RecordingSource;
+  /** Free text when `suggested_source` is "other". */
+  suggested_source_custom?: string;
+  /** A few topical tags. */
+  suggested_tags?: string[];
+  /**
+   * Where to file the recording. `name` is matched against existing
+   * projects / recording-lists on the client (`mapSuggestedName`); `is_new`
+   * means the model proposes creating a new one with that name.
+   */
+  suggested_filing?: {
+    project?: { name: string; is_new: boolean } | null;
+    recording_list?: { name: string; is_new: boolean } | null;
+  };
 }
 
 /**

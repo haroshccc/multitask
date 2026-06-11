@@ -81,6 +81,8 @@ import {
   useFrameworkContentForMany,
   useSetBlockOccurrence,
 } from "@/lib/hooks/useFrameworks";
+import { useMealPlanDays, useMeals } from "@/lib/hooks/useFood";
+import { MEAL_TIME_LABELS, type MealTimeKey } from "@/lib/types/domain";
 import {
   projectFrameworkBlocks,
   projectFrameworkDayLabels,
@@ -107,6 +109,16 @@ const MOBILE_BREAKPOINT_PX = 640;
 // filter/stats panels, and the bottom safety margin. Approximate; the
 // grid will overflow gracefully if the actual chrome is taller.
 const VERTICAL_CHROME_RESERVE = 280;
+
+// Sort hour for the synthetic all-day meal chips — keeps בוקר before
+// צהריים before ערב inside the all-day strip without a timed block.
+const MEAL_TIME_SORT_HOUR: Record<string, number> = {
+  breakfast: 6,
+  lunch: 12,
+  between: 16,
+  dinner: 19,
+  snack: 21,
+};
 
 // Stable empty references for non-primary lanes in multi-user mode, where we
 // suppress the shared day-notes / framework overlays (they'd repeat per lane).
@@ -271,6 +283,64 @@ export function Calendar() {
     return m;
   }, [lists]);
 
+  // ── Meals overlay ─────────────────────────────────────────────────────────
+  // The current user's planned menu (meal_plan_days) rendered as all-day
+  // chips — one per (date, meal-time). Synthetic items: clicking navigates
+  // to the food module instead of opening an event modal (see the `__meal`
+  // guard in handleItemClick). Days without a plan contribute nothing.
+  const { data: mealPlanRows = [] } = useMealPlanDays(
+    dateKey(range.from),
+    dateKey(range.to)
+  );
+  const { data: meals = [] } = useMeals();
+  const mealItems: CalendarItem[] = useMemo(() => {
+    const nameById = new Map(meals.map((m) => [m.id, m.name] as const));
+    const groups = new Map<
+      string,
+      { date: string; mealTime: string; names: string[] }
+    >();
+    for (const r of mealPlanRows) {
+      if (r.user_id !== user?.id) continue;
+      const key = `${r.date}:${r.meal_time}`;
+      let g = groups.get(key);
+      if (!g) {
+        g = { date: r.date, mealTime: r.meal_time, names: [] };
+        groups.set(key, g);
+      }
+      const name = nameById.get(r.meal_id);
+      if (name) g.names.push(name);
+    }
+    const out: CalendarItem[] = [];
+    for (const g of groups.values()) {
+      if (g.names.length === 0) continue;
+      const [y, m, d] = g.date.split("-").map(Number);
+      const hour = MEAL_TIME_SORT_HOUR[g.mealTime] ?? 12;
+      const start = new Date(y, (m ?? 1) - 1, d ?? 1, hour, 0, 0, 0);
+      const label =
+        MEAL_TIME_LABELS[g.mealTime as MealTimeKey] ?? g.mealTime;
+      const id = `meal:${g.date}:${g.mealTime}`;
+      out.push({
+        id,
+        kind: "event",
+        title: `🍽️ ${label}: ${g.names.join(", ")}`,
+        description: "תפריט מתוכנן — לחיצה פותחת את מודול האוכל",
+        start,
+        end: new Date(start.getTime() + 60 * 60_000),
+        allDay: true,
+        color: "#f59e0b",
+        listId: null,
+        calendarId: null,
+        completed: false,
+        source: {
+          __meal: true,
+          id,
+          owner_id: user?.id ?? "",
+        } as unknown as CalendarItem["source"],
+      });
+    }
+    return out;
+  }, [mealPlanRows, meals, user?.id]);
+
   const items: CalendarItem[] = useMemo(() => {
     const out: CalendarItem[] = [];
     if (layer !== "events") {
@@ -334,6 +404,8 @@ export function Calendar() {
         if (dl) out.push(dl);
       }
     }
+    // Meals overlay rides along regardless of the task/event layer toggle.
+    out.push(...mealItems);
     if (layer !== "tasks") {
       for (const e of events) {
         // Calendar visibility (via the same `hiddenLists` set, which holds
@@ -380,7 +452,7 @@ export function Calendar() {
       }
     }
     return out;
-  }, [tasks, events, layer, hiddenLists, listColorById, calendarColorById, range]);
+  }, [tasks, events, layer, hiddenLists, listColorById, calendarColorById, range, mealItems]);
 
   // ── Multi-user lanes ──────────────────────────────────────────────────────
   // One lane per person (me first), each carrying only that person's items.
@@ -551,6 +623,11 @@ export function Calendar() {
   }, []);
 
   const handleItemClick = (item: CalendarItem) => {
+    // Synthetic meal chips deep-link to the food module.
+    if ((item.source as { __meal?: boolean }).__meal) {
+      navigate("/app/food");
+      return;
+    }
     if (item.kind === "task" || item.kind === "deadline")
       setEditingTaskId((item.source as { id: string }).id);
     else setEditingEventId((item.source as { id: string }).id);

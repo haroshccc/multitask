@@ -38,9 +38,12 @@ const VIEW_MODE_KEY = "multitask:recordings:viewMode";
 function readViewMode(): RecordingsViewMode {
   try {
     const v = localStorage.getItem(VIEW_MODE_KEY);
-    return v === "files" || v === "insights" ? v : "insights";
+    // Default to the classic files dashboard until the insights view has been
+    // verified in production; the user can switch to "תובנות" via the toggle
+    // and that choice is then remembered.
+    return v === "files" || v === "insights" ? v : "files";
   } catch {
-    return "insights";
+    return "files";
   }
 }
 

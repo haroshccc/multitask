@@ -157,16 +157,18 @@ export function Recordings() {
     return applyGrouping(filtered, grouping, listsByRecording);
   }, [allRecordings, filters, listsByRecording, grouping]);
 
-  // Honor `?id=...` from the URL — used by deep links from the project page's
-  // recordings list. Cleared once consumed so reload doesn't re-force it.
+  // Honor `?id=...` (project-page deep links) and `?recording=...` (global
+  // search) from the URL. Cleared once consumed so reload doesn't re-force it.
   const [searchParams, setSearchParams] = useSearchParams();
-  const initialIdFromUrl = searchParams.get("id");
+  const initialIdFromUrl =
+    searchParams.get("id") ?? searchParams.get("recording");
   const [selectedId, setSelectedId] = useState<string | null>(initialIdFromUrl);
   useEffect(() => {
     if (initialIdFromUrl && initialIdFromUrl !== selectedId) {
       setSelectedId(initialIdFromUrl);
       const next = new URLSearchParams(searchParams);
       next.delete("id");
+      next.delete("recording");
       setSearchParams(next, { replace: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

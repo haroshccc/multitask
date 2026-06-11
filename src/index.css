@@ -81,6 +81,11 @@
     @apply btn border border-ink-300 bg-white text-ink-900 hover:bg-ink-50;
   }
 
+  /* Neutral filled button — referenced across settings/import flows. */
+  .btn-secondary {
+    @apply btn bg-ink-100 text-ink-700 hover:bg-ink-200;
+  }
+
   /* Cards ------------------------------------------------------------- */
   .card {
     @apply rounded-lg border border-ink-300 bg-white shadow-soft;
@@ -256,6 +261,19 @@
 @media (prefers-reduced-motion: reduce) {
   .ai-launcher { animation: aiLauncherGlow 3s ease-in-out infinite; }
   .ai-launcher-icon { animation: none; }
+}
+
+/* Users who ask the OS for reduced motion get it everywhere — kills the
+   infinite gradient/pulse loops and collapses transitions to instant. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* ── Multitask onboarding/login animations ── */

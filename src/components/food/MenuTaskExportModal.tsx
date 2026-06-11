@@ -15,6 +15,7 @@ import {
   buildCookingTaskPayloads,
   buildShoppingTaskPayload,
 } from "@/lib/food/task-export";
+import { DateField } from "@/components/ui/DateField";
 
 interface MenuTaskExportModalProps {
   open: boolean;
@@ -310,18 +311,22 @@ export function MenuTaskExportModal({ open, onClose }: MenuTaskExportModalProps)
             </div>
             {preset === "custom" && (
               <div className="mt-2 flex items-center gap-2">
-                <input
-                  type="date"
+                <DateField
                   value={customFrom}
-                  onChange={(e) => setCustomFrom(e.target.value)}
-                  className="field text-sm py-1.5 w-auto"
+                  max={customTo || undefined}
+                  onChange={setCustomFrom}
+                  className="w-40"
+                  required
+                  label="מתאריך"
                 />
                 <span className="text-xs text-ink-500">עד</span>
-                <input
-                  type="date"
+                <DateField
                   value={customTo}
-                  onChange={(e) => setCustomTo(e.target.value)}
-                  className="field text-sm py-1.5 w-auto"
+                  min={customFrom || undefined}
+                  onChange={setCustomTo}
+                  className="w-40"
+                  required
+                  label="עד תאריך"
                 />
               </div>
             )}
@@ -348,11 +353,10 @@ export function MenuTaskExportModal({ open, onClose }: MenuTaskExportModalProps)
                 <h3 className="text-xs font-medium text-ink-700 mb-2">
                   מתי לקנות?
                 </h3>
-                <input
-                  type="date"
+                <DateField
                   value={shoppingScheduledAt}
-                  onChange={(e) => setShoppingScheduledAt(e.target.value)}
-                  className="field text-sm"
+                  onChange={setShoppingScheduledAt}
+                  label="מתי לקנות"
                 />
               </div>
             )}

@@ -4,6 +4,7 @@ import { X, FileDown, Calendar as CalendarIcon } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import type { GanttRow } from "./gantt-utils";
 import { downloadGanttExcel, type ExcelGranularity } from "./gantt-excel-export";
+import { DateField } from "@/components/ui/DateField";
 
 interface GanttExportModalProps {
   open: boolean;
@@ -121,20 +122,24 @@ export function GanttExportModal({
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <label className="text-xs text-ink-500 mb-0.5 block">מ-</label>
-                    <input
-                      type="date"
+                    <DateField
                       value={from}
-                      onChange={(e) => setFrom(e.target.value)}
-                      className="field text-sm w-full"
+                      onChange={setFrom}
+                      max={to || undefined}
+                      className="w-full"
+                      required
+                      label="מתאריך"
                     />
                   </div>
                   <div>
                     <label className="text-xs text-ink-500 mb-0.5 block">עד</label>
-                    <input
-                      type="date"
+                    <DateField
                       value={to}
-                      onChange={(e) => setTo(e.target.value)}
-                      className="field text-sm w-full"
+                      onChange={setTo}
+                      min={from || undefined}
+                      className="w-full"
+                      required
+                      label="עד תאריך"
                     />
                   </div>
                 </div>

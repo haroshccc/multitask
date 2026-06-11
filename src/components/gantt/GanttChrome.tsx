@@ -25,6 +25,7 @@ import { cn } from "@/lib/utils/cn";
 import { ListIcon } from "@/components/tasks/list-icons";
 import { ToggleButton, PopoverButton } from "@/components/layout/ChromeControls";
 import { addDays, startOfDay, type GanttLayer, type GanttZoom } from "./gantt-utils";
+import { DateField } from "@/components/ui/DateField";
 
 interface UnifiedList {
   id: string;
@@ -644,31 +645,33 @@ function RangePicker({
     const [y, m, d] = v.split("-").map(Number);
     return y && m && d ? new Date(y, m - 1, d) : null;
   };
-  const inputCls =
-    "text-[11px] px-1.5 py-1 rounded-md border border-ink-200 hover:bg-ink-50 text-ink-700 font-medium tabular-nums";
   return (
     <div className="inline-flex items-center gap-1" title="טווח התאריכים בתצוגה">
       <span className="text-[10px] text-ink-400">מ־</span>
-      <input
-        type="date"
+      <DateField
+        variant="ghost"
+        className="w-28"
         value={toIso(start)}
         max={toIso(end)}
-        onChange={(e) => {
-          const d = parse(e.target.value);
+        onChange={(v) => {
+          const d = parse(v);
           if (d) onChange(d, end);
         }}
-        className={inputCls}
+        required
+        label="תחילת טווח"
       />
       <span className="text-[10px] text-ink-400">עד</span>
-      <input
-        type="date"
+      <DateField
+        variant="ghost"
+        className="w-28"
         value={toIso(end)}
         min={toIso(start)}
-        onChange={(e) => {
-          const d = parse(e.target.value);
+        onChange={(v) => {
+          const d = parse(v);
           if (d) onChange(start, d);
         }}
-        className={inputCls}
+        required
+        label="סוף טווח"
       />
     </div>
   );

@@ -20,6 +20,7 @@ import {
   type CalendarDisplayMode,
 } from "@/lib/types/plans";
 import { formatPlanRange, addMonthsToDate, todayIso } from "./plan-format";
+import { DateField } from "@/components/ui/DateField";
 
 export function PlansSection({ headerless = false }: { headerless?: boolean }) {
   const { data: plans = [], isLoading } = usePlans();
@@ -243,7 +244,7 @@ function CreatePlanDialog({
           </label>
           <label className="block text-sm flex-1">
             <span className="text-ink-600 text-xs">התחלה</span>
-            <input type="date" value={start} onChange={(e) => setStart(e.target.value)} className="field text-sm w-full mt-1" />
+            <DateField value={start} onChange={setStart} className="w-full mt-1" required />
           </label>
         </div>
         {end && (

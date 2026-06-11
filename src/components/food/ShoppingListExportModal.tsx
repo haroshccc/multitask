@@ -14,6 +14,7 @@ import {
   shoppingListToWhatsAppText,
   whatsAppShareUrl,
 } from "@/lib/food/shopping-list";
+import { DateField } from "@/components/ui/DateField";
 
 interface ShoppingListExportModalProps {
   open: boolean;
@@ -240,18 +241,22 @@ export function ShoppingListExportModal({
             </div>
             {preset === "custom" && (
               <div className="mt-2 flex items-center gap-2">
-                <input
-                  type="date"
+                <DateField
                   value={customFrom}
-                  onChange={(e) => setCustomFrom(e.target.value)}
-                  className="field text-sm py-1.5 w-auto"
+                  max={customTo || undefined}
+                  onChange={setCustomFrom}
+                  className="w-40"
+                  required
+                  label="מתאריך"
                 />
                 <span className="text-xs text-ink-500">עד</span>
-                <input
-                  type="date"
+                <DateField
                   value={customTo}
-                  onChange={(e) => setCustomTo(e.target.value)}
-                  className="field text-sm py-1.5 w-auto"
+                  min={customFrom || undefined}
+                  onChange={setCustomTo}
+                  className="w-40"
+                  required
+                  label="עד תאריך"
                 />
               </div>
             )}

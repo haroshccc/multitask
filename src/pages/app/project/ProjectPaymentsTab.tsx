@@ -55,6 +55,7 @@ import {
 } from "@/components/configurable-table/fieldCells";
 import type { CustomFieldType, TaskCustomField } from "@/lib/types/domain";
 import { cn } from "@/lib/utils/cn";
+import { DateField } from "@/components/ui/DateField";
 
 const DIRECTION_OPTIONS: { value: string; label: string }[] = [
   { value: "in", label: "תקבול" },
@@ -1050,11 +1051,10 @@ function PaymentDetailModal({
             </div>
             <div>
               <label className="eyebrow mb-1.5 block">תאריך דרישה</label>
-              <input
-                type="date"
+              <DateField
                 value={demandDate}
-                onChange={(e) => setDemandDate(e.target.value)}
-                className="field"
+                onChange={setDemandDate}
+                label="תאריך דרישה"
               />
             </div>
           </div>
@@ -1068,11 +1068,10 @@ function PaymentDetailModal({
 
           <div>
             <label className="eyebrow mb-1.5 block">שולם בתאריך</label>
-            <input
-              type="date"
+            <DateField
               value={paidDate}
-              onChange={(e) => setPaidDate(e.target.value)}
-              className="field"
+              onChange={setPaidDate}
+              label="שולם בתאריך"
             />
           </div>
 

@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Check,
   ChevronLeft,
@@ -75,19 +75,16 @@ export function FilingWizard({ recording, onClose }: Props) {
     () => ai?.suggested_title?.trim() || recording.title || "",
   );
 
-  const [speakerLabels, setSpeakerLabels] = useState<Record<number, string>>(() => {
-    const m: Record<number, string> = {};
-    for (const s of speakers) if (s.label?.trim()) m[s.speaker_index] = s.label.trim();
-    return m;
-  });
-  // Re-seed labels once speakers load (state init ran before the query resolved).
+  const [speakerLabels, setSpeakerLabels] = useState<Record<number, string>>({});
+  // Seed labels once speakers load (the query resolves after first render).
   const seeded = useRef(false);
-  if (!seeded.current && speakers.length > 0) {
+  useEffect(() => {
+    if (seeded.current || speakers.length === 0) return;
     seeded.current = true;
     const m: Record<number, string> = {};
     for (const s of speakers) if (s.label?.trim()) m[s.speaker_index] = s.label.trim();
     if (Object.keys(m).length) setSpeakerLabels((prev) => ({ ...m, ...prev }));
-  }
+  }, [speakers]);
 
   const projectSel0 = useMemo<Sel>(() => {
     if (recording.project_id) return { kind: "existing", id: recording.project_id };
@@ -150,7 +147,19 @@ export function FilingWizard({ recording, onClose }: Props) {
   const finish = async () => {
     setSaving(true);
     try {
-      // 1) recording fields
+      // 1) Resolve the project link first (create if new) so it goes into the
+      // single recording patch below — one write, no intermediate races.
+      let projectId: string | null | undefined;
+      if (project.kind === "new" && project.name.trim()) {
+        const created = await createProject.mutateAsync({ name: project.name.trim() });
+        projectId = created?.id ?? undefined;
+      } else if (project.kind === "existing") {
+        projectId = project.id;
+      } else if (project.kind === "none") {
+        projectId = recording.project_id ? null : undefined; // clear only if set
+      }
+
+      // 2) One recording patch with all the row-level fields.
       await update.mutateAsync({
         recordingId: recording.id,
         patch: {
@@ -158,22 +167,10 @@ export function FilingWizard({ recording, onClose }: Props) {
           source,
           source_custom: source === "other" ? sourceCustom.trim() || null : null,
           tags,
+          ...(projectId !== undefined ? { project_id: projectId } : {}),
         },
       });
-      // 2) project link (create if new)
-      if (project.kind === "new" && project.name.trim()) {
-        const created = await createProject.mutateAsync({ name: project.name.trim() });
-        if (created?.id)
-          await update.mutateAsync({
-            recordingId: recording.id,
-            patch: { project_id: created.id },
-          });
-      } else if (project.kind === "existing") {
-        await update.mutateAsync({
-          recordingId: recording.id,
-          patch: { project_id: project.id },
-        });
-      }
+
       // 3) recording list (create if new, then assign)
       if (list.kind === "new" && list.name.trim()) {
         const created = await createList.mutateAsync({ name: list.name.trim() });
@@ -210,15 +207,24 @@ export function FilingWizard({ recording, onClose }: Props) {
           "rounded-t-2xl sm:rounded-2xl max-h-[90vh] flex flex-col",
         )}
       >
+        {/* Grab handle (mobile bottom-sheet affordance) */}
+        <div className="sm:hidden flex justify-center pt-2">
+          <span className="h-1 w-10 rounded-full bg-ink-200" />
+        </div>
+
         {/* Header: progress dots + close */}
-        <div className="flex items-center justify-between px-4 pt-4 pb-2">
+        <div className="flex items-center justify-between px-4 pt-3 pb-2">
           <div className="flex items-center gap-1.5">
             {STEPS.map((s, i) => (
               <span
                 key={s}
                 className={cn(
                   "h-1.5 rounded-full transition-all",
-                  i === step ? "w-5 bg-primary-500" : "w-1.5 bg-ink-200",
+                  i === step
+                    ? "w-5 bg-primary-500"
+                    : i < step
+                      ? "w-1.5 bg-primary-300"
+                      : "w-1.5 bg-ink-200",
                 )}
               />
             ))}
@@ -248,6 +254,7 @@ export function FilingWizard({ recording, onClose }: Props) {
 
           <div
             key={step}
+            className="min-h-[180px]"
             style={{
               animation: `${dir.current === "next" ? "mtSlideLeft" : "mtSlideRight"} .18s ease`,
             }}

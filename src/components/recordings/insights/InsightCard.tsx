@@ -4,13 +4,17 @@ import {
   CalendarClock,
   CheckSquare,
   ChevronDown,
+  FileAudio,
   FolderOpen,
   ListChecks,
   Loader2,
+  MessageCircle,
+  Mic,
   Phone,
   Sparkles,
   Tag,
   Users,
+  type LucideIcon,
 } from "lucide-react";
 import { format } from "date-fns";
 import { he } from "date-fns/locale";
@@ -35,12 +39,40 @@ interface Props {
   onFile: () => void;
 }
 
-type Phase = "transcribing" | "summarizing" | "ready" | "empty" | "error";
+type Phase =
+  | "awaiting"
+  | "transcribing"
+  | "summarizing"
+  | "ready"
+  | "empty"
+  | "error";
+
+/** Per-source icon + colour tint so the feed is scannable at a glance. */
+function sourceMeta(source: Recording["source"]): {
+  Icon: LucideIcon;
+  className: string;
+} {
+  switch (source) {
+    case "call":
+      return { Icon: Phone, className: "bg-sky-50 text-sky-600" };
+    case "meeting":
+      return { Icon: Users, className: "bg-violet-50 text-violet-600" };
+    case "thought":
+      return { Icon: Mic, className: "bg-amber-50 text-amber-600" };
+    case "whatsapp":
+      return { Icon: MessageCircle, className: "bg-emerald-50 text-emerald-600" };
+    case "upload":
+    case "recording":
+      return { Icon: FileAudio, className: "bg-ink-100 text-ink-500" };
+    default:
+      return { Icon: Sparkles, className: "bg-primary-50 text-primary-600" };
+  }
+}
 
 function derivePhase(recording: Recording, ai: RecordingAiOutput | null): Phase {
   const hasTranscript = !!recording.transcript_text?.trim();
-  if (recording.status === "transcribing" || (!hasTranscript && recording.status === "uploaded"))
-    return "transcribing";
+  if (recording.status === "transcribing") return "transcribing";
+  if (!hasTranscript && recording.status === "uploaded") return "awaiting";
   if (recording.status === "error" && !hasTranscript) return "error";
   if (recording.ai_status === "pending" || recording.status === "processing")
     return "summarizing";
@@ -59,35 +91,41 @@ export function InsightCard({
   const [expanded, setExpanded] = useState(false);
   const ai = (recording.ai_output as RecordingAiOutput | null) ?? null;
   const phase = derivePhase(recording, ai);
-  const SourceIcon = recording.source === "call" ? Phone : Sparkles;
+  const { Icon: SourceIcon, className: sourceClass } = sourceMeta(recording.source);
 
   return (
     <article
       className={cn(
-        "rounded-xl border bg-white shadow-soft transition-colors",
-        isUnfiled ? "border-amber-300" : "border-ink-200",
+        "rounded-xl border bg-white shadow-soft transition-all hover:shadow-lift",
+        isUnfiled
+          ? "border-amber-300 ring-1 ring-amber-100"
+          : "border-ink-200 hover:border-ink-300",
       )}
     >
       <div className="p-4 space-y-3">
         {/* Title row */}
-        <div className="flex items-start gap-2">
+        <div className="flex items-start gap-2.5">
           <div
             className={cn(
-              "shrink-0 w-8 h-8 rounded-lg flex items-center justify-center",
-              "bg-primary-50 text-primary-600",
+              "shrink-0 w-9 h-9 rounded-lg flex items-center justify-center",
+              sourceClass,
             )}
           >
             <SourceIcon className="w-4 h-4" />
           </div>
           <div className="min-w-0 flex-1">
             <InlineTitle recording={recording} />
-            <div className="mt-0.5 flex items-center gap-2 text-[11px] text-ink-500">
+            <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] text-ink-500">
               <span>
                 {format(new Date(recording.created_at), "HH:mm", { locale: he })}
               </span>
               {recording.duration_seconds != null && (
-                <span>· {formatDuration(recording.duration_seconds)}</span>
+                <span className="text-ink-300">·</span>
               )}
+              {recording.duration_seconds != null && (
+                <span>{formatDuration(recording.duration_seconds)}</span>
+              )}
+              <span className="text-ink-300">·</span>
               <SpeakerLine count={recording.speakers_count} />
             </div>
           </div>
@@ -95,7 +133,7 @@ export function InsightCard({
             <button
               type="button"
               onClick={onFile}
-              className="btn-primary !py-1 !px-2.5 !text-xs inline-flex items-center gap-1 shrink-0"
+              className="shrink-0 inline-flex items-center gap-1 rounded-lg bg-amber-500 px-2.5 py-1 text-xs font-semibold text-white shadow-soft hover:bg-amber-600 transition-colors"
               title="תיוק מודרך בעזרת AI"
             >
               <Sparkles className="w-3 h-3" />
@@ -105,12 +143,16 @@ export function InsightCard({
         </div>
 
         {/* Body — depends on pipeline phase */}
+        {phase === "awaiting" && (
+          <PhaseLine
+            spin={false}
+            text="ממתינה לתמלול — פתחי ״הצג מקור״ כדי להתחיל."
+          />
+        )}
         {phase === "transcribing" && (
-          <PhaseLine icon="spin" text="מתמללת את ההקלטה…" />
+          <PhaseLine spin text="מתמללת את ההקלטה…" />
         )}
-        {phase === "summarizing" && (
-          <PhaseLine icon="spin" text="מסכמת עם AI…" />
-        )}
+        {phase === "summarizing" && <PhaseLine spin text="מסכמת עם AI…" />}
         {phase === "error" && (
           <ErrorLine recording={recording} />
         )}
@@ -136,18 +178,23 @@ export function InsightCard({
           </div>
         )}
 
-        {/* Source expander */}
-        <button
-          type="button"
-          onClick={() => setExpanded((v) => !v)}
-          className="text-[11px] font-medium text-ink-500 hover:text-primary-700 inline-flex items-center gap-1"
-        >
-          <ChevronDown
-            className={cn("w-3.5 h-3.5 transition-transform", expanded && "rotate-180")}
-          />
-          {expanded ? "הסתר מקור" : "הצג מקור (אודיו ותמלול)"}
-        </button>
       </div>
+
+      {/* Source expander — full-width footer */}
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        className={cn(
+          "w-full flex items-center justify-center gap-1 border-t px-4 py-2",
+          "text-[11px] font-medium text-ink-500 hover:text-primary-700 hover:bg-ink-50/60 transition-colors",
+          expanded ? "border-ink-100 rounded-none" : "border-ink-100 rounded-b-xl",
+        )}
+      >
+        <ChevronDown
+          className={cn("w-3.5 h-3.5 transition-transform", expanded && "rotate-180")}
+        />
+        {expanded ? "הסתר מקור" : "הצג מקור · אודיו ותמלול"}
+      </button>
 
       {expanded && <SourceExpander recordingId={recording.id} fallback={recording} />}
     </article>
@@ -193,49 +240,47 @@ function ReadyBody({
               </li>
             ))}
           </ul>
-          {tasks.length > shownTasks.length && (
-            <button
-              type="button"
-              onClick={onOpenSource}
-              className="text-[11px] text-primary-700 hover:underline"
-            >
-              +{tasks.length - shownTasks.length} משימות נוספות · המרה למשימות ↓
-            </button>
-          )}
-          {tasks.length > 0 && tasks.length <= shownTasks.length && (
-            <button
-              type="button"
-              onClick={onOpenSource}
-              className="text-[11px] text-primary-700 hover:underline"
-            >
-              המרה למשימות ↓
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={onOpenSource}
+            className="text-[11px] font-medium text-primary-700 hover:underline"
+          >
+            {tasks.length > shownTasks.length
+              ? `עוד ${tasks.length - shownTasks.length} · המרה למשימות ↓`
+              : "המרה למשימות ↓"}
+          </button>
         </div>
       )}
 
       {events.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5">
-          {events.map((e, i) => (
-            <span
-              key={i}
-              className="inline-flex items-center gap-1 rounded-md bg-violet-50 text-violet-700 px-2 py-0.5 text-[11px]"
-              dir="auto"
-            >
-              <CalendarClock className="w-3 h-3" />
-              {e.title}
-              {e.date_iso ? (
-                <span className="text-violet-400">
-                  {" "}
-                  · {format(new Date(e.date_iso), "d/M", { locale: he })}
-                </span>
-              ) : null}
-            </span>
-          ))}
+          {events.map((e, i) => {
+            const shortDate = safeShortDate(e.date_iso);
+            return (
+              <span
+                key={i}
+                className="inline-flex items-center gap-1 rounded-md bg-violet-50 text-violet-700 px-2 py-0.5 text-[11px]"
+                dir="auto"
+              >
+                <CalendarClock className="w-3 h-3" />
+                {e.title}
+                {shortDate && (
+                  <span className="text-violet-400"> · {shortDate}</span>
+                )}
+              </span>
+            );
+          })}
         </div>
       )}
     </div>
   );
+}
+
+/** Format an (untrusted, AI-provided) date string, or null if unparseable. */
+function safeShortDate(iso?: string | null): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? null : format(d, "d/M", { locale: he });
 }
 
 function SourceExpander({
@@ -305,26 +350,21 @@ function InlineTitle({ recording }: { recording: Recording }) {
 }
 
 function SpeakerLine({ count }: { count: number | null }) {
-  if (count == null || count <= 1) {
-    return (
-      <span className="inline-flex items-center gap-1">
-        · <Users className="w-3 h-3" /> הקלטה אישית
-      </span>
-    );
-  }
+  const personal = count == null || count <= 1;
   return (
     <span className="inline-flex items-center gap-1">
-      · <Users className="w-3 h-3" /> {count} דוברים
+      <Users className="w-3 h-3" />
+      {personal ? "הקלטה אישית" : `${count} דוברים`}
     </span>
   );
 }
 
-function PhaseLine({ icon, text }: { icon: "spin"; text: string }) {
+function PhaseLine({ spin, text }: { spin: boolean; text: string }) {
   return (
     <div className="flex items-center gap-2 text-xs text-ink-500 py-1">
-      {icon === "spin" && <Loader2 className="w-3.5 h-3.5 text-primary-600 animate-spin" />}
-      {text}
-      <span className="flex-1 h-3 rounded bg-ink-100 animate-pulse" />
+      {spin && <Loader2 className="w-3.5 h-3.5 text-primary-600 animate-spin" />}
+      <span>{text}</span>
+      {spin && <span className="flex-1 h-3 rounded bg-ink-100 animate-pulse" />}
     </div>
   );
 }

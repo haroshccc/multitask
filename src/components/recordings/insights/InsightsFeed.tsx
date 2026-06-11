@@ -154,9 +154,13 @@ export function InsightsFeed() {
           {/* Day groups */}
           {filedByDay.map(({ key, label, items }) => (
             <section key={key} className="space-y-3">
-              <h3 className="sticky top-[7.5rem] z-10 text-xs font-semibold text-ink-500 bg-white/85 backdrop-blur py-1">
-                {label}
-              </h3>
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-semibold text-ink-500 whitespace-nowrap">
+                  {label}
+                </span>
+                <span className="h-px flex-1 bg-ink-150" aria-hidden />
+                <span className="text-[10px] text-ink-400">{items.length}</span>
+              </div>
               <div className="space-y-3">{items.map(renderCard)}</div>
             </section>
           ))}

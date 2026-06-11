@@ -1,5 +1,5 @@
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth/AuthContext";
 import { ScreenScaffold } from "@/components/layout/ScreenScaffold";
@@ -498,6 +498,22 @@ export function Calendar() {
 
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
+
+  // Allow ?event=<id> in the URL to pre-open the EventEditModal — used by
+  // global search and the dashboard agenda. The param is stripped once
+  // consumed so closing the modal doesn't snap it back open (mirrors the
+  // ?edit= pattern on the Tasks screen).
+  const [urlParams, setUrlParams] = useSearchParams();
+  useEffect(() => {
+    const eventId = urlParams.get("event");
+    if (eventId && eventId !== editingEventId) {
+      setEditingEventId(eventId);
+      const next = new URLSearchParams(urlParams);
+      next.delete("event");
+      setUrlParams(next, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlParams]);
   /**
    * Single "create" state shared by event and task. The user can flip
    * between the two via the picker rendered inside the modal's `topSlot`.

@@ -414,7 +414,7 @@ function AgendaTaskRow({
         onClick={() => navigate(`/app/tasks?edit=${task.id}`)}
         className={cn(
           "flex-1 min-w-0 truncate text-start text-xs font-medium",
-          done ? "text-ink-500 line-through" : "text-ink-800",
+          done ? "text-ink-500 line-through" : "text-ink-700",
         )}
       >
         {task.title?.trim() || "ללא כותרת"}
@@ -463,7 +463,7 @@ function AgendaEventRow({
       <span className="shrink-0 w-10 font-mono tabular-nums text-[10px] text-ink-600 text-start">
         {fmtTime(event.starts_at)}
       </span>
-      <span className="flex-1 min-w-0 truncate text-xs font-medium text-ink-800">
+      <span className="flex-1 min-w-0 truncate text-xs font-medium text-ink-700">
         {event.title?.trim() || "ללא כותרת"}
       </span>
       <span className="shrink-0 text-[10px] text-ink-500 tabular-nums">

@@ -37,7 +37,7 @@ export function ActionInbox() {
               className="flex items-center gap-2 rounded-lg border border-ink-200 bg-white px-2.5 py-2 hover:border-primary-300 hover:bg-primary-50/40 transition-colors"
             >
               <Bell className="w-3.5 h-3.5 text-primary-600" aria-hidden="true" />
-              <span className="flex-1 text-xs font-medium text-ink-800">
+              <span className="flex-1 text-xs font-medium text-ink-700">
                 התראות חדשות
               </span>
               <CountBadge count={unread} />
@@ -55,7 +55,7 @@ export function ActionInbox() {
                   className="w-3.5 h-3.5 text-amber-500"
                   aria-hidden="true"
                 />
-                <span className="flex-1 text-xs font-medium text-ink-800">
+                <span className="flex-1 text-xs font-medium text-ink-700">
                   מחשבות לעיבוד
                 </span>
                 <CountBadge count={thoughts.length} />

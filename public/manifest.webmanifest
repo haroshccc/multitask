@@ -18,5 +18,35 @@
       "type": "image/png",
       "purpose": "maskable"
     }
+  ],
+  "shortcuts": [
+    {
+      "name": "הקלטה מהירה",
+      "short_name": "הקלטה",
+      "description": "התחל הקלטה מיד והעלה אותה",
+      "url": "/app/record",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "משימות",
+      "short_name": "משימות",
+      "description": "רשימת המשימות שלך",
+      "url": "/app/tasks",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "יומן",
+      "short_name": "יומן",
+      "description": "היומן והאירועים שלך",
+      "url": "/app/calendar",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "אוכל",
+      "short_name": "אוכל",
+      "description": "תפריט וקניות",
+      "url": "/app/food",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
   ]
 }

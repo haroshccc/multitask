@@ -20,6 +20,8 @@ import {
   Bell,
   Menu,
   X,
+  StickyNote,
+  Phone,
   Undo2,
   Redo2,
   Moon,
@@ -425,6 +427,28 @@ export function AppShell() {
               onClick={(e) => e.stopPropagation()}
             >
               <nav className="flex flex-col gap-1">
+                {/* Quick actions — the two dedicated capture surfaces. */}
+                <button
+                  onClick={() => {
+                    setSidebarOpen(false);
+                    navigate("/app/note");
+                  }}
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm bg-primary-50 text-primary-700 hover:bg-primary-100 text-start"
+                >
+                  <StickyNote className="w-5 h-5" />
+                  <span>הערה מהירה</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setSidebarOpen(false);
+                    navigate("/app/record");
+                  }}
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm bg-primary-50 text-primary-700 hover:bg-primary-100 text-start"
+                >
+                  <Phone className="w-5 h-5" />
+                  <span>הקלטת פגישה/שיחה</span>
+                </button>
+                <div className="h-px bg-ink-200 my-2" />
                 {NAV.map((item) => (
                   <NavLink
                     key={item.to}

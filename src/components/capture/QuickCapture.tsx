@@ -9,6 +9,8 @@ import {
   Calendar,
   Target,
   AlertTriangle,
+  StickyNote,
+  Phone,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { useNavigate } from "react-router-dom";
@@ -234,6 +236,24 @@ export function QuickCapture({ open, onClose }: QuickCaptureProps) {
             <div className="p-5 relative">
               {mode === "menu" ? (
                 <div className="grid grid-cols-2 gap-3">
+                  <MenuAction
+                    icon={StickyNote}
+                    label="הערה מהירה"
+                    accent
+                    onClick={() => {
+                      onClose();
+                      navigate("/app/note");
+                    }}
+                  />
+                  <MenuAction
+                    icon={Phone}
+                    label="הקלטת פגישה/שיחה"
+                    accent
+                    onClick={() => {
+                      onClose();
+                      navigate("/app/record");
+                    }}
+                  />
                   <MenuAction
                     icon={Mic}
                     label="הקלט מחשבה"

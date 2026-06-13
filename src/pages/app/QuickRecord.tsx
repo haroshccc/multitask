@@ -56,7 +56,7 @@ export function QuickRecord() {
           contentType: blob.type || `audio/${ext}`,
         });
         await createRecording.mutateAsync({
-          source: "other",
+          source: "meeting",
           title: defaultTitle(durationSeconds),
           storage_key: key,
           storage_provider: "r2",
@@ -143,6 +143,11 @@ export function QuickRecord() {
         להקלטות
       </button>
 
+      <header className="text-center">
+        <h1 className="text-2xl font-bold text-ink-900">הקלטת פגישה / שיחה</h1>
+        <p className="text-sm text-ink-500 mt-1">ההקלטה תישמר במסך ההקלטות</p>
+      </header>
+
       <div
         className={cn(
           "w-32 h-32 rounded-full flex items-center justify-center transition-all",
@@ -213,7 +218,7 @@ function defaultTitle(durationSeconds: number): string {
   const m = Math.floor(durationSeconds / 60);
   const s = durationSeconds % 60;
   const dur = m > 0 ? `${m}:${String(s).padStart(2, "0")} דק׳` : `${s} שנ׳`;
-  return `הקלטה מהירה ${date} ${time} (${dur})`;
+  return `הקלטת פגישה ${date} ${time} (${dur})`;
 }
 
 function humanizeError(err: unknown): string {

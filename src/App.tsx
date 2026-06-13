@@ -107,6 +107,9 @@ const Notifications = lazy(() =>
 const QuickRecord = lazy(() =>
   import("@/pages/app/QuickRecord").then((m) => ({ default: m.QuickRecord }))
 );
+const QuickNote = lazy(() =>
+  import("@/pages/app/QuickNote").then((m) => ({ default: m.QuickNote }))
+);
 
 function RequireAuth({ children }: { children: JSX.Element }) {
   const { session, loading } = useAuth();
@@ -383,6 +386,14 @@ export default function App() {
           element={
             <Suspense fallback={<LoadingShell />}>
               <QuickRecord />
+            </Suspense>
+          }
+        />
+        <Route
+          path="note"
+          element={
+            <Suspense fallback={<LoadingShell />}>
+              <QuickNote />
             </Suspense>
           }
         />

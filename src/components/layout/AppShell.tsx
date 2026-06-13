@@ -22,6 +22,7 @@ import {
   X,
   StickyNote,
   Phone,
+  Download,
   Undo2,
   Redo2,
   Moon,
@@ -34,6 +35,7 @@ import { useAuth } from "@/lib/auth/AuthContext";
 import { useRealtimeSync } from "@/lib/hooks/useRealtimeSync";
 import { useEventReminders } from "@/lib/hooks/useEventReminders";
 import { useTheme } from "@/lib/hooks/useTheme";
+import { useInstallPrompt } from "@/lib/hooks/useInstallPrompt";
 import { useUnreadNotificationsCount } from "@/lib/hooks/useNotifications";
 import { cn } from "@/lib/utils/cn";
 import { QuickCapture } from "@/components/capture/QuickCapture";
@@ -122,6 +124,7 @@ export function AppShell() {
   useEventReminders();
 
   const { theme, toggle: toggleTheme } = useTheme();
+  const { canInstall, promptInstall } = useInstallPrompt();
 
   const canUndo = useCanUndo();
   const canRedo = useCanRedo();
@@ -488,6 +491,18 @@ export function AppShell() {
                   {theme === "dark" ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
                   <span>{theme === "dark" ? "מצב בהיר" : "מצב כהה"}</span>
                 </button>
+                {canInstall && (
+                  <button
+                    onClick={() => {
+                      setSidebarOpen(false);
+                      void promptInstall();
+                    }}
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-ink-700 hover:bg-ink-100 text-start"
+                  >
+                    <Download className="w-5 h-5" />
+                    <span>התקן אפליקציה</span>
+                  </button>
+                )}
                 <NavLink
                   to="/app/settings"
                   onClick={() => setSidebarOpen(false)}

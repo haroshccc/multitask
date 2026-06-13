@@ -18,5 +18,35 @@
       "type": "image/png",
       "purpose": "maskable"
     }
+  ],
+  "shortcuts": [
+    {
+      "name": "הערה מהירה",
+      "short_name": "הערה",
+      "description": "כתיבה או הקלטה של הערה — נשמרת במחשבות",
+      "url": "/app/note",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "הקלטת פגישה / שיחה",
+      "short_name": "פגישה",
+      "description": "התחל הקלטת פגישה או שיחה — נשמרת בהקלטות",
+      "url": "/app/record",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "יומן",
+      "short_name": "יומן",
+      "description": "היומן והאירועים שלך",
+      "url": "/app/calendar",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "משימות",
+      "short_name": "משימות",
+      "description": "רשימת המשימות שלך",
+      "url": "/app/tasks",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
   ]
 }

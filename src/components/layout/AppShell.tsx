@@ -68,6 +68,14 @@ const NAV: NavItem[] = [
   { to: "/app/food", label: "אוכל", icon: UtensilsCrossed },
 ];
 
+// Primary destinations shown directly in the mobile bottom bar. Everything
+// else lives behind the "עוד" (More) tab, which opens the full nav drawer.
+const PRIMARY_MOBILE_NAV: NavItem[] = [
+  { to: "/app", label: "דשבורד", icon: Home, end: true },
+  { to: "/app/tasks", label: "משימות", icon: CheckSquare },
+  { to: "/app/calendar", label: "יומן", icon: CalendarIcon },
+];
+
 // Route codes for vim-style G→X navigation (physical key codes, layout-independent)
 const G_NAV: Record<string, string> = {
   KeyT: "/app/tasks",
@@ -437,6 +445,25 @@ export function AppShell() {
                   </NavLink>
                 ))}
                 <div className="h-px bg-ink-200 my-2" />
+                {assistantEnabled && (
+                  <button
+                    onClick={() => {
+                      setSidebarOpen(false);
+                      assistantUi.setOpen(true);
+                    }}
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-ink-700 hover:bg-ink-100 text-start"
+                  >
+                    <Sparkles className="w-5 h-5" />
+                    <span>עוזר AI</span>
+                  </button>
+                )}
+                <button
+                  onClick={toggleTheme}
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-ink-700 hover:bg-ink-100 text-start"
+                >
+                  {theme === "dark" ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+                  <span>{theme === "dark" ? "מצב בהיר" : "מצב כהה"}</span>
+                </button>
                 <NavLink
                   to="/app/settings"
                   onClick={() => setSidebarOpen(false)}
@@ -483,14 +510,14 @@ export function AppShell() {
         </main>
       </div>
 
-      {/* Bottom tab bar (mobile only). Every primary screen appears here;
-          inline-end padding reserves space for the AnimatedFab so it never
-          overlaps a tab. */}
+      {/* Bottom tab bar (mobile only): 3 primary tabs + a raised center capture
+          FAB + a "More" tab that opens the full nav drawer. Keeps every tap
+          target comfortably wide instead of cramming all 11 screens. */}
       <nav
-        className="md:hidden shrink-0 z-30 bg-white border-t border-ink-200 h-16 flex items-stretch"
-        style={{ paddingInlineEnd: "88px" /* matches 64px FAB + 24px inset */ }}
+        className="md:hidden shrink-0 z-30 bg-white border-t border-ink-200 grid grid-cols-5 items-stretch h-16"
+        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
-        {NAV.map((item) => (
+        {PRIMARY_MOBILE_NAV.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}
@@ -498,7 +525,7 @@ export function AppShell() {
             title={item.label}
             className={({ isActive }) =>
               cn(
-                "flex-1 min-w-0 flex flex-col items-center justify-center gap-0.5 text-[9px] leading-tight px-0.5",
+                "min-w-0 flex flex-col items-center justify-center gap-0.5 text-[10px] leading-tight px-0.5",
                 isActive ? "text-primary-600" : "text-ink-500"
               )
             }
@@ -507,14 +534,34 @@ export function AppShell() {
             <span className="truncate w-full text-center">{item.label}</span>
           </NavLink>
         ))}
+
+        {/* Center: raised capture FAB */}
+        <div className="flex items-start justify-center">
+          <AnimatedFab onClick={() => setCaptureOpen(true)} paused={captureOpen} variant="docked" />
+        </div>
+
+        {/* More — opens the full navigation drawer */}
+        <button
+          onClick={() => setSidebarOpen(true)}
+          title="עוד"
+          className={cn(
+            "min-w-0 flex flex-col items-center justify-center gap-0.5 text-[10px] leading-tight px-0.5",
+            sidebarOpen ? "text-primary-600" : "text-ink-500"
+          )}
+        >
+          <Menu className="w-5 h-5 shrink-0" />
+          <span className="truncate w-full text-center">עוד</span>
+        </button>
       </nav>
 
-      {/* Floating quick capture button — visible on every breakpoint, cycles
-          its icon + gradient through the five capture actions. */}
-      <AnimatedFab
-        onClick={() => setCaptureOpen(true)}
-        paused={captureOpen}
-      />
+      {/* Floating quick capture button — desktop only (mobile uses the docked
+          FAB inside the bottom bar above). */}
+      <div className="hidden md:block">
+        <AnimatedFab
+          onClick={() => setCaptureOpen(true)}
+          paused={captureOpen}
+        />
+      </div>
 
       <QuickCapture
         open={captureOpen}
@@ -537,7 +584,7 @@ export function AppShell() {
             <button
               type="button"
               onClick={() => assistantUi.setOpen(true)}
-              className="ai-launcher fixed bottom-20 md:bottom-4 start-4 z-40 w-16 h-16 rounded-full text-white flex items-center justify-center transition-transform hover:scale-110"
+              className="ai-launcher hidden md:flex fixed bottom-4 start-4 z-40 w-16 h-16 rounded-full text-white items-center justify-center transition-transform hover:scale-110"
               aria-label="עוזר AI"
               title="עוזר AI"
             >

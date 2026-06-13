@@ -247,7 +247,7 @@ export function AppShell() {
 
   return (
     <FocusSessionProvider>
-    <div className="h-screen bg-ink-50 flex flex-col overflow-hidden">
+    <div className="h-dvh bg-ink-50 flex flex-col overflow-hidden">
       {/* Top bar — not sticky; lives in fixed-height flex row so it never scrolls */}
       <header className="shrink-0 z-30 bg-white border-b border-ink-200">
       <div className="px-4 md:px-6 h-14 flex items-center justify-between gap-2">
@@ -514,7 +514,7 @@ export function AppShell() {
           FAB + a "More" tab that opens the full nav drawer. Keeps every tap
           target comfortably wide instead of cramming all 11 screens. */}
       <nav
-        className="md:hidden shrink-0 z-30 bg-white border-t border-ink-200 grid grid-cols-5 items-stretch h-16"
+        className="md:hidden shrink-0 z-30 bg-white border-t border-ink-200 grid grid-cols-4 items-stretch h-16"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
         {PRIMARY_MOBILE_NAV.map((item) => (
@@ -535,12 +535,8 @@ export function AppShell() {
           </NavLink>
         ))}
 
-        {/* Center: raised capture FAB */}
-        <div className="flex items-start justify-center">
-          <AnimatedFab onClick={() => setCaptureOpen(true)} paused={captureOpen} variant="docked" />
-        </div>
-
-        {/* More — opens the full navigation drawer */}
+        {/* More — opens the full navigation drawer. Quick-create lives in the
+            top bar (+), so there's no floating button on mobile. */}
         <button
           onClick={() => setSidebarOpen(true)}
           title="עוד"

@@ -233,7 +233,7 @@ function DayGroup({
           number on the right side (per spec "מימין מתחת למספר תאריך"). */}
       <div
         className={cn(
-          "flex flex-col items-stretch py-3 w-16 sm:w-32 shrink-0 border-e px-1 sm:px-2",
+          "flex flex-col items-stretch py-2 w-16 sm:w-32 shrink-0 border-e px-1 sm:px-2",
           today ? "border-primary-500 bg-primary-500" : "border-ink-200 bg-ink-50/60"
         )}
       >
@@ -314,7 +314,7 @@ function DayGroup({
           frameworkOccs.length === 0 ? (
             <button
               onClick={() => onCreateAt(day)}
-              className="w-full text-start px-4 py-2.5 text-[11px] text-ink-400 hover:text-primary-600 hover:bg-ink-50"
+              className="w-full text-start px-4 py-1.5 text-[11px] text-ink-400 hover:text-primary-600 hover:bg-ink-50"
               type="button"
             >
               + הוסף אירוע ליום זה
@@ -370,37 +370,16 @@ function AgendaRow({
             : undefined
         }
         className={cn(
-          "w-full px-3 py-2 flex items-center gap-2 text-start hover:bg-ink-50",
+          "w-full px-3 py-2 flex items-start gap-2 text-start hover:bg-ink-50",
           past && "opacity-75",
           item.completed && "opacity-60"
         )}
         type="button"
       >
-        {/* Time block — fixed width so titles align */}
-        <div className="w-14 shrink-0 text-[11px] text-ink-500 tabular-nums leading-tight">
-          {item.allDay ? (
-            <span className="font-medium">כל היום</span>
-          ) : isHourless(item) ? (
-            <span className="font-medium">ללא שעה</span>
-          ) : (
-            <>
-              <div>{formatHour(item.start, tz)}</div>
-              <div className="text-ink-400">{formatHour(item.end, tz)}</div>
-            </>
-          )}
-        </div>
-
-        {/* Color accent bar */}
-        <div
-          className="w-1 self-stretch rounded-full shrink-0"
-          style={{ backgroundColor: accent }}
-        />
-
-        {/* Task complete-checkbox — only for tasks. Stops propagation so
-            it doesn't fire the row's edit-modal click. Placed next to the
-            title so the visual association is immediate. */}
+        {/* Task complete-checkbox (tasks only), packed to the start beside the
+            title. Stops propagation so it doesn't fire the row's edit click. */}
         {isTask ? (
-          <div className="relative shrink-0">
+          <div className="relative shrink-0 mt-0.5">
             <TaskCheckButton
               taskId={(item.source as { id: string }).id}
               completed={item.completed}
@@ -417,25 +396,26 @@ function AgendaRow({
               />
             )}
           </div>
-        ) : (
-          <span className="w-4 h-4 shrink-0" />
-        )}
+        ) : null}
 
-        {/* Title + meta. On mobile the title is horizontally scrollable so
-            long task names can be read in full without truncation; desktop
-            keeps the cleaner truncated look since rows are wider there. */}
+        {/* Color accent bar */}
+        <div
+          className="w-1 self-stretch min-h-[1.75rem] rounded-full shrink-0"
+          style={{ backgroundColor: accent }}
+        />
+
+        {/* Title + meta — takes all remaining width and wraps to a second
+            line instead of truncating, so long names stay readable. */}
         <div className="flex-1 min-w-0">
-          <div className="overflow-x-auto sm:overflow-x-hidden no-scrollbar">
-            <div
-              className={cn(
-                "text-[13px] font-medium text-ink-900 whitespace-nowrap sm:truncate",
-                item.completed && "line-through"
-              )}
-            >
-              {item.title || <span className="italic text-ink-400">ללא כותרת</span>}
-            </div>
+          <div
+            className={cn(
+              "text-[13px] font-medium text-ink-900 break-words leading-snug",
+              item.completed && "line-through"
+            )}
+          >
+            {item.title || <span className="italic text-ink-400">ללא כותרת</span>}
           </div>
-          <div className="text-[10px] text-ink-500 mt-0.5 flex items-center gap-2">
+          <div className="text-[10px] text-ink-500 mt-0.5 flex items-center gap-1.5 flex-wrap">
             <span>{isTask ? "משימה" : "אירוע"}</span>
             {overdue && (
               <span className="text-danger-600 font-medium">· באיחור</span>
@@ -444,6 +424,20 @@ function AgendaRow({
               <span className="text-success-600 font-medium">· בוצע</span>
             )}
           </div>
+        </div>
+
+        {/* Time — compact, at the end (left in RTL) */}
+        <div className="shrink-0 text-[11px] text-ink-500 tabular-nums leading-tight text-end mt-0.5">
+          {item.allDay ? (
+            <span className="font-medium">כל היום</span>
+          ) : isHourless(item) ? (
+            <span className="font-medium">ללא שעה</span>
+          ) : (
+            <>
+              <div>{formatHour(item.start, tz)}</div>
+              <div className="text-ink-400">{formatHour(item.end, tz)}</div>
+            </>
+          )}
         </div>
       </button>
     </li>

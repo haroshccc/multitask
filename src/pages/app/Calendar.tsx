@@ -36,6 +36,8 @@ import {
   CheckSquare,
   UsersRound,
   ChevronDown,
+  X,
+  Plus,
 } from "lucide-react";
 import {
   useCalendarDayNotes,
@@ -53,6 +55,7 @@ import {
   startOfMonth,
   endOfMonth,
   startOfWeek,
+  formatDayLong,
   taskToItem,
   taskDeadlineToItem,
   timeEntryToStripe,
@@ -139,6 +142,9 @@ export function Calendar() {
   // Mobile: the entire control stack collapses behind the header "minimize"
   // toggle (same concept as the Tasks screen). Default collapsed on mobile.
   const [chromeOpen, setChromeOpen] = useState(false);
+  // Mobile month view: tapping a day opens a floating day-view banner over the
+  // month (edit/add then close with the X). Null = closed.
+  const [mobileDayOpen, setMobileDayOpen] = useState<Date | null>(null);
   // Scheduling mode: a side panel of list tasks the user drags onto the grid.
   const [scheduling, setScheduling] = useState(false);
   // Within scheduling mode: drag tasks (from lists) or meetings (from projects).
@@ -982,15 +988,13 @@ export function Calendar() {
     if (view === "month") {
       return (
         <>
-          {/* Mobile: compact dotted month; tapping a day jumps to its agenda. */}
+          {/* Mobile: compact dotted month; tapping a day opens a floating
+              day-view banner over the month (see overlay below). */}
           <div className="md:hidden">
             <CalendarMonthMobile
               anchor={anchor}
               items={bodyItems}
-              onDayClick={(day) => {
-                setAnchor(day);
-                setView("agenda");
-              }}
+              onDayClick={(day) => setMobileDayOpen(day)}
             />
           </div>
           <div className="hidden md:block">
@@ -1412,6 +1416,66 @@ export function Calendar() {
               <button type="submit" className="btn-dark text-sm" disabled={!newListName.trim()}>יצירה</button>
             </div>
           </form>
+        </div>
+      )}
+      {/* Mobile: floating day-view banner opened from the compact month.
+          The month stays underneath; close with the X. */}
+      {mobileDayOpen && (
+        <div
+          className="md:hidden fixed inset-0 z-50 flex items-center justify-center p-3 bg-ink-900/40"
+          onClick={() => setMobileDayOpen(null)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-lift w-full max-w-md max-h-[85vh] flex flex-col overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+            dir="rtl"
+          >
+            <div className="flex items-center gap-2 px-3 py-2 border-b border-ink-200 shrink-0">
+              <h3 className="font-semibold text-ink-900 text-sm flex-1 truncate">
+                {formatDayLong(mobileDayOpen)}
+              </h3>
+              <button
+                type="button"
+                onClick={() => {
+                  const start = new Date(mobileDayOpen);
+                  start.setHours(effectiveRange.hourStart, 0, 0, 0);
+                  handleCreateAt(start);
+                }}
+                className="p-1.5 rounded-md text-ink-600 hover:bg-ink-100"
+                title="הוספת משימה/אירוע"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setMobileDayOpen(null)}
+                className="p-1.5 rounded-md text-ink-500 hover:bg-ink-100"
+                title="סגירה"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-2">
+              <CalendarDayView
+                date={mobileDayOpen}
+                items={items}
+                actualStripes={actualStripes}
+                hourStart={effectiveRange.hourStart}
+                hourEnd={effectiveRange.hourEnd}
+                hourHeight={dynamicHourHeightDay}
+                onItemClick={handleItemClick}
+                onItemContextMenu={handleItemContextMenu}
+                onCreateAt={handleCreateAt}
+                onItemDrop={handleItemDrop}
+                dayNote={notesByDate.get(dateKey(mobileDayOpen))}
+                dayNoteColor={noteColorsByDate.get(dateKey(mobileDayOpen))}
+                onDateNoteClick={setEditingNoteDate}
+                frameworkBlocks={frameworkBlocks}
+                frameworkLabelsByDate={frameworkLabelsByDate}
+                onFrameworkBlockClick={cycleFrameworkBlock}
+              />
+            </div>
+          </div>
         </div>
       )}
     </ScreenScaffold>

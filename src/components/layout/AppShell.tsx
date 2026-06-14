@@ -616,17 +616,6 @@ export function AppShell() {
         />
       </div>
 
-      {/* Mobile: a clean Google-Tasks-style floating "+" — always reachable,
-          especially once the top bar auto-hides on scroll. */}
-      <button
-        onClick={() => setCaptureOpen(true)}
-        className="md:hidden fixed bottom-5 end-5 z-40 w-14 h-14 rounded-2xl bg-primary-500 text-white shadow-lift flex items-center justify-center hover:bg-primary-600 active:scale-95 transition"
-        style={{ marginBottom: "env(safe-area-inset-bottom)" }}
-        aria-label="יצירה מהירה"
-      >
-        <Plus className="w-7 h-7" />
-      </button>
-
       <QuickCapture
         open={captureOpen}
         onClose={() => setCaptureOpen(false)}

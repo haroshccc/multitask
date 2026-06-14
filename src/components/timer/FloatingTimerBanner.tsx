@@ -209,9 +209,9 @@ export function FloatingTimerBanner() {
       className={cn(
         "fixed z-40 pointer-events-auto",
         !pos && "bottom-20 md:bottom-4 end-4",
-        "card !p-2 !pe-2.5 shadow-lift select-none",
-        "flex items-center gap-2",
-        "max-w-[calc(100vw-2rem)] sm:max-w-md",
+        "card !p-1.5 sm:!p-2 !pe-2 sm:!pe-2.5 shadow-lift select-none touch-none",
+        "flex items-center gap-1.5 sm:gap-2",
+        "max-w-[86vw] sm:max-w-md",
         isDragging
           ? "cursor-grabbing transition-none"
           : "cursor-grab transition-shadow",
@@ -229,14 +229,14 @@ export function FloatingTimerBanner() {
 
       <span
         className={cn(
-          "shrink-0 w-9 h-9 rounded-full flex items-center justify-center",
+          "shrink-0 w-7 h-7 sm:w-9 sm:h-9 rounded-full flex items-center justify-center",
           isRunning
             ? "bg-gradient-to-br from-primary-500 to-primary-600 text-white shadow-accent"
             : "bg-ink-100 text-ink-500",
         )}
         aria-hidden
       >
-        <Clock className="w-4 h-4" />
+        <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
       </span>
 
       <div className="flex-1 min-w-0">
@@ -253,7 +253,7 @@ export function FloatingTimerBanner() {
             {formatElapsed(elapsed)}
           </span>
         </div>
-        <div className="text-[11px] text-ink-500 truncate flex items-center gap-1 min-w-0">
+        <div className="text-[11px] text-ink-500 truncate hidden sm:flex items-center gap-1 min-w-0">
           {list ? (
             <span className="inline-flex items-center gap-0.5 shrink-0">
               <ListIcon emoji={list.emoji} className="w-3 h-3" />

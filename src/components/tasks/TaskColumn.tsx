@@ -292,7 +292,7 @@ export function TaskColumn({
         // Mobile: one list at a time — force ~full width regardless of the
         // desktop column divisor, so titles stay readable and you swipe
         // horizontally to the next list. `!` beats the inline calc() width.
-        "max-md:!w-[86vw]",
+        "max-md:!w-[92vw]",
         pinned && "bg-ink-50/95",
         isOver && "ring-2 ring-primary-400 border-primary-300"
       )}

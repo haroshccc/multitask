@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   SlidersHorizontal,
   BarChart3,
@@ -76,6 +77,9 @@ export function TasksChrome({
   className,
 }: TasksChromeProps) {
   const visibleListCount = lists.length - hiddenListIds.size;
+  // Mobile only: collapse all controls behind one button so the lists get the
+  // screen. Desktop keeps the bar inline as before.
+  const [expanded, setExpanded] = useState(false);
 
   return (
     <div
@@ -88,6 +92,31 @@ export function TasksChrome({
         סרגל
       </span>
 
+      {/* Mobile-only: collapse all controls behind one button. */}
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        aria-expanded={expanded}
+        title="אפשרויות"
+        className="md:hidden ms-auto inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-ink-700 hover:bg-ink-100 relative"
+      >
+        <SlidersHorizontal className="w-3.5 h-3.5" />
+        <span>אפשרויות</span>
+        {(filtersActiveCount > 0 || hiddenListIds.size > 0) && (
+          <span className="absolute -top-0.5 -end-0.5 w-2 h-2 rounded-full bg-primary-500" />
+        )}
+        <ChevronDown
+          className={cn("w-3.5 h-3.5 transition-transform", expanded && "rotate-180")}
+        />
+      </button>
+
+      {/* Controls — collapse on mobile, inline on desktop. */}
+      <div
+        className={cn(
+          "items-center gap-1.5 flex-wrap md:flex md:flex-1",
+          expanded ? "flex w-full" : "hidden"
+        )}
+      >
       {/* Lists popover */}
       <PopoverButton
         icon={<ListIcon2 className="w-3.5 h-3.5" />}
@@ -249,6 +278,7 @@ export function TasksChrome({
           icon={<Rows3 className="w-3 h-3" />}
           label="ערמה"
         />
+        </div>
       </div>
     </div>
   );

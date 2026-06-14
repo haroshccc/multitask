@@ -289,6 +289,10 @@ export function TaskColumn({
       ref={setNodeRef}
       className={cn(
         "shrink-0 self-start flex flex-col bg-white border border-ink-200 rounded-xl shadow-soft transition-colors",
+        // Mobile: one list at a time — force ~full width regardless of the
+        // desktop column divisor, so titles stay readable and you swipe
+        // horizontally to the next list. `!` beats the inline calc() width.
+        "max-md:!w-[86vw]",
         pinned && "bg-ink-50/95",
         isOver && "ring-2 ring-primary-400 border-primary-300"
       )}

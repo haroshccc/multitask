@@ -72,14 +72,6 @@ const NAV: NavItem[] = [
   { to: "/app/food", label: "אוכל", icon: UtensilsCrossed },
 ];
 
-// Primary destinations shown directly in the mobile bottom bar. Everything
-// else lives behind the "עוד" (More) tab, which opens the full nav drawer.
-const PRIMARY_MOBILE_NAV: NavItem[] = [
-  { to: "/app", label: "דשבורד", icon: Home, end: true },
-  { to: "/app/tasks", label: "משימות", icon: CheckSquare },
-  { to: "/app/calendar", label: "יומן", icon: CalendarIcon },
-];
-
 // Route codes for vim-style G→X navigation (physical key codes, layout-independent)
 const G_NAV: Record<string, string> = {
   KeyT: "/app/tasks",
@@ -549,48 +541,7 @@ export function AppShell() {
         </main>
       </div>
 
-      {/* Bottom tab bar (mobile only): 3 primary tabs + a raised center capture
-          FAB + a "More" tab that opens the full nav drawer. Keeps every tap
-          target comfortably wide instead of cramming all 11 screens. */}
-      <nav
-        className="md:hidden shrink-0 z-30 bg-white border-t border-ink-200 grid grid-cols-4 items-stretch h-16"
-        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
-      >
-        {PRIMARY_MOBILE_NAV.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.end}
-            title={item.label}
-            className={({ isActive }) =>
-              cn(
-                "min-w-0 flex flex-col items-center justify-center gap-0.5 text-[10px] leading-tight px-0.5",
-                isActive ? "text-primary-600" : "text-ink-500"
-              )
-            }
-          >
-            <item.icon className="w-5 h-5 shrink-0" />
-            <span className="truncate w-full text-center">{item.label}</span>
-          </NavLink>
-        ))}
-
-        {/* More — opens the full navigation drawer. Quick-create lives in the
-            top bar (+), so there's no floating button on mobile. */}
-        <button
-          onClick={() => setSidebarOpen(true)}
-          title="עוד"
-          className={cn(
-            "min-w-0 flex flex-col items-center justify-center gap-0.5 text-[10px] leading-tight px-0.5",
-            sidebarOpen ? "text-primary-600" : "text-ink-500"
-          )}
-        >
-          <Menu className="w-5 h-5 shrink-0" />
-          <span className="truncate w-full text-center">עוד</span>
-        </button>
-      </nav>
-
-      {/* Floating quick capture button — desktop only (mobile uses the docked
-          FAB inside the bottom bar above). */}
+      {/* Floating quick capture button — desktop only. */}
       <div className="hidden md:block">
         <AnimatedFab
           onClick={() => setCaptureOpen(true)}

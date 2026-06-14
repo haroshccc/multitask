@@ -130,7 +130,7 @@ export function Calendar() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [view, setView] = useState<CalendarView>("week");
+  const [view, setView] = useState<CalendarView>("agenda");
   const [anchor, setAnchor] = useState<Date>(() => new Date());
   const [layer, setLayer] = useState<LayerMode>("both");
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -1025,6 +1025,20 @@ export function Calendar() {
       chromeOpen={chromeOpen}
       onToggleChrome={() => setChromeOpen((v) => !v)}
       chromeIndicator={filtersActiveCount > 0}
+      mobileExtra={
+        // View picker stays exposed in the header row (a downward dropdown)
+        // even when the rest of the controls are minimized on mobile.
+        <select
+          value={view}
+          onChange={(e) => setView(e.target.value as CalendarView)}
+          aria-label="תצוגה"
+          className="rounded-lg border border-ink-200 bg-white px-2 py-2 text-sm font-medium text-ink-800"
+        >
+          <option value="agenda">אג׳נדה</option>
+          <option value="week">שבוע</option>
+          <option value="month">חודש</option>
+        </select>
+      }
     >
       <DragHoverPill />
       {taskMenu && (

@@ -95,6 +95,25 @@ export function AppShell() {
   // actions (theme/undo/redo/search/bell) hide behind a toggle. Desktop shows
   // everything inline.
   const [topBarOpen, setTopBarOpen] = useState(false);
+  // Mobile: auto-hide the top bar when scrolling down, reveal when scrolling
+  // up — reclaims vertical space without losing the menu/“+”.
+  const [headerHidden, setHeaderHidden] = useState(false);
+  const mainRef = useRef<HTMLElement>(null);
+  const lastScrollY = useRef(0);
+  const handleMainScroll = () => {
+    const el = mainRef.current;
+    if (!el) return;
+    if (typeof window !== "undefined" && window.innerWidth >= 768) {
+      if (headerHidden) setHeaderHidden(false);
+      return;
+    }
+    const y = el.scrollTop;
+    const last = lastScrollY.current;
+    if (Math.abs(y - last) < 8) return;
+    if (y > last && y > 56) setHeaderHidden(true);
+    else if (y < last) setHeaderHidden(false);
+    lastScrollY.current = y;
+  };
   const [captureOpen, setCaptureOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
@@ -252,7 +271,10 @@ export function AppShell() {
     <div className="h-dvh bg-ink-50 flex flex-col overflow-hidden">
       {/* Top bar — not sticky; lives in fixed-height flex row so it never scrolls */}
       <header className="shrink-0 z-30 bg-white border-b border-ink-200">
-      <div className="px-4 md:px-6 h-14 flex items-center justify-between gap-2">
+      <div className={cn(
+        "px-4 md:px-6 h-14 flex items-center justify-between gap-2 transition-[margin-top] duration-200 md:!mt-0",
+        headerHidden && "-mt-14"
+      )}>
         <div className="flex items-center gap-2 min-w-0">
           <button
             onClick={() => setSidebarOpen((v) => !v)}
@@ -557,7 +579,11 @@ export function AppShell() {
         )}
 
         {/* Main content — the only scrolling region */}
-        <main className="flex-1 min-w-0 min-h-0 overflow-y-auto">
+        <main
+          ref={mainRef}
+          onScroll={handleMainScroll}
+          className="flex-1 min-w-0 min-h-0 overflow-y-auto"
+        >
           <Outlet />
         </main>
       </div>

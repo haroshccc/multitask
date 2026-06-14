@@ -211,7 +211,7 @@ export function DateField({
         typeof document !== "undefined" &&
         createPortal(
           <PortalPopover ref={popoverRef} anchorRect={anchorRect}>
-            <div className="p-3 w-[272px]">
+            <div className="p-3 w-[min(272px,calc(100vw-1.5rem))]">
               {/* Quick chips */}
               {quickChips.length > 0 && (
                 <div className="flex items-center gap-1.5 mb-2">

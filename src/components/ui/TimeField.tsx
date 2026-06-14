@@ -148,7 +148,7 @@ export function TimeField({
                 onChange("");
               }
             }}
-            className="p-0.5 rounded-md text-ink-400 hover:text-danger-500 hover:bg-ink-100 cursor-pointer"
+            className="p-1 rounded-md text-ink-400 hover:text-danger-500 hover:bg-ink-100 cursor-pointer"
             aria-label="נקה שעה"
           >
             <X className="w-3.5 h-3.5" />
@@ -161,7 +161,7 @@ export function TimeField({
         typeof document !== "undefined" &&
         createPortal(
           <PortalPopover ref={popoverRef} anchorRect={anchorRect}>
-            <div className="p-3 w-[228px] space-y-3">
+            <div className="p-3 w-[min(228px,calc(100vw-1.5rem))] space-y-3">
               <div className="flex items-center justify-center">
                 <TimeSpinner
                   hours={parsed?.h ?? 9}

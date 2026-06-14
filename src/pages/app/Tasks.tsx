@@ -727,7 +727,7 @@ export function Tasks() {
             // the lists below them. Drag-and-drop still works because the
             // DndContext wraps both the sticky header and the scrolling body.
             <>
-              <div className="sticky top-0 z-30 bg-ink-50 -mx-1 px-1 pt-1 pb-2 space-y-2">
+              <div className="md:sticky md:top-0 z-30 bg-ink-50 -mx-1 px-1 pt-1 pb-2 space-y-2">
                 <div className={cn("space-y-2", chromeOpen ? "block" : "hidden md:block")}>
                 <TasksChrome
                   lists={lists.map((l) => ({

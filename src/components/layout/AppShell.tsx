@@ -96,23 +96,43 @@ export function AppShell() {
   // everything inline.
   const [topBarOpen, setTopBarOpen] = useState(false);
   // Mobile: auto-hide the top bar when scrolling down, reveal when scrolling
-  // up — reclaims vertical space without losing the menu/“+”.
+  // up — reclaims vertical space without losing the menu/“+”. Guarded against
+  // the layout-reflow feedback loop (hiding the bar resizes the scroll area,
+  // which fires another scroll event): a deadzone + a short lock after each
+  // toggle keep it from flickering.
   const [headerHidden, setHeaderHidden] = useState(false);
   const mainRef = useRef<HTMLElement>(null);
   const lastScrollY = useRef(0);
+  const lockUntil = useRef(0);
+  const ticking = useRef(false);
   const handleMainScroll = () => {
-    const el = mainRef.current;
-    if (!el) return;
-    if (typeof window !== "undefined" && window.innerWidth >= 768) {
-      if (headerHidden) setHeaderHidden(false);
-      return;
-    }
-    const y = el.scrollTop;
-    const last = lastScrollY.current;
-    if (Math.abs(y - last) < 8) return;
-    if (y > last && y > 56) setHeaderHidden(true);
-    else if (y < last) setHeaderHidden(false);
-    lastScrollY.current = y;
+    if (ticking.current) return;
+    ticking.current = true;
+    requestAnimationFrame(() => {
+      ticking.current = false;
+      const el = mainRef.current;
+      if (!el) return;
+      if (typeof window !== "undefined" && window.innerWidth >= 768) {
+        setHeaderHidden(false);
+        return;
+      }
+      const now = performance.now();
+      const y = el.scrollTop;
+      if (now < lockUntil.current) {
+        lastScrollY.current = y;
+        return;
+      }
+      const delta = y - lastScrollY.current;
+      if (Math.abs(delta) < 24) return; // deadzone — ignore small jitters
+      if (delta > 0 && y > 64) {
+        setHeaderHidden(true);
+        lockUntil.current = now + 350;
+      } else if (delta < 0) {
+        setHeaderHidden(false);
+        lockUntil.current = now + 350;
+      }
+      lastScrollY.current = y;
+    });
   };
   const [captureOpen, setCaptureOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);

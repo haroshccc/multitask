@@ -135,6 +135,9 @@ export function Calendar() {
   const [layer, setLayer] = useState<LayerMode>("both");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [statsOpen, setStatsOpen] = useState(false);
+  // Mobile: the entire control stack collapses behind the header "minimize"
+  // toggle (same concept as the Tasks screen). Default collapsed on mobile.
+  const [chromeOpen, setChromeOpen] = useState(false);
   // Scheduling mode: a side panel of list tasks the user drags onto the grid.
   const [scheduling, setScheduling] = useState(false);
   // Within scheduling mode: drag tasks (from lists) or meetings (from projects).
@@ -1014,7 +1017,15 @@ export function Calendar() {
   const lanesSideBySide = view === "day" || view === "agenda";
 
   return (
-    <ScreenScaffold title="יומן" subtitle="">
+    <ScreenScaffold
+      title="יומן"
+      subtitle=""
+      icon={<CalendarRange className="w-5 h-5" />}
+      chromeCollapsible
+      chromeOpen={chromeOpen}
+      onToggleChrome={() => setChromeOpen((v) => !v)}
+      chromeIndicator={filtersActiveCount > 0}
+    >
       <DragHoverPill />
       {taskMenu && (
         <TaskActionsMenu
@@ -1029,6 +1040,10 @@ export function Calendar() {
         <TimerLogPopup task={logTask} onClose={() => setLogTask(null)} />
       )}
       <div className="space-y-2">
+        {/* Mobile: the whole control stack (nav + views + frameworks +
+            scheduling/multi-user) collapses behind the header minimize toggle
+            so the grid starts at the very top. Desktop always shows it. */}
+        <div className={cn("space-y-2", chromeOpen ? "block" : "hidden md:block")}>
         <CalendarChrome
           view={view}
           onViewChange={setView}
@@ -1189,6 +1204,7 @@ export function Calendar() {
             <CalendarRange className="w-4 h-4" />
             {scheduling ? "סגרי מצב שיבוץ" : "מצב שיבוץ"}
           </button>
+        </div>
         </div>
 
         <div className="flex items-start gap-3">

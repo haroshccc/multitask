@@ -1042,18 +1042,30 @@ export function Calendar() {
       onToggleChrome={() => setChromeOpen((v) => !v)}
       chromeIndicator={filtersActiveCount > 0}
       mobileExtra={
-        // View picker stays exposed in the header row (a downward dropdown)
-        // even when the rest of the controls are minimized on mobile.
-        <select
-          value={view}
-          onChange={(e) => setView(e.target.value as CalendarView)}
-          aria-label="תצוגה"
-          className="rounded-lg border border-ink-200 bg-white px-2 py-2 text-sm font-medium text-ink-800"
-        >
-          <option value="agenda">אג׳נדה</option>
-          <option value="week">שבוע</option>
-          <option value="month">חודש</option>
-        </select>
+        // View switch stays exposed in the header row as three buttons
+        // (agenda / week / month) even when the rest is minimized on mobile.
+        <div className="inline-flex items-center rounded-lg border border-ink-200 bg-white overflow-hidden text-sm">
+          {([
+            ["agenda", "אג׳נדה"],
+            ["week", "שבוע"],
+            ["month", "חודש"],
+          ] as const).map(([v, label]) => (
+            <button
+              key={v}
+              type="button"
+              onClick={() => setView(v)}
+              aria-pressed={view === v}
+              className={cn(
+                "px-2.5 py-1.5 font-medium transition-colors",
+                view === v
+                  ? "bg-ink-900 text-white"
+                  : "text-ink-600 hover:bg-ink-50"
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       }
     >
       <DragHoverPill />

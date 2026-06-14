@@ -904,7 +904,7 @@ export function Tasks() {
       {newListDialogOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40" onClick={() => setNewListDialogOpen(false)}>
           <form
-            className="bg-white rounded-2xl shadow-lift p-6 w-80 flex flex-col gap-4"
+            className="bg-white rounded-2xl shadow-lift p-6 w-80 max-w-[calc(100vw-1.5rem)] flex flex-col gap-4"
             onClick={(e) => e.stopPropagation()}
             onSubmit={handleCreateListSubmit}
           >

@@ -14,6 +14,7 @@ import { CalendarChrome } from "@/components/calendar/CalendarChrome";
 import { CalendarDayView } from "@/components/calendar/CalendarDayView";
 import { CalendarWeekView } from "@/components/calendar/CalendarWeekView";
 import { CalendarMonthView } from "@/components/calendar/CalendarMonthView";
+import { CalendarMonthMobile } from "@/components/calendar/CalendarMonthMobile";
 import { CalendarAgendaView } from "@/components/calendar/CalendarAgendaView";
 import { CalendarStatsStrip } from "@/components/calendar/CalendarStatsStrip";
 import { EventEditModal } from "@/components/calendar/EventEditModal";
@@ -980,20 +981,35 @@ export function Calendar() {
     }
     if (view === "month") {
       return (
-        <CalendarMonthView
-          anchor={anchor}
-          items={bodyItems}
-          onItemClick={handleItemClick}
-          onItemContextMenu={handleItemContextMenu}
-          onDayClick={handleMonthDayClick}
-          onCellClick={handleMonthCellClick}
-          onItemDrop={handleItemDrop}
-          notesByDate={notes}
-          noteColorsByDate={noteColors}
-          frameworkBlocks={fwBlocks}
-          frameworkLabelsByDate={fwLabels}
-          onFrameworkBlockClick={cycleFrameworkBlock}
-        />
+        <>
+          {/* Mobile: compact dotted month; tapping a day jumps to its agenda. */}
+          <div className="md:hidden">
+            <CalendarMonthMobile
+              anchor={anchor}
+              items={bodyItems}
+              onDayClick={(day) => {
+                setAnchor(day);
+                setView("agenda");
+              }}
+            />
+          </div>
+          <div className="hidden md:block">
+            <CalendarMonthView
+              anchor={anchor}
+              items={bodyItems}
+              onItemClick={handleItemClick}
+              onItemContextMenu={handleItemContextMenu}
+              onDayClick={handleMonthDayClick}
+              onCellClick={handleMonthCellClick}
+              onItemDrop={handleItemDrop}
+              notesByDate={notes}
+              noteColorsByDate={noteColors}
+              frameworkBlocks={fwBlocks}
+              frameworkLabelsByDate={fwLabels}
+              onFrameworkBlockClick={cycleFrameworkBlock}
+            />
+          </div>
+        </>
       );
     }
     return (

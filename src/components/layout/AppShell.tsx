@@ -29,6 +29,7 @@ import {
   Sun,
   Keyboard,
   Sparkles,
+  MoreHorizontal,
 } from "lucide-react";
 import { useUndoStore, useCanUndo, useCanRedo } from "@/lib/undo/store";
 import { useAuth } from "@/lib/auth/AuthContext";
@@ -90,6 +91,10 @@ export function AppShell() {
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  // Mobile: the top bar collapses to just the "+" button; the rest of the
+  // actions (theme/undo/redo/search/bell) hide behind a toggle. Desktop shows
+  // everything inline.
+  const [topBarOpen, setTopBarOpen] = useState(false);
   const [captureOpen, setCaptureOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
@@ -286,6 +291,21 @@ export function AppShell() {
 
         {/* Right actions */}
         <div className="flex items-center gap-1">
+          {/* Mobile-only: collapse the top bar to just the "+" button. This
+              toggle sits rightmost so the revealed actions appear to its
+              left, between it and the "+". */}
+          <button
+            onClick={() => setTopBarOpen((v) => !v)}
+            className="md:hidden p-2 rounded-xl hover:bg-ink-100 shrink-0"
+            aria-expanded={topBarOpen}
+            aria-label="עוד פעולות"
+            title="עוד פעולות"
+          >
+            <MoreHorizontal className="w-5 h-5 text-ink-600" />
+          </button>
+
+          {/* Secondary actions — hidden on mobile until expanded. */}
+          <div className={cn("items-center gap-1", topBarOpen ? "flex" : "hidden md:flex")}>
           <button
             onClick={toggleTheme}
             className="inline-flex p-2 rounded-xl hover:bg-ink-100"
@@ -351,6 +371,7 @@ export function AppShell() {
           >
             <Keyboard className="w-5 h-5 text-ink-600" />
           </button>
+          </div>
           <button
             onClick={() => setCaptureOpen(true)}
             className="p-2 rounded-xl bg-primary-500 text-white hover:bg-primary-600"

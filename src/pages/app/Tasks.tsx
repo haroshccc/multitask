@@ -17,7 +17,7 @@ import {
   Columns,
   Tag,
   Upload,
-  ListTodo,
+  CheckSquare,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { ImportTasksModal } from "@/components/tasks/ImportTasksModal";
@@ -606,7 +606,7 @@ export function Tasks() {
     <ScreenScaffold
       title="משימות"
       subtitle="רשימות עמודה-עמודה, עץ היררכי מלא, סטופר, גרירה בין רשימות."
-      icon={<ListTodo className="w-5 h-5" />}
+      icon={<CheckSquare className="w-5 h-5" />}
       chromeCollapsible
       chromeOpen={chromeOpen}
       onToggleChrome={() => setChromeOpen((v) => !v)}

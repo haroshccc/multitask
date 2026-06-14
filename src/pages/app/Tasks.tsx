@@ -18,6 +18,7 @@ import {
   Tag,
   Upload,
   CheckSquare,
+  Inbox,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { ImportTasksModal } from "@/components/tasks/ImportTasksModal";
@@ -611,6 +612,23 @@ export function Tasks() {
       chromeOpen={chromeOpen}
       onToggleChrome={() => setChromeOpen((v) => !v)}
       chromeIndicator={filtersActiveCount > 0 || hiddenSet.size > 0}
+      mobileExtra={
+        <button
+          type="button"
+          onClick={() => setUnassignedOpen((v) => !v)}
+          aria-pressed={unassignedOpen}
+          title="לא משויכות"
+          className={cn(
+            "inline-flex items-center gap-1 rounded-lg px-2 py-2 text-sm font-medium",
+            unassignedOpen
+              ? "bg-primary-100 text-primary-700"
+              : "bg-ink-100 text-ink-700 hover:bg-ink-200"
+          )}
+        >
+          <Inbox className="w-4 h-4" />
+          <span className="tabular-nums">{counts.get("__unassigned__") ?? 0}</span>
+        </button>
+      }
       actions={
         <div className="relative">
           <button

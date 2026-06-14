@@ -30,6 +30,9 @@ interface ScreenScaffoldProps {
   onToggleChrome?: () => void;
   /** Dot on the toggle (e.g. active filters/hidden lists). */
   chromeIndicator?: boolean;
+  /** Extra control(s) rendered in the mobile compact header row (before the
+   *  page actions), e.g. a screen-specific toggle. */
+  mobileExtra?: ReactNode;
 }
 
 export function ScreenScaffold({
@@ -44,6 +47,7 @@ export function ScreenScaffold({
   chromeOpen,
   onToggleChrome,
   chromeIndicator,
+  mobileExtra,
 }: ScreenScaffoldProps) {
   return (
     <div
@@ -65,6 +69,7 @@ export function ScreenScaffold({
             {icon}
           </span>
           <div className="ms-auto flex items-center gap-1.5">
+            {mobileExtra}
             {actions}
             {chromeCollapsible && (
               <button

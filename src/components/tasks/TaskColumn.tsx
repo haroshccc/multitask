@@ -293,6 +293,9 @@ export function TaskColumn({
         // the desktop divisor width so titles stay readable and you swipe
         // horizontally to the next list. `!` beats the inline calc() width.
         "max-md:!w-[calc(100vw_-_1.5rem)]",
+        // Mobile: the card fills down to the bottom of the screen (no dead
+        // space below a short list); long lists just grow and the page scrolls.
+        "max-md:min-h-[calc(100dvh_-_9rem)]",
         pinned && "bg-ink-50/95",
         isOver && "ring-2 ring-primary-400 border-primary-300"
       )}

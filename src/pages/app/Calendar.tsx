@@ -1419,8 +1419,14 @@ export function Calendar() {
         </div>
       )}
       {/* Mobile: floating day-view banner opened from the compact month.
-          The month stays underneath; close with the X. */}
-      {mobileDayOpen && (
+          The month stays underneath; close with the X. Hidden while a
+          create/edit modal is open so that modal isn't covered by the
+          banner (it reappears when the modal closes). */}
+      {mobileDayOpen &&
+        !creating &&
+        !editingTaskId &&
+        !editingEventId &&
+        !editingNoteDate && (
         <div
           className="md:hidden fixed inset-0 z-50 flex items-center justify-center p-3 bg-ink-900/40"
           onClick={() => setMobileDayOpen(null)}

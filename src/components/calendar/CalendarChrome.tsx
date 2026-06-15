@@ -1,6 +1,8 @@
+import { useState } from "react";
 import {
   ChevronRight,
   ChevronLeft,
+  ChevronDown,
   SlidersHorizontal,
   BarChart3,
   Layers,
@@ -131,6 +133,11 @@ export function CalendarChrome(props: CalendarChromeProps) {
     onCreateTask,
   } = props;
 
+  // Mobile only: secondary controls (layer / lists / filter / stats / create)
+  // are collapsed behind one button so the grid gets the screen. Desktop keeps
+  // everything inline as before.
+  const [expanded, setExpanded] = useState(false);
+
   const step = (n: 1 | -1) => {
     if (view === "day") onAnchorChange(addDays(anchor, n));
     else if (view === "week" || view === "agenda")
@@ -207,7 +214,29 @@ export function CalendarChrome(props: CalendarChromeProps) {
           {dateLabel}
         </span>
 
-        <div className="ms-auto inline-flex items-center gap-1 flex-wrap">
+        {/* Mobile-only: one button collapses all secondary controls below. */}
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          aria-expanded={expanded}
+          title="אפשרויות"
+          className="md:hidden ms-auto inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-ink-700 hover:bg-ink-100 relative"
+        >
+          <SlidersHorizontal className="w-3.5 h-3.5" />
+          {(filtersActiveCount > 0 || hiddenListIds.size > 0) && (
+            <span className="absolute -top-0.5 -end-0.5 w-2 h-2 rounded-full bg-primary-500" />
+          )}
+          <ChevronDown
+            className={cn("w-3.5 h-3.5 transition-transform", expanded && "rotate-180")}
+          />
+        </button>
+
+        <div
+          className={cn(
+            "items-center gap-1 flex-wrap md:ms-auto",
+            expanded ? "flex w-full md:w-auto" : "hidden md:flex"
+          )}
+        >
           {/* Layer toggle popover */}
           <PopoverButton
             icon={<Layers className="w-3.5 h-3.5" />}

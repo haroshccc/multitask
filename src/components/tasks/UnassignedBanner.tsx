@@ -84,6 +84,9 @@ export function UnassignedBanner({
         ref={setNodeRef}
         className={cn(
           "bg-white border border-ink-200 rounded-xl shadow-soft transition-colors",
+          // Mobile: the collapsed banner is replaced by a toggle in the screen
+          // header row, so hide it here. Desktop keeps the strip/bar.
+          "max-md:hidden",
           // In stack mode (fullWidth) we always render the thin horizontal
           // bar, even on desktop — that's what the user asked for.
           fullWidth ? "w-full" : "w-full md:w-10 md:flex-shrink-0",

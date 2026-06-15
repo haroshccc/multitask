@@ -20,6 +20,7 @@ import {
 } from "@/lib/hooks";
 import { cn } from "@/lib/utils/cn";
 import { ReorderDayCard } from "./BriefReorderDayCard";
+import { DateTimeField } from "@/components/ui/DateField";
 import type {
   DailyBrief,
   Proposal,
@@ -534,16 +535,12 @@ function ProposalEditor({
       return (
         <div className="bg-white border border-ink-200 rounded-md p-2 mb-2 space-y-2">
           <Field label="זמן חדש">
-            <input
-              type="datetime-local"
+            <DateTimeField
               value={toLocalInput(p.new_scheduled_at)}
-              onChange={(e) =>
-                onChange({
-                  ...p,
-                  new_scheduled_at: fromLocalInput(e.target.value),
-                })
+              onChange={(v) =>
+                onChange({ ...p, new_scheduled_at: fromLocalInput(v) })
               }
-              className="text-xs border border-ink-200 rounded px-2 py-1 w-full"
+              className="w-full"
             />
           </Field>
           {"duration_minutes" in p && (
@@ -580,23 +577,21 @@ function ProposalEditor({
           </Field>
           <div className="grid grid-cols-2 gap-2">
             <Field label="התחלה">
-              <input
-                type="datetime-local"
+              <DateTimeField
                 value={toLocalInput(p.starts_at)}
-                onChange={(e) =>
-                  onChange({ ...p, starts_at: fromLocalInput(e.target.value) })
+                onChange={(v) =>
+                  onChange({ ...p, starts_at: fromLocalInput(v) })
                 }
-                className="text-xs border border-ink-200 rounded px-2 py-1 w-full"
+                className="w-full"
               />
             </Field>
             <Field label="סיום">
-              <input
-                type="datetime-local"
+              <DateTimeField
                 value={toLocalInput(p.ends_at)}
-                onChange={(e) =>
-                  onChange({ ...p, ends_at: fromLocalInput(e.target.value) })
+                onChange={(v) =>
+                  onChange({ ...p, ends_at: fromLocalInput(v) })
                 }
-                className="text-xs border border-ink-200 rounded px-2 py-1 w-full"
+                className="w-full"
               />
             </Field>
           </div>

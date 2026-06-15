@@ -17,7 +17,10 @@ import {
   Columns,
   Tag,
   Upload,
+  CheckSquare,
+  Inbox,
 } from "lucide-react";
+import { cn } from "@/lib/utils/cn";
 import { ImportTasksModal } from "@/components/tasks/ImportTasksModal";
 import { MAX_VISIBLE_BOUNDS } from "@/lib/hooks/useMaxVisibleColumns";
 import { ScreenScaffold } from "@/components/layout/ScreenScaffold";
@@ -76,6 +79,9 @@ export function Tasks() {
   const [newListDialogOpen, setNewListDialogOpen] = useState(false);
   const [newListName, setNewListName] = useState("");
   const [pageMenuOpen, setPageMenuOpen] = useState(false);
+  // Mobile: the whole chrome (lists/filter/stats/layout) collapses under one
+  // toggle in the compact header. Default minimized so the first list is high.
+  const [chromeOpen, setChromeOpen] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [rowDisplayOpen, setRowDisplayOpen] = useState(false);
   const [statusesOpen, setStatusesOpen] = useState(false);
@@ -611,6 +617,28 @@ export function Tasks() {
     <ScreenScaffold
       title="משימות"
       subtitle="רשימות עמודה-עמודה, עץ היררכי מלא, סטופר, גרירה בין רשימות."
+      icon={<CheckSquare className="w-5 h-5" />}
+      chromeCollapsible
+      chromeOpen={chromeOpen}
+      onToggleChrome={() => setChromeOpen((v) => !v)}
+      chromeIndicator={filtersActiveCount > 0 || hiddenSet.size > 0}
+      mobileExtra={
+        <button
+          type="button"
+          onClick={() => setUnassignedOpen((v) => !v)}
+          aria-pressed={unassignedOpen}
+          title="לא משויכות"
+          className={cn(
+            "inline-flex items-center gap-1 rounded-lg px-2 py-2 text-sm font-medium",
+            unassignedOpen
+              ? "bg-primary-100 text-primary-700"
+              : "bg-ink-100 text-ink-700 hover:bg-ink-200"
+          )}
+        >
+          <Inbox className="w-4 h-4" />
+          <span className="tabular-nums">{counts.get("__unassigned__") ?? 0}</span>
+        </button>
+      }
       actions={
         <div className="relative">
           <button
@@ -620,7 +648,7 @@ export function Tasks() {
             title="הגדרות הדף"
           >
             <SettingsIcon className="w-4 h-4" />
-            <span>הגדרות הדף</span>
+            <span className="hidden sm:inline">הגדרות הדף</span>
           </button>
           {pageMenuOpen && (
             <>
@@ -727,7 +755,8 @@ export function Tasks() {
             // the lists below them. Drag-and-drop still works because the
             // DndContext wraps both the sticky header and the scrolling body.
             <>
-              <div className="sticky top-0 z-30 bg-ink-50 -mx-1 px-1 pt-1 pb-2 space-y-2">
+              <div className="md:sticky md:top-0 z-30 bg-ink-50 -mx-1 px-1 pt-1 pb-2 space-y-2">
+                <div className={cn("space-y-2", chromeOpen ? "block" : "hidden md:block")}>
                 <TasksChrome
                   lists={lists.map((l) => ({
                     id: l.id,
@@ -766,6 +795,7 @@ export function Tasks() {
                     onToggle={() => setStatsOpen(false)}
                   />
                 )}
+                </div>
                 <UnassignedBanner
                   open={unassignedOpen}
                   onToggle={() => setUnassignedOpen((v) => !v)}
@@ -801,6 +831,7 @@ export function Tasks() {
             // On mobile: stack vertically. On md+: side-by-side with
             // Unassigned on the leading (right in RTL) edge.
             <>
+              <div className={cn("space-y-2", chromeOpen ? "block" : "hidden md:block")}>
               <TasksChrome
                 lists={lists.map((l) => ({
                   id: l.id,
@@ -839,6 +870,7 @@ export function Tasks() {
                   onToggle={() => setStatsOpen(false)}
                 />
               )}
+              </div>
               <div className="flex flex-col md:flex-row items-stretch gap-3 min-h-[calc(100vh-340px)]">
                 <UnassignedBanner
                   open={unassignedOpen}
@@ -914,7 +946,7 @@ export function Tasks() {
       {newListDialogOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40" onClick={() => setNewListDialogOpen(false)}>
           <form
-            className="bg-white rounded-2xl shadow-lift p-6 w-80 flex flex-col gap-4"
+            className="bg-white rounded-2xl shadow-lift p-6 w-80 max-w-[calc(100vw-1.5rem)] flex flex-col gap-4"
             onClick={(e) => e.stopPropagation()}
             onSubmit={handleCreateListSubmit}
           >

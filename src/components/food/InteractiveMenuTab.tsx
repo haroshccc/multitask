@@ -26,6 +26,7 @@ import {
 import type { MealWithIngredients } from "@/lib/services/food";
 import { computeMealNutrition, round1 } from "@/lib/food/nutrition";
 import { pushUndo } from "@/lib/undo/store";
+import { DateField } from "@/components/ui/DateField";
 
 // =============================================================================
 // "Wolt-like" interactive menu — pick which meals you want for which day(s)
@@ -387,29 +388,31 @@ export function InteractiveMenuTab() {
         {/* Date inputs — only when the mode requires them. */}
         {(mode === "specific" || mode === "range") && (
           <div className="flex items-center gap-2 flex-wrap">
-            <input
-              type="date"
+            <DateField
               value={from}
-              onChange={(e) => {
-                const v = e.target.value;
+              onChange={(v) => {
                 setFrom(v);
                 if (mode === "specific") setTo(v);
                 else if (v > to) setTo(v);
                 setDirty(true);
               }}
-              className="field text-sm py-1.5 w-auto"
+              className="w-40"
+              required
+              label="מתאריך"
             />
             {mode === "range" && (
               <>
                 <span className="text-xs text-ink-500">עד</span>
-                <input
-                  type="date"
+                <DateField
                   value={to}
-                  onChange={(e) => {
-                    setTo(e.target.value);
+                  min={from || undefined}
+                  onChange={(v) => {
+                    setTo(v);
                     setDirty(true);
                   }}
-                  className="field text-sm py-1.5 w-auto"
+                  className="w-40"
+                  required
+                  label="עד תאריך"
                 />
               </>
             )}

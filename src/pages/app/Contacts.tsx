@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Plus,
   Loader2,
@@ -25,6 +25,7 @@ import {
   type ContactType,
 } from "@/lib/hooks/useContacts";
 import { cn } from "@/lib/utils/cn";
+import { useMediaQuery } from "@/lib/hooks/useMediaQuery";
 
 const VIEW_KEY = "multitask.contacts.view";
 type ViewMode = "table" | "cards";
@@ -66,10 +67,17 @@ export function Contacts() {
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [editId, setEditId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const isMobile = useMediaQuery("(max-width: 767px)");
   const [view, setView] = useState<ViewMode>(() => {
     if (typeof window === "undefined") return "table";
-    return localStorage.getItem(VIEW_KEY) === "cards" ? "cards" : "table";
+    const stored = localStorage.getItem(VIEW_KEY);
+    return stored === "cards" || stored === "table" ? stored : "table";
   });
+  // On phones the 820px-wide table forces horizontal scrolling, so default to
+  // the card view when the user hasn't explicitly chosen one yet.
+  useEffect(() => {
+    if (isMobile && !localStorage.getItem(VIEW_KEY)) setView("cards");
+  }, [isMobile]);
   const setViewPersist = (v: ViewMode) => {
     setView(v);
     if (typeof window !== "undefined") localStorage.setItem(VIEW_KEY, v);

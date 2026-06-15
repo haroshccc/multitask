@@ -1,5 +1,5 @@
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth/AuthContext";
 import { ScreenScaffold } from "@/components/layout/ScreenScaffold";
@@ -14,6 +14,7 @@ import { CalendarChrome } from "@/components/calendar/CalendarChrome";
 import { CalendarDayView } from "@/components/calendar/CalendarDayView";
 import { CalendarWeekView } from "@/components/calendar/CalendarWeekView";
 import { CalendarMonthView } from "@/components/calendar/CalendarMonthView";
+import { CalendarMonthMobile } from "@/components/calendar/CalendarMonthMobile";
 import { CalendarAgendaView } from "@/components/calendar/CalendarAgendaView";
 import { CalendarStatsStrip } from "@/components/calendar/CalendarStatsStrip";
 import { EventEditModal } from "@/components/calendar/EventEditModal";
@@ -35,6 +36,8 @@ import {
   CheckSquare,
   UsersRound,
   ChevronDown,
+  X,
+  Plus,
 } from "lucide-react";
 import {
   useCalendarDayNotes,
@@ -52,6 +55,7 @@ import {
   startOfMonth,
   endOfMonth,
   startOfWeek,
+  formatDayLong,
   taskToItem,
   taskDeadlineToItem,
   timeEntryToStripe,
@@ -83,6 +87,8 @@ import {
   useFrameworkContentForMany,
   useSetBlockOccurrence,
 } from "@/lib/hooks/useFrameworks";
+import { useMealPlanDays, useMeals } from "@/lib/hooks/useFood";
+import { MEAL_TIME_LABELS, type MealTimeKey } from "@/lib/types/domain";
 import {
   projectFrameworkBlocks,
   projectFrameworkDayLabels,
@@ -110,6 +116,16 @@ const MOBILE_BREAKPOINT_PX = 640;
 // grid will overflow gracefully if the actual chrome is taller.
 const VERTICAL_CHROME_RESERVE = 280;
 
+// Sort hour for the synthetic all-day meal chips — keeps בוקר before
+// צהריים before ערב inside the all-day strip without a timed block.
+const MEAL_TIME_SORT_HOUR: Record<string, number> = {
+  breakfast: 6,
+  lunch: 12,
+  between: 16,
+  dinner: 19,
+  snack: 21,
+};
+
 // Stable empty references for non-primary lanes in multi-user mode, where we
 // suppress the shared day-notes / framework overlays (they'd repeat per lane).
 const EMPTY_DATE_MAP = new Map<string, string>();
@@ -120,11 +136,17 @@ export function Calendar() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [view, setView] = useState<CalendarView>("week");
+  const [view, setView] = useState<CalendarView>("agenda");
   const [anchor, setAnchor] = useState<Date>(() => new Date());
   const [layer, setLayer] = useState<LayerMode>("both");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [statsOpen, setStatsOpen] = useState(false);
+  // Mobile: the entire control stack collapses behind the header "minimize"
+  // toggle (same concept as the Tasks screen). Default collapsed on mobile.
+  const [chromeOpen, setChromeOpen] = useState(false);
+  // Mobile month view: tapping a day opens a floating day-view banner over the
+  // month (edit/add then close with the X). Null = closed.
+  const [mobileDayOpen, setMobileDayOpen] = useState<Date | null>(null);
   // Scheduling mode: a side panel of list tasks the user drags onto the grid.
   const [scheduling, setScheduling] = useState(false);
   // Within scheduling mode: drag tasks (from lists) or meetings (from projects).
@@ -278,6 +300,64 @@ export function Calendar() {
     return m;
   }, [lists]);
 
+  // ── Meals overlay ─────────────────────────────────────────────────────────
+  // The current user's planned menu (meal_plan_days) rendered as all-day
+  // chips — one per (date, meal-time). Synthetic items: clicking navigates
+  // to the food module instead of opening an event modal (see the `__meal`
+  // guard in handleItemClick). Days without a plan contribute nothing.
+  const { data: mealPlanRows = [] } = useMealPlanDays(
+    dateKey(range.from),
+    dateKey(range.to)
+  );
+  const { data: meals = [] } = useMeals();
+  const mealItems: CalendarItem[] = useMemo(() => {
+    const nameById = new Map(meals.map((m) => [m.id, m.name] as const));
+    const groups = new Map<
+      string,
+      { date: string; mealTime: string; names: string[] }
+    >();
+    for (const r of mealPlanRows) {
+      if (r.user_id !== user?.id) continue;
+      const key = `${r.date}:${r.meal_time}`;
+      let g = groups.get(key);
+      if (!g) {
+        g = { date: r.date, mealTime: r.meal_time, names: [] };
+        groups.set(key, g);
+      }
+      const name = nameById.get(r.meal_id);
+      if (name) g.names.push(name);
+    }
+    const out: CalendarItem[] = [];
+    for (const g of groups.values()) {
+      if (g.names.length === 0) continue;
+      const [y, m, d] = g.date.split("-").map(Number);
+      const hour = MEAL_TIME_SORT_HOUR[g.mealTime] ?? 12;
+      const start = new Date(y, (m ?? 1) - 1, d ?? 1, hour, 0, 0, 0);
+      const label =
+        MEAL_TIME_LABELS[g.mealTime as MealTimeKey] ?? g.mealTime;
+      const id = `meal:${g.date}:${g.mealTime}`;
+      out.push({
+        id,
+        kind: "event",
+        title: `🍽️ ${label}: ${g.names.join(", ")}`,
+        description: "תפריט מתוכנן — לחיצה פותחת את מודול האוכל",
+        start,
+        end: new Date(start.getTime() + 60 * 60_000),
+        allDay: true,
+        color: "#f59e0b",
+        listId: null,
+        calendarId: null,
+        completed: false,
+        source: {
+          __meal: true,
+          id,
+          owner_id: user?.id ?? "",
+        } as unknown as CalendarItem["source"],
+      });
+    }
+    return out;
+  }, [mealPlanRows, meals, user?.id]);
+
   const items: CalendarItem[] = useMemo(() => {
     const out: CalendarItem[] = [];
     if (layer !== "events") {
@@ -342,6 +422,8 @@ export function Calendar() {
         if (dl) out.push(dl);
       }
     }
+    // Meals overlay rides along regardless of the task/event layer toggle.
+    out.push(...mealItems);
     if (layer !== "tasks") {
       for (const e of events) {
         // Calendar visibility (via the same `hiddenLists` set, which holds
@@ -399,6 +481,7 @@ export function Calendar() {
     listColorById,
     calendarColorById,
     range,
+    mealItems,
   ]);
 
   // ── Multi-user lanes ──────────────────────────────────────────────────────
@@ -517,6 +600,22 @@ export function Calendar() {
 
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
+
+  // Allow ?event=<id> in the URL to pre-open the EventEditModal — used by
+  // global search and the dashboard agenda. The param is stripped once
+  // consumed so closing the modal doesn't snap it back open (mirrors the
+  // ?edit= pattern on the Tasks screen).
+  const [urlParams, setUrlParams] = useSearchParams();
+  useEffect(() => {
+    const eventId = urlParams.get("event");
+    if (eventId && eventId !== editingEventId) {
+      setEditingEventId(eventId);
+      const next = new URLSearchParams(urlParams);
+      next.delete("event");
+      setUrlParams(next, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlParams]);
   /**
    * Single "create" state shared by event and task. The user can flip
    * between the two via the picker rendered inside the modal's `topSlot`.
@@ -554,6 +653,11 @@ export function Calendar() {
   }, []);
 
   const handleItemClick = (item: CalendarItem) => {
+    // Synthetic meal chips deep-link to the food module.
+    if ((item.source as { __meal?: boolean }).__meal) {
+      navigate("/app/food");
+      return;
+    }
     if (item.kind === "task" || item.kind === "deadline")
       setEditingTaskId((item.source as { id: string }).id);
     else setEditingEventId((item.source as { id: string }).id);
@@ -903,20 +1007,33 @@ export function Calendar() {
     }
     if (view === "month") {
       return (
-        <CalendarMonthView
-          anchor={anchor}
-          items={bodyItems}
-          onItemClick={handleItemClick}
-          onItemContextMenu={handleItemContextMenu}
-          onDayClick={handleMonthDayClick}
-          onCellClick={handleMonthCellClick}
-          onItemDrop={handleItemDrop}
-          notesByDate={notes}
-          noteColorsByDate={noteColors}
-          frameworkBlocks={fwBlocks}
-          frameworkLabelsByDate={fwLabels}
-          onFrameworkBlockClick={cycleFrameworkBlock}
-        />
+        <>
+          {/* Mobile: compact dotted month; tapping a day opens a floating
+              day-view banner over the month (see overlay below). */}
+          <div className="md:hidden">
+            <CalendarMonthMobile
+              anchor={anchor}
+              items={bodyItems}
+              onDayClick={(day) => setMobileDayOpen(day)}
+            />
+          </div>
+          <div className="hidden md:block">
+            <CalendarMonthView
+              anchor={anchor}
+              items={bodyItems}
+              onItemClick={handleItemClick}
+              onItemContextMenu={handleItemContextMenu}
+              onDayClick={handleMonthDayClick}
+              onCellClick={handleMonthCellClick}
+              onItemDrop={handleItemDrop}
+              notesByDate={notes}
+              noteColorsByDate={noteColors}
+              frameworkBlocks={fwBlocks}
+              frameworkLabelsByDate={fwLabels}
+              onFrameworkBlockClick={cycleFrameworkBlock}
+            />
+          </div>
+        </>
       );
     }
     return (
@@ -940,7 +1057,41 @@ export function Calendar() {
   const lanesSideBySide = view === "day" || view === "agenda";
 
   return (
-    <ScreenScaffold title="יומן" subtitle="">
+    <ScreenScaffold
+      title="יומן"
+      subtitle=""
+      icon={<CalendarRange className="w-5 h-5" />}
+      chromeCollapsible
+      chromeOpen={chromeOpen}
+      onToggleChrome={() => setChromeOpen((v) => !v)}
+      chromeIndicator={filtersActiveCount > 0}
+      mobileExtra={
+        // View switch stays exposed in the header row as three buttons
+        // (agenda / week / month) even when the rest is minimized on mobile.
+        <div className="inline-flex items-center rounded-lg border border-ink-200 bg-white overflow-hidden text-sm">
+          {([
+            ["agenda", "אג׳נדה"],
+            ["week", "שבוע"],
+            ["month", "חודש"],
+          ] as const).map(([v, label]) => (
+            <button
+              key={v}
+              type="button"
+              onClick={() => setView(v)}
+              aria-pressed={view === v}
+              className={cn(
+                "px-2.5 py-1.5 font-medium transition-colors",
+                view === v
+                  ? "bg-ink-900 text-white"
+                  : "text-ink-600 hover:bg-ink-50"
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      }
+    >
       <DragHoverPill />
       {taskMenu && (
         <TaskActionsMenu
@@ -955,6 +1106,10 @@ export function Calendar() {
         <TimerLogPopup task={logTask} onClose={() => setLogTask(null)} />
       )}
       <div className="space-y-2">
+        {/* Mobile: the whole control stack (nav + views + frameworks +
+            scheduling/multi-user) collapses behind the header minimize toggle
+            so the grid starts at the very top. Desktop always shows it. */}
+        <div className={cn("space-y-2", chromeOpen ? "block" : "hidden md:block")}>
         <CalendarChrome
           view={view}
           onViewChange={setView}
@@ -1116,6 +1271,7 @@ export function Calendar() {
             {scheduling ? "סגרי מצב שיבוץ" : "מצב שיבוץ"}
           </button>
         </div>
+        </div>
 
         <div className="flex items-start gap-3">
           {scheduling &&
@@ -1262,7 +1418,7 @@ export function Calendar() {
       {newListDialogOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40" onClick={() => setNewListDialogOpen(false)}>
           <form
-            className="bg-white rounded-2xl shadow-lift p-6 w-80 flex flex-col gap-4"
+            className="bg-white rounded-2xl shadow-lift p-6 w-80 max-w-[calc(100vw-1.5rem)] flex flex-col gap-4"
             onClick={(e) => e.stopPropagation()}
             onSubmit={handleCreateListSubmit}
           >
@@ -1280,6 +1436,72 @@ export function Calendar() {
               <button type="submit" className="btn-dark text-sm" disabled={!newListName.trim()}>יצירה</button>
             </div>
           </form>
+        </div>
+      )}
+      {/* Mobile: floating day-view banner opened from the compact month.
+          The month stays underneath; close with the X. Hidden while a
+          create/edit modal is open so that modal isn't covered by the
+          banner (it reappears when the modal closes). */}
+      {mobileDayOpen &&
+        !creating &&
+        !editingTaskId &&
+        !editingEventId &&
+        !editingNoteDate && (
+        <div
+          className="md:hidden fixed inset-0 z-50 flex items-center justify-center p-3 bg-ink-900/40"
+          onClick={() => setMobileDayOpen(null)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-lift w-full max-w-md max-h-[85vh] flex flex-col overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+            dir="rtl"
+          >
+            <div className="flex items-center gap-2 px-3 py-2 border-b border-ink-200 shrink-0">
+              <h3 className="font-semibold text-ink-900 text-sm flex-1 truncate">
+                {formatDayLong(mobileDayOpen)}
+              </h3>
+              <button
+                type="button"
+                onClick={() => {
+                  const start = new Date(mobileDayOpen);
+                  start.setHours(effectiveRange.hourStart, 0, 0, 0);
+                  handleCreateAt(start);
+                }}
+                className="p-1.5 rounded-md text-ink-600 hover:bg-ink-100"
+                title="הוספת משימה/אירוע"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setMobileDayOpen(null)}
+                className="p-1.5 rounded-md text-ink-500 hover:bg-ink-100"
+                title="סגירה"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-2">
+              <CalendarDayView
+                date={mobileDayOpen}
+                items={items}
+                actualStripes={actualStripes}
+                hourStart={effectiveRange.hourStart}
+                hourEnd={effectiveRange.hourEnd}
+                hourHeight={dynamicHourHeightDay}
+                onItemClick={handleItemClick}
+                onItemContextMenu={handleItemContextMenu}
+                onCreateAt={handleCreateAt}
+                onItemDrop={handleItemDrop}
+                dayNote={notesByDate.get(dateKey(mobileDayOpen))}
+                dayNoteColor={noteColorsByDate.get(dateKey(mobileDayOpen))}
+                onDateNoteClick={setEditingNoteDate}
+                frameworkBlocks={frameworkBlocks}
+                frameworkLabelsByDate={frameworkLabelsByDate}
+                onFrameworkBlockClick={cycleFrameworkBlock}
+              />
+            </div>
+          </div>
         </div>
       )}
     </ScreenScaffold>

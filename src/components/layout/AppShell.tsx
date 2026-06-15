@@ -20,14 +20,23 @@ import {
   Bell,
   Menu,
   X,
+  StickyNote,
+  Phone,
+  Download,
   Undo2,
   Redo2,
+  Moon,
+  Sun,
   Keyboard,
   Sparkles,
+  MoreHorizontal,
 } from "lucide-react";
 import { useUndoStore, useCanUndo, useCanRedo } from "@/lib/undo/store";
 import { useAuth } from "@/lib/auth/AuthContext";
 import { useRealtimeSync } from "@/lib/hooks/useRealtimeSync";
+import { useEventReminders } from "@/lib/hooks/useEventReminders";
+import { useTheme } from "@/lib/hooks/useTheme";
+import { useInstallPrompt } from "@/lib/hooks/useInstallPrompt";
 import { useUnreadNotificationsCount } from "@/lib/hooks/useNotifications";
 import { cn } from "@/lib/utils/cn";
 import { QuickCapture } from "@/components/capture/QuickCapture";
@@ -82,6 +91,49 @@ export function AppShell() {
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  // Mobile: the top bar collapses to just the "+" button; the rest of the
+  // actions (theme/undo/redo/search/bell) hide behind a toggle. Desktop shows
+  // everything inline.
+  const [topBarOpen, setTopBarOpen] = useState(false);
+  // Mobile: auto-hide the top bar when scrolling down, reveal when scrolling
+  // up — reclaims vertical space without losing the menu/“+”. Guarded against
+  // the layout-reflow feedback loop (hiding the bar resizes the scroll area,
+  // which fires another scroll event): a deadzone + a short lock after each
+  // toggle keep it from flickering.
+  const [headerHidden, setHeaderHidden] = useState(false);
+  const mainRef = useRef<HTMLElement>(null);
+  const lastScrollY = useRef(0);
+  const lockUntil = useRef(0);
+  const ticking = useRef(false);
+  const handleMainScroll = () => {
+    if (ticking.current) return;
+    ticking.current = true;
+    requestAnimationFrame(() => {
+      ticking.current = false;
+      const el = mainRef.current;
+      if (!el) return;
+      if (typeof window !== "undefined" && window.innerWidth >= 768) {
+        setHeaderHidden(false);
+        return;
+      }
+      const now = performance.now();
+      const y = el.scrollTop;
+      if (now < lockUntil.current) {
+        lastScrollY.current = y;
+        return;
+      }
+      const delta = y - lastScrollY.current;
+      if (Math.abs(delta) < 24) return; // deadzone — ignore small jitters
+      if (delta > 0 && y > 64) {
+        setHeaderHidden(true);
+        lockUntil.current = now + 350;
+      } else if (delta < 0) {
+        setHeaderHidden(false);
+        lockUntil.current = now + 350;
+      }
+      lastScrollY.current = y;
+    });
+  };
   const [captureOpen, setCaptureOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
@@ -103,6 +155,12 @@ export function AppShell() {
   // Subscribe the whole session to Realtime invalidations for the active org.
   // Must stay mounted at AppShell level — DO NOT move into individual screens.
   useRealtimeSync();
+
+  // Event-start reminders (system notifications) — app-wide, like realtime.
+  useEventReminders();
+
+  const { theme, toggle: toggleTheme } = useTheme();
+  const { canInstall, promptInstall } = useInstallPrompt();
 
   const canUndo = useCanUndo();
   const canRedo = useCanRedo();
@@ -230,10 +288,13 @@ export function AppShell() {
 
   return (
     <FocusSessionProvider>
-    <div className="h-screen bg-ink-50 flex flex-col overflow-hidden">
+    <div className="h-dvh bg-ink-50 flex flex-col overflow-hidden">
       {/* Top bar — not sticky; lives in fixed-height flex row so it never scrolls */}
       <header className="shrink-0 z-30 bg-white border-b border-ink-200">
-      <div className="px-4 md:px-6 h-14 flex items-center justify-between gap-2">
+      <div className={cn(
+        "px-4 md:px-6 h-14 flex items-center justify-between gap-2 transition-[margin-top] duration-200 md:!mt-0",
+        headerHidden && "-mt-14"
+      )}>
         <div className="flex items-center gap-2 min-w-0">
           <button
             onClick={() => setSidebarOpen((v) => !v)}
@@ -272,6 +333,33 @@ export function AppShell() {
 
         {/* Right actions */}
         <div className="flex items-center gap-1">
+          {/* Mobile-only: collapse the top bar to just the "+" button. This
+              toggle sits rightmost so the revealed actions appear to its
+              left, between it and the "+". */}
+          <button
+            onClick={() => setTopBarOpen((v) => !v)}
+            className="md:hidden p-2 rounded-xl hover:bg-ink-100 shrink-0"
+            aria-expanded={topBarOpen}
+            aria-label="עוד פעולות"
+            title="עוד פעולות"
+          >
+            <MoreHorizontal className="w-5 h-5 text-ink-600" />
+          </button>
+
+          {/* Secondary actions — hidden on mobile until expanded. */}
+          <div className={cn("items-center gap-1", topBarOpen ? "flex" : "hidden md:flex")}>
+          <button
+            onClick={toggleTheme}
+            className="inline-flex p-2 rounded-xl hover:bg-ink-100"
+            aria-label={theme === "dark" ? "מצב בהיר" : "מצב כהה"}
+            title={theme === "dark" ? "מצב בהיר" : "מצב כהה (בטא)"}
+          >
+            {theme === "dark" ? (
+              <Sun className="w-5 h-5 text-ink-600" />
+            ) : (
+              <Moon className="w-5 h-5 text-ink-600" />
+            )}
+          </button>
           <button
             onClick={() => useUndoStore.getState().undo()}
             disabled={!canUndo}
@@ -325,6 +413,7 @@ export function AppShell() {
           >
             <Keyboard className="w-5 h-5 text-ink-600" />
           </button>
+          </div>
           <button
             onClick={() => setCaptureOpen(true)}
             className="p-2 rounded-xl bg-primary-500 text-white hover:bg-primary-600"
@@ -396,6 +485,28 @@ export function AppShell() {
               onClick={(e) => e.stopPropagation()}
             >
               <nav className="flex flex-col gap-1">
+                {/* Quick actions — the two dedicated capture surfaces. */}
+                <button
+                  onClick={() => {
+                    setSidebarOpen(false);
+                    navigate("/app/note");
+                  }}
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm bg-primary-50 text-primary-700 hover:bg-primary-100 text-start"
+                >
+                  <StickyNote className="w-5 h-5" />
+                  <span>הערה מהירה</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setSidebarOpen(false);
+                    navigate("/app/record");
+                  }}
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm bg-primary-50 text-primary-700 hover:bg-primary-100 text-start"
+                >
+                  <Phone className="w-5 h-5" />
+                  <span>הקלטת פגישה/שיחה</span>
+                </button>
+                <div className="h-px bg-ink-200 my-2" />
                 {NAV.map((item) => (
                   <NavLink
                     key={item.to}
@@ -416,6 +527,37 @@ export function AppShell() {
                   </NavLink>
                 ))}
                 <div className="h-px bg-ink-200 my-2" />
+                {assistantEnabled && (
+                  <button
+                    onClick={() => {
+                      setSidebarOpen(false);
+                      assistantUi.setOpen(true);
+                    }}
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-ink-700 hover:bg-ink-100 text-start"
+                  >
+                    <Sparkles className="w-5 h-5" />
+                    <span>עוזר AI</span>
+                  </button>
+                )}
+                <button
+                  onClick={toggleTheme}
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-ink-700 hover:bg-ink-100 text-start"
+                >
+                  {theme === "dark" ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+                  <span>{theme === "dark" ? "מצב בהיר" : "מצב כהה"}</span>
+                </button>
+                {canInstall && (
+                  <button
+                    onClick={() => {
+                      setSidebarOpen(false);
+                      void promptInstall();
+                    }}
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-ink-700 hover:bg-ink-100 text-start"
+                  >
+                    <Download className="w-5 h-5" />
+                    <span>התקן אפליקציה</span>
+                  </button>
+                )}
                 <NavLink
                   to="/app/settings"
                   onClick={() => setSidebarOpen(false)}
@@ -457,43 +599,22 @@ export function AppShell() {
         )}
 
         {/* Main content — the only scrolling region */}
-        <main className="flex-1 min-w-0 min-h-0 overflow-y-auto">
+        <main
+          ref={mainRef}
+          onScroll={handleMainScroll}
+          className="flex-1 min-w-0 min-h-0 overflow-y-auto"
+        >
           <Outlet />
         </main>
       </div>
 
-      {/* Bottom tab bar (mobile only). Every primary screen appears here;
-          inline-end padding reserves space for the AnimatedFab so it never
-          overlaps a tab. */}
-      <nav
-        className="md:hidden shrink-0 z-30 bg-white border-t border-ink-200 h-16 flex items-stretch"
-        style={{ paddingInlineEnd: "88px" /* matches 64px FAB + 24px inset */ }}
-      >
-        {NAV.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.end}
-            title={item.label}
-            className={({ isActive }) =>
-              cn(
-                "flex-1 min-w-0 flex flex-col items-center justify-center gap-0.5 text-[9px] leading-tight px-0.5",
-                isActive ? "text-primary-600" : "text-ink-500"
-              )
-            }
-          >
-            <item.icon className="w-5 h-5 shrink-0" />
-            <span className="truncate w-full text-center">{item.label}</span>
-          </NavLink>
-        ))}
-      </nav>
-
-      {/* Floating quick capture button — visible on every breakpoint, cycles
-          its icon + gradient through the five capture actions. */}
-      <AnimatedFab
-        onClick={() => setCaptureOpen(true)}
-        paused={captureOpen}
-      />
+      {/* Floating quick capture button — desktop only. */}
+      <div className="hidden md:block">
+        <AnimatedFab
+          onClick={() => setCaptureOpen(true)}
+          paused={captureOpen}
+        />
+      </div>
 
       <QuickCapture
         open={captureOpen}
@@ -516,7 +637,7 @@ export function AppShell() {
             <button
               type="button"
               onClick={() => assistantUi.setOpen(true)}
-              className="ai-launcher fixed bottom-20 md:bottom-4 start-4 z-40 w-16 h-16 rounded-full text-white flex items-center justify-center transition-transform hover:scale-110"
+              className="ai-launcher hidden md:flex fixed bottom-4 start-4 z-40 w-16 h-16 rounded-full text-white items-center justify-center transition-transform hover:scale-110"
               aria-label="עוזר AI"
               title="עוזר AI"
             >

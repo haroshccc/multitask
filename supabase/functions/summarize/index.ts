@@ -38,7 +38,27 @@ interface AiOutput {
     duration_minutes?: number | null;
     speaker_name?: string | null;
   }>;
+  // Filing suggestions — power the insights-view FilingWizard. Optional: the
+  // model may omit them and existing consumers ignore them.
+  suggested_title?: string;
+  suggested_source?: string;
+  suggested_source_custom?: string;
+  suggested_tags?: string[];
+  suggested_filing?: {
+    project?: { name: string; is_new: boolean } | null;
+    recording_list?: { name: string; is_new: boolean } | null;
+  };
 }
+
+const RECORDING_SOURCES = [
+  "thought",
+  "call",
+  "meeting",
+  "other",
+  "recording",
+  "whatsapp",
+  "upload",
+] as const;
 
 // Default per-section instructions. Mirrored verbatim from
 // `src/lib/ai/recording-prompts.ts` — keep in sync. Each user can override
@@ -82,6 +102,12 @@ function buildSystemPrompt(
 [tasks] ${get("tasks")}
 [events] ${get("events")}
 
+הצעות תיוק (suggested_*) — נועדו לעזור למשתמשת לקטלג את ההקלטה במהירות:
+[suggested_title] הצע/י כותרת תמציתית (עד ~6 מילים) שמתארת את ההקלטה. אם כבר יש כותרת טובה, אפשר להחזיר אותה.
+[suggested_source] בחר/י את הסוג המתאים מתוך: "call" (שיחת טלפון), "meeting" (פגישה), "thought" (הקלטת מחשבה / תזכורת אישית), "whatsapp", "other" (אחר). אם "other", הוסף/י תיאור קצר ב-suggested_source_custom.
+[suggested_tags] הצע/י 2–4 תגיות נושא קצרות (מילה-שתיים כל אחת) בעברית.
+[suggested_filing] בחר/י את הפרויקט ואת רשימת-ההקלטות המתאימים ביותר לשיוך, מתוך הרשימות שיופיעו בהודעת המשתמש. אם אחד מהם מתאים — החזר/י את שמו המדויק עם is_new=false. אם שום פריט קיים לא מתאים אבל ברור לאיזה נושא ההקלטה שייכת — הצע/י שם חדש עם is_new=true. אם לא ברור — החזר/י null לאותו שדה. אל תכפה/י שיוך שאינו מתאים.
+
 ${customPrompt ? `\nהוראה נוספת מהמשתמש: ${customPrompt}\n` : ""}החזר/י JSON תקני בלבד התואם בדיוק לסכימה הבאה — בלי מלל לפני או אחרי, בלי בלוקי \`\`\`:
 
 {
@@ -94,7 +120,15 @@ ${customPrompt ? `\nהוראה נוספת מהמשתמש: ${customPrompt}\n` : "
   ],
   "events": [
     { "title": string, "date_iso": string | null, "duration_minutes": number | null, "speaker_name": string | null }
-  ]
+  ],
+  "suggested_title": string,
+  "suggested_source": "call" | "meeting" | "thought" | "whatsapp" | "other",
+  "suggested_source_custom": string | null,
+  "suggested_tags": string[],
+  "suggested_filing": {
+    "project": { "name": string, "is_new": boolean } | null,
+    "recording_list": { "name": string, "is_new": boolean } | null
+  }
 }`;
 }
 
@@ -102,24 +136,38 @@ function buildUserPrompt(args: {
   title: string | null;
   transcript_text: string;
   speakerLabels: Record<number, string>;
+  projectNames: string[];
+  recordingListNames: string[];
 }): string {
   const speakerHint = Object.keys(args.speakerLabels).length
     ? `\n\nתיוג דוברים:\n${Object.entries(args.speakerLabels)
         .map(([i, l]) => `  דובר ${i}: ${l}`)
         .join("\n")}`
     : "";
+  const filingHint =
+    args.projectNames.length || args.recordingListNames.length
+      ? `\n\nאפשרויות שיוך קיימות (לשדה suggested_filing):\n  פרויקטים: ${
+          args.projectNames.length ? args.projectNames.join(" · ") : "(אין)"
+        }\n  רשימות הקלטות: ${
+          args.recordingListNames.length
+            ? args.recordingListNames.join(" · ")
+            : "(אין)"
+        }`
+      : "";
   const t =
     args.transcript_text.length > MAX_TRANSCRIPT_CHARS
       ? args.transcript_text.slice(0, MAX_TRANSCRIPT_CHARS) +
         "\n\n[התמלול קוצר בגלל אורך]"
       : args.transcript_text;
-  return `כותרת ההקלטה: ${args.title ?? "ללא כותרת"}${speakerHint}\n\nתמלול:\n${t}`;
+  return `כותרת ההקלטה: ${args.title ?? "ללא כותרת"}${speakerHint}${filingHint}\n\nתמלול:\n${t}`;
 }
 
 async function callClaude(args: {
   title: string | null;
   transcript_text: string;
   speakerLabels: Record<number, string>;
+  projectNames: string[];
+  recordingListNames: string[];
   promptOverrides: Record<string, string | null | undefined> | null;
   customPrompt?: string;
 }): Promise<AiOutput> {
@@ -187,7 +235,40 @@ async function callClaude(args: {
             required: ["title"],
           },
         },
+        suggested_title: { type: "string" },
+        suggested_source: {
+          type: "string",
+          enum: RECORDING_SOURCES,
+        },
+        suggested_source_custom: { type: ["string", "null"] },
+        suggested_tags: {
+          type: "array",
+          items: { type: "string" },
+        },
+        suggested_filing: {
+          type: "object",
+          properties: {
+            project: {
+              type: ["object", "null"],
+              properties: {
+                name: { type: "string" },
+                is_new: { type: "boolean" },
+              },
+              required: ["name", "is_new"],
+            },
+            recording_list: {
+              type: ["object", "null"],
+              properties: {
+                name: { type: "string" },
+                is_new: { type: "boolean" },
+              },
+              required: ["name", "is_new"],
+            },
+          },
+        },
       },
+      // Filing suggestions are intentionally NOT required — keeps the call
+      // robust and existing consumers unaffected.
       required: [
         "short_summary",
         "long_summary",
@@ -501,6 +582,29 @@ async function summarizeHandler(
   const promptOverrides =
     (prefs?.recording_ai_prompts as Record<string, string> | null) ?? null;
 
+  // Candidate filing targets — names only (ids stay client-side; the client
+  // maps the chosen name back to an id). Used to power suggested_filing.
+  const [{ data: projectRows }, { data: listRows }] = await Promise.all([
+    ctx.serviceClient
+      .from("projects")
+      .select("name")
+      .eq("organization_id", ctx.organizationId)
+      .order("updated_at", { ascending: false })
+      .limit(60),
+    ctx.serviceClient
+      .from("recording_lists")
+      .select("name")
+      .eq("organization_id", ctx.organizationId)
+      .order("created_at", { ascending: false })
+      .limit(60),
+  ]);
+  const projectNames = (projectRows ?? [])
+    .map((r) => (r as { name?: string }).name?.trim())
+    .filter((n): n is string => !!n);
+  const recordingListNames = (listRows ?? [])
+    .map((r) => (r as { name?: string }).name?.trim())
+    .filter((n): n is string => !!n);
+
   // Mark in-flight so the UI shows "בעיבוד".
   await ctx.serviceClient
     .from("recordings")
@@ -515,6 +619,8 @@ async function summarizeHandler(
       title: recording.title,
       transcript_text: recording.transcript_text,
       speakerLabels,
+      projectNames,
+      recordingListNames,
       promptOverrides,
       customPrompt: customPromptText || undefined,
     });

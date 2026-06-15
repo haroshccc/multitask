@@ -7,6 +7,7 @@ import type { Config } from "tailwindcss";
  */
 const config: Config = {
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
+  darkMode: "class",
   theme: {
     extend: {
       fontFamily: {
@@ -15,17 +16,20 @@ const config: Config = {
       },
       colors: {
         // Neutral ink scale (cool, slight violet tint) ------------------------
+        // Backed by CSS variables (see index.css :root / .dark) so the whole
+        // neutral surface/text system flips in dark mode without touching
+        // call sites. Light values match the original hex tokens exactly.
         ink: {
-          0: "#ffffff",
-          50: "#fafafa",   // page background
-          100: "#f4f4f6",  // bg2
-          150: "#f0f0f5",  // ink6 (very light chips)
-          200: "#ededf0",  // bg3
-          300: "#e2e2ea",  // ink5 (borders)
-          400: "#a8a8bc",  // ink4 (disabled / meta)
-          500: "#6b6b80",  // ink3 (secondary text)
-          700: "#2d2d3a",  // ink2
-          900: "#111118",  // ink (primary text)
+          0: "rgb(var(--ink-0) / <alpha-value>)",
+          50: "rgb(var(--ink-50) / <alpha-value>)",   // page background
+          100: "rgb(var(--ink-100) / <alpha-value>)", // bg2
+          150: "rgb(var(--ink-150) / <alpha-value>)", // ink6 (very light chips)
+          200: "rgb(var(--ink-200) / <alpha-value>)", // bg3
+          300: "rgb(var(--ink-300) / <alpha-value>)", // ink5 (borders)
+          400: "rgb(var(--ink-400) / <alpha-value>)", // ink4 (disabled / meta)
+          500: "rgb(var(--ink-500) / <alpha-value>)", // ink3 (secondary text)
+          700: "rgb(var(--ink-700) / <alpha-value>)", // ink2
+          900: "rgb(var(--ink-900) / <alpha-value>)", // ink (primary text)
         },
         // Brand accent — amber is the singleton primary (gradient handles the
         // richer variants). Keep a numeric scale for compatibility with Tailwind
@@ -62,9 +66,48 @@ const config: Config = {
           violet: "#8b5cf6",
         },
         // Semantic ----------------------------------------------------------
-        success: { DEFAULT: "#10b981", 500: "#10b981", 600: "#059669" },
-        warning: { DEFAULT: "#f59e0b", 500: "#f59e0b", 600: "#d97706" },
-        danger: { DEFAULT: "#ef4444", 500: "#ef4444", 600: "#dc2626" },
+        // Full scales (Tailwind emerald/amber/red) — components were already
+        // using shades like success-50 / danger-700 that silently generated
+        // no CSS while only DEFAULT/500/600 were defined.
+        success: {
+          DEFAULT: "#10b981",
+          50: "#ecfdf5",
+          100: "#d1fae5",
+          200: "#a7f3d0",
+          300: "#6ee7b7",
+          400: "#34d399",
+          500: "#10b981",
+          600: "#059669",
+          700: "#047857",
+          800: "#065f46",
+          900: "#064e3b",
+        },
+        warning: {
+          DEFAULT: "#f59e0b",
+          50: "#fffbeb",
+          100: "#fef3c7",
+          200: "#fde68a",
+          300: "#fcd34d",
+          400: "#fbbf24",
+          500: "#f59e0b",
+          600: "#d97706",
+          700: "#b45309",
+          800: "#92400e",
+          900: "#78350f",
+        },
+        danger: {
+          DEFAULT: "#ef4444",
+          50: "#fef2f2",
+          100: "#fee2e2",
+          200: "#fecaca",
+          300: "#fca5a5",
+          400: "#f87171",
+          500: "#ef4444",
+          600: "#dc2626",
+          700: "#b91c1c",
+          800: "#991b1b",
+          900: "#7f1d1d",
+        },
       },
       backgroundImage: {
         "brand-gradient":

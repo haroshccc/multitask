@@ -64,7 +64,7 @@ export function TaskSchedulingPanel({
   return (
     <aside
       className={cn(
-        "shrink-0 card overflow-hidden flex flex-col max-h-[calc(100vh-220px)]",
+        "shrink-0 card overflow-hidden flex flex-col max-h-[calc(100vh-220px)] max-w-[calc(100vw-1rem)]",
         wide ? "w-80 sm:w-96 lg:w-[28rem]" : "w-72"
       )}
     >

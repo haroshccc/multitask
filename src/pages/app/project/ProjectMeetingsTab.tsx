@@ -60,6 +60,8 @@ import type {
   TaskCustomField,
 } from "@/lib/types/domain";
 import { cn } from "@/lib/utils/cn";
+import { DateField } from "@/components/ui/DateField";
+import { TimeField } from "@/components/ui/TimeField";
 
 const VIEW_KEY = "multitask.projectMeetings.view";
 type ViewMode = "table" | "cards";
@@ -725,11 +727,11 @@ function MeetingDetailModal({
           <div>
             <label className="eyebrow mb-1.5 block">מועד</label>
             <div className="flex items-center gap-2 flex-wrap">
-              <input
-                type="date"
+              <DateField
                 value={dateStr}
-                onChange={(e) => setDateStr(e.target.value)}
-                className="field w-auto"
+                onChange={setDateStr}
+                className="w-40"
+                label="תאריך פגישה"
               />
               <label className="inline-flex items-center gap-1.5 text-sm text-ink-700 select-none">
                 <input
@@ -742,11 +744,12 @@ function MeetingDetailModal({
                 שעה ספציפית
               </label>
               {hasTime && (
-                <input
-                  type="time"
+                <TimeField
                   value={timeStr}
-                  onChange={(e) => setTimeStr(e.target.value)}
-                  className="field w-auto"
+                  onChange={setTimeStr}
+                  className="w-32"
+                  required
+                  label="שעת פגישה"
                 />
               )}
             </div>

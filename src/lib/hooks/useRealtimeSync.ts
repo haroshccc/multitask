@@ -202,6 +202,101 @@ export function useRealtimeSync() {
           qc.invalidateQueries({ queryKey: queryFamilies.allShoppingRuns(organizationId) });
         }
       )
+      // Food planning — meals/menu are shared across the household, so live
+      // updates matter here more than anywhere. Categories + template +
+      // shares are cheap blanket invalidations.
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "meals", filter: orgFilter },
+        () => {
+          qc.invalidateQueries({ queryKey: queryFamilies.allMeals(organizationId) });
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "ingredients", filter: orgFilter },
+        () => {
+          qc.invalidateQueries({ queryKey: queryFamilies.allIngredients(organizationId) });
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "meal_plan_days", filter: orgFilter },
+        () => {
+          qc.invalidateQueries({ queryKey: ["meal-plan-days", organizationId] });
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "meal_plan_template", filter: orgFilter },
+        () => {
+          qc.invalidateQueries({ queryKey: ["meal-plan-template", organizationId] });
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "meal_plan_shares", filter: orgFilter },
+        () => {
+          qc.invalidateQueries({ queryKey: ["meal-plan-shares", organizationId] });
+        }
+      )
+      // Frameworks — blocks/labels don't carry organization_id, so those two
+      // subscribe unfiltered (RLS still scopes the events) and invalidate the
+      // whole framework content family.
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "frameworks", filter: orgFilter },
+        () => {
+          qc.invalidateQueries({ queryKey: ["frameworks", organizationId] });
+          qc.invalidateQueries({ queryKey: ["framework"] });
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "framework_blocks" },
+        () => {
+          qc.invalidateQueries({ queryKey: ["framework"] });
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "framework_day_labels" },
+        () => {
+          qc.invalidateQueries({ queryKey: ["framework"] });
+        }
+      )
+      // Goal plans — the plan lists themselves are task_lists (already
+      // covered); decisions/impacts tables invalidate the plans family.
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "plan_decisions" },
+        () => {
+          qc.invalidateQueries({ queryKey: ["plans", organizationId] });
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "plan_decision_impacts" },
+        () => {
+          qc.invalidateQueries({ queryKey: ["plans", organizationId] });
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "plan_stage_impacts" },
+        () => {
+          qc.invalidateQueries({ queryKey: ["plans", organizationId] });
+        }
+      )
+      // Contacts — org registry + per-project links.
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "contacts", filter: orgFilter },
+        () => {
+          qc.invalidateQueries({ queryKey: ["org-contacts", organizationId] });
+          qc.invalidateQueries({ queryKey: ["project-contacts"] });
+        }
+      )
       .subscribe();
 
     return () => {

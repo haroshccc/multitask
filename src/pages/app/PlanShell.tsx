@@ -40,6 +40,7 @@ import { ShareListModal } from "@/components/tasks/ShareListModal";
 import { PlanTasksTable } from "@/components/plans/PlanTasksTable";
 import { PlanDecisionsTab } from "@/components/plans/PlanDecisionsTab";
 import { PlanImpactMatrix } from "@/components/plans/PlanImpactMatrix";
+import { DateField } from "@/components/ui/DateField";
 
 // ---------------------------------------------------------------------------
 // Outlet context handed to each plan sub-screen
@@ -382,35 +383,35 @@ function PlanHeader({
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
         <label className="inline-flex items-center gap-1.5">
           <span className="text-ink-500 text-xs">מ־</span>
-          <input
-            type="date"
+          <DateField
             disabled={!canEdit}
             value={plan.plan_start_date ?? ""}
             max={plan.plan_end_date ?? undefined}
-            onChange={(e) => {
-              const v = e.target.value || null;
+            onChange={(raw) => {
+              const v = raw || null;
               const patch: Record<string, unknown> = { plan_start_date: v };
               // keep end ≥ start
               if (v && plan.plan_end_date && plan.plan_end_date < v) patch.plan_end_date = v;
               onPatch(patch);
             }}
-            className="field text-xs py-1 w-auto"
+            className="w-40"
+            label="תאריך התחלה"
           />
         </label>
         <label className="inline-flex items-center gap-1.5">
           <span className="text-ink-500 text-xs">עד</span>
-          <input
-            type="date"
+          <DateField
             disabled={!canEdit}
             value={plan.plan_end_date ?? ""}
             min={plan.plan_start_date ?? undefined}
-            onChange={(e) => {
-              let v = e.target.value || null;
+            onChange={(raw) => {
+              let v = raw || null;
               // never let end precede start
               if (v && plan.plan_start_date && v < plan.plan_start_date) v = plan.plan_start_date;
               onPatch({ plan_end_date: v });
             }}
-            className="field text-xs py-1 w-auto"
+            className="w-40"
+            label="תאריך סיום"
           />
         </label>
         <label className="inline-flex items-center gap-1.5">

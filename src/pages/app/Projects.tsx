@@ -6,6 +6,7 @@ import {
   useFiltersFromUrl,
 } from "@/components/filters/FilterBar";
 import { useProjects } from "@/lib/hooks/useProjects";
+import { useOrgContacts, useAllProjectContacts } from "@/lib/hooks/useContacts";
 import { CreateProjectDialog } from "@/components/projects/CreateProjectDialog";
 import { ProjectCard } from "@/components/projects/ProjectCard";
 import { ProjectsTable } from "@/components/projects/ProjectsTable";
@@ -20,9 +21,13 @@ const STATUS_OPTIONS = [
   { value: "completed", label: "הושלם" },
 ];
 
+type ActiveFilter = "all" | "active" | "inactive";
+
 export function Projects() {
   const [filters, setFilters] = useFiltersFromUrl();
   const [showArchived, setShowArchived] = useState(false);
+  const [activeFilter, setActiveFilter] = useState<ActiveFilter>("all");
+  const [contactId, setContactId] = useState<string>("");
   const [createOpen, setCreateOpen] = useState(false);
   const [view, setView] = useState<ViewMode>(() => {
     if (typeof window === "undefined") return "cards";
@@ -42,6 +47,19 @@ export function Projects() {
   }, []);
 
   const { data: projects = [], isLoading } = useProjects({}, true);
+  const { data: contacts = [] } = useOrgContacts();
+  const { data: projectContactLinks = [] } = useAllProjectContacts();
+
+  // project id → set of linked contact ids (for the contact filter).
+  const contactsByProject = useMemo(() => {
+    const m = new Map<string, Set<string>>();
+    for (const link of projectContactLinks) {
+      const set = m.get(link.project_id) ?? new Set<string>();
+      set.add(link.contact_id);
+      m.set(link.project_id, set);
+    }
+    return m;
+  }, [projectContactLinks]);
 
   const filtered = useMemo(() => {
     return projects.filter((p) => {
@@ -50,6 +68,9 @@ export function Projects() {
       } else {
         if (p.is_archived) return false;
       }
+      if (activeFilter === "active" && p.is_active === false) return false;
+      if (activeFilter === "inactive" && p.is_active !== false) return false;
+      if (contactId && !contactsByProject.get(p.id)?.has(contactId)) return false;
       if (filters.statuses?.length && !filters.statuses.includes(p.status)) {
         return false;
       }
@@ -59,7 +80,7 @@ export function Projects() {
       }
       return true;
     });
-  }, [projects, filters, showArchived]);
+  }, [projects, filters, showArchived, activeFilter, contactId, contactsByProject]);
 
   const archivedCount = useMemo(
     () => projects.filter((p) => p.is_archived).length,
@@ -104,6 +125,61 @@ export function Projects() {
             { key: "tags", type: "multi-text", label: "תגים" },
           ]}
         />
+
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Active / inactive segmented control */}
+          <div className="inline-flex items-center rounded-md border border-ink-200 bg-white overflow-hidden text-xs">
+            {([
+              ["all", "הכל"],
+              ["active", "פעילים"],
+              ["inactive", "לא פעילים"],
+            ] as [ActiveFilter, string][]).map(([val, label]) => (
+              <button
+                key={val}
+                type="button"
+                onClick={() => setActiveFilter(val)}
+                className={cn(
+                  "px-2.5 py-1",
+                  activeFilter === val
+                    ? "bg-ink-900 text-white"
+                    : "text-ink-600 hover:bg-ink-50"
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* Contact filter */}
+          {contacts.length > 0 && (
+            <select
+              value={contactId}
+              onChange={(e) => setContactId(e.target.value)}
+              className="field text-xs py-1.5 w-auto max-w-[12rem]"
+              title="סינון לפי איש קשר"
+            >
+              <option value="">כל אנשי הקשר</option>
+              {contacts.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name || c.company || "ללא שם"}
+                </option>
+              ))}
+            </select>
+          )}
+
+          {(contactId || activeFilter !== "all") && (
+            <button
+              type="button"
+              onClick={() => {
+                setContactId("");
+                setActiveFilter("all");
+              }}
+              className="text-xs text-ink-400 hover:text-ink-700"
+            >
+              נקה סינון
+            </button>
+          )}
+        </div>
 
         <div className="flex items-center justify-between gap-2">
           <div className="text-xs text-ink-500">

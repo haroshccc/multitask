@@ -91,6 +91,22 @@ export async function listContactProjects(
     .filter(Boolean) as { id: string; name: string }[];
 }
 
+/** Every project↔contact link in the org — used to filter the projects list
+ *  by contact without N per-project queries. */
+export async function listAllProjectContacts(
+  orgId: string
+): Promise<{ project_id: string; contact_id: string }[]> {
+  const { data, error } = await db
+    .from("project_contacts")
+    .select("project_id, contact_id, project:projects!inner(organization_id)")
+    .eq("project.organization_id", orgId);
+  if (error) throw error;
+  return (data ?? []).map((r: any) => ({
+    project_id: r.project_id as string,
+    contact_id: r.contact_id as string,
+  }));
+}
+
 export async function createContact(payload: ContactInsert): Promise<Contact> {
   const { data, error } = await db
     .from("contacts")

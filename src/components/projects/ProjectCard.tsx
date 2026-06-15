@@ -1,9 +1,14 @@
 import { useState, useRef, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { MoreHorizontal, Archive, ArchiveRestore } from "lucide-react";
-import { useArchiveProject, useRestoreProject } from "@/lib/hooks/useProjects";
+import { MoreHorizontal, Archive, ArchiveRestore, Power } from "lucide-react";
+import {
+  useArchiveProject,
+  useRestoreProject,
+  useUpdateProject,
+} from "@/lib/hooks/useProjects";
 import type { Project } from "@/lib/types/domain";
 import { pushUndo } from "@/lib/undo/store";
+import { cn } from "@/lib/utils/cn";
 import { ListIcon } from "@/components/tasks/list-icons";
 
 interface Props {
@@ -20,6 +25,8 @@ const STATUS_LABEL: Record<string, string> = {
 export function ProjectCard({ project }: Props) {
   const archive = useArchiveProject();
   const restore = useRestoreProject();
+  const update = useUpdateProject();
+  const isActive = project.is_active !== false;
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -63,12 +70,27 @@ export function ProjectCard({ project }: Props) {
     });
   };
 
+  const toggleActive = (e: React.MouseEvent) => {
+    stop(e);
+    const id = project.id;
+    const next = !isActive;
+    update.mutate({ projectId: id, patch: { is_active: next } });
+    pushUndo({
+      description: next ? "הפעלת פרויקט" : "השבתת פרויקט",
+      undo: () => update.mutate({ projectId: id, patch: { is_active: !next } }),
+      redo: () => update.mutate({ projectId: id, patch: { is_active: next } }),
+    });
+  };
+
   const accent = project.color ?? "#a8a8bc";
 
   return (
     <Link
       to={`/app/projects/${project.id}`}
-      className="card-lift relative block p-4 group"
+      className={cn(
+        "card-lift relative block p-4 group",
+        !isActive && "opacity-60"
+      )}
     >
       {/* Color stripe */}
       <span
@@ -91,7 +113,23 @@ export function ProjectCard({ project }: Props) {
             {project.name}
           </h3>
         </div>
-        <div className="relative shrink-0" ref={menuRef}>
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            type="button"
+            onClick={toggleActive}
+            className={cn(
+              "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors",
+              isActive
+                ? "border-success-300 bg-success-50 text-success-700 hover:bg-success-100"
+                : "border-ink-200 bg-ink-50 text-ink-400 hover:bg-ink-100"
+            )}
+            title={isActive ? "פרויקט פעיל — לחצי להשבתה" : "פרויקט לא פעיל — לחצי להפעלה"}
+            aria-pressed={isActive}
+          >
+            <Power className="w-3 h-3" />
+            {isActive ? "פעיל" : "לא פעיל"}
+          </button>
+          <div className="relative" ref={menuRef}>
           <button
             type="button"
             onClick={(e) => {
@@ -108,6 +146,14 @@ export function ProjectCard({ project }: Props) {
               onClick={stop}
               className="absolute end-0 top-full mt-1 z-20 bg-white border border-ink-200 rounded-lg shadow-lift min-w-[160px] py-1"
             >
+              <button
+                type="button"
+                onClick={toggleActive}
+                className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-start text-ink-700 hover:bg-ink-50"
+              >
+                <Power className="w-3.5 h-3.5" />
+                {isActive ? "סמני כלא פעיל" : "סמני כפעיל"}
+              </button>
               {project.is_archived ? (
                 <button
                   type="button"
@@ -129,6 +175,7 @@ export function ProjectCard({ project }: Props) {
               )}
             </div>
           )}
+          </div>
         </div>
       </div>
 

@@ -1,9 +1,14 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { MoreHorizontal, Archive, ArchiveRestore } from "lucide-react";
-import { useArchiveProject, useRestoreProject } from "@/lib/hooks/useProjects";
+import { MoreHorizontal, Archive, ArchiveRestore, Power } from "lucide-react";
+import {
+  useArchiveProject,
+  useRestoreProject,
+  useUpdateProject,
+} from "@/lib/hooks/useProjects";
 import type { Project } from "@/lib/types/domain";
 import { pushUndo } from "@/lib/undo/store";
+import { cn } from "@/lib/utils/cn";
 import { ListIcon } from "@/components/tasks/list-icons";
 
 interface Props {
@@ -59,8 +64,21 @@ function ProjectRow({
 }) {
   const archive = useArchiveProject();
   const restore = useRestoreProject();
+  const update = useUpdateProject();
+  const isActive = project.is_active !== false;
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  const toggleActive = () => {
+    const id = project.id;
+    const next = !isActive;
+    update.mutate({ projectId: id, patch: { is_active: next } });
+    pushUndo({
+      description: next ? "הפעלת פרויקט" : "השבתת פרויקט",
+      undo: () => update.mutate({ projectId: id, patch: { is_active: !next } }),
+      redo: () => update.mutate({ projectId: id, patch: { is_active: next } }),
+    });
+  };
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -86,7 +104,10 @@ function ProjectRow({
   return (
     <tr
       onClick={onOpen}
-      className="border-b border-ink-100 hover:bg-ink-50 cursor-pointer"
+      className={cn(
+        "border-b border-ink-100 hover:bg-ink-50 cursor-pointer",
+        !isActive && "opacity-60"
+      )}
     >
       <td className="px-3 py-2">
         <div className="flex items-center gap-2 min-w-0">
@@ -103,8 +124,29 @@ function ProjectRow({
           <span className="font-medium text-ink-900 truncate">{project.name}</span>
         </div>
       </td>
-      <td className="px-3 py-2 text-ink-600">
-        {STATUS_LABEL[project.status] ?? project.status}
+      <td className="px-3 py-2" onClick={stop}>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={toggleActive}
+            className={cn(
+              "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors",
+              isActive
+                ? "border-success-300 bg-success-50 text-success-700 hover:bg-success-100"
+                : "border-ink-200 bg-ink-50 text-ink-400 hover:bg-ink-100"
+            )}
+            title={isActive ? "פרויקט פעיל — לחצי להשבתה" : "פרויקט לא פעיל — לחצי להפעלה"}
+            aria-pressed={isActive}
+          >
+            <Power className="w-3 h-3" />
+            {isActive ? "פעיל" : "לא פעיל"}
+          </button>
+          {project.status !== "active" && (
+            <span className="text-xs text-ink-500">
+              {STATUS_LABEL[project.status] ?? project.status}
+            </span>
+          )}
+        </div>
       </td>
       <td className="px-3 py-2">
         <div className="flex items-center gap-1 flex-wrap">

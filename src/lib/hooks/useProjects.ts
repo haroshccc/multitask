@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { queryKeys, queryFamilies } from "@/lib/query-keys";
 import * as service from "@/lib/services/projects";
@@ -10,6 +10,7 @@ import type {
   FilterConfig,
 } from "@/lib/types/domain";
 import { useOrgScope, assertOrgScope } from "./useOrgScope";
+import { useTaskLists } from "./useTaskLists";
 
 export function useProjects(filters: FilterConfig = {}, includeArchived = false) {
   const scope = useOrgScope();
@@ -159,6 +160,37 @@ export function useRestoreProject() {
       }
     },
   });
+}
+
+/** Set of *inactive* project ids (used to hide their events/meetings). */
+export function useInactiveProjectIds(): Set<string> {
+  const { data: projects = [] } = useProjects({}, true);
+  return useMemo(
+    () =>
+      new Set(projects.filter((p) => p.is_active === false).map((p) => p.id)),
+    [projects]
+  );
+}
+
+/**
+ * Set of task-list ids that belong to an *inactive* project. Tasks/events in
+ * these lists are hidden from the task list and calendar until the project is
+ * reactivated. Relies on the shared (cached) projects + task-lists queries.
+ */
+export function useInactiveProjectListIds(): Set<string> {
+  const { data: projects = [] } = useProjects({}, true);
+  const { data: lists = [] } = useTaskLists();
+  return useMemo(() => {
+    const inactiveProjects = new Set(
+      projects.filter((p) => p.is_active === false).map((p) => p.id)
+    );
+    const listIds = new Set<string>();
+    if (inactiveProjects.size === 0) return listIds;
+    for (const l of lists) {
+      if (l.project_id && inactiveProjects.has(l.project_id)) listIds.add(l.id);
+    }
+    return listIds;
+  }, [projects, lists]);
 }
 
 // Expenses -------------------------------------------------------------------

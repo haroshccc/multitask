@@ -67,6 +67,8 @@ import {
   useTimeEntriesByRange,
   useUpdateEvent,
   useUpdateTask,
+  useInactiveProjectListIds,
+  useInactiveProjectIds,
 } from "@/lib/hooks";
 import { useCalendarPrefs } from "@/lib/hooks/useCalendarPrefs";
 import { useOrgMembers } from "@/lib/hooks/useOrgMembers";
@@ -190,6 +192,11 @@ export function Calendar() {
     [visibility]
   );
 
+  // Inactive projects: their tasks (via list) and events (via project_id) are
+  // hidden from the calendar until reactivated.
+  const inactiveListIds = useInactiveProjectListIds();
+  const inactiveProjectIds = useInactiveProjectIds();
+
   // Meeting-scheduling panel: meetings from every project whose list is
   // currently visible on the calendar (mirrors how the task panel respects
   // list visibility). Hidden project → its meetings drop out of the panel.
@@ -276,6 +283,7 @@ export function Calendar() {
     if (layer !== "events") {
       for (const t of tasks) {
         if (t.task_list_id && hiddenLists.has(t.task_list_id)) continue;
+        if (t.task_list_id && inactiveListIds.has(t.task_list_id)) continue;
         const listColor = listColorById.get(t.task_list_id ?? "") ?? null;
         // Scheduled work block (only if there's a scheduled_at).
         if (t.scheduled_at) {
@@ -339,6 +347,7 @@ export function Calendar() {
         // Calendar visibility (via the same `hiddenLists` set, which holds
         // both task_list_ids and event_calendar_ids).
         if (e.calendar_id && hiddenLists.has(e.calendar_id)) continue;
+        if (e.project_id && inactiveProjectIds.has(e.project_id)) continue;
         const base = eventToItem(e, calendarColorById);
         // Recurring event → expand into concrete occurrences inside the window.
         // The server returns the master row (its own `starts_at` as the anchor).
@@ -380,7 +389,17 @@ export function Calendar() {
       }
     }
     return out;
-  }, [tasks, events, layer, hiddenLists, listColorById, calendarColorById, range]);
+  }, [
+    tasks,
+    events,
+    layer,
+    hiddenLists,
+    inactiveListIds,
+    inactiveProjectIds,
+    listColorById,
+    calendarColorById,
+    range,
+  ]);
 
   // ── Multi-user lanes ──────────────────────────────────────────────────────
   // One lane per person (me first), each carrying only that person's items.

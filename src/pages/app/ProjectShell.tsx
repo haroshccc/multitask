@@ -26,7 +26,6 @@ import {
   MoreHorizontal,
   Check,
   Palette,
-  Power,
 } from "lucide-react";
 import { ListIcon } from "@/components/tasks/list-icons";
 import { ScreenScaffold } from "@/components/layout/ScreenScaffold";
@@ -40,6 +39,7 @@ import {
 import { useTaskLists, useUpdateTaskList } from "@/lib/hooks/useTaskLists";
 import type { Project } from "@/lib/types/domain";
 import { ShareProjectModal } from "@/components/projects/ShareProjectModal";
+import { ProjectStateControl } from "@/components/projects/ProjectStateControl";
 import { cn } from "@/lib/utils/cn";
 import { pushUndo } from "@/lib/undo/store";
 
@@ -128,45 +128,14 @@ function ProjectShellLoaded({
 }) {
   const archive = useArchiveProject();
   const restore = useRestoreProject();
-  const update = useUpdateProject();
   const [shareOpen, setShareOpen] = useState(false);
-  const isActive = project.is_active !== false;
-
-  const toggleActive = () => {
-    const id = project.id;
-    const next = !isActive;
-    update.mutate({ projectId: id, patch: { is_active: next } });
-    pushUndo({
-      description: next ? "הפעלת פרויקט" : "השבתת פרויקט",
-      undo: () => update.mutate({ projectId: id, patch: { is_active: !next } }),
-      redo: () => update.mutate({ projectId: id, patch: { is_active: next } }),
-    });
-  };
 
   return (
     <ScreenScaffold
       title=""
       actions={
         <>
-          <button
-            type="button"
-            onClick={toggleActive}
-            className={cn(
-              "text-sm flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 transition-colors",
-              isActive
-                ? "border-success-300 bg-success-50 text-success-700 hover:bg-success-100"
-                : "border-ink-200 bg-ink-50 text-ink-500 hover:bg-ink-100"
-            )}
-            title={
-              isActive
-                ? "פרויקט פעיל — לחצי כדי להשבית (יוסתר מהיומן וממשימות)"
-                : "פרויקט לא פעיל — לחצי כדי להפעיל"
-            }
-            aria-pressed={isActive}
-          >
-            <Power className="w-4 h-4" />
-            {isActive ? "פעיל" : "לא פעיל"}
-          </button>
+          <ProjectStateControl project={project} size="md" />
           <button
             type="button"
             onClick={() => setShareOpen(true)}

@@ -7,6 +7,11 @@ import {
 } from "@/components/filters/FilterBar";
 import { useProjects } from "@/lib/hooks/useProjects";
 import { useOrgContacts, useAllProjectContacts } from "@/lib/hooks/useContacts";
+import {
+  getProjectState,
+  PROJECT_STATE_LABEL,
+  type ProjectState,
+} from "@/lib/projects/state";
 import { CreateProjectDialog } from "@/components/projects/CreateProjectDialog";
 import { ProjectCard } from "@/components/projects/ProjectCard";
 import { ProjectsTable } from "@/components/projects/ProjectsTable";
@@ -14,19 +19,12 @@ import { cn } from "@/lib/utils/cn";
 
 const VIEW_STORAGE_KEY = "multitask.projects.view";
 type ViewMode = "cards" | "table";
-
-const STATUS_OPTIONS = [
-  { value: "active", label: "פעיל" },
-  { value: "on_hold", label: "מושהה" },
-  { value: "completed", label: "הושלם" },
-];
-
-type ActiveFilter = "all" | "active" | "inactive";
+type StateFilter = "all" | ProjectState;
 
 export function Projects() {
   const [filters, setFilters] = useFiltersFromUrl();
   const [showArchived, setShowArchived] = useState(false);
-  const [activeFilter, setActiveFilter] = useState<ActiveFilter>("all");
+  const [stateFilter, setStateFilter] = useState<StateFilter>("all");
   const [contactId, setContactId] = useState<string>("");
   const [createOpen, setCreateOpen] = useState(false);
   const [view, setView] = useState<ViewMode>(() => {
@@ -77,19 +75,15 @@ export function Projects() {
       } else {
         if (p.is_archived) return false;
       }
-      if (activeFilter === "active" && p.is_active === false) return false;
-      if (activeFilter === "inactive" && p.is_active !== false) return false;
+      if (stateFilter !== "all" && getProjectState(p) !== stateFilter) return false;
       if (contactId && !contactsByProject.get(p.id)?.has(contactId)) return false;
-      if (filters.statuses?.length && !filters.statuses.includes(p.status)) {
-        return false;
-      }
       if (filters.tags?.length) {
         const tagSet = new Set(p.tags ?? []);
         if (!filters.tags.some((t) => tagSet.has(t))) return false;
       }
       return true;
     });
-  }, [projects, filters, showArchived, activeFilter, contactId, contactsByProject]);
+  }, [projects, filters, showArchived, stateFilter, contactId, contactsByProject]);
 
   const archivedCount = useMemo(
     () => projects.filter((p) => p.is_archived).length,
@@ -125,12 +119,6 @@ export function Projects() {
           filters={filters}
           onChange={setFilters}
           fields={[
-            {
-              key: "statuses",
-              type: "multi-enum",
-              label: "סטטוס",
-              options: STATUS_OPTIONS,
-            },
             tagOptions.length > 0
               ? {
                   key: "tags",
@@ -143,20 +131,21 @@ export function Projects() {
         />
 
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Active / inactive segmented control */}
+          {/* Project state filter: פעיל / לא פעיל / הושלם */}
           <div className="inline-flex items-center rounded-md border border-ink-200 bg-white overflow-hidden text-xs">
             {([
               ["all", "הכל"],
-              ["active", "פעילים"],
-              ["inactive", "לא פעילים"],
-            ] as [ActiveFilter, string][]).map(([val, label]) => (
+              ["active", PROJECT_STATE_LABEL.active],
+              ["inactive", PROJECT_STATE_LABEL.inactive],
+              ["completed", PROJECT_STATE_LABEL.completed],
+            ] as [StateFilter, string][]).map(([val, label]) => (
               <button
                 key={val}
                 type="button"
-                onClick={() => setActiveFilter(val)}
+                onClick={() => setStateFilter(val)}
                 className={cn(
                   "px-2.5 py-1",
-                  activeFilter === val
+                  stateFilter === val
                     ? "bg-ink-900 text-white"
                     : "text-ink-600 hover:bg-ink-50"
                 )}
@@ -183,12 +172,12 @@ export function Projects() {
             </select>
           )}
 
-          {(contactId || activeFilter !== "all") && (
+          {(contactId || stateFilter !== "all") && (
             <button
               type="button"
               onClick={() => {
                 setContactId("");
-                setActiveFilter("all");
+                setStateFilter("all");
               }}
               className="text-xs text-ink-400 hover:text-ink-700"
             >

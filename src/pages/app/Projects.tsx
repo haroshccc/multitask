@@ -50,6 +50,15 @@ export function Projects() {
   const { data: contacts = [] } = useOrgContacts();
   const { data: projectContactLinks = [] } = useAllProjectContacts();
 
+  // All distinct tags across projects → ready-to-click chips in the filter.
+  const tagOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const p of projects) for (const t of p.tags ?? []) set.add(t);
+    return [...set]
+      .sort((a, b) => a.localeCompare(b, "he"))
+      .map((t) => ({ value: t, label: t }));
+  }, [projects]);
+
   // project id → set of linked contact ids (for the contact filter).
   const contactsByProject = useMemo(() => {
     const m = new Map<string, Set<string>>();
@@ -122,7 +131,14 @@ export function Projects() {
               label: "סטטוס",
               options: STATUS_OPTIONS,
             },
-            { key: "tags", type: "multi-text", label: "תגים" },
+            tagOptions.length > 0
+              ? {
+                  key: "tags",
+                  type: "multi-enum" as const,
+                  label: "תגים",
+                  options: tagOptions,
+                }
+              : { key: "tags", type: "multi-text" as const, label: "תגים" },
           ]}
         />
 

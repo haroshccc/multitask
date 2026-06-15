@@ -19,6 +19,8 @@ import {
   TouchSensor,
   useSensor,
   useSensors,
+  useDraggable,
+  useDroppable,
   closestCenter,
   type DragEndEvent,
 } from "@dnd-kit/core";
@@ -623,6 +625,18 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
     });
   };
 
+  // Drag a task between phases (or out to the top level) → reparent it.
+  const handleReparent = (taskId: string, parentId: string | null) => {
+    const before = tasks.find((t) => t.id === taskId)?.parent_task_id ?? null;
+    if (before === parentId) return;
+    update.mutate({ taskId, patch: { parent_task_id: parentId } });
+    pushUndo({
+      description: "העברת משימה בין שלבים",
+      undo: () => update.mutate({ taskId, patch: { parent_task_id: before } }),
+      redo: () => update.mutate({ taskId, patch: { parent_task_id: parentId } }),
+    });
+  };
+
   const handleIndentWithUndo = (current: Task) => {
     const beforeParent = current.parent_task_id;
     handleIndent(current);
@@ -990,6 +1004,8 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
               orderedFixedKeys={visibleFixedKeys}
               questionsByTaskId={questionsByTaskId}
               onReorder={handleReorderTopLevel}
+              allTasks={tasks}
+              onReparent={handleReparent}
               phaseEst={phaseEst}
               phaseActual={phaseActual}
               focusCell={focusCell}
@@ -1098,8 +1114,10 @@ function TaskList({
 }
 
 /**
- * Top-level list with row drag-to-reorder. Sub-tasks render in their normal
- * order (no drag) — reordering siblings within a parent is enough for now.
+ * Top-level list with drag support. Top-level rows reorder among themselves;
+ * every row (including sub-tasks) can also be dragged onto a phase row — or
+ * onto any task inside a phase — to reparent it into that phase. Dragging a
+ * phase-child onto a top-level task pulls it back out to the top level.
  */
 function SortableTaskList({
   nodes,
@@ -1111,6 +1129,8 @@ function SortableTaskList({
   orderedFixedKeys,
   questionsByTaskId,
   onReorder,
+  allTasks,
+  onReparent,
   ...handlers
 }: {
   nodes: TaskNode[];
@@ -1122,6 +1142,8 @@ function SortableTaskList({
   orderedFixedKeys: FixedColumnKey[];
   questionsByTaskId: Map<string, number>;
   onReorder: (newOrder: TaskNode[]) => void;
+  allTasks: Task[];
+  onReparent: (taskId: string, parentId: string | null) => void;
 } & RowHandlers) {
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 4 } }),
@@ -1132,13 +1154,64 @@ function SortableTaskList({
     })
   );
   const ids = nodes.map((n) => n.task.id);
+  const byId = useMemo(
+    () => new Map(allTasks.map((t) => [t.id, t])),
+    [allTasks]
+  );
+
+  // True if `ancestorId` lies on the parent chain of `nodeId` (so reparenting
+  // `nodeId` under `ancestorId` would create a cycle).
+  const wouldCycle = (ancestorId: string, nodeId: string): boolean => {
+    let cur: string | null | undefined = nodeId;
+    while (cur) {
+      if (cur === ancestorId) return true;
+      cur = byId.get(cur)?.parent_task_id ?? null;
+    }
+    return false;
+  };
+
+  const reorderTopLevel = (activeId: string, overId: string) => {
+    const fromIdx = ids.indexOf(activeId);
+    const toIdx = ids.indexOf(overId);
+    if (fromIdx === -1 || toIdx === -1) return;
+    onReorder(arrayMove(nodes, fromIdx, toIdx));
+  };
+
   const handleDragEnd = (e: DragEndEvent) => {
     const { active, over } = e;
     if (!over || active.id === over.id) return;
-    const fromIdx = ids.indexOf(active.id as string);
-    const toIdx = ids.indexOf(over.id as string);
-    if (fromIdx === -1 || toIdx === -1) return;
-    onReorder(arrayMove(nodes, fromIdx, toIdx));
+    const activeTask = byId.get(active.id as string);
+    const overTask = byId.get(over.id as string);
+    if (!activeTask || !overTask) return;
+
+    // Phases only ever reorder among the top level — never nest into anything.
+    if (activeTask.is_phase) {
+      reorderTopLevel(active.id as string, over.id as string);
+      return;
+    }
+
+    // Drop onto a phase row → move the task under that phase.
+    if (overTask.is_phase) {
+      if (!wouldCycle(activeTask.id, overTask.id)) {
+        onReparent(activeTask.id, overTask.id);
+      }
+      return;
+    }
+
+    const activeTop = !activeTask.parent_task_id;
+    const overTop = !overTask.parent_task_id;
+    // Two plain top-level tasks → reorder.
+    if (activeTop && overTop) {
+      reorderTopLevel(active.id as string, over.id as string);
+      return;
+    }
+    // Otherwise join the drop target's group (its parent) — i.e. drop a task
+    // onto any row inside a phase to put it in that phase; drop a phase-child
+    // onto a top-level task to pull it out to the top level.
+    const newParent = overTask.parent_task_id ?? null;
+    if (newParent === (activeTask.parent_task_id ?? null)) return;
+    if (newParent && wouldCycle(activeTask.id, newParent)) return;
+    onReparent(activeTask.id, newParent);
   };
 
   if (nodes.length === 0) return null;
@@ -1261,24 +1334,36 @@ function TaskItem({
 } & RowHandlers) {
   const [expanded, setExpanded] = useState(true);
   const hasChildren = node.children.length > 0;
+  // Sub-task rows are both draggable (to move between phases) and droppable
+  // (so another task can be dropped onto them to join their phase). Same id in
+  // the two registries is fine — they don't collide with the top-level sortable.
+  const drag = useDraggable({ id: node.task.id, data: { type: "task" } });
+  const drop = useDroppable({ id: node.task.id, data: { type: "task" } });
+  const setRowRef = (el: HTMLElement | null) => {
+    drag.setNodeRef(el);
+    drop.setNodeRef(el);
+  };
 
   return (
     <li>
-      <TaskRow
-        task={node.task}
-        level={level}
-        expanded={expanded}
-        hasChildren={hasChildren}
-        activeTimer={activeTimer}
-        shouldFocus={focusTaskId === node.task.id}
-        onFocusHandled={onFocusHandled}
-        customFields={customFields}
-        gridCols={gridCols}
-        orderedFixedKeys={orderedFixedKeys}
-        questionsByTaskId={questionsByTaskId}
-        onToggleExpand={() => setExpanded((v) => !v)}
-        {...handlers}
-      />
+      <div ref={setRowRef} style={{ opacity: drag.isDragging ? 0.4 : 1 }}>
+        <TaskRow
+          task={node.task}
+          level={level}
+          expanded={expanded}
+          hasChildren={hasChildren}
+          activeTimer={activeTimer}
+          shouldFocus={focusTaskId === node.task.id}
+          onFocusHandled={onFocusHandled}
+          customFields={customFields}
+          gridCols={gridCols}
+          orderedFixedKeys={orderedFixedKeys}
+          questionsByTaskId={questionsByTaskId}
+          onToggleExpand={() => setExpanded((v) => !v)}
+          dragHandleProps={{ ...drag.attributes, ...drag.listeners }}
+          {...handlers}
+        />
+      </div>
       {hasChildren && expanded && (
         <TaskList
           nodes={node.children}

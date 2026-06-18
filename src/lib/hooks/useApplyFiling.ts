@@ -58,7 +58,10 @@ export function planFromAiSuggestions(
     title: ai.suggested_title?.trim() ? ai.suggested_title.trim() : undefined,
     source: (ai.suggested_source as RecordingSource | undefined) || undefined,
     sourceCustom: ai.suggested_source_custom ?? undefined,
-    tags: ai.suggested_tags?.length ? ai.suggested_tags : undefined,
+    tags:
+      Array.isArray(ai.suggested_tags) && ai.suggested_tags.length
+        ? ai.suggested_tags
+        : undefined,
     project: ai.suggested_filing?.project ? selFromMatch(projectMatch) : undefined,
     list: ai.suggested_filing?.recording_list
       ? selFromMatch(listMatch)

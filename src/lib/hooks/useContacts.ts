@@ -15,6 +15,16 @@ export function useOrgContacts() {
   });
 }
 
+/** All project↔contact links in the org (for filtering the projects list). */
+export function useAllProjectContacts() {
+  const scope = useOrgScope();
+  return useQuery({
+    queryKey: ["org-project-contacts", scope.organizationId ?? ""],
+    queryFn: () => service.listAllProjectContacts(scope.organizationId!),
+    enabled: scope.enabled,
+  });
+}
+
 export function useContactProjects(contactId: string | null | undefined) {
   return useQuery({
     queryKey: ["contact-projects", contactId ?? ""],

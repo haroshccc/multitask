@@ -4,7 +4,9 @@ import { MoreHorizontal, Archive, ArchiveRestore } from "lucide-react";
 import { useArchiveProject, useRestoreProject } from "@/lib/hooks/useProjects";
 import type { Project } from "@/lib/types/domain";
 import { pushUndo } from "@/lib/undo/store";
+import { cn } from "@/lib/utils/cn";
 import { ListIcon } from "@/components/tasks/list-icons";
+import { ProjectStateControl } from "@/components/projects/ProjectStateControl";
 
 interface Props {
   project: Project;
@@ -20,6 +22,7 @@ const STATUS_LABEL: Record<string, string> = {
 export function ProjectCard({ project }: Props) {
   const archive = useArchiveProject();
   const restore = useRestoreProject();
+  const isActive = project.is_active !== false;
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -68,7 +71,10 @@ export function ProjectCard({ project }: Props) {
   return (
     <Link
       to={`/app/projects/${project.id}`}
-      className="card-lift relative block p-4 group"
+      className={cn(
+        "card-lift relative block p-4 group",
+        !isActive && "opacity-60"
+      )}
     >
       {/* Color stripe */}
       <span
@@ -91,7 +97,9 @@ export function ProjectCard({ project }: Props) {
             {project.name}
           </h3>
         </div>
-        <div className="relative shrink-0" ref={menuRef}>
+        <div className="flex items-center gap-1 shrink-0">
+          <ProjectStateControl project={project} />
+          <div className="relative" ref={menuRef}>
           <button
             type="button"
             onClick={(e) => {
@@ -129,6 +137,7 @@ export function ProjectCard({ project }: Props) {
               )}
             </div>
           )}
+          </div>
         </div>
       </div>
 

@@ -53,6 +53,7 @@ import {
   useMyTaskStatuses,
   useMaxVisibleColumns,
   useRowDisplayPrefs,
+  useInactiveProjectListIds,
 } from "@/lib/hooks";
 import { pushUndo } from "@/lib/undo/store";
 import { useTaskSelectionStore } from "@/lib/selection/store";
@@ -218,9 +219,18 @@ export function Tasks() {
   // Build per-list trees + a count map for header badges.
   // Pass knownListIds so tasks delegated to me from foreign lists fall into unassigned.
   const knownListIds = useMemo(() => new Set(lists.map((l) => l.id)), [lists]);
+  // Hide tasks belonging to inactive projects (their lists) from the task list.
+  const inactiveListIds = useInactiveProjectListIds();
+  const visibleTasks = useMemo(
+    () =>
+      inactiveListIds.size === 0
+        ? tasks
+        : tasks.filter((t) => !(t.task_list_id && inactiveListIds.has(t.task_list_id))),
+    [tasks, inactiveListIds]
+  );
   const { listTrees, counts } = useMemo(
-    () => buildTrees(tasks, knownListIds),
-    [tasks, knownListIds]
+    () => buildTrees(visibleTasks, knownListIds),
+    [visibleTasks, knownListIds]
   );
 
   // Columns to render: "unassigned" always visible and pinned, then the rest.

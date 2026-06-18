@@ -2357,6 +2357,7 @@ export type Database = {
           hourly_rate_cents: number | null
           id: string
           is_archived: boolean
+          is_active: boolean
           last_backup_at: string | null
           name: string
           organization_id: string
@@ -2388,6 +2389,7 @@ export type Database = {
           hourly_rate_cents?: number | null
           id?: string
           is_archived?: boolean
+          is_active?: boolean
           last_backup_at?: string | null
           name: string
           organization_id: string
@@ -2419,6 +2421,7 @@ export type Database = {
           hourly_rate_cents?: number | null
           id?: string
           is_archived?: boolean
+          is_active?: boolean
           last_backup_at?: string | null
           name?: string
           organization_id?: string

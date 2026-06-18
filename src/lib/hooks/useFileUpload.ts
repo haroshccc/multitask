@@ -69,14 +69,19 @@ export type UploadOptions = {
   onFailed?: (error: Error) => void;
 };
 
-// Single-PUT covers files up to 100 MB. Above the threshold we have to
-// chunk-and-stitch via R2's multipart API, but R2's CompleteMultipartUpload
-// has been observed to hang in the wild (we saw 45s timeouts with all parts
-// uploaded successfully — chunks went up but the assembly call never came
-// back). Single PUT side-steps that whole pipeline entirely. R2 itself
-// supports single PUT up to ~5 TB so we have plenty of headroom; the cap
-// here is really about browser memory pressure when slicing the blob.
-const SINGLE_UPLOAD_MAX_BYTES = 100 * 1024 * 1024;
+// Single-PUT vs multipart threshold for the one-shot `upload()` path.
+//
+// R2's CompleteMultipartUpload has been observed to hang in the wild: all parts
+// upload successfully (progress reaches ~99%) but the final assembly call never
+// returns, so the upload stalls and times out. A single PUT side-steps that
+// whole pipeline — one request, no assembly step. R2 supports single PUT for
+// objects far larger than our 500 MB upload cap, and `putWithProgress` uses an
+// XHR with no client-side timeout, so even a slow single PUT just keeps going.
+//
+// We therefore route EVERY allowed upload (the file-size cap is 500 MB) through
+// single PUT. Multipart remains only for the live-recording streaming path
+// (`startLiveUpload`/`appendChunk`), which genuinely needs incremental parts.
+const SINGLE_UPLOAD_MAX_BYTES = 512 * 1024 * 1024;
 const PART_SIZE_BYTES = 5 * 1024 * 1024;
 const MAX_RETRIES_PER_PART = 3;
 

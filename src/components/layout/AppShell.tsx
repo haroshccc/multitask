@@ -298,7 +298,7 @@ export function AppShell() {
         <div className="flex items-center gap-2 min-w-0">
           <button
             onClick={() => setSidebarOpen((v) => !v)}
-            className="md:hidden p-2 rounded-xl hover:bg-ink-100 shrink-0"
+            className="p-2 rounded-xl hover:bg-ink-100 shrink-0"
             aria-label="פתח תפריט"
           >
             {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
@@ -309,27 +309,8 @@ export function AppShell() {
           <Logo markSize={28} className="hidden md:flex min-w-0" idKey="shellLogo" />
         </div>
 
-        {/* Horizontal nav (desktop) */}
-        <nav className="hidden md:flex items-center gap-1 flex-1 justify-center max-w-2xl mx-auto">
-          {NAV.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.end}
-              className={({ isActive }) =>
-                cn(
-                  "flex items-center gap-2 px-3 py-1.5 rounded-xl text-sm transition-colors",
-                  isActive
-                    ? "bg-ink-900 text-white"
-                    : "text-ink-600 hover:bg-ink-100 hover:text-ink-900"
-                )
-              }
-            >
-              <item.icon className="w-4 h-4" />
-              <span>{item.label}</span>
-            </NavLink>
-          ))}
-        </nav>
+        {/* Screen navigation now lives in the hamburger menu (the drawer) on
+            all viewports — no horizontal nav row. */}
 
         {/* Right actions */}
         <div className="flex items-center gap-1">
@@ -477,11 +458,13 @@ export function AppShell() {
         {/* Mobile drawer */}
         {sidebarOpen && (
           <div
-            className="md:hidden fixed inset-0 z-40 bg-ink-900/40"
+            className="fixed inset-0 z-40 bg-ink-900/40"
             onClick={() => setSidebarOpen(false)}
           >
+            {/* Mobile: drawer on the left (end-0). Desktop/tablet: top-right
+                (start-0), under the hamburger button. */}
             <aside
-              className="absolute top-14 end-0 bottom-0 w-64 bg-white border-s border-ink-200 shadow-lift p-3 overflow-y-auto"
+              className="absolute top-14 end-0 md:end-auto md:start-0 bottom-0 w-64 bg-white border-s border-ink-200 shadow-lift p-3 overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
             >
               <nav className="flex flex-col gap-1">

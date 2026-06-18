@@ -16,6 +16,7 @@ import type {
   FrameworkPeriodUnit,
 } from "@/lib/types/frameworks";
 import type { FrameworkContent } from "@/lib/services/frameworks";
+import { TimeField } from "@/components/ui/TimeField";
 
 const WEEKDAYS = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"];
 const MONTHS = [
@@ -421,9 +422,9 @@ function BlockForm({
       </label>
       {!allDay && (
         <div className="flex items-center gap-1.5">
-          <input type="time" className="field !py-1 !text-xs flex-1" value={start} onChange={(e) => setStart(e.target.value)} />
+          <TimeField className="flex-1" value={start} onChange={setStart} required label="שעת התחלה" />
           <span className="text-ink-400 text-xs">–</span>
-          <input type="time" className="field !py-1 !text-xs flex-1" value={end} onChange={(e) => setEnd(e.target.value)} />
+          <TimeField className="flex-1" value={end} onChange={setEnd} required label="שעת סיום" />
         </div>
       )}
       <RecurrenceFields

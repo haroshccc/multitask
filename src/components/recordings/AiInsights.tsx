@@ -33,6 +33,7 @@ import {
   TaskEditModal,
   type TaskCreateDraft,
 } from "@/components/tasks/TaskEditModal";
+import { DateTimeField } from "@/components/ui/DateField";
 import { useCreateTask, useDeleteTask } from "@/lib/hooks/useTasks";
 import { useTaskLists } from "@/lib/hooks/useTaskLists";
 import { useCreateEvent, useDeleteEvent } from "@/lib/hooks/useEvents";
@@ -1008,19 +1009,18 @@ function EventsSection({
                 dir="auto"
               />
               <div className="flex items-center gap-2 flex-wrap">
-                <input
-                  type="datetime-local"
+                <DateTimeField
                   value={isoToLocalInput(ev.date_iso ?? null)}
-                  onChange={(e) =>
+                  onChange={(v) =>
                     onChange(
                       items.map((it, j) =>
                         j === i
-                          ? { ...it, date_iso: localInputToIso(e.target.value) }
+                          ? { ...it, date_iso: localInputToIso(v) }
                           : it
                       )
                     )
                   }
-                  className="field !py-0.5 !px-1 text-[11px] w-auto"
+                  className="w-44"
                 />
                 <input
                   type="number"

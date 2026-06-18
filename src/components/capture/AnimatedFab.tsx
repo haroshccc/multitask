@@ -13,6 +13,11 @@ interface AnimatedFabProps {
   onClick: () => void;
   /** Override the default 2.6s icon cycle (e.g. to pause while the modal is open). */
   paused?: boolean;
+  /**
+   * "floating" — fixed, free-floating button (desktop corner).
+   * "docked"   — sits inside the mobile bottom bar, raised above it.
+   */
+  variant?: "floating" | "docked";
 }
 
 /**
@@ -33,7 +38,7 @@ const GRADIENTS: string[] = [
   "linear-gradient(135deg, #facc15 0%, #ec4899 100%)", // yellow → pink
 ];
 
-export function AnimatedFab({ onClick, paused = false }: AnimatedFabProps) {
+export function AnimatedFab({ onClick, paused = false, variant = "floating" }: AnimatedFabProps) {
   const [i, setI] = useState(0);
 
   useEffect(() => {
@@ -47,17 +52,22 @@ export function AnimatedFab({ onClick, paused = false }: AnimatedFabProps) {
   const Icon = ICONS[i];
   const gradient = GRADIENTS[i];
 
+  // Docked: lives inside the mobile bottom bar's center slot, raised above it.
+  // Floating: free-floating corner button (desktop only — see AppShell).
+  const positionClasses =
+    variant === "docked"
+      ? "relative -top-5 w-14 h-14"
+      : "fixed z-40 bottom-6 end-6 w-[72px] h-[72px]";
+
   return (
     <motion.button
       onClick={onClick}
       aria-label="יצירה מהירה"
       title="יצירה מהירה"
-      // Mobile: sits inside the bottom nav, protruding upward slightly so it
-      // reads as a primary action attached to the bar.
-      // md+: free-floating bottom-right with a larger footprint.
-      className="fixed z-40 rounded-full shadow-lift flex items-center justify-center text-white ring-1 ring-white/25 hover:scale-105 transition-transform
-        bottom-8 end-4 w-16 h-16
-        md:bottom-6 md:end-6 md:w-[72px] md:h-[72px]"
+      className={
+        "rounded-full shadow-lift flex items-center justify-center text-white ring-2 ring-white hover:scale-105 transition-transform z-40 " +
+        positionClasses
+      }
       animate={{ background: gradient }}
       transition={{ duration: 1.4, ease: "easeInOut" }}
     >
@@ -69,7 +79,7 @@ export function AnimatedFab({ onClick, paused = false }: AnimatedFabProps) {
           exit={{ scale: 0.55, rotate: 35, opacity: 0 }}
           transition={{ duration: 0.35, ease: "easeOut" }}
         >
-          <Icon className="w-7 h-7 md:w-8 md:h-8" strokeWidth={2} />
+          <Icon className={variant === "docked" ? "w-6 h-6" : "w-8 h-8"} strokeWidth={2} />
         </motion.div>
       </AnimatePresence>
     </motion.button>

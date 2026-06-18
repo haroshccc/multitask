@@ -20,6 +20,8 @@ import { useFileUpload } from "@/lib/hooks/useFileUpload";
 import { presignDownload } from "@/lib/services/storage";
 import { useOrgMembers } from "@/lib/hooks";
 import type { TaskCustomField, CustomFieldType } from "@/lib/types/domain";
+import { DateField } from "@/components/ui/DateField";
+import { TimeField } from "@/components/ui/TimeField";
 
 // Generic alias — the configurable table operates on any row shape that
 // carries a `custom_fields` jsonb column and is described by a custom-field
@@ -164,11 +166,11 @@ function DynDateCell({
   onSave: (v: string | null) => void;
 }) {
   return (
-    <input
-      type="date"
+    <DateField
+      variant="ghost"
       value={value}
-      onChange={(e) => onSave(e.target.value || null)}
-      className="w-full bg-transparent border-0 outline-none text-[11px] text-ink-700 px-1 py-0.5 rounded hover:bg-white focus:bg-white focus:ring-1 focus:ring-primary-500/40"
+      onChange={(v) => onSave(v || null)}
+      label="תאריך"
     />
   );
 }
@@ -515,11 +517,11 @@ function DynTimeCell({
   onSave: (v: string | null) => void;
 }) {
   return (
-    <input
-      type="time"
+    <TimeField
+      variant="ghost"
       value={value}
-      onChange={(e) => onSave(e.target.value || null)}
-      className="w-full bg-transparent border-0 outline-none text-[11px] text-ink-700 px-1 py-0.5 rounded hover:bg-white focus:bg-white focus:ring-1 focus:ring-primary-500/40"
+      onChange={(v) => onSave(v || null)}
+      label="שעה"
     />
   );
 }

@@ -39,6 +39,7 @@ import {
 import { useTaskLists, useUpdateTaskList } from "@/lib/hooks/useTaskLists";
 import type { Project } from "@/lib/types/domain";
 import { ShareProjectModal } from "@/components/projects/ShareProjectModal";
+import { ProjectStateControl } from "@/components/projects/ProjectStateControl";
 import { cn } from "@/lib/utils/cn";
 import { pushUndo } from "@/lib/undo/store";
 
@@ -134,6 +135,7 @@ function ProjectShellLoaded({
       title=""
       actions={
         <>
+          <ProjectStateControl project={project} size="md" />
           <button
             type="button"
             onClick={() => setShareOpen(true)}

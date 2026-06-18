@@ -26,7 +26,7 @@ export function SectionCard({
   className,
 }: SectionCardProps) {
   return (
-    <section className={cn("card p-4 flex flex-col overflow-hidden", className)}>
+    <section className={cn("card p-3 sm:p-4 flex flex-col overflow-hidden", className)}>
       <header className="flex items-center gap-2 mb-3 shrink-0">
         <span
           className="w-7 h-7 rounded-lg bg-ink-50 border border-ink-100 flex items-center justify-center text-primary-600"

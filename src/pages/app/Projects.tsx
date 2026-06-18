@@ -6,6 +6,12 @@ import {
   useFiltersFromUrl,
 } from "@/components/filters/FilterBar";
 import { useProjects } from "@/lib/hooks/useProjects";
+import { useOrgContacts, useAllProjectContacts } from "@/lib/hooks/useContacts";
+import {
+  getProjectState,
+  PROJECT_STATE_LABEL,
+  type ProjectState,
+} from "@/lib/projects/state";
 import { CreateProjectDialog } from "@/components/projects/CreateProjectDialog";
 import { ProjectCard } from "@/components/projects/ProjectCard";
 import { ProjectsTable } from "@/components/projects/ProjectsTable";
@@ -13,16 +19,13 @@ import { cn } from "@/lib/utils/cn";
 
 const VIEW_STORAGE_KEY = "multitask.projects.view";
 type ViewMode = "cards" | "table";
-
-const STATUS_OPTIONS = [
-  { value: "active", label: "פעיל" },
-  { value: "on_hold", label: "מושהה" },
-  { value: "completed", label: "הושלם" },
-];
+type StateFilter = "all" | ProjectState;
 
 export function Projects() {
   const [filters, setFilters] = useFiltersFromUrl();
   const [showArchived, setShowArchived] = useState(false);
+  const [stateFilter, setStateFilter] = useState<StateFilter>("all");
+  const [contactId, setContactId] = useState<string>("");
   const [createOpen, setCreateOpen] = useState(false);
   const [view, setView] = useState<ViewMode>(() => {
     if (typeof window === "undefined") return "cards";
@@ -42,6 +45,28 @@ export function Projects() {
   }, []);
 
   const { data: projects = [], isLoading } = useProjects({}, true);
+  const { data: contacts = [] } = useOrgContacts();
+  const { data: projectContactLinks = [] } = useAllProjectContacts();
+
+  // All distinct tags across projects → ready-to-click chips in the filter.
+  const tagOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const p of projects) for (const t of p.tags ?? []) set.add(t);
+    return [...set]
+      .sort((a, b) => a.localeCompare(b, "he"))
+      .map((t) => ({ value: t, label: t }));
+  }, [projects]);
+
+  // project id → set of linked contact ids (for the contact filter).
+  const contactsByProject = useMemo(() => {
+    const m = new Map<string, Set<string>>();
+    for (const link of projectContactLinks) {
+      const set = m.get(link.project_id) ?? new Set<string>();
+      set.add(link.contact_id);
+      m.set(link.project_id, set);
+    }
+    return m;
+  }, [projectContactLinks]);
 
   const filtered = useMemo(() => {
     return projects.filter((p) => {
@@ -50,16 +75,15 @@ export function Projects() {
       } else {
         if (p.is_archived) return false;
       }
-      if (filters.statuses?.length && !filters.statuses.includes(p.status)) {
-        return false;
-      }
+      if (stateFilter !== "all" && getProjectState(p) !== stateFilter) return false;
+      if (contactId && !contactsByProject.get(p.id)?.has(contactId)) return false;
       if (filters.tags?.length) {
         const tagSet = new Set(p.tags ?? []);
         if (!filters.tags.some((t) => tagSet.has(t))) return false;
       }
       return true;
     });
-  }, [projects, filters, showArchived]);
+  }, [projects, filters, showArchived, stateFilter, contactId, contactsByProject]);
 
   const archivedCount = useMemo(
     () => projects.filter((p) => p.is_archived).length,
@@ -95,15 +119,72 @@ export function Projects() {
           filters={filters}
           onChange={setFilters}
           fields={[
-            {
-              key: "statuses",
-              type: "multi-enum",
-              label: "סטטוס",
-              options: STATUS_OPTIONS,
-            },
-            { key: "tags", type: "multi-text", label: "תגים" },
+            tagOptions.length > 0
+              ? {
+                  key: "tags",
+                  type: "multi-enum" as const,
+                  label: "תגים",
+                  options: tagOptions,
+                }
+              : { key: "tags", type: "multi-text" as const, label: "תגים" },
           ]}
         />
+
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Project state filter: פעיל / לא פעיל / הושלם */}
+          <div className="inline-flex items-center rounded-md border border-ink-200 bg-white overflow-hidden text-xs">
+            {([
+              ["all", "הכל"],
+              ["active", PROJECT_STATE_LABEL.active],
+              ["inactive", PROJECT_STATE_LABEL.inactive],
+              ["completed", PROJECT_STATE_LABEL.completed],
+            ] as [StateFilter, string][]).map(([val, label]) => (
+              <button
+                key={val}
+                type="button"
+                onClick={() => setStateFilter(val)}
+                className={cn(
+                  "px-2.5 py-1",
+                  stateFilter === val
+                    ? "bg-ink-900 text-white"
+                    : "text-ink-600 hover:bg-ink-50"
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* Contact filter */}
+          {contacts.length > 0 && (
+            <select
+              value={contactId}
+              onChange={(e) => setContactId(e.target.value)}
+              className="field text-xs py-1.5 w-auto max-w-[12rem]"
+              title="סינון לפי איש קשר"
+            >
+              <option value="">כל אנשי הקשר</option>
+              {contacts.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name || c.company || "ללא שם"}
+                </option>
+              ))}
+            </select>
+          )}
+
+          {(contactId || stateFilter !== "all") && (
+            <button
+              type="button"
+              onClick={() => {
+                setContactId("");
+                setStateFilter("all");
+              }}
+              className="text-xs text-ink-400 hover:text-ink-700"
+            >
+              נקה סינון
+            </button>
+          )}
+        </div>
 
         <div className="flex items-center justify-between gap-2">
           <div className="text-xs text-ink-500">

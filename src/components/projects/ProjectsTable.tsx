@@ -4,18 +4,13 @@ import { MoreHorizontal, Archive, ArchiveRestore } from "lucide-react";
 import { useArchiveProject, useRestoreProject } from "@/lib/hooks/useProjects";
 import type { Project } from "@/lib/types/domain";
 import { pushUndo } from "@/lib/undo/store";
+import { cn } from "@/lib/utils/cn";
 import { ListIcon } from "@/components/tasks/list-icons";
+import { ProjectStateControl } from "@/components/projects/ProjectStateControl";
 
 interface Props {
   projects: Project[];
 }
-
-const STATUS_LABEL: Record<string, string> = {
-  active: "פעיל",
-  on_hold: "מושהה",
-  completed: "הושלם",
-  archived: "בארכיון",
-};
 
 export function ProjectsTable({ projects }: Props) {
   const navigate = useNavigate();
@@ -59,6 +54,7 @@ function ProjectRow({
 }) {
   const archive = useArchiveProject();
   const restore = useRestoreProject();
+  const isActive = project.is_active !== false;
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -86,7 +82,10 @@ function ProjectRow({
   return (
     <tr
       onClick={onOpen}
-      className="border-b border-ink-100 hover:bg-ink-50 cursor-pointer"
+      className={cn(
+        "border-b border-ink-100 hover:bg-ink-50 cursor-pointer",
+        !isActive && "opacity-60"
+      )}
     >
       <td className="px-3 py-2">
         <div className="flex items-center gap-2 min-w-0">
@@ -103,8 +102,8 @@ function ProjectRow({
           <span className="font-medium text-ink-900 truncate">{project.name}</span>
         </div>
       </td>
-      <td className="px-3 py-2 text-ink-600">
-        {STATUS_LABEL[project.status] ?? project.status}
+      <td className="px-3 py-2" onClick={stop}>
+        <ProjectStateControl project={project} />
       </td>
       <td className="px-3 py-2">
         <div className="flex items-center gap-1 flex-wrap">

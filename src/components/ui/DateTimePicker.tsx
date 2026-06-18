@@ -353,7 +353,7 @@ export function DateTimePicker({
   );
 }
 
-const PortalPopover = forwardRef<
+export const PortalPopover = forwardRef<
   HTMLDivElement,
   {
     anchorRect: DOMRect;
@@ -411,7 +411,7 @@ const PortalPopover = forwardRef<
  * buttons (hour ±1, minute ±5 and carrying over the hour) or typed into
  * directly for an exact value. Stepping wraps around the clock.
  */
-function TimeSpinner({
+export function TimeSpinner({
   hours,
   minutes,
   minuteStep = 5,

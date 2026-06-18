@@ -39,6 +39,7 @@ import {
 import type { TaskInsert } from "@/lib/types/domain";
 import { useFileUpload } from "@/lib/hooks/useFileUpload";
 import { getThoughtDevelopmentFileUrl } from "@/lib/services/thought-developments";
+import { DateTimeField } from "@/components/ui/DateField";
 import type {
   ThoughtDevelopmentFile,
   ThoughtDevelopmentFileRole,
@@ -254,11 +255,9 @@ export function ThoughtDevelopmentEditModal({
                 </label>
                 <label className="block">
                   <div className="eyebrow mb-1">תאריך ושעת כתיבה</div>
-                  <input
-                    type="datetime-local"
+                  <DateTimeField
                     value={writtenAt}
-                    onChange={(e) => setWrittenAt(e.target.value)}
-                    className="field"
+                    onChange={setWrittenAt}
                   />
                 </label>
               </div>

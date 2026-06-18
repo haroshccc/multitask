@@ -25,6 +25,7 @@ import { useOrgMembersForOrg } from "@/lib/hooks/useOrgMembers";
 import { useAuth } from "@/lib/auth/AuthContext";
 import { useTaskSelectionStore } from "@/lib/selection/store";
 import { pushUndo } from "@/lib/undo/store";
+import { DateTimeField } from "@/components/ui/DateField";
 import type { Task } from "@/lib/types/domain";
 
 interface BulkActionsToolbarProps {
@@ -346,11 +347,10 @@ export function BulkActionsToolbar({ allTasks }: BulkActionsToolbarProps) {
                 onClick={() => setScheduleOpen(false)}
               />
               <div className="absolute bottom-full mb-1 start-0 z-40 bg-white text-ink-900 border border-ink-200 rounded-xl shadow-lift p-3 w-72 space-y-2">
-                <input
-                  type="datetime-local"
+                <DateTimeField
                   value={scheduleDraft}
-                  onChange={(e) => setScheduleDraft(e.target.value)}
-                  className="field text-sm w-full"
+                  onChange={setScheduleDraft}
+                  className="w-full"
                 />
                 <div className="flex items-center justify-between gap-2">
                   <button

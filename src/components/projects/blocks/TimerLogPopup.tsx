@@ -8,6 +8,8 @@ import {
 } from "@/lib/hooks";
 import type { Task, TimeEntry } from "@/lib/types/domain";
 import { pushUndo } from "@/lib/undo/store";
+import { DateField } from "@/components/ui/DateField";
+import { TimeField } from "@/components/ui/TimeField";
 
 /**
  * Modal popup that lists every time_entries row for a task and lets the user
@@ -355,17 +357,17 @@ function DateTimeInputs({
     <div>
       <label className="eyebrow mb-1 block text-[10px]">{label}</label>
       <div className="grid grid-cols-2 gap-1">
-        <input
-          type="date"
+        <DateField
           value={value.date}
-          onChange={(e) => onChange({ ...value, date: e.target.value })}
-          className="field py-1 text-xs"
+          onChange={(v) => onChange({ ...value, date: v })}
+          required
+          label="תאריך"
         />
-        <input
-          type="time"
+        <TimeField
           value={value.time}
-          onChange={(e) => onChange({ ...value, time: e.target.value })}
-          className="field py-1 text-xs"
+          onChange={(v) => onChange({ ...value, time: v })}
+          required
+          label="שעה"
         />
       </div>
     </div>

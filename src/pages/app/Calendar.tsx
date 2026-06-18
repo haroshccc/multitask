@@ -14,6 +14,7 @@ import { CalendarChrome } from "@/components/calendar/CalendarChrome";
 import { CalendarDayView } from "@/components/calendar/CalendarDayView";
 import { CalendarWeekView } from "@/components/calendar/CalendarWeekView";
 import { CalendarMonthView } from "@/components/calendar/CalendarMonthView";
+import { CalendarMonthMobile } from "@/components/calendar/CalendarMonthMobile";
 import { CalendarAgendaView } from "@/components/calendar/CalendarAgendaView";
 import { CalendarStatsStrip } from "@/components/calendar/CalendarStatsStrip";
 import { EventEditModal } from "@/components/calendar/EventEditModal";
@@ -35,6 +36,8 @@ import {
   CheckSquare,
   UsersRound,
   ChevronDown,
+  X,
+  Plus,
 } from "lucide-react";
 import {
   useCalendarDayNotes,
@@ -52,6 +55,7 @@ import {
   startOfMonth,
   endOfMonth,
   startOfWeek,
+  formatDayLong,
   taskToItem,
   taskDeadlineToItem,
   timeEntryToStripe,
@@ -67,6 +71,8 @@ import {
   useTimeEntriesByRange,
   useUpdateEvent,
   useUpdateTask,
+  useInactiveProjectListIds,
+  useInactiveProjectIds,
 } from "@/lib/hooks";
 import { useCalendarPrefs } from "@/lib/hooks/useCalendarPrefs";
 import { useOrgMembers } from "@/lib/hooks/useOrgMembers";
@@ -130,11 +136,17 @@ export function Calendar() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [view, setView] = useState<CalendarView>("week");
+  const [view, setView] = useState<CalendarView>("agenda");
   const [anchor, setAnchor] = useState<Date>(() => new Date());
   const [layer, setLayer] = useState<LayerMode>("both");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [statsOpen, setStatsOpen] = useState(false);
+  // Mobile: the entire control stack collapses behind the header "minimize"
+  // toggle (same concept as the Tasks screen). Default collapsed on mobile.
+  const [chromeOpen, setChromeOpen] = useState(false);
+  // Mobile month view: tapping a day opens a floating day-view banner over the
+  // month (edit/add then close with the X). Null = closed.
+  const [mobileDayOpen, setMobileDayOpen] = useState<Date | null>(null);
   // Scheduling mode: a side panel of list tasks the user drags onto the grid.
   const [scheduling, setScheduling] = useState(false);
   // Within scheduling mode: drag tasks (from lists) or meetings (from projects).
@@ -201,6 +213,11 @@ export function Calendar() {
     () => new Set(visibility?.hidden_list_ids ?? []),
     [visibility]
   );
+
+  // Inactive projects: their tasks (via list) and events (via project_id) are
+  // hidden from the calendar until reactivated.
+  const inactiveListIds = useInactiveProjectListIds();
+  const inactiveProjectIds = useInactiveProjectIds();
 
   // Meeting-scheduling panel: meetings from every project whose list is
   // currently visible on the calendar (mirrors how the task panel respects
@@ -346,6 +363,7 @@ export function Calendar() {
     if (layer !== "events") {
       for (const t of tasks) {
         if (t.task_list_id && hiddenLists.has(t.task_list_id)) continue;
+        if (t.task_list_id && inactiveListIds.has(t.task_list_id)) continue;
         const listColor = listColorById.get(t.task_list_id ?? "") ?? null;
         // Scheduled work block (only if there's a scheduled_at).
         if (t.scheduled_at) {
@@ -411,6 +429,7 @@ export function Calendar() {
         // Calendar visibility (via the same `hiddenLists` set, which holds
         // both task_list_ids and event_calendar_ids).
         if (e.calendar_id && hiddenLists.has(e.calendar_id)) continue;
+        if (e.project_id && inactiveProjectIds.has(e.project_id)) continue;
         const base = eventToItem(e, calendarColorById);
         // Recurring event → expand into concrete occurrences inside the window.
         // The server returns the master row (its own `starts_at` as the anchor).
@@ -452,7 +471,18 @@ export function Calendar() {
       }
     }
     return out;
-  }, [tasks, events, layer, hiddenLists, listColorById, calendarColorById, range, mealItems]);
+  }, [
+    tasks,
+    events,
+    layer,
+    hiddenLists,
+    inactiveListIds,
+    inactiveProjectIds,
+    listColorById,
+    calendarColorById,
+    range,
+    mealItems,
+  ]);
 
   // ── Multi-user lanes ──────────────────────────────────────────────────────
   // One lane per person (me first), each carrying only that person's items.
@@ -977,20 +1007,33 @@ export function Calendar() {
     }
     if (view === "month") {
       return (
-        <CalendarMonthView
-          anchor={anchor}
-          items={bodyItems}
-          onItemClick={handleItemClick}
-          onItemContextMenu={handleItemContextMenu}
-          onDayClick={handleMonthDayClick}
-          onCellClick={handleMonthCellClick}
-          onItemDrop={handleItemDrop}
-          notesByDate={notes}
-          noteColorsByDate={noteColors}
-          frameworkBlocks={fwBlocks}
-          frameworkLabelsByDate={fwLabels}
-          onFrameworkBlockClick={cycleFrameworkBlock}
-        />
+        <>
+          {/* Mobile: compact dotted month; tapping a day opens a floating
+              day-view banner over the month (see overlay below). */}
+          <div className="md:hidden">
+            <CalendarMonthMobile
+              anchor={anchor}
+              items={bodyItems}
+              onDayClick={(day) => setMobileDayOpen(day)}
+            />
+          </div>
+          <div className="hidden md:block">
+            <CalendarMonthView
+              anchor={anchor}
+              items={bodyItems}
+              onItemClick={handleItemClick}
+              onItemContextMenu={handleItemContextMenu}
+              onDayClick={handleMonthDayClick}
+              onCellClick={handleMonthCellClick}
+              onItemDrop={handleItemDrop}
+              notesByDate={notes}
+              noteColorsByDate={noteColors}
+              frameworkBlocks={fwBlocks}
+              frameworkLabelsByDate={fwLabels}
+              onFrameworkBlockClick={cycleFrameworkBlock}
+            />
+          </div>
+        </>
       );
     }
     return (
@@ -1014,7 +1057,41 @@ export function Calendar() {
   const lanesSideBySide = view === "day" || view === "agenda";
 
   return (
-    <ScreenScaffold title="יומן" subtitle="">
+    <ScreenScaffold
+      title="יומן"
+      subtitle=""
+      icon={<CalendarRange className="w-5 h-5" />}
+      chromeCollapsible
+      chromeOpen={chromeOpen}
+      onToggleChrome={() => setChromeOpen((v) => !v)}
+      chromeIndicator={filtersActiveCount > 0}
+      mobileExtra={
+        // View switch stays exposed in the header row as three buttons
+        // (agenda / week / month) even when the rest is minimized on mobile.
+        <div className="inline-flex items-center rounded-lg border border-ink-200 bg-white overflow-hidden text-sm">
+          {([
+            ["agenda", "אג׳נדה"],
+            ["week", "שבוע"],
+            ["month", "חודש"],
+          ] as const).map(([v, label]) => (
+            <button
+              key={v}
+              type="button"
+              onClick={() => setView(v)}
+              aria-pressed={view === v}
+              className={cn(
+                "px-2.5 py-1.5 font-medium transition-colors",
+                view === v
+                  ? "bg-ink-900 text-white"
+                  : "text-ink-600 hover:bg-ink-50"
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      }
+    >
       <DragHoverPill />
       {taskMenu && (
         <TaskActionsMenu
@@ -1029,6 +1106,10 @@ export function Calendar() {
         <TimerLogPopup task={logTask} onClose={() => setLogTask(null)} />
       )}
       <div className="space-y-2">
+        {/* Mobile: the whole control stack (nav + views + frameworks +
+            scheduling/multi-user) collapses behind the header minimize toggle
+            so the grid starts at the very top. Desktop always shows it. */}
+        <div className={cn("space-y-2", chromeOpen ? "block" : "hidden md:block")}>
         <CalendarChrome
           view={view}
           onViewChange={setView}
@@ -1190,6 +1271,7 @@ export function Calendar() {
             {scheduling ? "סגרי מצב שיבוץ" : "מצב שיבוץ"}
           </button>
         </div>
+        </div>
 
         <div className="flex items-start gap-3">
           {scheduling &&
@@ -1336,7 +1418,7 @@ export function Calendar() {
       {newListDialogOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40" onClick={() => setNewListDialogOpen(false)}>
           <form
-            className="bg-white rounded-2xl shadow-lift p-6 w-80 flex flex-col gap-4"
+            className="bg-white rounded-2xl shadow-lift p-6 w-80 max-w-[calc(100vw-1.5rem)] flex flex-col gap-4"
             onClick={(e) => e.stopPropagation()}
             onSubmit={handleCreateListSubmit}
           >
@@ -1354,6 +1436,72 @@ export function Calendar() {
               <button type="submit" className="btn-dark text-sm" disabled={!newListName.trim()}>יצירה</button>
             </div>
           </form>
+        </div>
+      )}
+      {/* Mobile: floating day-view banner opened from the compact month.
+          The month stays underneath; close with the X. Hidden while a
+          create/edit modal is open so that modal isn't covered by the
+          banner (it reappears when the modal closes). */}
+      {mobileDayOpen &&
+        !creating &&
+        !editingTaskId &&
+        !editingEventId &&
+        !editingNoteDate && (
+        <div
+          className="md:hidden fixed inset-0 z-50 flex items-center justify-center p-3 bg-ink-900/40"
+          onClick={() => setMobileDayOpen(null)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-lift w-full max-w-md max-h-[85vh] flex flex-col overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+            dir="rtl"
+          >
+            <div className="flex items-center gap-2 px-3 py-2 border-b border-ink-200 shrink-0">
+              <h3 className="font-semibold text-ink-900 text-sm flex-1 truncate">
+                {formatDayLong(mobileDayOpen)}
+              </h3>
+              <button
+                type="button"
+                onClick={() => {
+                  const start = new Date(mobileDayOpen);
+                  start.setHours(effectiveRange.hourStart, 0, 0, 0);
+                  handleCreateAt(start);
+                }}
+                className="p-1.5 rounded-md text-ink-600 hover:bg-ink-100"
+                title="הוספת משימה/אירוע"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setMobileDayOpen(null)}
+                className="p-1.5 rounded-md text-ink-500 hover:bg-ink-100"
+                title="סגירה"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-2">
+              <CalendarDayView
+                date={mobileDayOpen}
+                items={items}
+                actualStripes={actualStripes}
+                hourStart={effectiveRange.hourStart}
+                hourEnd={effectiveRange.hourEnd}
+                hourHeight={dynamicHourHeightDay}
+                onItemClick={handleItemClick}
+                onItemContextMenu={handleItemContextMenu}
+                onCreateAt={handleCreateAt}
+                onItemDrop={handleItemDrop}
+                dayNote={notesByDate.get(dateKey(mobileDayOpen))}
+                dayNoteColor={noteColorsByDate.get(dateKey(mobileDayOpen))}
+                onDateNoteClick={setEditingNoteDate}
+                frameworkBlocks={frameworkBlocks}
+                frameworkLabelsByDate={frameworkLabelsByDate}
+                onFrameworkBlockClick={cycleFrameworkBlock}
+              />
+            </div>
+          </div>
         </div>
       )}
     </ScreenScaffold>

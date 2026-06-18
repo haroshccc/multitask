@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { X, Plus } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
+import { DateField } from "@/components/ui/DateField";
+import { TimeField } from "@/components/ui/TimeField";
 
 /**
  * Lightweight RRULE picker — covers the cases a user actually hits in daily
@@ -239,11 +241,11 @@ export function RrulePicker({ value, onChange, anchorDate }: RrulePickerProps) {
                     שעה
                   </label>
                   {slot.hasTime ? (
-                    <input
-                      type="time"
+                    <TimeField
                       value={slot.time}
-                      onChange={(e) => setSlotTime(i, e.target.value)}
-                      className="field text-sm w-28 py-1"
+                      onChange={(v) => setSlotTime(i, v)}
+                      className="w-32"
+                      required
                     />
                   ) : (
                     <span className="text-[11px] text-ink-400">ללא שעה ספציפית</span>
@@ -273,14 +275,11 @@ export function RrulePicker({ value, onChange, anchorDate }: RrulePickerProps) {
 
           <div>
             <div className="text-[11px] text-ink-500 mb-1">עד תאריך (לא חובה)</div>
-            <input
-              type="date"
+            <DateField
               value={until.slice(0, 10)}
               min={anchorDate ? anchorDate.toISOString().slice(0, 10) : undefined}
-              onChange={(e) =>
-                setUntil(e.target.value ? e.target.value + "T00:00:00Z" : "")
-              }
-              className="field text-sm"
+              onChange={(v) => setUntil(v ? v + "T00:00:00Z" : "")}
+              placeholder="ללא תאריך סיום"
             />
           </div>
 

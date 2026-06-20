@@ -71,8 +71,8 @@ import {
   useTimeEntriesByRange,
   useUpdateEvent,
   useUpdateTask,
-  useInactiveProjectListIds,
-  useInactiveProjectIds,
+  useHiddenProjectListIds,
+  useHiddenProjectIds,
 } from "@/lib/hooks";
 import { useCalendarPrefs } from "@/lib/hooks/useCalendarPrefs";
 import { useOrgMembers } from "@/lib/hooks/useOrgMembers";
@@ -214,10 +214,10 @@ export function Calendar() {
     [visibility]
   );
 
-  // Inactive projects: their tasks (via list) and events (via project_id) are
-  // hidden from the calendar until reactivated.
-  const inactiveListIds = useInactiveProjectListIds();
-  const inactiveProjectIds = useInactiveProjectIds();
+  // Hidden projects (inactive/completed): their tasks (via list) and events
+  // (via project_id) are kept off the calendar until set back to active.
+  const inactiveListIds = useHiddenProjectListIds();
+  const inactiveProjectIds = useHiddenProjectIds();
 
   // Meeting-scheduling panel: meetings from every project whose list is
   // currently visible on the calendar (mirrors how the task panel respects

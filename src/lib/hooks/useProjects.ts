@@ -11,6 +11,7 @@ import type {
 } from "@/lib/types/domain";
 import { useOrgScope, assertOrgScope } from "./useOrgScope";
 import { useTaskLists } from "./useTaskLists";
+import { getProjectState } from "@/lib/projects/state";
 
 export function useProjects(filters: FilterConfig = {}, includeArchived = false) {
   const scope = useOrgScope();
@@ -162,32 +163,36 @@ export function useRestoreProject() {
   });
 }
 
-/** Set of *inactive* project ids (used to hide their events/meetings). */
-export function useInactiveProjectIds(): Set<string> {
+/** Set of *hidden* project ids — anything not in the "active" state (i.e.
+ *  inactive OR completed). Their tasks/events/lists are kept out of the task
+ *  list, calendar and Gantt until the project is set back to active. */
+export function useHiddenProjectIds(): Set<string> {
   const { data: projects = [] } = useProjects({}, true);
   return useMemo(
     () =>
-      new Set(projects.filter((p) => p.is_active === false).map((p) => p.id)),
+      new Set(
+        projects.filter((p) => getProjectState(p) !== "active").map((p) => p.id)
+      ),
     [projects]
   );
 }
 
 /**
- * Set of task-list ids that belong to an *inactive* project. Tasks/events in
- * these lists are hidden from the task list and calendar until the project is
- * reactivated. Relies on the shared (cached) projects + task-lists queries.
+ * Set of task-list ids that belong to a *hidden* project (inactive or
+ * completed). Used to hide their tasks/lists from the task list, calendar and
+ * Gantt. Relies on the shared (cached) projects + task-lists queries.
  */
-export function useInactiveProjectListIds(): Set<string> {
+export function useHiddenProjectListIds(): Set<string> {
   const { data: projects = [] } = useProjects({}, true);
   const { data: lists = [] } = useTaskLists();
   return useMemo(() => {
-    const inactiveProjects = new Set(
-      projects.filter((p) => p.is_active === false).map((p) => p.id)
+    const hiddenProjects = new Set(
+      projects.filter((p) => getProjectState(p) !== "active").map((p) => p.id)
     );
     const listIds = new Set<string>();
-    if (inactiveProjects.size === 0) return listIds;
+    if (hiddenProjects.size === 0) return listIds;
     for (const l of lists) {
-      if (l.project_id && inactiveProjects.has(l.project_id)) listIds.add(l.id);
+      if (l.project_id && hiddenProjects.has(l.project_id)) listIds.add(l.id);
     }
     return listIds;
   }, [projects, lists]);

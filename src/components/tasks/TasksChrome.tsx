@@ -91,7 +91,7 @@ export function TasksChrome({
       {/* Lists popover */}
       <PopoverButton
         icon={<ListIcon2 className="w-3.5 h-3.5" />}
-        label={<>רשימות <span className="text-amber-500 font-medium">({visibleListCount}/{lists.length})</span></>}
+        label={<>רשימות <span dir="ltr" className="inline-block text-amber-500 font-medium">({visibleListCount}/{lists.length})</span></>}
         title="בחירת רשימות בתצוגה"
         wide
       >

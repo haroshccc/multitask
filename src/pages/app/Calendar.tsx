@@ -865,13 +865,15 @@ export function Calendar() {
 
   const unifiedLists = useMemo(
     () =>
-      lists.map((l) => ({
-        id: l.id,
-        name: l.name,
-        emoji: l.emoji,
-        color: l.color,
-      })),
-    [lists]
+      lists
+        .filter((l) => !inactiveListIds.has(l.id))
+        .map((l) => ({
+          id: l.id,
+          name: l.name,
+          emoji: l.emoji,
+          color: l.color,
+        })),
+    [lists, inactiveListIds]
   );
 
   // Grouped lists picker: my personal lists first, then lists shared with me,
@@ -908,7 +910,9 @@ export function Calendar() {
         lists: shared.map(toUnified),
       });
 
-    const projects = lists.filter((l) => l.project_id);
+    const projects = lists.filter(
+      (l) => l.project_id && !inactiveListIds.has(l.id)
+    );
     if (projects.length > 0)
       sections.push({
         key: "projects",
@@ -917,7 +921,7 @@ export function Calendar() {
       });
 
     return sections;
-  }, [lists, unifiedLists, user?.id]);
+  }, [lists, unifiedLists, user?.id, inactiveListIds]);
 
   const unifiedCalendars = useMemo(
     () =>

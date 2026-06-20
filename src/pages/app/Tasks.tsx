@@ -248,6 +248,13 @@ export function Tasks() {
     });
   }, [lists, hiddenSet, hiddenProjectListIds]);
 
+  // Lists offered in the visibility menu / empty-state — hidden-project lists
+  // are excluded so they don't appear as toggle options at all.
+  const chromeLists = useMemo(
+    () => lists.filter((l) => !hiddenProjectListIds.has(l.id)),
+    [lists, hiddenProjectListIds]
+  );
+
   const handleMoveListInOrder = (listId: string, direction: -1 | 1) => {
     const target = visibleLists.find((l) => l.id === listId);
     if (!target) return;
@@ -763,7 +770,7 @@ export function Tasks() {
               <div className="md:sticky md:top-0 z-30 bg-ink-50 -mx-1 px-1 pt-1 pb-2 space-y-2">
                 <div className={cn("space-y-2", chromeOpen ? "block" : "hidden md:block")}>
                 <TasksChrome
-                  lists={lists.map((l) => ({
+                  lists={chromeLists.map((l) => ({
                     id: l.id,
                     name: l.name,
                     emoji: l.emoji,
@@ -828,7 +835,7 @@ export function Tasks() {
                     layout="stack"
                   />
                 ))}
-                {visibleLists.length === 0 && <EmptyListsHint lists={lists} />}
+                {visibleLists.length === 0 && <EmptyListsHint lists={chromeLists} />}
               </div>
             </>
           ) : (
@@ -838,7 +845,7 @@ export function Tasks() {
             <>
               <div className={cn("space-y-2", chromeOpen ? "block" : "hidden md:block")}>
               <TasksChrome
-                lists={lists.map((l) => ({
+                lists={chromeLists.map((l) => ({
                   id: l.id,
                   name: l.name,
                   emoji: l.emoji,
@@ -910,7 +917,7 @@ export function Tasks() {
                       />
                     ))}
                     {visibleLists.length === 0 && (
-                      <EmptyListsHint lists={lists} />
+                      <EmptyListsHint lists={chromeLists} />
                     )}
                   </div>
                 </div>

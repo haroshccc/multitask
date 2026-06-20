@@ -685,7 +685,7 @@ export function Gantt() {
     }
   };
 
-  const unifiedLists = useMemo(() => lists.map((l) => ({ id: l.id, name: l.name, emoji: l.emoji, color: l.color, project_id: l.project_id })), [lists]);
+  const unifiedLists = useMemo(() => lists.filter((l) => !hiddenProjectListIds.has(l.id)).map((l) => ({ id: l.id, name: l.name, emoji: l.emoji, color: l.color, project_id: l.project_id })), [lists, hiddenProjectListIds]);
   const unifiedProjects = useMemo(() => projects.map((p) => ({ id: p.id, name: p.name, emoji: p.emoji ?? null, color: p.color ?? null })), [projects]);
 
   const listNamesMap = useMemo(() => {

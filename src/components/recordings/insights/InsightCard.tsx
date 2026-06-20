@@ -392,8 +392,8 @@ function ReadyBody({
   ai: RecordingAiOutput;
   onOpenSource: () => void;
 }) {
-  const tasks = ai.tasks ?? [];
-  const events = ai.events ?? [];
+  const tasks = toArray<NonNullable<RecordingAiOutput["tasks"]>[number]>(ai.tasks);
+  const events = toArray<NonNullable<RecordingAiOutput["events"]>[number]>(ai.events);
   const shownTasks = tasks.slice(0, 3);
   return (
     <div className="space-y-2.5">
@@ -458,6 +458,25 @@ function ReadyBody({
       )}
     </div>
   );
+}
+
+/**
+ * Coerce an `ai_output` field to an array. Legacy/corrupt rows have stored
+ * `tasks`/`events` as a JSON *string* (sometimes itself malformed) instead of a
+ * real array — `?? []` doesn't catch that and `.map` then throws and white-
+ * screens the whole feed. This tolerates array | JSON-string-of-array | junk.
+ */
+function toArray<T>(v: unknown): T[] {
+  if (Array.isArray(v)) return v as T[];
+  if (typeof v === "string") {
+    try {
+      const parsed = JSON.parse(v);
+      return Array.isArray(parsed) ? (parsed as T[]) : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
 }
 
 /** Format an (untrusted, AI-provided) date string, or null if unparseable. */

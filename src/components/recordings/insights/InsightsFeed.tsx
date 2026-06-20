@@ -12,6 +12,7 @@ import { useRecordingsPageCtx } from "@/components/recordings/widgets/context";
 import { QuickRecordTallWidget } from "@/components/recordings/widgets/QuickRecordTallWidget";
 import { UploadTallWidget } from "@/components/recordings/widgets/UploadTallWidget";
 import { InsightCard } from "./InsightCard";
+import { CardErrorBoundary } from "./CardErrorBoundary";
 import { FilingWizard } from "./FilingWizard";
 import type { Recording } from "@/lib/types/domain";
 
@@ -131,16 +132,17 @@ export function InsightsFeed() {
   };
 
   const renderCard = (r: Recording) => (
-    <InsightCard
-      key={r.id}
-      recording={r}
-      isUnfiled={isUnfiled(r)}
-      projectName={r.project_id ? projectName.get(r.project_id) ?? null : null}
-      listNames={listNamesFor(r)}
-      lists={lists}
-      projects={projects}
-      onFile={() => setWizardId(r.id)}
-    />
+    <CardErrorBoundary key={r.id} title={r.title}>
+      <InsightCard
+        recording={r}
+        isUnfiled={isUnfiled(r)}
+        projectName={r.project_id ? projectName.get(r.project_id) ?? null : null}
+        listNames={listNamesFor(r)}
+        lists={lists}
+        projects={projects}
+        onFile={() => setWizardId(r.id)}
+      />
+    </CardErrorBoundary>
   );
 
   const activeFolderLabel = folders.find((f) => f.key === folder)?.label ?? "הכל";

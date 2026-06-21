@@ -16,6 +16,7 @@ import {
   useMoveTaskToList,
 } from "@/lib/hooks/useTasks";
 import { useTaskLists } from "@/lib/hooks/useTaskLists";
+import { useHiddenProjectListIds } from "@/lib/hooks/useProjects";
 import {
   useAddTaskAssignee,
 } from "@/lib/hooks/useTaskAssignees";
@@ -50,7 +51,9 @@ export function BulkActionsToolbar({ allTasks }: BulkActionsToolbarProps) {
   const setShare = useSetTaskShare();
   const { user, activeOrganizationId } = useAuth();
   const { data: allOrgs = [] } = useUserOrganizations();
-  const { data: taskLists = [] } = useTaskLists();
+  const { data: allTaskLists = [] } = useTaskLists();
+  const hiddenProjectListIds = useHiddenProjectListIds();
+  const taskLists = allTaskLists.filter((l) => !hiddenProjectListIds.has(l.id));
 
   const [urgencyOpen, setUrgencyOpen] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);

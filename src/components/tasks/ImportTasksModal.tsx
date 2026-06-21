@@ -12,6 +12,7 @@ import {
 import { cn } from "@/lib/utils/cn";
 import { useCreateTask } from "@/lib/hooks/useTasks";
 import { useTaskLists } from "@/lib/hooks/useTaskLists";
+import { useHiddenProjectListIds } from "@/lib/hooks/useProjects";
 import type { TaskList } from "@/lib/types/domain";
 
 // ---------------------------------------------------------------------------
@@ -124,7 +125,9 @@ function TextImportTab({ onClose }: { onClose: () => void }) {
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const { data: lists = [] } = useTaskLists();
+  const { data: allLists = [] } = useTaskLists();
+  const hiddenProjectListIds = useHiddenProjectListIds();
+  const lists = allLists.filter((l) => !hiddenProjectListIds.has(l.id));
   const createTask = useCreateTask();
 
   const handleParse = () => {
@@ -300,7 +303,9 @@ function ImageImportTab({ onClose }: { onClose: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
-  const { data: lists = [] } = useTaskLists();
+  const { data: allLists = [] } = useTaskLists();
+  const hiddenProjectListIds = useHiddenProjectListIds();
+  const lists = allLists.filter((l) => !hiddenProjectListIds.has(l.id));
   const createTask = useCreateTask();
 
   const handleFile = async (file: File) => {

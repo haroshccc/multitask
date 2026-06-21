@@ -209,15 +209,17 @@ export function Calendar() {
   const setListVisibility = useSetListVisibility();
   const createTaskList = useCreateTaskList();
 
-  const hiddenLists = useMemo(
-    () => new Set(visibility?.hidden_list_ids ?? []),
-    [visibility]
-  );
-
   // Hidden projects (inactive/completed): their tasks (via list) and events
   // (via project_id) are kept off the calendar until set back to active.
   const inactiveListIds = useHiddenProjectListIds();
   const inactiveProjectIds = useHiddenProjectIds();
+
+  // The set the whole calendar (board + scheduling panel + pickers) treats as
+  // hidden: user-toggled lists PLUS lists of inactive/completed projects.
+  const hiddenLists = useMemo(
+    () => new Set([...(visibility?.hidden_list_ids ?? []), ...inactiveListIds]),
+    [visibility, inactiveListIds]
+  );
 
   // Meeting-scheduling panel: meetings from every project whose list is
   // currently visible on the calendar (mirrors how the task panel respects

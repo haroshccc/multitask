@@ -32,6 +32,7 @@ import {
 } from "@/lib/hooks/useTasks";
 import * as tasksService from "@/lib/services/tasks";
 import { useTaskLists } from "@/lib/hooks/useTaskLists";
+import { useHiddenProjectListIds } from "@/lib/hooks/useProjects";
 import {
   useActiveTimer,
   useStartTimer,
@@ -131,7 +132,10 @@ export function TaskRow({
   const duplicateOne = useDuplicateTask();
   const deleteTaskM = useDeleteTask();
   const restoreTasks = useRestoreTasks();
-  const { data: taskLists = [] } = useTaskLists();
+  const { data: allTaskLists = [] } = useTaskLists();
+  const hiddenProjectListIds = useHiddenProjectListIds();
+  // Hide inactive/completed-project lists from the move/duplicate pickers.
+  const taskLists = allTaskLists.filter((l) => !hiddenProjectListIds.has(l.id));
   const startTimer = useStartTimer();
   const stopTimer = useStopTimer();
   const { data: activeTimer } = useActiveTimer();

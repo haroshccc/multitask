@@ -75,7 +75,7 @@ export function TasksChrome({
   onToggleStats,
   className,
 }: TasksChromeProps) {
-  const visibleListCount = lists.length - hiddenListIds.size;
+  const visibleListCount = lists.filter((l) => !hiddenListIds.has(l.id)).length;
 
   return (
     <div

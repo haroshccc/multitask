@@ -14,7 +14,9 @@ import {
   useCompleteTask,
   useDeleteTask,
   useMoveTaskToList,
+  useRestoreTasks,
 } from "@/lib/hooks/useTasks";
+import { fetchTaskSubtree } from "@/lib/services/tasks";
 import { useTaskLists } from "@/lib/hooks/useTaskLists";
 import { useHiddenProjectListIds } from "@/lib/hooks/useProjects";
 import {
@@ -46,6 +48,7 @@ export function BulkActionsToolbar({ allTasks }: BulkActionsToolbarProps) {
   const updateTask = useUpdateTask();
   const completeTask = useCompleteTask();
   const deleteTask = useDeleteTask();
+  const restore = useRestoreTasks();
   const moveToList = useMoveTaskToList();
   const addAssignee = useAddTaskAssignee();
   const setShare = useSetTaskShare();
@@ -262,12 +265,44 @@ export function BulkActionsToolbar({ allTasks }: BulkActionsToolbarProps) {
     setDelegateSelectedUsers(new Set());
   };
 
-  const applyDelete = () => {
-    // Delete cascades children at the DB level; no undo (matches per-row
-    // delete behaviour). We confirm before applying for safety.
-    for (const id of ids) deleteTask.mutate(id);
+  const applyDelete = async () => {
+    // Snapshot every selected subtree first so the whole batch can be undone.
+    // Selecting a parent also selects its descendants, so the same task can be
+    // reached via several roots — dedupe by id and order parents-before-children
+    // so the restore re-inserts without FK/PK errors.
+    const byId = new Map<string, Task>();
+    for (const id of ids) {
+      try {
+        for (const t of await fetchTaskSubtree(id)) byId.set(t.id, t);
+      } catch (e) {
+        console.error("bulk delete: subtree snapshot failed", e);
+      }
+    }
+    const ordered: Task[] = [];
+    const emitted = new Set<string>();
+    const visit = (t: Task) => {
+      if (emitted.has(t.id)) return;
+      const parent = t.parent_task_id ? byId.get(t.parent_task_id) : undefined;
+      if (parent && !emitted.has(parent.id)) visit(parent);
+      emitted.add(t.id);
+      ordered.push(t);
+    };
+    byId.forEach((t) => visit(t));
+
+    const count = ids.length;
+    const redo = () => {
+      for (const id of ids) deleteTask.mutate(id);
+    };
+    redo();
     setConfirmDelete(false);
     clear();
+    if (ordered.length > 0) {
+      pushUndo({
+        description: `מחיקת ${count} משימות`,
+        undo: () => restore.mutate(ordered),
+        redo,
+      });
+    }
   };
 
   return (

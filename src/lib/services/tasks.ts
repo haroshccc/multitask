@@ -428,7 +428,13 @@ export async function restoreTasks(tasks: Task[]): Promise<void> {
   // Insert one row at a time to keep the order; bulk insert wouldn't
   // guarantee parent-before-child execution if the array is ever reordered.
   for (const t of tasks) {
-    const { error } = await supabase.from("tasks").insert(t);
+    // `search_tsv` is a GENERATED ALWAYS column — Postgres rejects an explicit
+    // value for it, which previously made the very first insert (the parent)
+    // throw and the whole restore silently no-op (the undo toast still fired,
+    // so deletes looked un-undoable). Strip it before re-inserting.
+    const row = { ...t } as Record<string, unknown>;
+    delete row.search_tsv;
+    const { error } = await (supabase.from("tasks") as any).insert(row);
     if (error) throw error;
   }
 }

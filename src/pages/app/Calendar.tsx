@@ -136,7 +136,20 @@ export function Calendar() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [view, setView] = useState<CalendarView>("agenda");
+  const [view, setView] = useState<CalendarView>(() => {
+    if (typeof window === "undefined") return "agenda";
+    const stored = localStorage.getItem("multitask.calendar.view");
+    return stored === "day" ||
+      stored === "week" ||
+      stored === "month" ||
+      stored === "agenda"
+      ? stored
+      : "agenda";
+  });
+  useEffect(() => {
+    if (typeof window !== "undefined")
+      localStorage.setItem("multitask.calendar.view", view);
+  }, [view]);
   const [anchor, setAnchor] = useState<Date>(() => new Date());
   const [layer, setLayer] = useState<LayerMode>("both");
   const [filtersOpen, setFiltersOpen] = useState(false);

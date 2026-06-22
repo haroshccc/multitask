@@ -19,6 +19,7 @@ import {
   useRestoreTasks,
   useTaskLists,
   useUpdateTask,
+  useHiddenProjectListIds,
 } from "@/lib/hooks";
 import { fetchTaskSubtree } from "@/lib/services/tasks";
 import { pushUndo } from "@/lib/undo/store";
@@ -48,7 +49,9 @@ export function TaskActionsMenu({
   const duplicate = useDuplicateTask();
   const deleteTask = useDeleteTask();
   const restore = useRestoreTasks();
-  const { data: taskLists = [] } = useTaskLists();
+  const { data: allTaskLists = [] } = useTaskLists();
+  const hiddenProjectListIds = useHiddenProjectListIds();
+  const taskLists = allTaskLists.filter((l) => !hiddenProjectListIds.has(l.id));
   const { startSession } = useFocusSession();
 
   const ref = useRef<HTMLDivElement>(null);

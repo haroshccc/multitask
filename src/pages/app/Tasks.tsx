@@ -53,7 +53,7 @@ import {
   useMyTaskStatuses,
   useMaxVisibleColumns,
   useRowDisplayPrefs,
-  useInactiveProjectListIds,
+  useHiddenProjectListIds,
 } from "@/lib/hooks";
 import { pushUndo } from "@/lib/undo/store";
 import { useTaskSelectionStore } from "@/lib/selection/store";
@@ -219,14 +219,16 @@ export function Tasks() {
   // Build per-list trees + a count map for header badges.
   // Pass knownListIds so tasks delegated to me from foreign lists fall into unassigned.
   const knownListIds = useMemo(() => new Set(lists.map((l) => l.id)), [lists]);
-  // Hide tasks belonging to inactive projects (their lists) from the task list.
-  const inactiveListIds = useInactiveProjectListIds();
+  // Hide tasks + list columns belonging to hidden projects (inactive/completed).
+  const hiddenProjectListIds = useHiddenProjectListIds();
   const visibleTasks = useMemo(
     () =>
-      inactiveListIds.size === 0
+      hiddenProjectListIds.size === 0
         ? tasks
-        : tasks.filter((t) => !(t.task_list_id && inactiveListIds.has(t.task_list_id))),
-    [tasks, inactiveListIds]
+        : tasks.filter(
+            (t) => !(t.task_list_id && hiddenProjectListIds.has(t.task_list_id))
+          ),
+    [tasks, hiddenProjectListIds]
   );
   const { listTrees, counts } = useMemo(
     () => buildTrees(visibleTasks, knownListIds),
@@ -235,13 +237,23 @@ export function Tasks() {
 
   // Columns to render: "unassigned" always visible and pinned, then the rest.
   // Pinned-via-menu custom lists come first (right after "unassigned").
+  // Lists of hidden projects (inactive/completed) drop out entirely.
   const visibleLists = useMemo(() => {
-    const shown = lists.filter((l) => !hiddenSet.has(l.id));
+    const shown = lists.filter(
+      (l) => !hiddenSet.has(l.id) && !hiddenProjectListIds.has(l.id)
+    );
     return shown.sort((a, b) => {
       if (!!a.is_pinned !== !!b.is_pinned) return a.is_pinned ? -1 : 1;
       return a.sort_order - b.sort_order;
     });
-  }, [lists, hiddenSet]);
+  }, [lists, hiddenSet, hiddenProjectListIds]);
+
+  // Lists offered in the visibility menu / empty-state — hidden-project lists
+  // are excluded so they don't appear as toggle options at all.
+  const chromeLists = useMemo(
+    () => lists.filter((l) => !hiddenProjectListIds.has(l.id)),
+    [lists, hiddenProjectListIds]
+  );
 
   const handleMoveListInOrder = (listId: string, direction: -1 | 1) => {
     const target = visibleLists.find((l) => l.id === listId);
@@ -758,7 +770,7 @@ export function Tasks() {
               <div className="md:sticky md:top-0 z-30 bg-ink-50 -mx-1 px-1 pt-1 pb-2 space-y-2">
                 <div className={cn("space-y-2", chromeOpen ? "block" : "hidden md:block")}>
                 <TasksChrome
-                  lists={lists.map((l) => ({
+                  lists={chromeLists.map((l) => ({
                     id: l.id,
                     name: l.name,
                     emoji: l.emoji,
@@ -823,7 +835,7 @@ export function Tasks() {
                     layout="stack"
                   />
                 ))}
-                {visibleLists.length === 0 && <EmptyListsHint lists={lists} />}
+                {visibleLists.length === 0 && <EmptyListsHint lists={chromeLists} />}
               </div>
             </>
           ) : (
@@ -833,7 +845,7 @@ export function Tasks() {
             <>
               <div className={cn("space-y-2", chromeOpen ? "block" : "hidden md:block")}>
               <TasksChrome
-                lists={lists.map((l) => ({
+                lists={chromeLists.map((l) => ({
                   id: l.id,
                   name: l.name,
                   emoji: l.emoji,
@@ -905,7 +917,7 @@ export function Tasks() {
                       />
                     ))}
                     {visibleLists.length === 0 && (
-                      <EmptyListsHint lists={lists} />
+                      <EmptyListsHint lists={chromeLists} />
                     )}
                   </div>
                 </div>

@@ -71,8 +71,8 @@ import {
   useTimeEntriesByRange,
   useUpdateEvent,
   useUpdateTask,
-  useInactiveProjectListIds,
-  useInactiveProjectIds,
+  useHiddenProjectListIds,
+  useHiddenProjectIds,
 } from "@/lib/hooks";
 import { useCalendarPrefs } from "@/lib/hooks/useCalendarPrefs";
 import { useOrgMembers } from "@/lib/hooks/useOrgMembers";
@@ -136,7 +136,20 @@ export function Calendar() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [view, setView] = useState<CalendarView>("agenda");
+  const [view, setView] = useState<CalendarView>(() => {
+    if (typeof window === "undefined") return "agenda";
+    const stored = localStorage.getItem("multitask.calendar.view");
+    return stored === "day" ||
+      stored === "week" ||
+      stored === "month" ||
+      stored === "agenda"
+      ? stored
+      : "agenda";
+  });
+  useEffect(() => {
+    if (typeof window !== "undefined")
+      localStorage.setItem("multitask.calendar.view", view);
+  }, [view]);
   const [anchor, setAnchor] = useState<Date>(() => new Date());
   const [layer, setLayer] = useState<LayerMode>("both");
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -209,15 +222,17 @@ export function Calendar() {
   const setListVisibility = useSetListVisibility();
   const createTaskList = useCreateTaskList();
 
-  const hiddenLists = useMemo(
-    () => new Set(visibility?.hidden_list_ids ?? []),
-    [visibility]
-  );
+  // Hidden projects (inactive/completed): their tasks (via list) and events
+  // (via project_id) are kept off the calendar until set back to active.
+  const inactiveListIds = useHiddenProjectListIds();
+  const inactiveProjectIds = useHiddenProjectIds();
 
-  // Inactive projects: their tasks (via list) and events (via project_id) are
-  // hidden from the calendar until reactivated.
-  const inactiveListIds = useInactiveProjectListIds();
-  const inactiveProjectIds = useInactiveProjectIds();
+  // The set the whole calendar (board + scheduling panel + pickers) treats as
+  // hidden: user-toggled lists PLUS lists of inactive/completed projects.
+  const hiddenLists = useMemo(
+    () => new Set([...(visibility?.hidden_list_ids ?? []), ...inactiveListIds]),
+    [visibility, inactiveListIds]
+  );
 
   // Meeting-scheduling panel: meetings from every project whose list is
   // currently visible on the calendar (mirrors how the task panel respects
@@ -865,13 +880,15 @@ export function Calendar() {
 
   const unifiedLists = useMemo(
     () =>
-      lists.map((l) => ({
-        id: l.id,
-        name: l.name,
-        emoji: l.emoji,
-        color: l.color,
-      })),
-    [lists]
+      lists
+        .filter((l) => !inactiveListIds.has(l.id))
+        .map((l) => ({
+          id: l.id,
+          name: l.name,
+          emoji: l.emoji,
+          color: l.color,
+        })),
+    [lists, inactiveListIds]
   );
 
   // Grouped lists picker: my personal lists first, then lists shared with me,
@@ -908,7 +925,9 @@ export function Calendar() {
         lists: shared.map(toUnified),
       });
 
-    const projects = lists.filter((l) => l.project_id);
+    const projects = lists.filter(
+      (l) => l.project_id && !inactiveListIds.has(l.id)
+    );
     if (projects.length > 0)
       sections.push({
         key: "projects",
@@ -917,7 +936,7 @@ export function Calendar() {
       });
 
     return sections;
-  }, [lists, unifiedLists, user?.id]);
+  }, [lists, unifiedLists, user?.id, inactiveListIds]);
 
   const unifiedCalendars = useMemo(
     () =>

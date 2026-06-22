@@ -41,6 +41,7 @@ import {
   useUpdateTask,
   useCompleteTask,
   useDeleteTask,
+  useRestoreTasks,
   useTaskLists,
   useCreateTaskList,
   useProject,
@@ -55,6 +56,7 @@ import {
   useProjectQuestions,
 } from "@/lib/hooks";
 import { useUpdateProject } from "@/lib/hooks/useProjects";
+import { fetchTaskSubtree } from "@/lib/services/tasks";
 import type {
   Project,
   Task,
@@ -318,7 +320,30 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
   const update = useUpdateTask();
   const complete = useCompleteTask();
   const del = useDeleteTask();
+  const restore = useRestoreTasks();
   const reorder = useReorderTasks();
+
+  // Delete a task (and its subtree) with undo — snapshot first so the whole
+  // branch can be restored.
+  const handleDeleteWithUndo = async (taskId: string) => {
+    let subtree: Task[] = [];
+    try {
+      subtree = await fetchTaskSubtree(taskId);
+    } catch (e) {
+      console.error("delete: subtree snapshot failed", e);
+    }
+    del.mutate(taskId);
+    if (subtree.length > 0) {
+      pushUndo({
+        description:
+          subtree.length > 1
+            ? `מחיקת משימה (${subtree.length} פריטים)`
+            : "מחיקת משימה",
+        undo: () => restore.mutate(subtree),
+        redo: () => del.mutate(taskId),
+      });
+    }
+  };
   const updateProject = useUpdateProject();
   const { data: activeTimer } = useActiveTimer();
   const startTimer = useStartTimer();
@@ -1013,7 +1038,7 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
               onEnterNavigate={handleEnterNavigate}
               onUpdate={handleTaskUpdate}
               onComplete={handleCompleteWithUndo}
-              onDelete={(id) => del.mutate(id)}
+              onDelete={(id) => handleDeleteWithUndo(id)}
               onAddSub={handleAddSub}
               onToggleTimer={(taskId, isCurrentlyActive) => {
                 if (isCurrentlyActive) stopTimer.mutate();

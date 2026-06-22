@@ -38,6 +38,7 @@ import {
   useCreateTask,
   useCreateTaskList,
   useEvents,
+  useHiddenProjectListIds,
   useListVisibility,
   useMoveTaskToList,
   useProjects,
@@ -261,6 +262,8 @@ export function Gantt() {
   const setListVisibility = useSetListVisibility();
   const createTaskList = useCreateTaskList();
   const hiddenLists = useMemo(() => new Set(visibility?.hidden_list_ids ?? []), [visibility]);
+  // Lists of hidden projects (inactive/completed) — kept off the global Gantt.
+  const hiddenProjectListIds = useHiddenProjectListIds();
 
   const [source, setSource] = useState<GanttSource>(() => {
     if (typeof window === "undefined") return { kind: "all" };
@@ -349,9 +352,11 @@ export function Gantt() {
       if (source.kind === "list") return t.task_list_id === source.id;
       if (source.kind === "project") return !!t.task_list_id && !!projectListIds?.has(t.task_list_id);
       if (t.task_list_id && hiddenLists.has(t.task_list_id)) return false;
+      // Hide tasks of inactive/completed projects from the global Gantt.
+      if (t.task_list_id && hiddenProjectListIds.has(t.task_list_id)) return false;
       return true;
     });
-  }, [tasks, hiddenLists, source, projectListIds]);
+  }, [tasks, hiddenLists, hiddenProjectListIds, source, projectListIds]);
 
   const filteredEvents = useMemo(() => {
     if (source.kind === "all") return events;
@@ -680,7 +685,7 @@ export function Gantt() {
     }
   };
 
-  const unifiedLists = useMemo(() => lists.map((l) => ({ id: l.id, name: l.name, emoji: l.emoji, color: l.color, project_id: l.project_id })), [lists]);
+  const unifiedLists = useMemo(() => lists.filter((l) => !hiddenProjectListIds.has(l.id)).map((l) => ({ id: l.id, name: l.name, emoji: l.emoji, color: l.color, project_id: l.project_id })), [lists, hiddenProjectListIds]);
   const unifiedProjects = useMemo(() => projects.map((p) => ({ id: p.id, name: p.name, emoji: p.emoji ?? null, color: p.color ?? null })), [projects]);
 
   const listNamesMap = useMemo(() => {

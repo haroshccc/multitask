@@ -1573,12 +1573,11 @@ function stripDescHtml(html: string): string {
       } else if (tag === "li") {
         const text = (el.textContent ?? "").trim();
         lines.push(listType === "ol" ? `${cnt.n++}. ${text}` : `• ${text}`);
-      } else if (tag === "br") {
-        lines.push("");
-      } else if (tag === "p" || tag === "div") {
-        el.childNodes.forEach((c) => visit(c, listType, cnt));
-        lines.push("");
       } else {
+        // p, div, br, span, … — just recurse into children. Each text node
+        // already becomes its own line, so block boundaries don't need an
+        // extra blank line. Adding one here injected an unwanted empty line
+        // between every paragraph when opening the description for editing.
         el.childNodes.forEach((c) => visit(c, listType, cnt));
       }
     }

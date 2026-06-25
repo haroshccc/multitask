@@ -22,6 +22,7 @@ export function ExpenseRow({
   occ,
   expense,
   account,
+  readOnly,
   onToggleCharged,
   onToggleWithdrawn,
   onArchive,
@@ -29,6 +30,7 @@ export function ExpenseRow({
   occ: FinanceOccurrence;
   expense?: FinanceExpense;
   account?: FinanceAccount;
+  readOnly?: boolean;
   onToggleCharged: (charged: boolean) => void;
   onToggleWithdrawn: (withdrawn: boolean) => void;
   onArchive?: () => void;
@@ -56,11 +58,12 @@ export function ExpenseRow({
       {/* charged-to-budget vee — generous tap target for touch */}
       <button
         type="button"
-        onClick={() => onToggleCharged(!occ.budget_charged)}
+        onClick={() => !readOnly && onToggleCharged(!occ.budget_charged)}
+        disabled={readOnly}
         aria-pressed={occ.budget_charged}
         aria-label={occ.budget_charged ? "חויב לתקציב" : "סמן חיוב לתקציב"}
         title={occ.budget_charged ? "חויב לתקציב" : "סמן חיוב לתקציב"}
-        className="flex h-9 w-7 shrink-0 items-center justify-center"
+        className="flex h-9 w-7 shrink-0 items-center justify-center disabled:cursor-default"
       >
         <span
           className={cn(
@@ -93,7 +96,8 @@ export function ExpenseRow({
       {/* account / withdrawal state */}
       <button
         type="button"
-        onClick={() => onToggleWithdrawn(!occ.withdrawn)}
+        onClick={() => !readOnly && onToggleWithdrawn(!occ.withdrawn)}
+        disabled={readOnly}
         aria-pressed={occ.withdrawn}
         aria-label={
           occ.withdrawn
@@ -113,7 +117,8 @@ export function ExpenseRow({
           "flex h-7 shrink-0 items-center gap-1 rounded-full border px-2 text-[11px] transition-colors",
           occ.withdrawn
             ? "border-success-300 bg-success-50 text-success-700"
-            : "border-ink-300 text-ink-500 hover:bg-ink-100"
+            : "border-ink-300 text-ink-500 hover:bg-ink-100",
+          readOnly && "cursor-default opacity-70 hover:bg-transparent"
         )}
       >
         {account ? (
@@ -126,7 +131,7 @@ export function ExpenseRow({
         <span>{occ.withdrawn ? "שולם" : future ? "עתידי" : "ירד?"}</span>
       </button>
 
-      {onArchive && (
+      {onArchive && !readOnly && (
         <button
           type="button"
           onClick={onArchive}

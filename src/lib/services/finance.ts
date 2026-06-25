@@ -18,6 +18,7 @@ import type {
   FinanceCarryoverTransfer,
   FinanceEvent,
   BudgetPeriod,
+  BudgetShareLevel,
   RemainderUnit,
   AccountKind,
   PaymentMethod,
@@ -64,6 +65,7 @@ export interface CreateBudgetInput {
   icon?: string;
   category?: string | null;
   is_shared?: boolean;
+  share_level?: BudgetShareLevel;
   remainder_views?: RemainderUnit[];
   // initial version
   title: string;
@@ -92,6 +94,7 @@ export async function createBudget(
       icon: input.icon ?? "wallet",
       category: input.category ?? null,
       is_shared: input.is_shared ?? false,
+      share_level: input.share_level ?? "transact",
       remainder_views: input.remainder_views ?? ["month"],
       sort_order: sortOrder,
     })
@@ -117,7 +120,7 @@ export async function updateBudgetPresentation(
   patch: Partial<
     Pick<
       FinanceBudget,
-      "name" | "color" | "icon" | "category" | "is_shared" | "remainder_views" | "sort_order" | "is_archived"
+      "name" | "color" | "icon" | "category" | "is_shared" | "share_level" | "remainder_views" | "sort_order" | "is_archived"
     >
   >
 ): Promise<FinanceBudget> {

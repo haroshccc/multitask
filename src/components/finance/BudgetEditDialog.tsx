@@ -19,10 +19,13 @@ import {
 import {
   ALL_REMAINDER_UNITS,
   REMAINDER_UNIT_META,
+  ALL_SHARE_LEVELS,
+  SHARE_LEVEL_META,
   type FinanceBudget,
   type FinanceBudgetVersion,
   type BudgetPeriod,
   type RemainderUnit,
+  type BudgetShareLevel,
 } from "@/lib/types/finance";
 
 interface Props {
@@ -48,6 +51,7 @@ export function BudgetEditDialog({ existing, onClose }: Props) {
   const [amount, setAmount] = useState<number>(v?.amount ?? 0);
   const [period, setPeriod] = useState<BudgetPeriod>(v?.period ?? "monthly");
   const [versionTitle, setVersionTitle] = useState("");
+  const [shareLevel, setShareLevel] = useState<BudgetShareLevel>(b?.share_level ?? "transact");
   const [error, setError] = useState<string | null>(null);
 
   const isEdit = !!b;
@@ -77,6 +81,7 @@ export function BudgetEditDialog({ existing, onClose }: Props) {
           icon,
           color,
           category: category.trim() || null,
+          share_level: shareLevel,
           remainder_views: views.length ? views : ["month"],
           title: versionTitle.trim(),
           amount,
@@ -90,6 +95,7 @@ export function BudgetEditDialog({ existing, onClose }: Props) {
             icon,
             color,
             category: category.trim() || null,
+            share_level: shareLevel,
             remainder_views: views.length ? views : ["month"],
           },
         });
@@ -207,6 +213,39 @@ export function BudgetEditDialog({ existing, onClose }: Props) {
               </button>
             ))}
           </div>
+        </div>
+
+        <div>
+          <span className="mb-1.5 block text-xs font-medium text-ink-600">
+            הרשאת שיתוף לחברים אחרים
+          </span>
+          <div className="flex flex-col gap-1.5 sm:flex-row">
+            {ALL_SHARE_LEVELS.map((lvl) => (
+              <button
+                key={lvl}
+                type="button"
+                onClick={() => setShareLevel(lvl)}
+                className={cn(
+                  "flex-1 rounded-lg border px-3 py-2 text-start transition-colors",
+                  shareLevel === lvl
+                    ? "border-primary-500 bg-primary-50"
+                    : "border-ink-300 hover:bg-ink-50"
+                )}
+              >
+                <span
+                  className={cn(
+                    "block text-sm font-medium",
+                    shareLevel === lvl ? "text-primary-700" : "text-ink-800"
+                  )}
+                >
+                  {SHARE_LEVEL_META[lvl].label}
+                </span>
+              </button>
+            ))}
+          </div>
+          <span className="mt-1 block text-[11px] text-ink-400">
+            {SHARE_LEVEL_META[shareLevel].hint} · חל רק כששיתוף ההתנהלות הכלכלית פעיל בארגון.
+          </span>
         </div>
 
         <div>

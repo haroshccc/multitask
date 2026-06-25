@@ -3,8 +3,10 @@
  * dynamic day/week division pills (🔴/🟢), a quick-add, and the expense list.
  */
 import { useMemo, useRef, useState, useEffect } from "react";
-import { MoreVertical, Pencil, Scale, Plus, Users } from "lucide-react";
+import { MoreVertical, Pencil, Scale, Plus, Eye, Users } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
+import { useOrgScope } from "@/lib/hooks/useOrgScope";
+import { SHARE_LEVEL_META } from "@/lib/types/finance";
 import { Money, BudgetIcon, DivisionPill, TEXT_COLOR } from "./finance-bits";
 import { ExpenseRow } from "./ExpenseRow";
 import { QuickAddExpense } from "./QuickAddExpense";
@@ -51,6 +53,13 @@ export function BudgetCard({
   const setCharged = useSetOccurrenceCharged();
   const setWithdrawn = useSetOccurrenceWithdrawn();
   const archive = useArchiveExpense();
+  const { userId } = useOrgScope();
+
+  // Capability for the current viewer. A non-owner only ever sees this budget
+  // because org finance sharing is on, so the budget's share_level applies.
+  const isOwner = !budget.owner_id || budget.owner_id === userId;
+  const canEdit = isOwner || budget.share_level === "full";
+  const canTransact = isOwner || budget.share_level !== "view";
 
   const [adding, setAdding] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -109,8 +118,22 @@ export function BudgetCard({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
             <h3 className="truncate font-semibold text-ink-900">{budget.name}</h3>
-            {budget.is_shared && (
-              <Users className="h-3.5 w-3.5 shrink-0 text-ink-400" />
+            {!isOwner ? (
+              <span
+                className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-ink-100 px-1.5 py-0.5 text-[10px] text-ink-500"
+                title={SHARE_LEVEL_META[budget.share_level].hint}
+              >
+                {budget.share_level === "view" ? (
+                  <Eye className="h-2.5 w-2.5" />
+                ) : (
+                  <Users className="h-2.5 w-2.5" />
+                )}
+                {SHARE_LEVEL_META[budget.share_level].short}
+              </span>
+            ) : (
+              budget.share_level !== "view" && (
+                <Users className="h-3.5 w-3.5 shrink-0 text-ink-400" />
+              )
             )}
           </div>
           {version && (
@@ -120,6 +143,7 @@ export function BudgetCard({
         <span className="chip shrink-0 bg-ink-150 text-ink-600">
           {version?.period === "yearly" ? "שנתי" : "חודשי"}
         </span>
+        {canEdit && (
         <div className="relative shrink-0" ref={menuRef}>
           <button
             type="button"
@@ -135,6 +159,7 @@ export function BudgetCard({
             </div>
           )}
         </div>
+        )}
       </div>
 
       {/* hero remaining */}
@@ -167,16 +192,18 @@ export function BudgetCard({
       </div>
 
       {/* quick add */}
-      <div className="px-4 pt-3">
-        <button
-          type="button"
-          onClick={() => setAdding(true)}
-          className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-ink-300 py-1.5 text-sm text-ink-500 hover:border-primary-400 hover:text-primary-600"
-        >
-          <Plus className="h-4 w-4" />
-          הוסף הוצאה
-        </button>
-      </div>
+      {canTransact && (
+        <div className="px-4 pt-3">
+          <button
+            type="button"
+            onClick={() => setAdding(true)}
+            className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-ink-300 py-1.5 text-sm text-ink-500 hover:border-primary-400 hover:text-primary-600"
+          >
+            <Plus className="h-4 w-4" />
+            הוסף הוצאה
+          </button>
+        </div>
+      )}
 
       {/* expenses */}
       <div className="mt-2 max-h-72 space-y-0.5 overflow-y-auto px-2 pb-3">
@@ -191,6 +218,7 @@ export function BudgetCard({
                 occ={occ}
                 expense={expense}
                 account={occ.account_id ? accountById.get(occ.account_id) : undefined}
+                readOnly={!canTransact}
                 onToggleCharged={(c) => setCharged.mutate({ occId: occ.id, charged: c })}
                 onToggleWithdrawn={(w) => setWithdrawn.mutate({ occ, withdrawn: w })}
                 onArchive={

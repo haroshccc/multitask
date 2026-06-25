@@ -5,6 +5,8 @@
  */
 
 export type BudgetPeriod = "monthly" | "yearly";
+/** What OTHER org members may do with a budget when finance is org-shared. */
+export type BudgetShareLevel = "view" | "transact" | "full";
 export type RemainderUnit = "month" | "week" | "day";
 export type AccountKind = "bank" | "credit" | "cash";
 export type PaymentMethod = "credit" | "bank" | "cash";
@@ -27,6 +29,7 @@ export interface FinanceBudget {
   icon: string;
   category: string | null;
   is_shared: boolean;
+  share_level: BudgetShareLevel;
   remainder_views: RemainderUnit[];
   sort_order: number;
   is_archived: boolean;
@@ -210,3 +213,26 @@ export const REMAINDER_UNIT_META: Record<
 };
 
 export const ALL_REMAINDER_UNITS: RemainderUnit[] = ["month", "week", "day"];
+
+export const SHARE_LEVEL_META: Record<
+  BudgetShareLevel,
+  { label: string; short: string; hint: string }
+> = {
+  view: {
+    label: "צפייה בלבד",
+    short: "צפייה",
+    hint: "חברים אחרים רואים את התקציב אך לא יכולים לשנות דבר",
+  },
+  transact: {
+    label: "הוספת הוצאות",
+    short: "הוצאות",
+    hint: "חברים אחרים יכולים להוסיף/להוריד הוצאות ולסמן חיוב/תשלום — אך לא לערוך את התקציב",
+  },
+  full: {
+    label: "עריכה מלאה",
+    short: "עריכה",
+    hint: "חברים אחרים יכולים גם לערוך את התקציב, הסכום והגרסאות",
+  },
+};
+
+export const ALL_SHARE_LEVELS: BudgetShareLevel[] = ["view", "transact", "full"];

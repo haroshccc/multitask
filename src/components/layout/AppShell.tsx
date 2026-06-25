@@ -12,6 +12,7 @@ import {
   Target,
   Frame,
   UtensilsCrossed,
+  Wallet,
   Settings as SettingsIcon,
   Shield,
   LogOut,
@@ -71,6 +72,7 @@ const NAV: NavItem[] = [
   { to: "/app/projects", label: "פרויקטים", icon: FolderKanban },
   { to: "/app/contacts", label: "אנשי קשר", icon: ContactIcon },
   { to: "/app/food", label: "אוכל", icon: UtensilsCrossed },
+  { to: "/app/finance", label: "התנהלות כלכלית", icon: Wallet },
 ];
 
 // Route codes for vim-style G→X navigation (physical key codes, layout-independent)

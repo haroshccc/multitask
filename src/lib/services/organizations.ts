@@ -67,7 +67,7 @@ export async function listUserOrganizations(userId: string): Promise<OrgDetails[
 
 export async function updateOrganization(
   orgId: string,
-  updates: { name?: string; org_type?: OrgType; food_shared?: boolean }
+  updates: { name?: string; org_type?: OrgType; food_shared?: boolean; finance_shared?: boolean }
 ) {
   const { error } = await db
     .from("organizations")

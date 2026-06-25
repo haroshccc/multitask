@@ -57,6 +57,24 @@ const PlanImpactsPage = lazy(() =>
 const Contacts = lazy(() =>
   import("@/pages/app/Contacts").then((m) => ({ default: m.Contacts }))
 );
+const FinanceShell = lazy(() =>
+  import("@/pages/app/FinanceShell").then((m) => ({ default: m.FinanceShell }))
+);
+const FinanceOverviewPage = lazy(() =>
+  import("@/pages/app/FinanceShell").then((m) => ({ default: m.FinanceOverviewPage }))
+);
+const FinanceBudgetsPage = lazy(() =>
+  import("@/pages/app/FinanceShell").then((m) => ({ default: m.FinanceBudgetsPage }))
+);
+const FinanceAccountsPage = lazy(() =>
+  import("@/pages/app/FinanceShell").then((m) => ({ default: m.FinanceAccountsPage }))
+);
+const FinanceHistoryPage = lazy(() =>
+  import("@/pages/app/FinanceShell").then((m) => ({ default: m.FinanceHistoryPage }))
+);
+const FinanceTemplatesPage = lazy(() =>
+  import("@/pages/app/FinanceShell").then((m) => ({ default: m.FinanceTemplatesPage }))
+);
 const ProjectShell = lazy(() =>
   import("@/pages/app/ProjectShell").then((m) => ({ default: m.ProjectShell }))
 );
@@ -291,6 +309,55 @@ export default function App() {
             </Suspense>
           }
         />
+        <Route
+          path="finance"
+          element={
+            <Suspense fallback={<LoadingShell />}>
+              <FinanceShell />
+            </Suspense>
+          }
+        >
+          <Route
+            index
+            element={
+              <Suspense fallback={<LoadingShell />}>
+                <FinanceOverviewPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="budgets"
+            element={
+              <Suspense fallback={<LoadingShell />}>
+                <FinanceBudgetsPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="accounts"
+            element={
+              <Suspense fallback={<LoadingShell />}>
+                <FinanceAccountsPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="history"
+            element={
+              <Suspense fallback={<LoadingShell />}>
+                <FinanceHistoryPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="templates"
+            element={
+              <Suspense fallback={<LoadingShell />}>
+                <FinanceTemplatesPage />
+              </Suspense>
+            }
+          />
+        </Route>
         <Route
           path="projects/:projectId"
           element={

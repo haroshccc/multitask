@@ -125,6 +125,9 @@ export function divisionView(
     // always ≤ allocation once anything is charged). Signal by sign instead.
     color = snap.remaining < 0 ? "red" : "neutral";
   } else {
+    // green = on/under pace. Note `value >= baseline` is algebraically
+    // `remaining >= allocation * (daysRemaining / daysInMonth)` — i.e. you have
+    // at least the on-pace expected balance left for the days that remain.
     color = value < 0 ? "red" : value >= baseline ? "green" : "red";
   }
   return { unit, value, baseline, color };

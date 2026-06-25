@@ -32,7 +32,7 @@ export function useBudgets() {
 export function useBudgetVersions() {
   const scope = useOrgScope();
   return useQuery<FinanceBudgetVersion[]>({
-    queryKey: ["finance-budget-versions", scope.organizationId ?? ""],
+    queryKey: queryKeys.financeBudgetVersionsAll(scope.organizationId ?? ""),
     queryFn: () => svc.listAllBudgetVersions(scope.organizationId!),
     enabled: scope.enabled,
   });
@@ -156,8 +156,10 @@ export function useAddBudgetVersion() {
     onSuccess: () => {
       if (scope.organizationId) {
         qc.invalidateQueries({ queryKey: queryFamilies.allFinanceBudgets(scope.organizationId) });
+        qc.invalidateQueries({
+          queryKey: queryFamilies.allFinanceBudgetVersions(scope.organizationId),
+        });
       }
-      qc.invalidateQueries({ queryKey: ["finance-budget-versions"] });
     },
   });
 }

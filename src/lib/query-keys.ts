@@ -150,8 +150,8 @@ export const queryKeys = {
 
   // Finance (התנהלות כלכלית)
   financeBudgets: (orgId: string) => ["finance-budgets", orgId] as const,
-  financeBudgetVersions: (budgetId: string) =>
-    ["finance-budget", budgetId, "versions"] as const,
+  financeBudgetVersionsAll: (orgId: string) =>
+    ["finance-budget-versions", orgId] as const,
   financeAccounts: (orgId: string) => ["finance-accounts", orgId] as const,
   financeAccountTransactions: (accountId: string) =>
     ["finance-account", accountId, "transactions"] as const,
@@ -209,6 +209,8 @@ export const queryFamilies = {
 
   // Finance
   allFinanceBudgets: (orgId: string) => ["finance-budgets", orgId] as const,
+  allFinanceBudgetVersions: (orgId: string) =>
+    ["finance-budget-versions", orgId] as const,
   allFinanceAccounts: (orgId: string) => ["finance-accounts", orgId] as const,
   allFinanceAccountTx: (orgId: string) =>
     ["finance-account-transactions", orgId] as const,

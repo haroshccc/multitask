@@ -83,11 +83,11 @@ export function useFinanceContext(): FinanceContext {
 }
 
 const TABS = [
-  { to: ".", end: true, label: "סקירה", icon: LayoutList },
-  { to: "budgets", end: false, label: "תקציבים", icon: Wallet },
-  { to: "accounts", end: false, label: "חשבונות", icon: Landmark },
-  { to: "history", end: false, label: "היסטוריה", icon: HistoryIcon },
-  { to: "templates", end: false, label: "שבלונות", icon: FileStack },
+  { to: "/app/finance", end: true, label: "סקירה", icon: LayoutList },
+  { to: "/app/finance/budgets", end: false, label: "תקציבים", icon: Wallet },
+  { to: "/app/finance/accounts", end: false, label: "חשבונות", icon: Landmark },
+  { to: "/app/finance/history", end: false, label: "היסטוריה", icon: HistoryIcon },
+  { to: "/app/finance/templates", end: false, label: "שבלונות", icon: FileStack },
 ];
 
 export function FinanceShell() {

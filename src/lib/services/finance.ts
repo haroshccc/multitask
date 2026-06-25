@@ -4,7 +4,7 @@
  */
 import { supabase } from "@/lib/supabase/client";
 import { expandRrule } from "@/components/calendar/calendar-utils";
-import { startOfMonth, endOfMonth } from "date-fns";
+import { startOfMonth, endOfMonth, addMonths } from "date-fns";
 import { toDateKey } from "@/lib/finance/calc";
 import type {
   FinanceBudget,
@@ -349,7 +349,7 @@ export async function createExpense(
 
   const dates: string[] =
     input.kind === "fixed" && input.recurrence_rule
-      ? expandMonthOccurrences(input.recurrence_rule)
+      ? expandFixedOccurrences(input.recurrence_rule)
       : [input.occurrence_date ?? toDateKey(new Date())];
 
   const rows = dates.map((due) => ({
@@ -378,9 +378,18 @@ export async function createExpense(
   return expense as FinanceExpense;
 }
 
-function expandMonthOccurrences(rule: string): string[] {
+/**
+ * Materialize a fixed expense's occurrences across a rolling 12-month horizon
+ * (expandRrule caps daily rules at ~366 rows). This makes "fixed" expenses
+ * actually recur beyond the current month. A future phase will add a monthly
+ * rollover job + re-materialization on rule edits; for now editing the rule
+ * does not retro-update already-generated future occurrences.
+ */
+function expandFixedOccurrences(rule: string): string[] {
   const now = new Date();
-  const dates = expandRrule(rule, startOfMonth(now), startOfMonth(now), endOfMonth(now));
+  const start = startOfMonth(now);
+  const end = endOfMonth(addMonths(now, 11));
+  const dates = expandRrule(rule, start, start, end);
   return dates.map(toDateKey);
 }
 
@@ -431,8 +440,10 @@ export async function setOccurrenceWithdrawn(
   createdBy: string
 ): Promise<void> {
   if (withdrawn) {
-    let txId: string | null = null;
-    if (occ.account_id) {
+    // Idempotency: if a transaction is already linked (e.g. a retry after a
+    // partial failure), reuse it instead of creating a duplicate money row.
+    let txId: string | null = occ.account_transaction_id;
+    if (occ.account_id && !txId) {
       const { data: tx, error: txErr } = await db
         .from("finance_account_transactions")
         .insert({

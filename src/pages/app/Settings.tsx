@@ -602,6 +602,69 @@ function OrgTab() {
             </section>
           )}
 
+          {/* ── Finance sharing toggle ───────────────────────────────── */}
+          {canManage && members.length > 1 && (
+            <section className="card p-4 space-y-2">
+              <h2 className="font-semibold text-ink-900 text-sm">שיתוף התנהלות כלכלית</h2>
+              <p className="text-xs text-ink-500">
+                כאשר מופעל, כל חברי הקבוצה רואים ויכולים לערוך את אותם תקציבים, חשבונות והוצאות.
+                כאשר כבוי — לכל אחד התנהלות כלכלית פרטית משלו.
+                {org?.org_type === "family" && (
+                  <span className="ms-1 text-primary-600 font-medium">
+                    קבוצות משפחה — פעיל תמיד.
+                  </span>
+                )}
+              </p>
+              {org?.org_type !== "family" && (
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <div className="relative">
+                    <input
+                      type="checkbox"
+                      className="sr-only"
+                      checked={(org as { finance_shared?: boolean })?.finance_shared ?? false}
+                      onChange={async (e) => {
+                        if (!activeOrganizationId) return;
+                        const orgId = activeOrganizationId;
+                        const prev = (org as { finance_shared?: boolean })?.finance_shared ?? false;
+                        const next = e.target.checked;
+                        await updateOrg.mutateAsync({
+                          orgId,
+                          updates: { finance_shared: next },
+                        });
+                        pushUndo({
+                          description: next
+                            ? "הפעלת שיתוף התנהלות כלכלית"
+                            : "ביטול שיתוף התנהלות כלכלית",
+                          undo: () =>
+                            updateOrg.mutate({
+                              orgId,
+                              updates: { finance_shared: prev },
+                            }),
+                          redo: () =>
+                            updateOrg.mutate({
+                              orgId,
+                              updates: { finance_shared: next },
+                            }),
+                        });
+                      }}
+                    />
+                    <div className={cn(
+                      "w-10 h-6 rounded-full transition-colors",
+                      ((org as { finance_shared?: boolean })?.finance_shared ?? false) ? "bg-primary-600" : "bg-ink-300"
+                    )} />
+                    <div className={cn(
+                      "absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform",
+                      ((org as { finance_shared?: boolean })?.finance_shared ?? false) ? "translate-x-5" : "translate-x-1"
+                    )} />
+                  </div>
+                  <span className="text-sm text-ink-800">
+                    {((org as { finance_shared?: boolean })?.finance_shared ?? false) ? "שיתוף פעיל" : "שיתוף לא פעיל"}
+                  </span>
+                </label>
+              )}
+            </section>
+          )}
+
           {/* ── Store connections (shopping handoff) ─────────────────── */}
           <StoreConnectionsSection />
 

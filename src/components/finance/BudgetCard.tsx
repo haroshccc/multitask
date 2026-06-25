@@ -118,7 +118,7 @@ export function BudgetCard({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
             <h3 className="truncate font-semibold text-ink-900">{budget.name}</h3>
-            {!isOwner ? (
+            {!isOwner && (
               <span
                 className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-ink-100 px-1.5 py-0.5 text-[10px] text-ink-500"
                 title={SHARE_LEVEL_META[budget.share_level].hint}
@@ -130,10 +130,6 @@ export function BudgetCard({
                 )}
                 {SHARE_LEVEL_META[budget.share_level].short}
               </span>
-            ) : (
-              budget.share_level !== "view" && (
-                <Users className="h-3.5 w-3.5 shrink-0 text-ink-400" />
-              )
             )}
           </div>
           {version && (

@@ -2356,6 +2356,8 @@ export type Database = {
           created_at: string
           currency: string
           description: string | null
+          files_folder_url: string | null
+          presentation_url: string | null
           emoji: string | null
           entity_column_labels: Json
           entity_column_order: Json
@@ -2388,6 +2390,8 @@ export type Database = {
           created_at?: string
           currency?: string
           description?: string | null
+          files_folder_url?: string | null
+          presentation_url?: string | null
           emoji?: string | null
           entity_column_labels?: Json
           entity_column_order?: Json
@@ -2420,6 +2424,8 @@ export type Database = {
           created_at?: string
           currency?: string
           description?: string | null
+          files_folder_url?: string | null
+          presentation_url?: string | null
           emoji?: string | null
           entity_column_labels?: Json
           entity_column_order?: Json

@@ -1,6 +1,12 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { MoreHorizontal, Archive, ArchiveRestore } from "lucide-react";
+import {
+  MoreHorizontal,
+  Archive,
+  ArchiveRestore,
+  Folder,
+  Presentation,
+} from "lucide-react";
 import { useArchiveProject, useRestoreProject } from "@/lib/hooks/useProjects";
 import { useTasks, useTaskLists } from "@/lib/hooks";
 import { formatMoney, type Currency } from "@/lib/utils/pricing";
@@ -76,6 +82,9 @@ export function ProjectsTable({ projects }: Props) {
               <th className="text-end font-semibold px-3 py-2">מחיר</th>
               <th className="text-end font-semibold px-3 py-2 hidden sm:table-cell">
                 רווח/שעה
+              </th>
+              <th className="text-center font-semibold px-3 py-2 hidden md:table-cell">
+                קישורים
               </th>
               <th className="w-8 px-3 py-2"></th>
             </tr>
@@ -209,6 +218,24 @@ function ProjectRow({
         )}
       </td>
 
+      {/* Quick links */}
+      <td className="px-3 py-2 hidden md:table-cell" onClick={stop}>
+        <div className="flex items-center justify-center gap-1">
+          <LinkIconBtn
+            url={project.files_folder_url}
+            Icon={Folder}
+            colorClass="text-amber-500"
+            title="תיקיית הקבצים"
+          />
+          <LinkIconBtn
+            url={project.presentation_url}
+            Icon={Presentation}
+            colorClass="text-pink-500"
+            title="מצגת (Canva)"
+          />
+        </div>
+      </td>
+
       <td className="px-3 py-2 text-end" onClick={stop}>
         <div className="relative inline-block" ref={menuRef}>
           <button
@@ -263,5 +290,37 @@ function ProjectRow({
         </div>
       </td>
     </tr>
+  );
+}
+
+function LinkIconBtn({
+  url,
+  Icon,
+  colorClass,
+  title,
+}: {
+  url: string | null | undefined;
+  Icon: React.ComponentType<{ className?: string }>;
+  colorClass: string;
+  title: string;
+}) {
+  if (!url) {
+    return (
+      <span className="p-1 text-ink-200" title={`${title} — לא הוגדר`}>
+        <Icon className="w-4 h-4" />
+      </span>
+    );
+  }
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={cn("p-1 rounded-md hover:bg-ink-100", colorClass)}
+      title={title}
+      aria-label={title}
+    >
+      <Icon className="w-4 h-4" />
+    </a>
   );
 }

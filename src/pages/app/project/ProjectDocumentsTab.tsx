@@ -17,6 +17,8 @@ import {
   Pencil,
 } from "lucide-react";
 import { useProjectContext } from "@/pages/app/ProjectShell";
+import { useUpdateProject } from "@/lib/hooks/useProjects";
+import { ProjectLinkBox } from "@/components/projects/ProjectLinkBox";
 import {
   useProjectDocuments,
   useCreateProjectDocument,
@@ -38,7 +40,8 @@ function formatSize(bytes: number | null): string {
 }
 
 export function ProjectDocumentsTab() {
-  const { projectId } = useProjectContext();
+  const { project, projectId } = useProjectContext();
+  const updateProject = useUpdateProject();
   const { data: docs = [], isLoading } = useProjectDocuments(projectId);
   const createDoc = useCreateProjectDocument();
   const updateDoc = useUpdateProjectDocument();
@@ -209,6 +212,34 @@ export function ProjectDocumentsTab() {
 
   return (
     <div className="space-y-3">
+      {/* Pinned project links */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <ProjectLinkBox
+          kind="folder"
+          label="תיקיית הקבצים של הפרויקט"
+          placeholder="קישור לתיקייה (Drive/Dropbox/…)"
+          value={project.files_folder_url ?? ""}
+          onSave={(url) =>
+            updateProject.mutate({
+              projectId,
+              patch: { files_folder_url: url || null },
+            })
+          }
+        />
+        <ProjectLinkBox
+          kind="presentation"
+          label="מצגת הפרויקט (Canva)"
+          placeholder="קישור למצגת ב-Canva"
+          value={project.presentation_url ?? ""}
+          onSave={(url) =>
+            updateProject.mutate({
+              projectId,
+              patch: { presentation_url: url || null },
+            })
+          }
+        />
+      </div>
+
       {/* Toolbar */}
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <Breadcrumb

@@ -143,7 +143,9 @@ export async function createProjectExpense(
 
 export async function updateProjectExpense(
   expenseId: string,
-  patch: Partial<Pick<ProjectExpense, "label" | "amount_cents" | "sort_order">>
+  patch: Partial<
+    Pick<ProjectExpense, "label" | "amount_cents" | "sort_order" | "impact">
+  >
 ): Promise<ProjectExpense> {
   const { data, error } = await supabase
     .from("project_expenses")

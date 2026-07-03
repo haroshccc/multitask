@@ -239,8 +239,12 @@ export function useProjectExpenses(projectId: string | null | undefined) {
 export function useCreateProjectExpense() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: { project_id: string; label: string; amount_cents: number }) =>
-      service.createProjectExpense(input),
+    mutationFn: (input: {
+      project_id: string;
+      label: string;
+      amount_cents: number;
+      impact?: string;
+    }) => service.createProjectExpense(input),
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: queryKeys.projectExpenses(vars.project_id) });
     },
@@ -256,7 +260,9 @@ export function useUpdateProjectExpense() {
     }: {
       expenseId: string;
       projectId: string;
-      patch: Partial<Pick<ProjectExpense, "label" | "amount_cents" | "sort_order">>;
+      patch: Partial<
+        Pick<ProjectExpense, "label" | "amount_cents" | "sort_order" | "impact">
+      >;
     }) => service.updateProjectExpense(expenseId, patch),
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: queryKeys.projectExpenses(vars.projectId) });

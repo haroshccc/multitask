@@ -2083,6 +2083,7 @@ export type Database = {
           amount_cents: number
           created_at: string
           id: string
+          impact: string
           label: string
           project_id: string
           sort_order: number
@@ -2092,6 +2093,7 @@ export type Database = {
           amount_cents?: number
           created_at?: string
           id?: string
+          impact?: string
           label: string
           project_id: string
           sort_order?: number
@@ -2101,6 +2103,7 @@ export type Database = {
           amount_cents?: number
           created_at?: string
           id?: string
+          impact?: string
           label?: string
           project_id?: string
           sort_order?: number

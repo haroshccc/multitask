@@ -10,6 +10,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { useProjectContext } from "@/pages/app/ProjectShell";
+import { ProjectPricingPanel } from "@/components/projects/ProjectPricingPanel";
 import { useProjectContacts } from "@/lib/hooks/useContacts";
 import type { ProjectContact } from "@/lib/services/contacts";
 import { useOrgScope, assertOrgScope } from "@/lib/hooks/useOrgScope";
@@ -428,6 +429,14 @@ export function ProjectPaymentsTab() {
 
   return (
     <div className="space-y-3">
+      <ProjectPricingPanel />
+
+      <details className="group">
+        <summary className="cursor-pointer select-none list-none inline-flex items-center gap-1.5 text-xs font-semibold text-ink-500 hover:text-ink-800 pt-1">
+          <span className="transition-transform group-open:rotate-90">▸</span>
+          תנועות מפורטות (כל התשלומים, ייצוא, עמודות)
+        </summary>
+        <div className="space-y-3 pt-3">
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <SummaryStrip
           toCollect={summary.toCollect}
@@ -555,6 +564,8 @@ export function ProjectPaymentsTab() {
           onClose={() => setOpenId(null)}
         />
       )}
+        </div>
+      </details>
     </div>
   );
 }

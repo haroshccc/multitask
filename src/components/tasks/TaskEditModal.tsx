@@ -920,7 +920,7 @@ export function TaskEditModal({
                     </p>
                   </Field>
 
-                  {task && task.parent_task_id === null && (
+                  {task && (
                     <div className="flex items-start gap-2 p-2 rounded-md border border-ink-200">
                       <label className="flex items-start gap-2 cursor-pointer select-none flex-1 hover:bg-ink-50 rounded-md -m-1 p-1">
                         <input

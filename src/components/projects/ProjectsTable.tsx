@@ -1,7 +1,9 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { MoreHorizontal, Archive, ArchiveRestore } from "lucide-react";
 import { useArchiveProject, useRestoreProject } from "@/lib/hooks/useProjects";
+import { useTasks, useTaskLists } from "@/lib/hooks";
+import { formatMoney, type Currency } from "@/lib/utils/pricing";
 import type { Project } from "@/lib/types/domain";
 import { pushUndo } from "@/lib/undo/store";
 import { cn } from "@/lib/utils/cn";
@@ -12,8 +14,52 @@ interface Props {
   projects: Project[];
 }
 
+interface ProjectStats {
+  estH: number; // planned hours (Σ estimated)
+  actualH: number; // worked hours (Σ actual_seconds)
+  done: number; // completed tasks
+  open: number; // not-yet-done tasks
+  blendedH: number; // actual for done + estimated for not-done
+}
+
+function round1(n: number): number {
+  return Math.round(n * 10) / 10;
+}
+
 export function ProjectsTable({ projects }: Props) {
   const navigate = useNavigate();
+  const { data: tasks = [] } = useTasks();
+  const { data: lists = [] } = useTaskLists();
+
+  // Aggregate task stats per project (task → list → project).
+  const statsByProject = useMemo(() => {
+    const listToProject = new Map<string, string>();
+    for (const l of lists) if (l.project_id) listToProject.set(l.id, l.project_id);
+    const m = new Map<string, ProjectStats>();
+    const get = (pid: string): ProjectStats => {
+      let s = m.get(pid);
+      if (!s) {
+        s = { estH: 0, actualH: 0, done: 0, open: 0, blendedH: 0 };
+        m.set(pid, s);
+      }
+      return s;
+    };
+    for (const t of tasks) {
+      if (t.is_phase) continue;
+      const pid = t.task_list_id ? listToProject.get(t.task_list_id) : undefined;
+      if (!pid) continue;
+      const s = get(pid);
+      const est = t.estimated_hours ?? 0;
+      const act = (t.actual_seconds ?? 0) / 3600;
+      const done = !!t.completed_at;
+      s.estH += est;
+      s.actualH += act;
+      if (done) s.done += 1;
+      else s.open += 1;
+      s.blendedH += done ? act : est;
+    }
+    return m;
+  }, [tasks, lists]);
 
   return (
     <div className="card overflow-hidden">
@@ -22,10 +68,14 @@ export function ProjectsTable({ projects }: Props) {
           <thead className="bg-ink-50 border-b border-ink-200">
             <tr className="text-start text-ink-500 text-xs">
               <th className="text-start font-semibold px-3 py-2">שם</th>
-              <th className="text-start font-semibold px-3 py-2">סטטוס</th>
-              <th className="text-start font-semibold px-3 py-2">תגים</th>
-              <th className="text-start font-semibold px-3 py-2 hidden md:table-cell">
-                עודכן
+              <th className="text-start font-semibold px-3 py-2">מצב</th>
+              <th className="text-start font-semibold px-3 py-2">משימות</th>
+              <th className="text-start font-semibold px-3 py-2 hidden sm:table-cell">
+                שעות (מתוכנן/בפועל)
+              </th>
+              <th className="text-end font-semibold px-3 py-2">מחיר</th>
+              <th className="text-end font-semibold px-3 py-2 hidden sm:table-cell">
+                רווח/שעה
               </th>
               <th className="w-8 px-3 py-2"></th>
             </tr>
@@ -35,6 +85,7 @@ export function ProjectsTable({ projects }: Props) {
               <ProjectRow
                 key={p.id}
                 project={p}
+                stats={statsByProject.get(p.id)}
                 onOpen={() => navigate(`/app/projects/${p.id}`)}
               />
             ))}
@@ -47,9 +98,11 @@ export function ProjectsTable({ projects }: Props) {
 
 function ProjectRow({
   project,
+  stats,
   onOpen,
 }: {
   project: Project;
+  stats?: ProjectStats;
   onOpen: () => void;
 }) {
   const archive = useArchiveProject();
@@ -74,10 +127,11 @@ function ProjectRow({
   };
 
   const accent = project.color ?? "#a8a8bc";
-  const updated = new Date(project.updated_at).toLocaleDateString("he-IL", {
-    day: "numeric",
-    month: "short",
-  });
+  const currency = ((project.currency as Currency) ?? "ILS") as Currency;
+  const priceCents = project.total_price_cents ?? 0;
+  const s = stats ?? { estH: 0, actualH: 0, done: 0, open: 0, blendedH: 0 };
+  const total = s.done + s.open;
+  const profitPerHour = s.blendedH > 0 ? Math.round(priceCents / s.blendedH) : null;
 
   return (
     <tr
@@ -102,26 +156,59 @@ function ProjectRow({
           <span className="font-medium text-ink-900 truncate">{project.name}</span>
         </div>
       </td>
+
       <td className="px-3 py-2" onClick={stop}>
         <ProjectStateControl project={project} />
       </td>
-      <td className="px-3 py-2">
-        <div className="flex items-center gap-1 flex-wrap">
-          {project.tags?.slice(0, 3).map((t) => (
-            <span key={t} className="chip-accent">
-              {t}
+
+      {/* Tasks: done / open */}
+      <td className="px-3 py-2 whitespace-nowrap">
+        {total === 0 ? (
+          <span className="text-ink-300 text-xs">—</span>
+        ) : (
+          <span className="text-xs">
+            <span className="font-semibold text-success-700 tabular-nums">
+              {s.done}
             </span>
-          ))}
-          {project.tags && project.tags.length > 3 && (
-            <span className="text-[10px] text-ink-400">
-              +{project.tags.length - 3}
-            </span>
-          )}
-        </div>
+            <span className="text-ink-400"> הושלמו · </span>
+            <span className="font-semibold text-ink-700 tabular-nums">{s.open}</span>
+            <span className="text-ink-400"> פתוחות</span>
+          </span>
+        )}
       </td>
-      <td className="px-3 py-2 text-ink-500 text-xs hidden md:table-cell">
-        {updated}
+
+      {/* Hours: planned / actual */}
+      <td className="px-3 py-2 whitespace-nowrap hidden sm:table-cell">
+        <span className="text-xs tabular-nums">
+          <span className="text-ink-600">{round1(s.estH)}</span>
+          <span className="text-ink-400"> / </span>
+          <span className="text-primary-700 font-medium">{round1(s.actualH)}</span>
+          <span className="text-ink-400"> ש׳</span>
+        </span>
       </td>
+
+      {/* Price */}
+      <td className="px-3 py-2 text-end whitespace-nowrap tabular-nums">
+        {priceCents > 0 ? (
+          <span className="font-semibold text-ink-900">
+            {formatMoney(priceCents, currency)}
+          </span>
+        ) : (
+          <span className="text-ink-300 text-xs">—</span>
+        )}
+      </td>
+
+      {/* Profit / hour (blended) */}
+      <td className="px-3 py-2 text-end whitespace-nowrap tabular-nums hidden sm:table-cell">
+        {profitPerHour == null || priceCents === 0 ? (
+          <span className="text-ink-300 text-xs">—</span>
+        ) : (
+          <span className="font-medium text-primary-700">
+            {formatMoney(profitPerHour, currency)}
+          </span>
+        )}
+      </td>
+
       <td className="px-3 py-2 text-end" onClick={stop}>
         <div className="relative inline-block" ref={menuRef}>
           <button

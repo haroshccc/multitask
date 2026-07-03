@@ -28,9 +28,9 @@ export function Projects() {
   const [contactId, setContactId] = useState<string>("");
   const [createOpen, setCreateOpen] = useState(false);
   const [view, setView] = useState<ViewMode>(() => {
-    if (typeof window === "undefined") return "cards";
+    if (typeof window === "undefined") return "table";
     const stored = localStorage.getItem(VIEW_STORAGE_KEY);
-    return stored === "table" ? "table" : "cards";
+    return stored === "cards" ? "cards" : "table"; // default: table
   });
 
   useEffect(() => {

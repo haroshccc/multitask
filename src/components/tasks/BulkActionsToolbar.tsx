@@ -7,6 +7,7 @@ import {
   Trash2,
   AlertCircle,
   UserPlus,
+  Copy,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import {
@@ -15,6 +16,7 @@ import {
   useDeleteTask,
   useMoveTaskToList,
   useRestoreTasks,
+  useDuplicateTaskTree,
 } from "@/lib/hooks/useTasks";
 import { fetchTaskSubtree } from "@/lib/services/tasks";
 import { useTaskLists } from "@/lib/hooks/useTaskLists";
@@ -50,6 +52,7 @@ export function BulkActionsToolbar({ allTasks }: BulkActionsToolbarProps) {
   const deleteTask = useDeleteTask();
   const restore = useRestoreTasks();
   const moveToList = useMoveTaskToList();
+  const duplicateTree = useDuplicateTaskTree();
   const addAssignee = useAddTaskAssignee();
   const setShare = useSetTaskShare();
   const { user, activeOrganizationId } = useAuth();
@@ -62,6 +65,7 @@ export function BulkActionsToolbar({ allTasks }: BulkActionsToolbarProps) {
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [scheduleDraft, setScheduleDraft] = useState("");
   const [listOpen, setListOpen] = useState(false);
+  const [duplicateOpen, setDuplicateOpen] = useState(false);
   const [delegateOpen, setDelegateOpen] = useState(false);
   const [delegateOrgId, setDelegateOrgId] = useState<string | null>(null);
   const [delegateSelectedUsers, setDelegateSelectedUsers] = useState<
@@ -301,6 +305,59 @@ export function BulkActionsToolbar({ allTasks }: BulkActionsToolbarProps) {
         description: `מחיקת ${count} משימות`,
         undo: () => restore.mutate(ordered),
         redo,
+      });
+    }
+  };
+
+  const applyDuplicate = async (targetListId: string) => {
+    // Selecting a parent auto-selects its whole subtree, and duplicateTaskTree
+    // copies the subtree too. So we only duplicate the selection "roots" —
+    // selected tasks that have no selected ancestor — otherwise nested
+    // subtasks would also be cloned standalone, producing orphan copies.
+    const taskById = new Map(allTasks.map((t) => [t.id, t]));
+    const hasSelectedAncestor = (t: Task): boolean => {
+      let cur = t.parent_task_id;
+      while (cur) {
+        if (selected.has(cur)) return true;
+        cur = taskById.get(cur)?.parent_task_id ?? null;
+      }
+      return false;
+    };
+    const roots = selectedTasks.filter((t) => !hasSelectedAncestor(t));
+    if (roots.length === 0) return;
+
+    // createdIds is mutable so a redo refreshes it (each duplication mints new
+    // ids), keeping a subsequent undo able to remove the latest copies.
+    let createdIds: string[] = [];
+    const run = async () => {
+      const fresh: string[] = [];
+      for (const t of roots) {
+        try {
+          fresh.push(
+            await duplicateTree.mutateAsync({
+              sourceTaskId: t.id,
+              targetListId,
+            })
+          );
+        } catch (e) {
+          console.error("bulk duplicate failed for", t.id, e);
+        }
+      }
+      createdIds = fresh;
+    };
+
+    await run();
+    setDuplicateOpen(false);
+    clear();
+    if (createdIds.length > 0) {
+      pushUndo({
+        description: `שכפול ${roots.length} משימות`,
+        undo: () => {
+          for (const id of createdIds) deleteTask.mutate(id);
+        },
+        redo: () => {
+          void run();
+        },
       });
     }
   };
@@ -559,6 +616,48 @@ export function BulkActionsToolbar({ allTasks }: BulkActionsToolbarProps) {
           <Check className="w-3.5 h-3.5" />
           הושלם
         </button>
+
+        {/* Duplicate (to a chosen list) */}
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setDuplicateOpen((v) => !v)}
+            className="px-2 py-1 rounded-md hover:bg-white/10 text-xs inline-flex items-center gap-1"
+            title="שכפל את המשימות המסומנות (כולל תת-משימות) לרשימה שתבחרי"
+          >
+            <Copy className="w-3.5 h-3.5" />
+            שכפל
+          </button>
+          {duplicateOpen && (
+            <>
+              <div
+                className="fixed inset-0 z-30"
+                onClick={() => setDuplicateOpen(false)}
+              />
+              <div className="absolute bottom-full mb-1 start-0 z-40 bg-white text-ink-900 border border-ink-200 rounded-xl shadow-lift py-1 w-60 max-h-72 overflow-y-auto">
+                <p className="px-3 py-1.5 text-[11px] text-ink-400 border-b border-ink-100">
+                  שכפלי את {count} המשימות לרשימה:
+                </p>
+                {taskLists.length === 0 && (
+                  <p className="px-3 py-2 text-xs text-ink-400">
+                    אין רשימות זמינות.
+                  </p>
+                )}
+                {taskLists.map((l) => (
+                  <button
+                    key={l.id}
+                    type="button"
+                    disabled={duplicateTree.isPending}
+                    onClick={() => applyDuplicate(l.id)}
+                    className="w-full text-start px-3 py-1.5 text-sm text-ink-700 hover:bg-ink-100 disabled:opacity-50"
+                  >
+                    {l.name}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
 
         {/* Delete */}
         <button

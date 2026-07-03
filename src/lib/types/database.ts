@@ -1617,6 +1617,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           current_period_end: string | null
+          finance_shared: boolean
           food_shared: boolean
           id: string
           is_archived: boolean
@@ -1639,6 +1640,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           current_period_end?: string | null
+          finance_shared?: boolean
           food_shared?: boolean
           id?: string
           is_archived?: boolean
@@ -1661,6 +1663,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           current_period_end?: string | null
+          finance_shared?: boolean
           food_shared?: boolean
           id?: string
           is_archived?: boolean
@@ -4313,6 +4316,7 @@ export type Database = {
               created_at: string
               created_by: string | null
               current_period_end: string | null
+              finance_shared: boolean
               food_shared: boolean
               id: string
               is_archived: boolean

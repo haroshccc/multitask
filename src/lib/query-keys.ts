@@ -147,6 +147,23 @@ export const queryKeys = {
     ["framework", frameworkId, "history"] as const,
   frameworkVisibility: (userId: string, orgId: string) =>
     ["framework-visibility", userId, orgId] as const,
+
+  // Finance (התנהלות כלכלית)
+  financeBudgets: (orgId: string) => ["finance-budgets", orgId] as const,
+  financeBudgetVersionsAll: (orgId: string) =>
+    ["finance-budget-versions", orgId] as const,
+  financeAccounts: (orgId: string) => ["finance-accounts", orgId] as const,
+  financeAccountTransactions: (accountId: string) =>
+    ["finance-account", accountId, "transactions"] as const,
+  financeAccountTxAll: (orgId: string) =>
+    ["finance-account-transactions", orgId] as const,
+  financeExpenses: (orgId: string) => ["finance-expenses", orgId] as const,
+  financeOccurrences: (orgId: string) => ["finance-occurrences", orgId] as const,
+  financeTemplates: (orgId: string) => ["finance-templates", orgId] as const,
+  financeClosings: (orgId: string) => ["finance-closings", orgId] as const,
+  financeCarryovers: (orgId: string) => ["finance-carryovers", orgId] as const,
+  financeEventLog: (entityType: string, entityId: string) =>
+    ["finance-event-log", entityType, entityId] as const,
 } as const;
 
 /**
@@ -189,4 +206,19 @@ export const queryFamilies = {
   frameworkFamily: (frameworkId: string) => ["framework", frameworkId] as const,
   allPlans: (orgId: string) => ["plans", orgId] as const,
   planFamily: (planId: string) => ["plan", planId] as const,
+
+  // Finance
+  allFinanceBudgets: (orgId: string) => ["finance-budgets", orgId] as const,
+  allFinanceBudgetVersions: (orgId: string) =>
+    ["finance-budget-versions", orgId] as const,
+  allFinanceAccounts: (orgId: string) => ["finance-accounts", orgId] as const,
+  allFinanceAccountTx: (orgId: string) =>
+    ["finance-account-transactions", orgId] as const,
+  allFinanceExpenses: (orgId: string) => ["finance-expenses", orgId] as const,
+  allFinanceOccurrences: (orgId: string) => ["finance-occurrences", orgId] as const,
+  allFinanceTemplates: (orgId: string) => ["finance-templates", orgId] as const,
+  allFinanceClosings: (orgId: string) => ["finance-closings", orgId] as const,
+  allFinanceCarryovers: (orgId: string) => ["finance-carryovers", orgId] as const,
+  financeBudgetFamily: (budgetId: string) => ["finance-budget", budgetId] as const,
+  financeAccountFamily: (accountId: string) => ["finance-account", accountId] as const,
 } as const;

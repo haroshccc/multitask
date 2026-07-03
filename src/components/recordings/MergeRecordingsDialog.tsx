@@ -12,9 +12,9 @@ import {
 } from "lucide-react";
 import {
   useRecordings,
-  useMergeRecordingsMany,
   useRecordingAudioUrl,
 } from "@/lib/hooks/useRecordings";
+import { useAudioMerge } from "@/lib/hooks/useAudioMerge";
 import type { Recording } from "@/lib/types/domain";
 import { format } from "date-fns";
 import { he } from "date-fns/locale";
@@ -35,7 +35,7 @@ export function MergeRecordingsDialog({
   onMerged,
 }: Props) {
   const { data: allRecordings = [] } = useRecordings();
-  const merge = useMergeRecordingsMany();
+  const audioMerge = useAudioMerge();
   // Ordered list of selected recording IDs. Seeds with the dialog opener.
   const [orderedIds, setOrderedIds] = useState<string[]>([recording.id]);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -64,6 +64,7 @@ export function MergeRecordingsDialog({
           (r) =>
             !orderedIds.includes(r.id) &&
             !r.merged_into &&
+            !r.audio_archived &&
             r.organization_id === recording.organization_id
         )
         .sort(
@@ -91,13 +92,20 @@ export function MergeRecordingsDialog({
       setError("בחרי לפחות 2 הקלטות לאיחוד.");
       return;
     }
+    const ordered = orderedIds
+      .map((id) => recordingsById.get(id))
+      .filter((r): r is Recording => Boolean(r));
+    if (ordered.some((r) => r.audio_archived)) {
+      setError("אחת ההקלטות אורכבה — אי אפשר לכלול את האודיו שלה באיחוד.");
+      return;
+    }
     setError(null);
     try {
-      const survivor = await merge.mutateAsync(orderedIds);
-      onMerged?.(survivor.id);
+      const merged = await audioMerge.run(ordered, { archiveOriginals: true });
+      onMerged?.(merged.id);
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(humanizeMergeError(err));
     }
   };
 
@@ -137,9 +145,9 @@ export function MergeRecordingsDialog({
 
             <div className="p-5 space-y-4 max-h-[calc(100vh-12rem)] overflow-y-auto">
               <p className="text-xs text-ink-600 leading-relaxed">
-                סדרי את ההקלטות לפי הסדר שתרצי שיופיעו בהקלטה המאוחדת. הראשונה
-                תשמור את האודיו וסופחות אליה כל השאר. אפשרות לשמוע כל הקלטה
-                לפני האישור.
+                סדרי את ההקלטות לפי הסדר הרצוי. ייווצר קובץ אודיו <b>אחד חדש</b>{" "}
+                שמשרשר את כולן ברצף — אפשר יהיה לנגן ולתמלל אותו כמקשה אחת.
+                ההקלטות המקוריות יאורכבו (ויעלמו מהרשימה) אך נשמרות וניתנות לשחזור.
               </p>
 
               {/* Ordered list */}
@@ -262,28 +270,31 @@ export function MergeRecordingsDialog({
 
             <div className="px-5 py-3 border-t border-ink-200 flex items-center justify-between gap-2 flex-wrap">
               <p className="text-[11px] text-ink-500">
-                {orderedIds.length < 2
-                  ? "צריך לפחות 2 הקלטות"
-                  : `יאוחדו ${orderedIds.length} הקלטות. השאר יקבלו "מוזגה".`}
+                {audioMerge.pending
+                  ? mergePhaseLabel(audioMerge.progress)
+                  : orderedIds.length < 2
+                    ? "צריך לפחות 2 הקלטות"
+                    : `ישורשרו ${orderedIds.length} הקלטות לקובץ אחד.`}
               </p>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={onClose}
-                  className="btn-outline !py-1.5 !px-3 text-sm"
+                  disabled={audioMerge.pending}
+                  className="btn-outline !py-1.5 !px-3 text-sm disabled:opacity-50"
                 >
                   ביטול
                 </button>
                 <button
                   type="button"
                   onClick={submit}
-                  disabled={merge.isPending || orderedIds.length < 2}
+                  disabled={audioMerge.pending || orderedIds.length < 2}
                   className="btn-primary !py-1.5 !px-3 text-sm inline-flex items-center gap-1.5"
                 >
-                  {merge.isPending && (
+                  {audioMerge.pending && (
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
                   )}
-                  {merge.isPending ? "מאחדת…" : "איחוד"}
+                  {audioMerge.pending ? "מאחדת…" : "איחוד אודיו"}
                 </button>
               </div>
             </div>
@@ -331,8 +342,8 @@ function InlineAudioPreview({ recording }: { recording: Recording }) {
 
   if (recording.audio_archived) {
     return (
-      <div className="text-[11px] text-ink-500">
-        האודיו של ההקלטה הזאת אורכב — אפשר עדיין לאחד את התמלול.
+      <div className="text-[11px] text-amber-600">
+        האודיו של ההקלטה הזאת אורכב — לא ניתן לכלול אותה באיחוד.
       </div>
     );
   }
@@ -362,4 +373,38 @@ function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = Math.floor(seconds % 60);
   return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+function mergePhaseLabel(p: {
+  phase: string;
+  done?: number;
+  total?: number;
+}): string {
+  switch (p.phase) {
+    case "preparing":
+      return "מכינה…";
+    case "concatenating":
+      return p.total
+        ? `מאחדת אודיו… ${p.done ?? 0}/${p.total}`
+        : "מאחדת אודיו…";
+    case "uploading":
+      return "מעלה את הקובץ המאוחד…";
+    case "finalizing":
+      return "מסיימת…";
+    default:
+      return "מאחדת…";
+  }
+}
+
+function humanizeMergeError(err: unknown): string {
+  const msg = err instanceof Error ? err.message : String(err);
+  if (msg.includes("web_audio_unsupported"))
+    return "הדפדפן לא תומך בעיבוד אודיו. נסי בכרום/ספארי מעודכן.";
+  if (msg.includes("archived_audio_in_selection"))
+    return "אחת ההקלטות אורכבה — אי אפשר לכלול את האודיו שלה.";
+  if (msg.includes("audio_fetch_"))
+    return "לא הצלחתי להוריד את אחד מקבצי האודיו. נסי שוב.";
+  if (/decode|EncodingError|Unable to decode/i.test(msg))
+    return "אחד מקבצי האודיו לא ניתן לפענוח בדפדפן. נסי פורמט אחר.";
+  return msg;
 }

@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase/client";
+import { presignDownload } from "@/lib/services/storage";
 import type {
   Recording,
   RecordingInsert,
@@ -95,6 +96,19 @@ export async function getRecordingAudioUrlLegacy(
     .createSignedUrl(storageKey, expiresInSeconds);
   if (error) throw error;
   return data.signedUrl;
+}
+
+/**
+ * Provider-aware playback URL for a recording (R2 presign or legacy signed
+ * URL). Plain async version of `useRecordingAudioUrl` for use outside React
+ * (e.g. the audio-merge pipeline, which fetches several URLs in a loop).
+ */
+export async function getRecordingAudioUrl(rec: Recording): Promise<string> {
+  if (rec.storage_provider === "r2") {
+    const { url } = await presignDownload(rec.storage_key);
+    return url;
+  }
+  return getRecordingAudioUrlLegacy(rec.storage_key);
 }
 
 export async function updateRecording(

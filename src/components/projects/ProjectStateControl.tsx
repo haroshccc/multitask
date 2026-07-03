@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useLayoutEffect } from "react";
+import { createPortal } from "react-dom";
 import { Power, Check, ChevronDown } from "lucide-react";
 import { useUpdateProject } from "@/lib/hooks/useProjects";
 import { pushUndo } from "@/lib/undo/store";
@@ -20,8 +21,8 @@ const STATE_STYLE: Record<ProjectState, string> = {
 
 /**
  * Three-way project state selector (פעיל / לא פעיל / הושלם), shared by the
- * project card, table row and detail header. Writes via useUpdateProject and
- * registers an undo entry.
+ * project card, table row and detail header. The menu renders in a portal so it
+ * is never clipped by (or painted behind) a neighbouring card.
  */
 export function ProjectStateControl({
   project,
@@ -32,16 +33,43 @@ export function ProjectStateControl({
 }) {
   const update = useUpdateProject();
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
   const state = getProjectState(project);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    const el = btnRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    setPos({
+      top: r.bottom + 4,
+      right: Math.max(8, window.innerWidth - r.right),
+    });
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (btnRef.current?.contains(t) || menuRef.current?.contains(t)) return;
+      setOpen(false);
     };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    const onScroll = () => setOpen(false);
     document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onScroll);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onScroll);
+    };
   }, [open]);
 
   const stop = (e: React.MouseEvent) => {
@@ -64,8 +92,9 @@ export function ProjectStateControl({
   };
 
   return (
-    <div className="relative" ref={ref}>
+    <>
       <button
+        ref={btnRef}
         type="button"
         onClick={(e) => {
           stop(e);
@@ -84,27 +113,32 @@ export function ProjectStateControl({
         {PROJECT_STATE_LABEL[state]}
         <ChevronDown className={size === "sm" ? "w-3 h-3" : "w-3.5 h-3.5"} />
       </button>
-      {open && (
-        <div
-          onClick={stop}
-          className="absolute end-0 top-full mt-1 z-30 min-w-[140px] bg-white border border-ink-200 rounded-lg shadow-lift py-1"
-          role="listbox"
-        >
-          {PROJECT_STATE_ORDER.map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={(e) => choose(s, e)}
-              className="w-full flex items-center justify-between gap-2 px-3 py-1.5 text-sm text-start text-ink-700 hover:bg-ink-50"
-              role="option"
-              aria-selected={s === state}
-            >
-              <span>{PROJECT_STATE_LABEL[s]}</span>
-              {s === state && <Check className="w-3.5 h-3.5 text-ink-500" />}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
+      {open &&
+        pos &&
+        createPortal(
+          <div
+            ref={menuRef}
+            onClick={stop}
+            style={{ position: "fixed", top: pos.top, right: pos.right, zIndex: 9999 }}
+            className="min-w-[140px] bg-white border border-ink-200 rounded-lg shadow-lift py-1"
+            role="listbox"
+          >
+            {PROJECT_STATE_ORDER.map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={(e) => choose(s, e)}
+                className="w-full flex items-center justify-between gap-2 px-3 py-1.5 text-sm text-start text-ink-700 hover:bg-ink-50"
+                role="option"
+                aria-selected={s === state}
+              >
+                <span>{PROJECT_STATE_LABEL[s]}</span>
+                {s === state && <Check className="w-3.5 h-3.5 text-ink-500" />}
+              </button>
+            ))}
+          </div>,
+          document.body
+        )}
+    </>
   );
 }

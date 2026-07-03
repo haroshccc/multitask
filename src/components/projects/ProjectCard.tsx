@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useLayoutEffect } from "react";
+import { createPortal } from "react-dom";
 import { Link, useNavigate } from "react-router-dom";
 import { MoreHorizontal, Archive, ArchiveRestore, Copy, Loader2 } from "lucide-react";
 import {
@@ -30,17 +31,40 @@ export function ProjectCard({ project }: Props) {
   const navigate = useNavigate();
   const isActive = project.is_active !== false;
   const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
+  const menuBtnRef = useRef<HTMLButtonElement>(null);
+  const menuPanelRef = useRef<HTMLDivElement>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(
+    null
+  );
+
+  useLayoutEffect(() => {
+    if (!menuOpen) return;
+    const el = menuBtnRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    setMenuPos({
+      top: r.bottom + 4,
+      right: Math.max(8, window.innerWidth - r.right),
+    });
+  }, [menuOpen]);
 
   useEffect(() => {
     if (!menuOpen) return;
     const onDown = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setMenuOpen(false);
-      }
+      const t = e.target as Node;
+      if (menuBtnRef.current?.contains(t) || menuPanelRef.current?.contains(t))
+        return;
+      setMenuOpen(false);
     };
+    const onScroll = () => setMenuOpen(false);
     window.addEventListener("mousedown", onDown);
-    return () => window.removeEventListener("mousedown", onDown);
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onScroll);
+    return () => {
+      window.removeEventListener("mousedown", onDown);
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onScroll);
+    };
   }, [menuOpen]);
 
   const stop = (e: React.MouseEvent) => {
@@ -114,8 +138,8 @@ export function ProjectCard({ project }: Props) {
         </div>
         <div className="flex items-center gap-1 shrink-0">
           <ProjectStateControl project={project} />
-          <div className="relative" ref={menuRef}>
           <button
+            ref={menuBtnRef}
             type="button"
             onClick={(e) => {
               stop(e);
@@ -126,47 +150,56 @@ export function ProjectCard({ project }: Props) {
           >
             <MoreHorizontal className="w-4 h-4" />
           </button>
-          {menuOpen && (
-            <div
-              onClick={stop}
-              className="absolute end-0 top-full mt-1 z-20 bg-white border border-ink-200 rounded-lg shadow-lift min-w-[160px] py-1"
-            >
-              <button
-                type="button"
-                onClick={onDuplicate}
-                disabled={duplicate.isPending}
-                className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-start text-ink-700 hover:bg-ink-50 disabled:opacity-50"
+          {menuOpen &&
+            menuPos &&
+            createPortal(
+              <div
+                ref={menuPanelRef}
+                onClick={stop}
+                style={{
+                  position: "fixed",
+                  top: menuPos.top,
+                  right: menuPos.right,
+                  zIndex: 9999,
+                }}
+                className="bg-white border border-ink-200 rounded-lg shadow-lift min-w-[200px] py-1"
               >
-                {duplicate.isPending ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <button
+                  type="button"
+                  onClick={onDuplicate}
+                  disabled={duplicate.isPending}
+                  className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-start text-ink-700 hover:bg-ink-50 disabled:opacity-50"
+                >
+                  {duplicate.isPending ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Copy className="w-3.5 h-3.5" />
+                  )}
+                  שכפול (ללא זמן וללא סימונים)
+                </button>
+                <div className="h-px bg-ink-100 my-1" />
+                {project.is_archived ? (
+                  <button
+                    type="button"
+                    onClick={onRestore}
+                    className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-start text-ink-700 hover:bg-ink-50"
+                  >
+                    <ArchiveRestore className="w-3.5 h-3.5" />
+                    שחזרי מארכיון
+                  </button>
                 ) : (
-                  <Copy className="w-3.5 h-3.5" />
+                  <button
+                    type="button"
+                    onClick={onArchive}
+                    className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-start text-ink-700 hover:bg-ink-50"
+                  >
+                    <Archive className="w-3.5 h-3.5" />
+                    ארכבי
+                  </button>
                 )}
-                שכפול (ללא זמן וללא סימונים)
-              </button>
-              <div className="h-px bg-ink-100 my-1" />
-              {project.is_archived ? (
-                <button
-                  type="button"
-                  onClick={onRestore}
-                  className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-start text-ink-700 hover:bg-ink-50"
-                >
-                  <ArchiveRestore className="w-3.5 h-3.5" />
-                  שחזרי מארכיון
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={onArchive}
-                  className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-start text-ink-700 hover:bg-ink-50"
-                >
-                  <Archive className="w-3.5 h-3.5" />
-                  ארכבי
-                </button>
-              )}
-            </div>
-          )}
-          </div>
+              </div>,
+              document.body
+            )}
         </div>
       </div>
 

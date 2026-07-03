@@ -26,6 +26,7 @@ import {
   MoreHorizontal,
   Check,
   Palette,
+  Copy,
 } from "lucide-react";
 import { ListIcon } from "@/components/tasks/list-icons";
 import { ScreenScaffold } from "@/components/layout/ScreenScaffold";
@@ -35,6 +36,7 @@ import {
   useRestoreProject,
   useDebouncedProjectUpdate,
   useUpdateProject,
+  useDuplicateProject,
 } from "@/lib/hooks/useProjects";
 import { useTaskLists, useUpdateTaskList } from "@/lib/hooks/useTaskLists";
 import type { Project } from "@/lib/types/domain";
@@ -216,8 +218,10 @@ function ProjectKebabMenu({
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
   const updateProject = useUpdateProject();
   const updateList = useUpdateTaskList();
+  const duplicate = useDuplicateProject();
   const { data: lists = [] } = useTaskLists();
   const projectList = lists.find((l) => l.project_id === projectId) ?? null;
   const current = project.color ?? null;
@@ -312,6 +316,27 @@ function ProjectKebabMenu({
               לפרויקט עדיין אין רשימת משימות — הצבע יחול גם עליה כשתיווצר.
             </p>
           )}
+
+          <div className="h-px bg-ink-100 my-1" />
+          <button
+            type="button"
+            disabled={duplicate.isPending}
+            onClick={() => {
+              setOpen(false);
+              duplicate.mutate(
+                { sourceProjectId: projectId },
+                { onSuccess: (newId) => navigate(`/app/projects/${newId}`) }
+              );
+            }}
+            className="w-full flex items-center gap-2 px-1 py-1.5 text-sm text-start text-ink-700 hover:bg-ink-50 rounded-md disabled:opacity-50"
+          >
+            {duplicate.isPending ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Copy className="w-3.5 h-3.5" />
+            )}
+            שכפול פרויקט (ללא זמן וללא סימונים)
+          </button>
         </div>
       )}
     </div>

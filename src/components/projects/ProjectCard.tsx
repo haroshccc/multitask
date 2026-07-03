@@ -1,7 +1,11 @@
 import { useState, useRef, useEffect } from "react";
-import { Link } from "react-router-dom";
-import { MoreHorizontal, Archive, ArchiveRestore } from "lucide-react";
-import { useArchiveProject, useRestoreProject } from "@/lib/hooks/useProjects";
+import { Link, useNavigate } from "react-router-dom";
+import { MoreHorizontal, Archive, ArchiveRestore, Copy, Loader2 } from "lucide-react";
+import {
+  useArchiveProject,
+  useRestoreProject,
+  useDuplicateProject,
+} from "@/lib/hooks/useProjects";
 import type { Project } from "@/lib/types/domain";
 import { pushUndo } from "@/lib/undo/store";
 import { cn } from "@/lib/utils/cn";
@@ -22,6 +26,8 @@ const STATUS_LABEL: Record<string, string> = {
 export function ProjectCard({ project }: Props) {
   const archive = useArchiveProject();
   const restore = useRestoreProject();
+  const duplicate = useDuplicateProject();
+  const navigate = useNavigate();
   const isActive = project.is_active !== false;
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -64,6 +70,15 @@ export function ProjectCard({ project }: Props) {
       undo: () => archive.mutate(id),
       redo: () => restore.mutate(id),
     });
+  };
+
+  const onDuplicate = (e: React.MouseEvent) => {
+    stop(e);
+    setMenuOpen(false);
+    duplicate.mutate(
+      { sourceProjectId: project.id },
+      { onSuccess: (newId) => navigate(`/app/projects/${newId}`) }
+    );
   };
 
   const accent = project.color ?? "#a8a8bc";
@@ -116,6 +131,20 @@ export function ProjectCard({ project }: Props) {
               onClick={stop}
               className="absolute end-0 top-full mt-1 z-20 bg-white border border-ink-200 rounded-lg shadow-lift min-w-[160px] py-1"
             >
+              <button
+                type="button"
+                onClick={onDuplicate}
+                disabled={duplicate.isPending}
+                className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-start text-ink-700 hover:bg-ink-50 disabled:opacity-50"
+              >
+                {duplicate.isPending ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Copy className="w-3.5 h-3.5" />
+                )}
+                שכפול (ללא זמן וללא סימונים)
+              </button>
+              <div className="h-px bg-ink-100 my-1" />
               {project.is_archived ? (
                 <button
                   type="button"

@@ -47,6 +47,24 @@ export async function createProject(payload: ProjectInsert): Promise<Project> {
   return data;
 }
 
+/**
+ * Duplicate a project with its full task tree, but WITHOUT time worked
+ * (actual_seconds reset, time_entries not copied) and WITHOUT completion
+ * (status reset to todo, completed_at/occurrences/approval cleared). Server-side
+ * via the `duplicate_project` RPC. Returns the new project id.
+ */
+export async function duplicateProject(
+  sourceProjectId: string,
+  newName?: string | null
+): Promise<string> {
+  const { data, error } = await (supabase as any).rpc("duplicate_project", {
+    p_source: sourceProjectId,
+    p_new_name: newName ?? null,
+  });
+  if (error) throw error;
+  return data as string;
+}
+
 export async function updateProject(
   projectId: string,
   patch: ProjectUpdate

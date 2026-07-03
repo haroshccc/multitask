@@ -163,6 +163,34 @@ export function useRestoreProject() {
   });
 }
 
+/** Duplicate a project (tasks copied, time worked + completion reset). */
+export function useDuplicateProject() {
+  const qc = useQueryClient();
+  const scope = useOrgScope();
+  return useMutation({
+    mutationFn: ({
+      sourceProjectId,
+      newName,
+    }: {
+      sourceProjectId: string;
+      newName?: string | null;
+    }) => service.duplicateProject(sourceProjectId, newName),
+    onSuccess: () => {
+      if (scope.organizationId) {
+        qc.invalidateQueries({
+          queryKey: queryFamilies.allProjects(scope.organizationId),
+        });
+        qc.invalidateQueries({
+          queryKey: queryFamilies.allTaskLists(scope.organizationId),
+        });
+        qc.invalidateQueries({
+          queryKey: queryFamilies.allTasks(scope.organizationId),
+        });
+      }
+    },
+  });
+}
+
 /** Set of *hidden* project ids — anything not in the "active" state (i.e.
  *  inactive OR completed). Their tasks/events/lists are kept out of the task
  *  list, calendar and Gantt until the project is set back to active. */

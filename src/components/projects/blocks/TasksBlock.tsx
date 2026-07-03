@@ -12,6 +12,7 @@ import {
   GripVertical,
   CalendarPlus,
   Wand2,
+  Pencil,
 } from "lucide-react";
 import {
   DndContext,
@@ -1058,6 +1059,9 @@ export function TasksBlock({ scopeId }: { scopeId?: string | null }) {
               totalSpare={totalSpare}
               totalActual={totalActual}
             />
+            {/* Bottom breathing room so the last rows can scroll clear of any
+                floating side panels/banners overlapping the viewport edge. */}
+            <div className="h-64 shrink-0" aria-hidden />
           </div>
         )}
       </div>
@@ -1594,6 +1598,13 @@ function TaskRow({
 
   return (
     <div
+      onDoubleClick={(e) => {
+        // Double-click anywhere on the row opens the edit modal — except on the
+        // interactive cells (title input, buttons) so inline editing still works.
+        const el = e.target as HTMLElement;
+        if (el.closest("input, textarea, button, a, [contenteditable]")) return;
+        onOpenEdit(task.id);
+      }}
       className={
         "group/row grid items-center gap-1 py-1 px-1.5 transition-colors border-b " +
         (isPhase
@@ -1708,6 +1719,15 @@ function TaskRow({
           aria-label="הוסיפי תת-משימה"
         >
           <Plus className="w-3 h-3" />
+        </button>
+        <button
+          type="button"
+          onClick={() => onOpenEdit(task.id)}
+          className="p-1 rounded hover:bg-ink-200 text-ink-500 hover:text-ink-900"
+          title="עריכת המשימה (פרטים, שלב, ועוד)"
+          aria-label="עריכת המשימה"
+        >
+          <Pencil className="w-3 h-3" />
         </button>
         <button
           type="button"

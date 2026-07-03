@@ -325,7 +325,13 @@ function ProjectKebabMenu({
               setOpen(false);
               duplicate.mutate(
                 { sourceProjectId: projectId },
-                { onSuccess: (newId) => navigate(`/app/projects/${newId}`) }
+                {
+                  onSuccess: (newId) => navigate(`/app/projects/${newId}`),
+                  onError: (err) => {
+                    console.error("duplicate project failed", err);
+                    alert("שכפול הפרויקט נכשל. נסי שוב, ואם זה חוזר פני לתמיכה.");
+                  },
+                }
               );
             }}
             className="w-full flex items-center gap-2 px-1 py-1.5 text-sm text-start text-ink-700 hover:bg-ink-50 rounded-md disabled:opacity-50"

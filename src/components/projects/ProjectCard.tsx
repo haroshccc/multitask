@@ -101,7 +101,13 @@ export function ProjectCard({ project }: Props) {
     setMenuOpen(false);
     duplicate.mutate(
       { sourceProjectId: project.id },
-      { onSuccess: (newId) => navigate(`/app/projects/${newId}`) }
+      {
+        onSuccess: (newId) => navigate(`/app/projects/${newId}`),
+        onError: (err) => {
+          console.error("duplicate project failed", err);
+          alert("שכפול הפרויקט נכשל. נסי שוב, ואם זה חוזר פני לתמיכה.");
+        },
+      }
     );
   };
 

@@ -58,7 +58,7 @@ begin
 
   -- 3. reuse the trigger-created list; map the source project's list onto it
   create temp table if not exists _proj_dup_lmap(old uuid primary key, new uuid not null) on commit drop;
-  delete from _proj_dup_lmap;
+  delete from _proj_dup_lmap where true; -- `where true` for pg_safeupdate (API roles)
   select id into v_new_list from public.task_lists where project_id = v_new limit 1;
 
   for r in
@@ -87,7 +87,7 @@ begin
 
   -- 4. tasks (parents before children); reset time worked + completion state
   create temp table if not exists _proj_dup_tmap(old uuid primary key, new uuid not null) on commit drop;
-  delete from _proj_dup_tmap;
+  delete from _proj_dup_tmap where true; -- `where true` for pg_safeupdate (API roles)
   loop
     v_found := false;
     for r in

@@ -42,6 +42,7 @@ import { useTaskLists, useUpdateTaskList } from "@/lib/hooks/useTaskLists";
 import type { Project } from "@/lib/types/domain";
 import { ShareProjectModal } from "@/components/projects/ShareProjectModal";
 import { ProjectStateControl } from "@/components/projects/ProjectStateControl";
+import { ProjectStatsBanner } from "@/components/projects/ProjectStatsBanner";
 import { cn } from "@/lib/utils/cn";
 import { pushUndo } from "@/lib/undo/store";
 
@@ -437,7 +438,7 @@ function ProjectHeader({
         חזרה לפרויקטים
       </Link>
 
-      <div className="flex items-start gap-3">
+      <div className="flex items-start gap-3 flex-wrap">
         <span
           aria-hidden
           className="shrink-0 mt-0.5 inline-flex text-ink-700"
@@ -450,7 +451,7 @@ function ProjectHeader({
             emojiClassName="text-3xl leading-none"
           />
         </span>
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 basis-48">
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -470,6 +471,7 @@ function ProjectHeader({
             className="w-full text-sm text-ink-500 bg-transparent border-0 outline-none focus:ring-2 focus:ring-primary-500/25 rounded px-1 -mx-1 mt-1 resize-none"
           />
         </div>
+        <ProjectStatsBanner project={project} />
       </div>
 
       <div className="flex flex-wrap items-center gap-2">

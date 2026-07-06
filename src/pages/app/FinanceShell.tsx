@@ -17,6 +17,7 @@ import {
   ArrowLeftRight,
   Upload,
   Layers,
+  Pencil,
   Wallet,
   Landmark,
   History as HistoryIcon,
@@ -25,9 +26,13 @@ import {
 } from "lucide-react";
 import { ScreenScaffold } from "@/components/layout/ScreenScaffold";
 import { cn } from "@/lib/utils/cn";
+import { pushUndo } from "@/lib/undo/store";
+import { toast } from "@/components/ui/Toast";
+import { useOrgScope } from "@/lib/hooks/useOrgScope";
 import {
   useBudgetGroups,
   useBudgets,
+  useUpdateBudget,
   useBudgetVersions,
   useAccounts,
   useAccountTransactions,
@@ -51,6 +56,7 @@ import { AccountCard } from "@/components/finance/AccountCard";
 import { CreateAccountDialog, TransferDialog } from "@/components/finance/AccountDialogs";
 import { CreditImportDialog } from "@/components/finance/CreditImportDialog";
 import { CreateBudgetGroupDialog } from "@/components/finance/CreateBudgetGroupDialog";
+import { GroupEditDialog } from "@/components/finance/GroupEditDialog";
 import { ForecastTimeline } from "@/components/finance/ForecastTimeline";
 import { TemplateList } from "@/components/finance/TemplateEditor";
 import type {
@@ -339,16 +345,20 @@ function readViewMode(): ViewMode {
   return "columns";
 }
 
+const UNGROUPED = "__none__";
+
 export function FinanceBudgetsPage() {
   const ctx = useFinanceContext();
-  const { budgets, accounts, templates, expenses } = ctx;
+  const { budgets, groups, accounts, templates, expenses } = ctx;
+  const updateBudget = useUpdateBudget();
 
   const [viewMode, setViewMode] = useState<ViewMode>(() => readViewMode());
   const [category, setCategory] = useState<string>("");
-  const [shown, setShown] = useState<Set<string> | null>(null); // null = all
+  const [shownGroups, setShownGroups] = useState<Set<string> | null>(null); // null = all
   const [editing, setEditing] = useState<FinanceBudget | "new" | null>(null);
   const [closing, setClosing] = useState<FinanceBudget | null>(null);
   const [groupCreating, setGroupCreating] = useState(false);
+  const [editingGroup, setEditingGroup] = useState<FinanceBudgetGroup | null>(null);
 
   function persistView(v: ViewMode) {
     setViewMode(v);
@@ -359,22 +369,58 @@ export function FinanceBudgetsPage() {
     }
   }
 
+  const groupById = useMemo(() => {
+    const m = new Map<string, FinanceBudgetGroup>();
+    for (const g of groups) m.set(g.id, g);
+    return m;
+  }, [groups]);
+
+  const shareLevelOf = (b: FinanceBudget) =>
+    (b.group_id ? groupById.get(b.group_id)?.share_level : undefined) ?? b.share_level;
+
   const categories = useMemo(
     () => [...new Set(budgets.map((b) => b.category).filter(Boolean) as string[])],
     [budgets]
   );
 
+  const hasUngrouped = budgets.some((b) => !b.group_id);
+
   const visible = useMemo(
     () =>
-      budgets.filter(
-        (b) =>
-          (!category || b.category === category) && (!shown || shown.has(b.id))
-      ),
-    [budgets, category, shown]
+      budgets.filter((b) => {
+        if (category && b.category !== category) return false;
+        if (!shownGroups) return true;
+        return shownGroups.has(b.group_id ?? UNGROUPED);
+      }),
+    [budgets, category, shownGroups]
   );
 
   const expensesFor = (budgetId: string) =>
     expenses.filter((e) => e.budget_id === budgetId);
+
+  function deleteBudget(b: FinanceBudget) {
+    updateBudget.mutate({ budgetId: b.id, patch: { is_archived: true } });
+    pushUndo({
+      description: `מחיקת תקציב "${b.name}"`,
+      undo: async () => {
+        await updateBudget.mutateAsync({ budgetId: b.id, patch: { is_archived: false } });
+      },
+      redo: async () => {
+        await updateBudget.mutateAsync({ budgetId: b.id, patch: { is_archived: true } });
+      },
+    });
+    toast(`התקציב "${b.name}" נמחק · Ctrl+Z לשחזור`, "info");
+  }
+
+  function toggleGroupFilter(key: string) {
+    const allKeys = [...groups.map((g) => g.id), ...(hasUngrouped ? [UNGROUPED] : [])];
+    setShownGroups((prev) => {
+      const next = new Set(prev ?? allKeys);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
 
   const sections = useMemo(() => {
     const byGroup = new Map<string, FinanceBudget[]>();
@@ -462,43 +508,31 @@ export function FinanceBudgetsPage() {
         </button>
       </div>
 
-      {/* budget chips selector */}
-      <div className="flex flex-wrap gap-1.5">
-        <button
-          type="button"
-          onClick={() => setShown(null)}
-          className={cn(
-            "chip",
-            !shown ? "bg-ink-900 text-white" : "bg-ink-150 text-ink-600 hover:bg-ink-200"
+      {/* group filter chips (primary filter is by full budget) */}
+      {(groups.length > 0 || hasUngrouped) && (
+        <div className="flex flex-wrap gap-1.5">
+          <FilterChip label="הכל" active={!shownGroups} onClick={() => setShownGroups(null)} />
+          {groups.map((g) => {
+            const key = g.id;
+            const active = !shownGroups || shownGroups.has(key);
+            return (
+              <FilterChip
+                key={key}
+                label={g.name}
+                active={active}
+                onClick={() => toggleGroupFilter(key)}
+              />
+            );
+          })}
+          {hasUngrouped && (
+            <FilterChip
+              label="ללא קבוצה"
+              active={!shownGroups || shownGroups.has(UNGROUPED)}
+              onClick={() => toggleGroupFilter(UNGROUPED)}
+            />
           )}
-        >
-          הכל
-        </button>
-        {budgets.map((b) => {
-          const active = !shown || shown.has(b.id);
-          return (
-            <button
-              key={b.id}
-              type="button"
-              onClick={() =>
-                setShown((prev) => {
-                  const next = new Set(prev ?? budgets.map((x) => x.id));
-                  if (next.has(b.id)) next.delete(b.id);
-                  else next.add(b.id);
-                  return next;
-                })
-              }
-              className={cn(
-                "chip",
-                active ? "text-white" : "bg-ink-150 text-ink-500"
-              )}
-              style={active ? { backgroundColor: b.color } : undefined}
-            >
-              {b.name}
-            </button>
-          );
-        })}
-      </div>
+        </div>
+      )}
 
       {sections.map((section) => {
         const cards = (
@@ -513,8 +547,10 @@ export function FinanceBudgetsPage() {
                 accounts={accounts}
                 templates={templates}
                 carryoverAdjustment={ctx.carryoverAdjustmentFor(b.id)}
+                shareLevel={shareLevelOf(b)}
                 onEdit={() => setEditing(b)}
                 onOpenClosing={() => setClosing(b)}
+                onDelete={() => deleteBudget(b)}
               />
             ))}
           </div>
@@ -531,7 +567,12 @@ export function FinanceBudgetsPage() {
         }
         return (
           <section key={section.group.id} className="space-y-2">
-            <GroupHeader group={section.group} budgets={section.budgets} ctx={ctx} />
+            <GroupHeader
+              group={section.group}
+              budgets={section.budgets}
+              ctx={ctx}
+              onEdit={() => setEditingGroup(section.group!)}
+            />
             {cards}
           </section>
         );
@@ -539,6 +580,13 @@ export function FinanceBudgetsPage() {
 
       {groupCreating && (
         <CreateBudgetGroupDialog onClose={() => setGroupCreating(false)} />
+      )}
+      {editingGroup && (
+        <GroupEditDialog
+          group={editingGroup}
+          budgetIds={budgets.filter((b) => b.group_id === editingGroup.id).map((b) => b.id)}
+          onClose={() => setEditingGroup(null)}
+        />
       )}
       {editing && (
         <BudgetEditDialog
@@ -567,15 +615,42 @@ export function FinanceBudgetsPage() {
   );
 }
 
+function FilterChip({
+  label,
+  active,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "chip",
+        active ? "bg-primary-600 text-white" : "bg-ink-150 text-ink-500 hover:bg-ink-200"
+      )}
+    >
+      {label}
+    </button>
+  );
+}
+
 function GroupHeader({
   group,
   budgets,
   ctx,
+  onEdit,
 }: {
   group: FinanceBudgetGroup;
   budgets: FinanceBudget[];
   ctx: FinanceContext;
+  onEdit: () => void;
 }) {
+  const { userId } = useOrgScope();
+  const canManage = !group.owner_id || group.owner_id === userId;
   const { allocation, remaining } = budgets.reduce(
     (acc, b) => {
       const snap = budgetMonthSnapshot(
@@ -596,6 +671,17 @@ function GroupHeader({
         <Layers className="h-4 w-4 self-center text-primary-500" />
         <h3 className="font-semibold text-ink-900">{group.name}</h3>
         <span className="text-xs text-ink-400">{budgets.length} תתי-תקציבים</span>
+        {canManage && (
+          <button
+            type="button"
+            onClick={onEdit}
+            aria-label="עריכת תקציב כולל"
+            title="עריכת תקציב כולל / שיתוף / מחיקה"
+            className="self-center rounded p-1 text-ink-400 hover:bg-ink-100 hover:text-ink-700"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
+        )}
       </div>
       <span className="text-sm text-ink-500">
         נשאר{" "}

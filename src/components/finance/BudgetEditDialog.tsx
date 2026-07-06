@@ -215,38 +215,42 @@ export function BudgetEditDialog({ existing, onClose }: Props) {
           </div>
         </div>
 
-        <div>
-          <span className="mb-1.5 block text-xs font-medium text-ink-600">
-            הרשאת שיתוף לחברים אחרים
-          </span>
-          <div className="flex flex-col gap-1.5 sm:flex-row">
-            {ALL_SHARE_LEVELS.map((lvl) => (
-              <button
-                key={lvl}
-                type="button"
-                onClick={() => setShareLevel(lvl)}
-                className={cn(
-                  "flex-1 rounded-lg border px-3 py-2 text-start transition-colors",
-                  shareLevel === lvl
-                    ? "border-primary-500 bg-primary-50"
-                    : "border-ink-300 hover:bg-ink-50"
-                )}
-              >
-                <span
+        {/* Share level lives on the containing "תקציב כולל" for grouped
+            budgets — only ungrouped single budgets configure it here. */}
+        {!b?.group_id && (
+          <div>
+            <span className="mb-1.5 block text-xs font-medium text-ink-600">
+              הרשאת שיתוף לחברים אחרים
+            </span>
+            <div className="flex flex-col gap-1.5 sm:flex-row">
+              {ALL_SHARE_LEVELS.map((lvl) => (
+                <button
+                  key={lvl}
+                  type="button"
+                  onClick={() => setShareLevel(lvl)}
                   className={cn(
-                    "block text-sm font-medium",
-                    shareLevel === lvl ? "text-primary-700" : "text-ink-800"
+                    "flex-1 rounded-lg border px-3 py-2 text-start transition-colors",
+                    shareLevel === lvl
+                      ? "border-primary-500 bg-primary-50"
+                      : "border-ink-300 hover:bg-ink-50"
                   )}
                 >
-                  {SHARE_LEVEL_META[lvl].label}
-                </span>
-              </button>
-            ))}
+                  <span
+                    className={cn(
+                      "block text-sm font-medium",
+                      shareLevel === lvl ? "text-primary-700" : "text-ink-800"
+                    )}
+                  >
+                    {SHARE_LEVEL_META[lvl].label}
+                  </span>
+                </button>
+              ))}
+            </div>
+            <span className="mt-1 block text-[11px] text-ink-400">
+              {SHARE_LEVEL_META[shareLevel].hint} · חל רק כששיתוף ההתנהלות הכלכלית פעיל בארגון.
+            </span>
           </div>
-          <span className="mt-1 block text-[11px] text-ink-400">
-            {SHARE_LEVEL_META[shareLevel].hint} · חל רק כששיתוף ההתנהלות הכלכלית פעיל בארגון.
-          </span>
-        </div>
+        )}
 
         <div>
           <span className="mb-1.5 block text-xs font-medium text-ink-600">צבע ואייקון</span>

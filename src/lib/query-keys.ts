@@ -163,6 +163,7 @@ export const queryKeys = {
   financeTemplates: (orgId: string) => ["finance-templates", orgId] as const,
   financeClosings: (orgId: string) => ["finance-closings", orgId] as const,
   financeCarryovers: (orgId: string) => ["finance-carryovers", orgId] as const,
+  financeCreditImports: (orgId: string) => ["finance-credit-imports", orgId] as const,
   financeEventLog: (entityType: string, entityId: string) =>
     ["finance-event-log", entityType, entityId] as const,
 } as const;
@@ -221,6 +222,7 @@ export const queryFamilies = {
   allFinanceTemplates: (orgId: string) => ["finance-templates", orgId] as const,
   allFinanceClosings: (orgId: string) => ["finance-closings", orgId] as const,
   allFinanceCarryovers: (orgId: string) => ["finance-carryovers", orgId] as const,
+  allFinanceCreditImports: (orgId: string) => ["finance-credit-imports", orgId] as const,
   financeBudgetFamily: (budgetId: string) => ["finance-budget", budgetId] as const,
   financeAccountFamily: (accountId: string) => ["finance-account", accountId] as const,
 } as const;

@@ -41,12 +41,16 @@ import {
   useTemplates,
   useClosings,
   useCarryovers,
+  useCreditImports,
 } from "@/lib/hooks/useFinance";
+import { endOfMonth } from "date-fns";
 import {
   activeVersion,
   budgetMonthSnapshot,
   accountBalance,
   monthKey,
+  toDateKey,
+  billingCycle,
 } from "@/lib/finance/calc";
 import { Money } from "@/components/finance/finance-bits";
 import { BudgetCard } from "@/components/finance/BudgetCard";
@@ -203,30 +207,72 @@ export function FinanceOverviewPage() {
   const { budgets, versionsFor, occurrencesFor, accounts, transactions, occurrences, expenses } = ctx;
   const [importing, setImporting] = useState(false);
 
+  const mStart = monthKey();
+  const mEnd = toDateKey(endOfMonth(new Date()));
+
+  // per-budget breakdown for this month
+  const rows = useMemo(
+    () =>
+      budgets.map((b) => {
+        const occs = occurrencesFor(b.id);
+        const snap = budgetMonthSnapshot(
+          activeVersion(versionsFor(b.id)),
+          occs,
+          new Date(),
+          ctx.carryoverAdjustmentFor(b.id)
+        );
+        const monthOccs = occs.filter((o) => o.due_date >= mStart && o.due_date <= mEnd);
+        const withdrawn = monthOccs
+          .filter((o) => o.withdrawn)
+          .reduce((s, o) => s + Number(o.amount), 0);
+        return {
+          b,
+          allocated: snap.allocation,
+          charged: snap.charged,
+          remainingToCharge: snap.remaining,
+          withdrawn,
+          remainingToWithdraw: Math.max(0, snap.charged - withdrawn),
+        };
+      }),
+    [budgets, versionsFor, occurrencesFor, mStart, mEnd, ctx]
+  );
+
   const totals = useMemo(() => {
-    let allocated = 0;
-    let charged = 0;
-    for (const b of budgets) {
-      const snap = budgetMonthSnapshot(
-        activeVersion(versionsFor(b.id)),
-        occurrencesFor(b.id),
-        new Date(),
-        ctx.carryoverAdjustmentFor(b.id)
-      );
-      allocated += snap.allocation;
-      charged += snap.charged;
-    }
+    const t = rows.reduce(
+      (acc, r) => {
+        acc.allocated += r.allocated;
+        acc.charged += r.charged;
+        acc.remainingToCharge += r.remainingToCharge;
+        acc.withdrawn += r.withdrawn;
+        acc.remainingToWithdraw += r.remainingToWithdraw;
+        return acc;
+      },
+      { allocated: 0, charged: 0, remainingToCharge: 0, withdrawn: 0, remainingToWithdraw: 0 }
+    );
     const accountsTotal = accounts.reduce(
       (sum, a) =>
-        sum +
-        accountBalance(
-          Number(a.opening_balance),
-          transactions.filter((t) => t.account_id === a.id)
-        ),
+        sum + accountBalance(Number(a.opening_balance), transactions.filter((x) => x.account_id === a.id)),
       0
     );
-    return { allocated, charged, remaining: allocated - charged, accountsTotal };
-  }, [budgets, accounts, transactions, versionsFor, occurrencesFor, ctx]);
+    return { ...t, accountsTotal };
+  }, [rows, accounts, transactions]);
+
+  // per-account: now / withdrew this month / expected still to withdraw
+  const acctRows = useMemo(
+    () =>
+      accounts.map((a) => {
+        const txs = transactions.filter((t) => t.account_id === a.id);
+        const bal = accountBalance(Number(a.opening_balance), txs);
+        const withdrewThisMonth = txs
+          .filter((t) => Number(t.amount) < 0 && t.tx_date >= mStart && t.tx_date <= mEnd)
+          .reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
+        const expected = occurrences
+          .filter((o) => o.account_id === a.id && !o.withdrawn)
+          .reduce((s, o) => s + Number(o.amount), 0);
+        return { a, bal, withdrewThisMonth, expected };
+      }),
+    [accounts, transactions, occurrences, mStart, mEnd]
+  );
 
   if (ctx.loading) return <LoadingGrid />;
 
@@ -249,48 +295,87 @@ export function FinanceOverviewPage() {
         <KpiCard label="הוקצב החודש" value={totals.allocated} />
         <KpiCard label="חויב" value={totals.charged} />
         <KpiCard
-          label="נשאר"
-          value={totals.remaining}
-          tone={totals.remaining < 0 ? "red" : "green"}
+          label="נשאר לחיוב"
+          value={totals.remainingToCharge}
+          tone={totals.remainingToCharge < 0 ? "red" : "green"}
         />
         <KpiCard label="יתרת חשבונות" value={totals.accountsTotal} />
       </div>
 
+      {/* per-budget breakdown */}
+      {rows.length > 0 && (
+        <section className="card overflow-hidden">
+          <h3 className="px-4 pt-3.5 font-semibold text-ink-900">פירוט לפי תקציב</h3>
+          <div className="overflow-x-auto p-2">
+            <table className="w-full min-w-[560px] text-sm">
+              <thead>
+                <tr className="text-xs text-ink-500">
+                  <th className="p-2 text-start font-medium">תקציב</th>
+                  <th className="p-2 text-end font-medium">הוקצב</th>
+                  <th className="p-2 text-end font-medium">חויב</th>
+                  <th className="p-2 text-end font-medium">נשאר לחיוב</th>
+                  <th className="p-2 text-end font-medium">ירד</th>
+                  <th className="p-2 text-end font-medium">נשאר להורדה</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.b.id} className="border-t border-ink-100">
+                    <td className="p-2">
+                      <span className="flex items-center gap-1.5">
+                        <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: r.b.color }} />
+                        <span className="truncate text-ink-800">{r.b.name}</span>
+                      </span>
+                    </td>
+                    <td className="p-2 text-end tabular-nums text-ink-600"><Money value={r.allocated} /></td>
+                    <td className="p-2 text-end tabular-nums text-ink-800"><Money value={r.charged} /></td>
+                    <td className="p-2 text-end tabular-nums">
+                      <Money value={r.remainingToCharge} className={r.remainingToCharge < 0 ? "text-danger-600" : "text-success-600"} />
+                    </td>
+                    <td className="p-2 text-end tabular-nums text-ink-600"><Money value={r.withdrawn} /></td>
+                    <td className="p-2 text-end tabular-nums text-ink-800"><Money value={r.remainingToWithdraw} /></td>
+                  </tr>
+                ))}
+                <tr className="border-t-2 border-ink-200 font-semibold">
+                  <td className="p-2 text-ink-900">סה״כ</td>
+                  <td className="p-2 text-end tabular-nums"><Money value={totals.allocated} /></td>
+                  <td className="p-2 text-end tabular-nums"><Money value={totals.charged} /></td>
+                  <td className="p-2 text-end tabular-nums"><Money value={totals.remainingToCharge} /></td>
+                  <td className="p-2 text-end tabular-nums"><Money value={totals.withdrawn} /></td>
+                  <td className="p-2 text-end tabular-nums"><Money value={totals.remainingToWithdraw} /></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
       <div className="grid gap-5 lg:grid-cols-2">
         <section className="card p-4">
-          <h3 className="mb-3 font-semibold text-ink-900">תחזית — מה יוצא ומתי</h3>
-          <ForecastTimeline occurrences={occurrences} expenses={expenses} />
+          <h3 className="mb-3 font-semibold text-ink-900">תחזית — מה יוצא ומתי (לפי תקציב)</h3>
+          <ForecastTimeline occurrences={occurrences} expenses={expenses} budgets={budgets} />
         </section>
         <section className="card p-4">
           <h3 className="mb-3 font-semibold text-ink-900">חשבונות</h3>
-          {accounts.length === 0 ? (
+          {acctRows.length === 0 ? (
             <p className="py-4 text-center text-sm text-ink-400">אין חשבונות עדיין</p>
           ) : (
-            <div className="space-y-1.5">
-              {accounts.map((a) => {
-                const bal = accountBalance(
-                  Number(a.opening_balance),
-                  transactions.filter((t) => t.account_id === a.id)
-                );
-                return (
-                  <div
-                    key={a.id}
-                    className="flex items-center justify-between rounded-lg px-2 py-1.5 odd:bg-ink-50"
-                  >
-                    <span className="flex items-center gap-2 text-sm text-ink-700">
-                      <span
-                        className="h-2.5 w-2.5 rounded-full"
-                        style={{ backgroundColor: a.color }}
-                      />
+            <div className="space-y-2">
+              {acctRows.map(({ a, bal, withdrewThisMonth, expected }) => (
+                <div key={a.id} className="rounded-lg border border-ink-200 px-3 py-2">
+                  <div className="flex items-center justify-between">
+                    <span className="flex items-center gap-2 text-sm font-medium text-ink-800">
+                      <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: a.color }} />
                       {a.name}
                     </span>
-                    <Money
-                      value={bal}
-                      className={cn("font-medium", bal < 0 ? "text-danger-600" : "text-ink-900")}
-                    />
+                    <Money value={bal} className={cn("font-semibold", bal < 0 ? "text-danger-600" : "text-ink-900")} />
                   </div>
-                );
-              })}
+                  <div className="mt-1 flex justify-between gap-2 text-[11px] text-ink-500">
+                    <span>ירד החודש: <Money value={withdrewThisMonth} /></span>
+                    <span>צפוי לרדת: <Money value={expected} /></span>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </section>
@@ -359,6 +444,7 @@ export function FinanceBudgetsPage() {
   const [closing, setClosing] = useState<FinanceBudget | null>(null);
   const [groupCreating, setGroupCreating] = useState(false);
   const [editingGroup, setEditingGroup] = useState<FinanceBudgetGroup | null>(null);
+  const [importing, setImporting] = useState(false);
 
   function persistView(v: ViewMode) {
     setViewMode(v);
@@ -510,6 +596,17 @@ export function FinanceBudgetsPage() {
           <Plus className="h-4 w-4" />
           תקציב בודד
         </button>
+        {accounts.length > 0 && (
+          <button
+            type="button"
+            className="btn-outline flex items-center gap-1.5 text-sm"
+            onClick={() => setImporting(true)}
+            title="הדבקת רשימת חיובים מדף האשראי"
+          >
+            <Upload className="h-4 w-4" />
+            ייבוא מאשראי
+          </button>
+        )}
       </div>
 
       {/* group filter chips (primary filter is by full budget) */}
@@ -620,6 +717,13 @@ export function FinanceBudgetsPage() {
           expenses={expensesFor(closing.id)}
           allBudgets={budgets}
           onClose={() => setClosing(null)}
+        />
+      )}
+      {importing && (
+        <CreditImportDialog
+          accounts={accounts}
+          budgets={budgets}
+          onClose={() => setImporting(false)}
         />
       )}
     </div>
@@ -803,6 +907,8 @@ export function FinanceHistoryPage() {
 
   return (
     <div className="space-y-5">
+      <CreditImportHistory />
+
       <section>
         <h3 className="mb-2 font-semibold text-ink-900">סגירות חודשיות — עודף/גרעון</h3>
         {closings.length === 0 ? (
@@ -855,6 +961,87 @@ export function FinanceHistoryPage() {
         )}
       </section>
     </div>
+  );
+}
+
+function CreditImportHistory() {
+  const ctx = useFinanceContext();
+  const importsQ = useCreditImports();
+  const imports = importsQ.data ?? [];
+
+  const accountName = (id: string | null) =>
+    ctx.accounts.find((a) => a.id === id)?.name ?? "—";
+
+  // group import batches by billing cycle (2nd → 1st) of their import date
+  const cycles = useMemo(() => {
+    const m = new Map<string, { label: string; batches: typeof imports }>();
+    for (const imp of imports) {
+      const c = billingCycle(imp.imported_on);
+      const entry = m.get(c.key) ?? { label: c.label, batches: [] };
+      entry.batches.push(imp);
+      m.set(c.key, entry);
+    }
+    return [...m.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1)); // newest cycle first
+  }, [imports]);
+
+  const batchExpenses = (importId: string) =>
+    ctx.expenses.filter((e) => e.credit_import_id === importId);
+  const expenseAmount = (expenseId: string) =>
+    ctx.occurrences
+      .filter((o) => o.expense_id === expenseId)
+      .reduce((s, o) => s + Number(o.amount), 0);
+
+  if (imports.length === 0) return null;
+
+  return (
+    <section>
+      <h3 className="mb-1 font-semibold text-ink-900">היסטוריית ייבוא אשראי</h3>
+      <p className="mb-2 text-xs text-ink-400">
+        לזיכרון — מה כבר ייבאת, לפי מחזור חיוב (2 בחודש עד 1 בחודש הבא). כדי למנוע כפילויות.
+      </p>
+      <div className="space-y-2">
+        {cycles.map(([key, cyc], ci) => (
+          <details key={key} className="card overflow-hidden" open={ci === 0}>
+            <summary className="cursor-pointer px-4 py-2.5 text-sm font-medium text-ink-800">
+              <span dir="ltr">{cyc.label}</span>
+              <span className="ms-2 text-xs text-ink-400">{cyc.batches.length} ייבואים</span>
+            </summary>
+            <div className="divide-y divide-ink-100 border-t border-ink-100">
+              {cyc.batches.map((imp) => {
+                const exps = batchExpenses(imp.id);
+                const total = exps.reduce((s, e) => s + expenseAmount(e.id), 0);
+                return (
+                  <div key={imp.id} className="px-4 py-2.5">
+                    <div className="flex items-center justify-between gap-2 text-sm">
+                      <span className="text-ink-700">
+                        יובא ב־<span dir="ltr">{imp.imported_on}</span> · מחשבון{" "}
+                        <span className="font-medium">{accountName(imp.account_id)}</span>
+                      </span>
+                      <span className="shrink-0 text-xs text-ink-500">
+                        {exps.length} הוצאות · <Money value={total} />
+                      </span>
+                    </div>
+                    {exps.length > 0 && (
+                      <div className="mt-1.5 space-y-0.5">
+                        {exps.map((e) => (
+                          <div
+                            key={e.id}
+                            className="flex items-center justify-between rounded px-2 py-0.5 text-xs odd:bg-ink-50"
+                          >
+                            <span className="truncate text-ink-600">{e.title}</span>
+                            <Money value={expenseAmount(e.id)} className="text-ink-500" />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </details>
+        ))}
+      </div>
+    </section>
   );
 }
 

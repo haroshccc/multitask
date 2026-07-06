@@ -55,7 +55,9 @@ export function BudgetEditDialog({ existing, onClose }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   const isEdit = !!b;
-  const amountChanged = !!v && (amount !== v.amount || period !== v.period);
+  // Also true when there is no active version yet (v == null) but an amount is
+  // set — otherwise the amount edit would silently do nothing.
+  const amountChanged = amount !== (v?.amount ?? null) || period !== (v?.period ?? null);
   const busy = create.isPending || updateBudget.isPending || addVersion.isPending;
 
   function toggleView(u: RemainderUnit) {
@@ -72,10 +74,6 @@ export function BudgetEditDialog({ existing, onClose }: Props) {
     }
     try {
       if (!isEdit) {
-        if (!versionTitle.trim()) {
-          setError("יש לתת כותרת לגרסת התקציב");
-          return;
-        }
         await create.mutateAsync({
           name: name.trim(),
           icon,
@@ -83,7 +81,7 @@ export function BudgetEditDialog({ existing, onClose }: Props) {
           category: category.trim() || null,
           share_level: shareLevel,
           remainder_views: views.length ? views : ["month"],
-          title: versionTitle.trim(),
+          title: versionTitle.trim() || "תקציב התחלתי",
           amount,
           period,
         });
@@ -100,13 +98,9 @@ export function BudgetEditDialog({ existing, onClose }: Props) {
           },
         });
         if (amountChanged) {
-          if (!versionTitle.trim()) {
-            setError("שינוי הסכום/התקופה מחייב כותרת לגרסה החדשה");
-            return;
-          }
           await addVersion.mutateAsync({
             budget_id: b!.id,
-            title: versionTitle.trim(),
+            title: versionTitle.trim() || `עדכון ${new Date().toLocaleDateString("he-IL")}`,
             amount,
             period,
           });
@@ -173,8 +167,8 @@ export function BudgetEditDialog({ existing, onClose }: Props) {
 
         {(!isEdit || amountChanged) && (
           <LabeledField
-            label="כותרת לגרסת התקציב"
-            hint="כל שינוי סכום נשמר כגרסה עם כותרת — לשמירת היסטוריה"
+            label="כותרת לגרסת התקציב (לא חובה)"
+            hint="כל שינוי סכום נשמר כגרסה — כותרת עוזרת לזכור למה שינית"
           >
             <input
               className="field"

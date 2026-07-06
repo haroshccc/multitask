@@ -16,6 +16,7 @@ import type {
   FinanceExpenseTemplate,
   FinanceMonthlyClosing,
   FinanceCarryoverTransfer,
+  FinanceCreditImport,
   FinanceEvent,
 } from "@/lib/types/finance";
 
@@ -142,7 +143,8 @@ export function useCreateBudget() {
       const { organizationId, userId } = assertOrgScope(scope);
       return svc.createBudget({ ...input, organization_id: organizationId, owner_id: userId });
     },
-    onSuccess: () => invalidate([queryFamilies.allFinanceBudgets]),
+    onSuccess: () =>
+      invalidate([queryFamilies.allFinanceBudgets, queryFamilies.allFinanceBudgetVersions]),
   });
 }
 
@@ -362,11 +364,20 @@ export function useSetOccurrenceWithdrawn() {
   });
 }
 
+export function useCreditImports() {
+  const scope = useOrgScope();
+  return useQuery<FinanceCreditImport[]>({
+    queryKey: queryKeys.financeCreditImports(scope.organizationId ?? ""),
+    queryFn: () => svc.listCreditImports(scope.organizationId!),
+    enabled: scope.enabled,
+  });
+}
+
 export function useImportCreditRows() {
   const scope = useOrgScope();
   const invalidate = useInvalidate();
   return useMutation({
-    mutationFn: (input: { account_id: string; rows: svc.CreditImportRow[] }) => {
+    mutationFn: (input: { account_id: string; imported_on?: string; rows: svc.CreditImportRow[] }) => {
       const { organizationId, userId } = assertOrgScope(scope);
       return svc.importCreditRows({
         ...input,
@@ -380,6 +391,7 @@ export function useImportCreditRows() {
         queryFamilies.allFinanceOccurrences,
         queryFamilies.allFinanceAccounts,
         queryFamilies.allFinanceAccountTx,
+        queryFamilies.allFinanceCreditImports,
       ]),
   });
 }

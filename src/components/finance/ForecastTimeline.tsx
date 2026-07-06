@@ -7,19 +7,29 @@ import { useMemo } from "react";
 import { CalendarClock } from "lucide-react";
 import { Money } from "./finance-bits";
 import { toDateKey } from "@/lib/finance/calc";
-import type { FinanceOccurrence, FinanceExpense } from "@/lib/types/finance";
+import type {
+  FinanceOccurrence,
+  FinanceExpense,
+  FinanceBudget,
+} from "@/lib/types/finance";
 
 export function ForecastTimeline({
   occurrences,
   expenses,
+  budgets = [],
 }: {
   occurrences: FinanceOccurrence[];
   expenses: FinanceExpense[];
+  budgets?: FinanceBudget[];
 }) {
   const today = toDateKey(new Date());
   const titleOf = useMemo(
     () => new Map(expenses.map((e) => [e.id, e.title])),
     [expenses]
+  );
+  const budgetOf = useMemo(
+    () => new Map(budgets.map((b) => [b.id, b])),
+    [budgets]
   );
 
   const groups = useMemo(() => {
@@ -70,10 +80,22 @@ export function ForecastTimeline({
                 key={o.id}
                 className="flex items-center justify-between rounded px-2 py-1 text-sm odd:bg-ink-50"
               >
-                <span className="truncate text-ink-700">
-                  {titleOf.get(o.expense_id) ?? "—"}
+                <span className="flex min-w-0 items-center gap-1.5 truncate text-ink-700">
+                  {budgetOf.get(o.budget_id) && (
+                    <span
+                      className="h-2 w-2 shrink-0 rounded-full"
+                      style={{ backgroundColor: budgetOf.get(o.budget_id)!.color }}
+                      title={budgetOf.get(o.budget_id)!.name}
+                    />
+                  )}
+                  <span className="truncate">{titleOf.get(o.expense_id) ?? "—"}</span>
+                  {budgetOf.get(o.budget_id) && (
+                    <span className="shrink-0 text-[10px] text-ink-400">
+                      · {budgetOf.get(o.budget_id)!.name}
+                    </span>
+                  )}
                   {!o.budget_charged && (
-                    <span className="ms-1.5 text-[11px] text-sky-500">(טרם חויב)</span>
+                    <span className="shrink-0 text-[11px] text-sky-500">(טרם חויב)</span>
                   )}
                 </span>
                 <Money value={-Number(o.amount)} className="text-ink-700" />

@@ -67,13 +67,13 @@ export function ExpenseRow({
       >
         <span
           className={cn(
-            "flex h-[22px] w-[22px] items-center justify-center rounded-md border transition-colors",
+            "flex h-[17px] w-[17px] items-center justify-center rounded border transition-colors",
             occ.budget_charged
               ? "border-primary-500 bg-primary-500 text-white"
               : "border-ink-300 text-transparent group-hover:border-primary-400"
           )}
         >
-          <Check className="h-3.5 w-3.5" />
+          <Check className="h-2.5 w-2.5" />
         </span>
       </button>
 

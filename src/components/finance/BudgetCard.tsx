@@ -11,10 +11,13 @@ import { Money, BudgetIcon, DivisionPill, TEXT_COLOR } from "./finance-bits";
 import { ExpenseRow } from "./ExpenseRow";
 import { QuickAddExpense } from "./QuickAddExpense";
 import { ExpenseEditDialog } from "./ExpenseEditDialog";
+import { endOfMonth } from "date-fns";
 import {
   budgetMonthSnapshot,
   divisionView,
   activeVersion,
+  monthKey,
+  toDateKey,
 } from "@/lib/finance/calc";
 import {
   useSetOccurrenceCharged,
@@ -101,9 +104,17 @@ export function BudgetCard({
     return m;
   }, [accounts]);
 
+  const mStart = monthKey();
+  const mEnd = toDateKey(endOfMonth(new Date()));
+
+  // Show only THIS month's occurrences on the card (recurring expenses
+  // materialize a year ahead — past/future are seen via the expense editor).
   const sortedOccs = useMemo(
-    () => occurrences.slice().sort((a, b) => (a.due_date < b.due_date ? -1 : 1)),
-    [occurrences]
+    () =>
+      occurrences
+        .filter((o) => o.due_date >= mStart && o.due_date <= mEnd)
+        .sort((a, b) => (a.due_date < b.due_date ? -1 : 1)),
+    [occurrences, mStart, mEnd]
   );
 
   const pct =
@@ -252,6 +263,7 @@ export function BudgetCard({
         <ExpenseEditDialog
           occ={editingOcc}
           expense={expenseById.get(editingOcc.expense_id)}
+          siblings={occurrences.filter((o) => o.expense_id === editingOcc.expense_id)}
           budgets={allBudgets}
           accounts={accounts}
           onClose={() => setEditingOcc(null)}

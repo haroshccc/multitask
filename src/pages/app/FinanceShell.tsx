@@ -15,6 +15,7 @@ import {
   Columns3,
   Rows3,
   ArrowLeftRight,
+  Upload,
   Wallet,
   Landmark,
   History as HistoryIcon,
@@ -46,6 +47,7 @@ import { BudgetEditDialog } from "@/components/finance/BudgetEditDialog";
 import { MonthlyClosingPanel } from "@/components/finance/MonthlyClosingPanel";
 import { AccountCard } from "@/components/finance/AccountCard";
 import { CreateAccountDialog, TransferDialog } from "@/components/finance/AccountDialogs";
+import { CreditImportDialog } from "@/components/finance/CreditImportDialog";
 import { ForecastTimeline } from "@/components/finance/ForecastTimeline";
 import { TemplateList } from "@/components/finance/TemplateEditor";
 import type {
@@ -514,9 +516,10 @@ function ViewModeToggle({
 
 export function FinanceAccountsPage() {
   const ctx = useFinanceContext();
-  const { accounts, transactions } = ctx;
+  const { accounts, transactions, budgets } = ctx;
   const [creating, setCreating] = useState(false);
   const [transferring, setTransferring] = useState(false);
+  const [importing, setImporting] = useState(false);
 
   if (ctx.loading) return <LoadingGrid />;
 
@@ -531,6 +534,17 @@ export function FinanceAccountsPage() {
           <Plus className="h-4 w-4" />
           חשבון חדש
         </button>
+        {accounts.length > 0 && (
+          <button
+            type="button"
+            className="btn-outline flex items-center gap-1.5 text-sm"
+            onClick={() => setImporting(true)}
+            title="הדבקת רשימת חיובים מדף האשראי"
+          >
+            <Upload className="h-4 w-4" />
+            ייבוא הוצאות מאשראי
+          </button>
+        )}
         {accounts.length >= 2 && (
           <button
             type="button"
@@ -558,6 +572,13 @@ export function FinanceAccountsPage() {
       {creating && <CreateAccountDialog onClose={() => setCreating(false)} />}
       {transferring && (
         <TransferDialog accounts={accounts} onClose={() => setTransferring(false)} />
+      )}
+      {importing && (
+        <CreditImportDialog
+          accounts={accounts}
+          budgets={budgets}
+          onClose={() => setImporting(false)}
+        />
       )}
     </div>
   );

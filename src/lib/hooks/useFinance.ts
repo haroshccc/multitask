@@ -259,6 +259,28 @@ export function useSetOccurrenceWithdrawn() {
   });
 }
 
+export function useImportCreditRows() {
+  const scope = useOrgScope();
+  const invalidate = useInvalidate();
+  return useMutation({
+    mutationFn: (input: { account_id: string; rows: svc.CreditImportRow[] }) => {
+      const { organizationId, userId } = assertOrgScope(scope);
+      return svc.importCreditRows({
+        ...input,
+        organization_id: organizationId,
+        created_by: userId,
+      });
+    },
+    onSuccess: () =>
+      invalidate([
+        queryFamilies.allFinanceExpenses,
+        queryFamilies.allFinanceOccurrences,
+        queryFamilies.allFinanceAccounts,
+        queryFamilies.allFinanceAccountTx,
+      ]),
+  });
+}
+
 // ---- Template mutations ------------------------------------------------------
 
 export function useCreateTemplate() {

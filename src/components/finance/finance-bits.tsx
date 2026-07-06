@@ -123,13 +123,18 @@ export function Modal({
   children,
   footer,
   wide,
+  size,
 }: {
   title: string;
   onClose: () => void;
   children: ReactNode;
   footer?: ReactNode;
   wide?: boolean;
+  size?: "md" | "lg" | "xl";
 }) {
+  const resolved = size ?? (wide ? "lg" : "md");
+  const widthClass =
+    resolved === "xl" ? "max-w-4xl" : resolved === "lg" ? "max-w-2xl" : "max-w-md";
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -144,10 +149,7 @@ export function Modal({
       onMouseDown={onClose}
     >
       <div
-        className={cn(
-          "card w-full my-8 sm:my-0 max-h-[90vh] overflow-y-auto",
-          wide ? "max-w-2xl" : "max-w-md"
-        )}
+        className={cn("card w-full my-8 sm:my-0 max-h-[90vh] overflow-y-auto", widthClass)}
         onMouseDown={(e) => e.stopPropagation()}
       >
         <header className="flex items-center justify-between gap-3 border-b border-ink-200 px-5 py-3.5">

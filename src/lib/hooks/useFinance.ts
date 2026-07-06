@@ -7,6 +7,7 @@ import { queryKeys, queryFamilies } from "@/lib/query-keys";
 import * as svc from "@/lib/services/finance";
 import type {
   FinanceBudget,
+  FinanceBudgetGroup,
   FinanceBudgetVersion,
   FinanceAccount,
   FinanceAccountTransaction,
@@ -19,6 +20,15 @@ import type {
 } from "@/lib/types/finance";
 
 // ---- Queries -----------------------------------------------------------------
+
+export function useBudgetGroups() {
+  const scope = useOrgScope();
+  return useQuery<FinanceBudgetGroup[]>({
+    queryKey: queryKeys.financeBudgetGroups(scope.organizationId ?? ""),
+    queryFn: () => svc.listBudgetGroups(scope.organizationId!),
+    enabled: scope.enabled,
+  });
+}
 
 export function useBudgets() {
   const scope = useOrgScope();
@@ -133,6 +143,27 @@ export function useCreateBudget() {
       return svc.createBudget({ ...input, organization_id: organizationId, owner_id: userId });
     },
     onSuccess: () => invalidate([queryFamilies.allFinanceBudgets]),
+  });
+}
+
+export function useCreateBudgetGroup() {
+  const scope = useOrgScope();
+  const invalidate = useInvalidate();
+  return useMutation({
+    mutationFn: (input: { name: string; subs: svc.GroupSubBudgetInput[] }) => {
+      const { organizationId, userId } = assertOrgScope(scope);
+      return svc.createBudgetGroupWithBudgets({
+        ...input,
+        organization_id: organizationId,
+        owner_id: userId,
+      });
+    },
+    onSuccess: () =>
+      invalidate([
+        queryFamilies.allFinanceBudgetGroups,
+        queryFamilies.allFinanceBudgets,
+        queryFamilies.allFinanceBudgetVersions,
+      ]),
   });
 }
 

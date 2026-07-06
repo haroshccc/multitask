@@ -594,6 +594,118 @@ export async function setOccurrenceWithdrawn(
   }
 }
 
+/**
+ * Edit an occurrence's fields (amount / budget / account / dates / note). When
+ * the occurrence is already withdrawn, keep its account transaction in sync
+ * (move it to the new account, update amount/date, or create it if missing).
+ */
+export async function updateOccurrenceFields(input: {
+  occ: FinanceOccurrence;
+  patch: Partial<
+    Pick<
+      FinanceOccurrence,
+      "amount" | "budget_id" | "account_id" | "due_date" | "withdrawal_date" | "note"
+    >
+  >;
+  createdBy: string;
+}): Promise<void> {
+  const { error } = await db
+    .from("finance_expense_occurrences")
+    .update(input.patch)
+    .eq("id", input.occ.id);
+  if (error) throw error;
+
+  const merged = { ...input.occ, ...input.patch };
+  if (!merged.withdrawn) return;
+
+  const txDate = merged.withdrawal_date ?? merged.due_date;
+  const amount = -Math.abs(Number(merged.amount));
+  if (merged.account_transaction_id) {
+    await db
+      .from("finance_account_transactions")
+      .update({ account_id: merged.account_id, amount, tx_date: txDate })
+      .eq("id", merged.account_transaction_id);
+  } else if (merged.account_id) {
+    const { data: tx, error: txErr } = await db
+      .from("finance_account_transactions")
+      .insert({
+        organization_id: merged.organization_id,
+        account_id: merged.account_id,
+        amount,
+        tx_date: txDate,
+        kind: "expense",
+        expense_occurrence_id: merged.id,
+        created_by: input.createdBy,
+      })
+      .select()
+      .single();
+    if (txErr) throw txErr;
+    await db
+      .from("finance_expense_occurrences")
+      .update({ account_transaction_id: tx.id })
+      .eq("id", merged.id);
+  }
+}
+
+/** Hard-delete an occurrence (+ its account transaction). */
+export async function deleteOccurrence(occ: FinanceOccurrence): Promise<void> {
+  if (occ.account_transaction_id) {
+    await db.from("finance_account_transactions").delete().eq("id", occ.account_transaction_id);
+  }
+  const { error } = await db
+    .from("finance_expense_occurrences")
+    .delete()
+    .eq("id", occ.id);
+  if (error) throw error;
+}
+
+/** Re-insert a deleted occurrence (for undo); recreates its transaction too. */
+export async function recreateOccurrence(
+  occ: FinanceOccurrence,
+  createdBy: string
+): Promise<void> {
+  const { data: newOcc, error } = await db
+    .from("finance_expense_occurrences")
+    .insert({
+      organization_id: occ.organization_id,
+      expense_id: occ.expense_id,
+      budget_id: occ.budget_id,
+      account_id: occ.account_id,
+      amount: occ.amount,
+      due_date: occ.due_date,
+      budget_charged: occ.budget_charged,
+      budget_charged_at: occ.budget_charged_at,
+      withdrawal_date: occ.withdrawal_date,
+      withdrawn: occ.withdrawn,
+      withdrawn_at: occ.withdrawn_at,
+      note: occ.note,
+    })
+    .select()
+    .single();
+  if (error) throw error;
+
+  if (occ.withdrawn && occ.account_id) {
+    const { data: tx, error: txErr } = await db
+      .from("finance_account_transactions")
+      .insert({
+        organization_id: occ.organization_id,
+        account_id: occ.account_id,
+        amount: -Math.abs(Number(occ.amount)),
+        tx_date: occ.withdrawal_date ?? occ.due_date,
+        kind: "expense",
+        expense_occurrence_id: newOcc.id,
+        created_by: createdBy,
+      })
+      .select()
+      .single();
+    if (txErr) throw txErr;
+    await db
+      .from("finance_expense_occurrences")
+      .update({ account_transaction_id: tx.id })
+      .eq("id", newOcc.id);
+  }
+}
+
 // ---- Credit-statement bulk import --------------------------------------------
 
 export interface CreditImportRow {

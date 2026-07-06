@@ -435,13 +435,17 @@ export function FinanceBudgetsPage() {
       }
     }
     const out: { group: FinanceBudgetGroup | null; budgets: FinanceBudget[] }[] = [];
-    for (const g of ctx.groups) {
-      const gb = byGroup.get(g.id);
-      if (gb?.length) out.push({ group: g, budgets: gb });
+    for (const g of groups) {
+      if (shownGroups && !shownGroups.has(g.id)) continue;
+      const gb = byGroup.get(g.id) ?? [];
+      // keep empty groups visible (so they can be edited/deleted) — but hide
+      // them while a category filter is narrowing the view.
+      if (!gb.length && category) continue;
+      out.push({ group: g, budgets: gb });
     }
     if (ungrouped.length) out.push({ group: null, budgets: ungrouped });
     return out;
-  }, [visible, ctx.groups]);
+  }, [visible, groups, shownGroups, category]);
 
   if (ctx.loading) return <LoadingGrid />;
 
@@ -546,6 +550,7 @@ export function FinanceBudgetsPage() {
                 expenses={expensesFor(b.id)}
                 accounts={accounts}
                 templates={templates}
+                allBudgets={budgets}
                 carryoverAdjustment={ctx.carryoverAdjustmentFor(b.id)}
                 shareLevel={shareLevelOf(b)}
                 onEdit={() => setEditing(b)}
@@ -573,7 +578,13 @@ export function FinanceBudgetsPage() {
               ctx={ctx}
               onEdit={() => setEditingGroup(section.group!)}
             />
-            {cards}
+            {section.budgets.length ? (
+              cards
+            ) : (
+              <p className="py-2 text-xs text-ink-400">
+                אין תתי-תקציבים · הוסיפי דרך העריכה (✏️) או מחקי את התקציב הכולל.
+              </p>
+            )}
           </section>
         );
       })}

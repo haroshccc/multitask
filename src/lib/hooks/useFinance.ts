@@ -297,6 +297,54 @@ export function useSetOccurrenceCharged() {
   });
 }
 
+export function useUpdateOccurrence() {
+  const scope = useOrgScope();
+  const invalidate = useInvalidate();
+  return useMutation({
+    mutationFn: ({ occ, patch }: { occ: FinanceOccurrence; patch: Parameters<typeof svc.updateOccurrenceFields>[0]["patch"] }) => {
+      const { userId } = assertOrgScope(scope);
+      return svc.updateOccurrenceFields({ occ, patch, createdBy: userId });
+    },
+    onSuccess: () =>
+      invalidate([
+        queryFamilies.allFinanceOccurrences,
+        queryFamilies.allFinanceExpenses,
+        queryFamilies.allFinanceAccounts,
+        queryFamilies.allFinanceAccountTx,
+      ]),
+  });
+}
+
+export function useDeleteOccurrence() {
+  const invalidate = useInvalidate();
+  return useMutation({
+    mutationFn: (occ: FinanceOccurrence) => svc.deleteOccurrence(occ),
+    onSuccess: () =>
+      invalidate([
+        queryFamilies.allFinanceOccurrences,
+        queryFamilies.allFinanceAccounts,
+        queryFamilies.allFinanceAccountTx,
+      ]),
+  });
+}
+
+export function useRecreateOccurrence() {
+  const scope = useOrgScope();
+  const invalidate = useInvalidate();
+  return useMutation({
+    mutationFn: (occ: FinanceOccurrence) => {
+      const { userId } = assertOrgScope(scope);
+      return svc.recreateOccurrence(occ, userId);
+    },
+    onSuccess: () =>
+      invalidate([
+        queryFamilies.allFinanceOccurrences,
+        queryFamilies.allFinanceAccounts,
+        queryFamilies.allFinanceAccountTx,
+      ]),
+  });
+}
+
 export function useSetOccurrenceWithdrawn() {
   const scope = useOrgScope();
   const invalidate = useInvalidate();

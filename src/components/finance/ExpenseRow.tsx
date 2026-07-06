@@ -3,7 +3,7 @@
  *  - charged-to-budget (left checkbox; auto or manual vee)
  *  - withdrawn-from-account ("paid in practice"; immediate / future-dated)
  */
-import { Check, Zap, CalendarClock, Trash2 } from "lucide-react";
+import { Check, Zap, CalendarClock } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { Money, AccountIcon } from "./finance-bits";
 import { toDateKey } from "@/lib/finance/calc";
@@ -25,7 +25,7 @@ export function ExpenseRow({
   readOnly,
   onToggleCharged,
   onToggleWithdrawn,
-  onArchive,
+  onEdit,
 }: {
   occ: FinanceOccurrence;
   expense?: FinanceExpense;
@@ -33,7 +33,7 @@ export function ExpenseRow({
   readOnly?: boolean;
   onToggleCharged: (charged: boolean) => void;
   onToggleWithdrawn: (withdrawn: boolean) => void;
-  onArchive?: () => void;
+  onEdit?: () => void;
 }) {
   const today = toDateKey(new Date());
   const overdueManual =
@@ -77,21 +77,27 @@ export function ExpenseRow({
         </span>
       </button>
 
-      <span className="min-w-0 flex-1 truncate text-ink-900">
-        {expense?.title || "—"}
-      </span>
-
-      <Money
-        value={Number(occ.amount)}
-        className={cn(
-          "shrink-0 font-medium",
-          occ.budget_charged ? "text-ink-900" : "text-ink-400"
-        )}
-      />
-
-      <span className="hidden shrink-0 text-xs text-ink-400 tabular-nums min-[360px]:inline">
-        {shortDate(occ.due_date)}
-      </span>
+      <button
+        type="button"
+        onClick={() => !readOnly && onEdit?.()}
+        disabled={readOnly || !onEdit}
+        title={onEdit ? "עריכת הוצאה" : undefined}
+        className="flex min-w-0 flex-1 items-center gap-2 rounded text-start disabled:cursor-default enabled:hover:bg-ink-100/60"
+      >
+        <span className="min-w-0 flex-1 truncate text-ink-900">
+          {expense?.title || "—"}
+        </span>
+        <Money
+          value={Number(occ.amount)}
+          className={cn(
+            "shrink-0 font-medium",
+            occ.budget_charged ? "text-ink-900" : "text-ink-400"
+          )}
+        />
+        <span className="hidden shrink-0 text-xs text-ink-400 tabular-nums min-[360px]:inline">
+          {shortDate(occ.due_date)}
+        </span>
+      </button>
 
       {/* account / withdrawal state */}
       <button
@@ -130,18 +136,6 @@ export function ExpenseRow({
         )}
         <span>{occ.withdrawn ? "שולם" : future ? "עתידי" : "ירד?"}</span>
       </button>
-
-      {onArchive && !readOnly && (
-        <button
-          type="button"
-          onClick={onArchive}
-          aria-label="הסר הוצאה"
-          title="הסר הוצאה"
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-ink-300 transition-opacity hover:bg-danger-50 hover:text-danger-600 sm:opacity-0 sm:group-hover:opacity-100"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </button>
-      )}
     </div>
   );
 }

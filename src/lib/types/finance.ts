@@ -121,10 +121,21 @@ export interface FinanceExpense {
   withdrawal_timing: WithdrawalTiming;
   withdrawal_offset_days: number | null;
   template_id: string | null;
+  credit_import_id: string | null;
   created_by: string | null;
   is_archived: boolean;
   created_at: string;
   updated_at: string;
+}
+
+export interface FinanceCreditImport {
+  id: string;
+  organization_id: string;
+  owner_id: string | null;
+  account_id: string | null;
+  imported_on: string;
+  note: string | null;
+  created_at: string;
 }
 
 export interface FinanceOccurrence {

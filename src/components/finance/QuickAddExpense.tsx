@@ -45,6 +45,8 @@ export function QuickAddExpense({
   const [date, setDate] = useState(toDateKey(new Date()));
   const [freq, setFreq] = useState<"DAILY" | "WEEKLY" | "MONTHLY">("WEEKLY");
   const [weekday, setWeekday] = useState("MO");
+  const [duration, setDuration] = useState<"3" | "6" | "12" | "24" | "until">("12");
+  const [untilDate, setUntilDate] = useState("");
   const [accountId, setAccountId] = useState<string>("");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | "">("");
   const [chargeMode, setChargeMode] = useState<BudgetChargeMode>("auto");
@@ -66,6 +68,13 @@ export function QuickAddExpense({
     return `FREQ=${freq}`;
   }
 
+  function recurrenceUntil(): string {
+    if (duration === "until") return untilDate;
+    const d = new Date(date);
+    d.setMonth(d.getMonth() + Number(duration));
+    return toDateKey(d);
+  }
+
   async function handleSave() {
     setError(null);
     if (!title.trim()) {
@@ -81,6 +90,8 @@ export function QuickAddExpense({
         title: title.trim(),
         default_amount: amount,
         recurrence_rule: kind === "fixed" ? buildRule() : null,
+        recurrence_start: kind === "fixed" ? date : null,
+        recurrence_until: kind === "fixed" ? recurrenceUntil() : null,
         budget_charge_mode: chargeMode,
         withdrawal_timing: timing,
         occurrence_date: date,
@@ -187,6 +198,37 @@ export function QuickAddExpense({
                     </option>
                   ))}
                 </select>
+              </LabeledField>
+            )}
+            <LabeledField label="תאריך התחלה">
+              <input
+                type="date"
+                className="field"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+              />
+            </LabeledField>
+            <LabeledField label="חוזר למשך">
+              <select
+                className="field"
+                value={duration}
+                onChange={(e) => setDuration(e.target.value as typeof duration)}
+              >
+                <option value="3">3 חודשים</option>
+                <option value="6">חצי שנה</option>
+                <option value="12">שנה</option>
+                <option value="24">שנתיים</option>
+                <option value="until">עד תאריך…</option>
+              </select>
+            </LabeledField>
+            {duration === "until" && (
+              <LabeledField label="חוזר עד">
+                <input
+                  type="date"
+                  className="field"
+                  value={untilDate}
+                  onChange={(e) => setUntilDate(e.target.value)}
+                />
               </LabeledField>
             )}
           </div>

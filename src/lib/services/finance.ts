@@ -17,6 +17,7 @@ import type {
   FinanceExpenseTemplate,
   FinanceMonthlyClosing,
   FinanceCarryoverTransfer,
+  FinanceCreditImport,
   FinanceEvent,
   BudgetPeriod,
   BudgetShareLevel,
@@ -423,6 +424,10 @@ export interface CreateExpenseInput {
   template_id?: string | null;
   /** For one-time / variable: the date of the single occurrence. */
   occurrence_date?: string;
+  /** For fixed: last date to materialize occurrences up to (default +12mo). */
+  recurrence_until?: string | null;
+  /** For fixed: the date the recurrence starts from (default today). */
+  recurrence_start?: string | null;
 }
 
 /**
@@ -459,7 +464,7 @@ export async function createExpense(
 
   const dates: string[] =
     input.kind === "fixed" && input.recurrence_rule
-      ? expandFixedOccurrences(input.recurrence_rule)
+      ? expandFixedOccurrences(input.recurrence_rule, input.recurrence_start, input.recurrence_until)
       : [input.occurrence_date ?? toDateKey(new Date())];
 
   const rows = dates.map((due) => ({
@@ -495,11 +500,18 @@ export async function createExpense(
  * rollover job + re-materialization on rule edits; for now editing the rule
  * does not retro-update already-generated future occurrences.
  */
-function expandFixedOccurrences(rule: string): string[] {
+function expandFixedOccurrences(
+  rule: string,
+  startKey?: string | null,
+  untilKey?: string | null
+): string[] {
   const now = new Date();
-  const start = startOfMonth(now);
-  const end = endOfMonth(addMonths(now, 11));
-  const dates = expandRrule(rule, start, start, end);
+  const anchor = startKey ? new Date(`${startKey}T00:00:00`) : now;
+  const windowStart = startOfMonth(anchor);
+  const end = untilKey
+    ? new Date(`${untilKey}T23:59:59`)
+    : endOfMonth(addMonths(now, 11));
+  const dates = expandRrule(rule, windowStart, windowStart, end);
   return dates.map(toDateKey);
 }
 
@@ -724,15 +736,41 @@ export interface CreditImportRow {
  * the charge date has passed; a withdrawn occurrence (deduction date passed)
  * also gets an account transaction. Returns the number of rows imported.
  */
+export async function listCreditImports(
+  orgId: string
+): Promise<FinanceCreditImport[]> {
+  const { data, error } = await db
+    .from("finance_credit_imports")
+    .select("*")
+    .eq("organization_id", orgId)
+    .order("imported_on", { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as FinanceCreditImport[];
+}
+
 export async function importCreditRows(input: {
   organization_id: string;
   created_by: string;
   account_id: string;
+  imported_on?: string;
   rows: CreditImportRow[];
 }): Promise<number> {
   const today = toDateKey(new Date());
   const nowIso = new Date().toISOString();
   let count = 0;
+
+  // record the import batch (import date + source account) for history/memory
+  const { data: batch, error: bErr } = await db
+    .from("finance_credit_imports")
+    .insert({
+      organization_id: input.organization_id,
+      owner_id: input.created_by,
+      account_id: input.account_id,
+      imported_on: input.imported_on || today,
+    })
+    .select()
+    .single();
+  if (bErr) throw bErr;
 
   for (const row of input.rows) {
     if (!row.budget_id || !row.amount) continue;
@@ -753,6 +791,7 @@ export async function importCreditRows(input: {
         default_amount: row.amount,
         budget_charge_mode: "auto",
         withdrawal_timing: withdrawn ? "immediate" : "future_date",
+        credit_import_id: batch.id,
         created_by: input.created_by,
       })
       .select()

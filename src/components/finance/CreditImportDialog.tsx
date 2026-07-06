@@ -8,7 +8,7 @@ import { useRef, useState } from "react";
 import { Plus, Trash2, Upload, Zap, CalendarClock } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { Modal, LabeledField } from "./finance-bits";
-import { useImportCreditRows } from "@/lib/hooks/useFinance";
+import { useImportCreditRows, useCreditImports } from "@/lib/hooks/useFinance";
 import { parseCreditText } from "@/lib/finance/import";
 import { toDateKey } from "@/lib/finance/calc";
 import type { FinanceAccount, FinanceBudget } from "@/lib/types/finance";
@@ -33,14 +33,21 @@ export function CreditImportDialog({
   onClose: () => void;
 }) {
   const importRows = useImportCreditRows();
+  const existingImports = useCreditImports();
   const keyRef = useRef(1);
   const today = toDateKey(new Date());
 
   const [accountId, setAccountId] = useState(accounts[0]?.id ?? "");
+  const [importedOn, setImportedOn] = useState(today);
   const [paste, setPaste] = useState("");
   const [rows, setRows] = useState<EditRow[]>([]);
   const [defaultBudget, setDefaultBudget] = useState("");
   const [error, setError] = useState<string | null>(null);
+
+  // duplicate guard: warn if an import from the same account on the same date exists
+  const duplicate = (existingImports.data ?? []).some(
+    (imp) => imp.account_id === accountId && imp.imported_on === importedOn
+  );
 
   const newRow = (r?: Partial<EditRow>): EditRow => ({
     key: keyRef.current++,
@@ -97,6 +104,7 @@ export function CreditImportDialog({
     try {
       const n = await importRows.mutateAsync({
         account_id: accountId,
+        imported_on: importedOn,
         rows: validRows.map((r) => ({
           charge_date: r.chargeDate,
           withdrawal_date: r.withdrawDate,
@@ -138,7 +146,7 @@ export function CreditImportDialog({
       }
     >
       <div className="space-y-4">
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-3">
           <LabeledField label="החשבון שממנו יורד (אשראי)">
             <select
               className="field"
@@ -153,13 +161,21 @@ export function CreditImportDialog({
               ))}
             </select>
           </LabeledField>
-          <LabeledField label="תקציב ברירת מחדל לשורות חדשות (לא חובה)">
+          <LabeledField label="תאריך הייבוא">
+            <input
+              type="date"
+              className="field"
+              value={importedOn}
+              onChange={(e) => setImportedOn(e.target.value)}
+            />
+          </LabeledField>
+          <LabeledField label="תקציב ברירת מחדל (לא חובה)">
             <select
               className="field"
               value={defaultBudget}
               onChange={(e) => setDefaultBudget(e.target.value)}
             >
-              <option value="">— בחירה ידנית לכל שורה —</option>
+              <option value="">— בחירה ידנית —</option>
               {budgets.map((b) => (
                 <option key={b.id} value={b.id}>
                   {b.name}
@@ -168,6 +184,12 @@ export function CreditImportDialog({
             </select>
           </LabeledField>
         </div>
+
+        {duplicate && (
+          <p className="rounded-lg bg-warning-50 px-3 py-2 text-xs text-warning-700">
+            ⚠️ כבר יש ייבוא מהחשבון הזה בתאריך הזה — בדקי בהיסטוריה (טאב היסטוריה) כדי לא לייבא כפול.
+          </p>
+        )}
 
         <LabeledField
           label="הדבקת שורות מדף האשראי"

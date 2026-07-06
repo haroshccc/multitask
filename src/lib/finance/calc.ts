@@ -21,20 +21,30 @@ import type {
 
 export type DivisionColor = "green" | "red" | "neutral";
 
-/** The version in effect as of `asOf` (latest effective_from that has started). */
+/**
+ * The version in effect as of `asOf`. When several versions share the same
+ * effective_from (e.g. right after an amount edit, the old version is closed
+ * and a new open one is inserted on the same day) we prefer the still-open one
+ * and, failing that, the most recently created — so the newest amount wins.
+ */
 export function activeVersion(
   versions: FinanceBudgetVersion[],
   asOf: Date = new Date()
 ): FinanceBudgetVersion | null {
+  const cmp = (a: FinanceBudgetVersion, b: FinanceBudgetVersion) => {
+    const aOpen = a.effective_to ? 0 : 1;
+    const bOpen = b.effective_to ? 0 : 1;
+    if (aOpen !== bOpen) return bOpen - aOpen; // open version first
+    if (a.effective_from !== b.effective_from) return a.effective_from < b.effective_from ? 1 : -1;
+    return a.created_at < b.created_at ? 1 : -1; // newest first
+  };
   const key = toDateKey(asOf);
   const started = versions
     .filter((v) => v.effective_from <= key)
     .filter((v) => !v.effective_to || v.effective_to >= key)
-    .sort((a, b) => (a.effective_from < b.effective_from ? 1 : -1));
+    .sort(cmp);
   // fall back to the most recent version even if its window has lapsed
-  return started[0] ?? versions.slice().sort((a, b) =>
-    a.effective_from < b.effective_from ? 1 : -1
-  )[0] ?? null;
+  return started[0] ?? versions.slice().sort(cmp)[0] ?? null;
 }
 
 /** Monthly allocation for a version (yearly → /12). */
@@ -182,4 +192,20 @@ export function monthKey(d: Date = new Date()): string {
 
 export function parseDateKey(key: string): Date {
   return parseISO(key);
+}
+
+/**
+ * Credit billing cycle for a date: runs from the 2nd of a month to the 1st of
+ * the next. The 1st belongs to the previous cycle. Returns a sortable key
+ * (the cycle's start date) and a display label like "2.7.2025 – 1.8.2025".
+ */
+export function billingCycle(dateKey: string): { key: string; label: string } {
+  const d = parseDateKey(dateKey);
+  const start =
+    d.getDate() >= 2
+      ? new Date(d.getFullYear(), d.getMonth(), 2)
+      : new Date(d.getFullYear(), d.getMonth() - 1, 2);
+  const end = new Date(start.getFullYear(), start.getMonth() + 1, 1);
+  const fmt = (x: Date) => `${x.getDate()}.${x.getMonth() + 1}.${x.getFullYear()}`;
+  return { key: toDateKey(start), label: `${fmt(start)} – ${fmt(end)}` };
 }

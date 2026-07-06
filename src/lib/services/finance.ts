@@ -63,6 +63,7 @@ export async function createBudgetGroupWithBudgets(input: {
   organization_id: string;
   owner_id: string;
   name: string;
+  share_level?: BudgetShareLevel;
   subs: GroupSubBudgetInput[];
 }): Promise<FinanceBudgetGroup> {
   const { data: last } = await db
@@ -79,6 +80,7 @@ export async function createBudgetGroupWithBudgets(input: {
       organization_id: input.organization_id,
       owner_id: input.owner_id,
       name: input.name,
+      share_level: input.share_level ?? "transact",
       sort_order: sortOrder,
     })
     .select()
@@ -105,6 +107,33 @@ export async function createBudgetGroupWithBudgets(input: {
     step += SORT_STEP;
   }
   return group as FinanceBudgetGroup;
+}
+
+export async function updateBudgetGroup(
+  groupId: string,
+  patch: Partial<Pick<FinanceBudgetGroup, "name" | "share_level" | "sort_order" | "is_archived">>
+): Promise<FinanceBudgetGroup> {
+  const { data, error } = await db
+    .from("finance_budget_groups")
+    .update(patch)
+    .eq("id", groupId)
+    .select()
+    .single();
+  if (error) throw error;
+  return data as FinanceBudgetGroup;
+}
+
+/** Bulk-set is_archived on budgets (used by group delete + undo). */
+export async function setBudgetsArchived(
+  budgetIds: string[],
+  archived: boolean
+): Promise<void> {
+  if (!budgetIds.length) return;
+  const { error } = await db
+    .from("finance_budgets")
+    .update({ is_archived: archived })
+    .in("id", budgetIds);
+  if (error) throw error;
 }
 
 // ---- Budgets -----------------------------------------------------------------

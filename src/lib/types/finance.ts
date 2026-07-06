@@ -25,6 +25,7 @@ export interface FinanceBudgetGroup {
   organization_id: string;
   owner_id: string | null;
   name: string;
+  share_level: BudgetShareLevel;
   sort_order: number;
   is_archived: boolean;
   created_at: string;

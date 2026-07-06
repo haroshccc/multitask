@@ -3,7 +3,7 @@
  * dynamic day/week division pills (🔴/🟢), a quick-add, and the expense list.
  */
 import { useMemo, useRef, useState, useEffect } from "react";
-import { MoreVertical, Pencil, Scale, Plus, Eye, Users } from "lucide-react";
+import { MoreVertical, Pencil, Scale, Plus, Eye, Users, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { useOrgScope } from "@/lib/hooks/useOrgScope";
 import { SHARE_LEVEL_META } from "@/lib/types/finance";
@@ -37,8 +37,10 @@ export function BudgetCard({
   accounts,
   templates,
   carryoverAdjustment = 0,
+  shareLevel,
   onEdit,
   onOpenClosing,
+  onDelete,
 }: {
   budget: FinanceBudget;
   versions: FinanceBudgetVersion[];
@@ -47,8 +49,11 @@ export function BudgetCard({
   accounts: FinanceAccount[];
   templates: FinanceExpenseTemplate[];
   carryoverAdjustment?: number;
+  /** Effective share level (the group's, for grouped budgets). */
+  shareLevel?: FinanceBudget["share_level"];
   onEdit: () => void;
   onOpenClosing: () => void;
+  onDelete?: () => void;
 }) {
   const setCharged = useSetOccurrenceCharged();
   const setWithdrawn = useSetOccurrenceWithdrawn();
@@ -56,10 +61,11 @@ export function BudgetCard({
   const { userId } = useOrgScope();
 
   // Capability for the current viewer. A non-owner only ever sees this budget
-  // because org finance sharing is on, so the budget's share_level applies.
+  // because org finance sharing is on, so the effective share level applies.
+  const effShare = shareLevel ?? budget.share_level;
   const isOwner = !budget.owner_id || budget.owner_id === userId;
-  const canEdit = isOwner || budget.share_level === "full";
-  const canTransact = isOwner || budget.share_level !== "view";
+  const canEdit = isOwner || effShare === "full";
+  const canTransact = isOwner || effShare !== "view";
 
   const [adding, setAdding] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -121,14 +127,14 @@ export function BudgetCard({
             {!isOwner && (
               <span
                 className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-ink-100 px-1.5 py-0.5 text-[10px] text-ink-500"
-                title={SHARE_LEVEL_META[budget.share_level].hint}
+                title={SHARE_LEVEL_META[effShare].hint}
               >
-                {budget.share_level === "view" ? (
+                {effShare === "view" ? (
                   <Eye className="h-2.5 w-2.5" />
                 ) : (
                   <Users className="h-2.5 w-2.5" />
                 )}
-                {SHARE_LEVEL_META[budget.share_level].short}
+                {SHARE_LEVEL_META[effShare].short}
               </span>
             )}
           </div>
@@ -152,6 +158,14 @@ export function BudgetCard({
             <div className="absolute end-0 top-8 z-20 w-44 overflow-hidden rounded-lg border border-ink-200 bg-white py-1 shadow-lift">
               <MenuItem icon={Pencil} label="עריכה (גרסה)" onClick={() => { setMenuOpen(false); onEdit(); }} />
               <MenuItem icon={Scale} label="סגירה חודשית" onClick={() => { setMenuOpen(false); onOpenClosing(); }} />
+              {onDelete && (
+                <MenuItem
+                  icon={Trash2}
+                  label="מחק תקציב"
+                  danger
+                  onClick={() => { setMenuOpen(false); onDelete(); }}
+                />
+              )}
             </div>
           )}
         </div>
@@ -242,18 +256,23 @@ function MenuItem({
   icon: Icon,
   label,
   onClick,
+  danger,
 }: {
   icon: typeof Pencil;
   label: string;
   onClick: () => void;
+  danger?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="flex w-full items-center gap-2 px-3 py-2 text-sm text-ink-700 hover:bg-ink-50"
+      className={cn(
+        "flex w-full items-center gap-2 px-3 py-2 text-sm",
+        danger ? "text-danger-600 hover:bg-danger-50" : "text-ink-700 hover:bg-ink-50"
+      )}
     >
-      <Icon className="h-4 w-4 text-ink-400" />
+      <Icon className={cn("h-4 w-4", danger ? "text-danger-500" : "text-ink-400")} />
       {label}
     </button>
   );

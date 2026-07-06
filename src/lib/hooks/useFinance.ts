@@ -150,7 +150,11 @@ export function useCreateBudgetGroup() {
   const scope = useOrgScope();
   const invalidate = useInvalidate();
   return useMutation({
-    mutationFn: (input: { name: string; subs: svc.GroupSubBudgetInput[] }) => {
+    mutationFn: (input: {
+      name: string;
+      share_level?: FinanceBudgetGroup["share_level"];
+      subs: svc.GroupSubBudgetInput[];
+    }) => {
       const { organizationId, userId } = assertOrgScope(scope);
       return svc.createBudgetGroupWithBudgets({
         ...input,
@@ -164,6 +168,26 @@ export function useCreateBudgetGroup() {
         queryFamilies.allFinanceBudgets,
         queryFamilies.allFinanceBudgetVersions,
       ]),
+  });
+}
+
+export function useUpdateBudgetGroup() {
+  const invalidate = useInvalidate();
+  return useMutation({
+    mutationFn: ({ groupId, patch }: { groupId: string; patch: Parameters<typeof svc.updateBudgetGroup>[1] }) =>
+      svc.updateBudgetGroup(groupId, patch),
+    onSuccess: () =>
+      invalidate([queryFamilies.allFinanceBudgetGroups, queryFamilies.allFinanceBudgets]),
+  });
+}
+
+export function useSetBudgetsArchived() {
+  const invalidate = useInvalidate();
+  return useMutation({
+    mutationFn: ({ budgetIds, archived }: { budgetIds: string[]; archived: boolean }) =>
+      svc.setBudgetsArchived(budgetIds, archived),
+    onSuccess: () =>
+      invalidate([queryFamilies.allFinanceBudgets, queryFamilies.allFinanceOccurrences]),
   });
 }
 

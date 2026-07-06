@@ -1,12 +1,18 @@
 /**
  * Best-effort parser for a pasted credit-card statement. Each line becomes a
- * row {date, title, amount, note}; every field stays editable in the UI, so
- * the parser only needs to be a helpful starting point, not perfect.
+ * row {chargeDate, withdrawDate, title, amount, note}; every field stays
+ * editable in the UI, so the parser only needs to be a helpful starting point.
+ *
+ * A line may hold one OR two dates. The earlier is the charge date, the later
+ * is the account-deduction date. With a single date, the deduction date
+ * defaults to the same day. Both dates are stripped from the text so they never
+ * leak into the note.
  */
 import { toDateKey } from "@/lib/finance/calc";
 
 export interface ParsedCreditRow {
-  date: string; // yyyy-mm-dd (local) or "" if not detected
+  chargeDate: string; // yyyy-mm-dd (local) or ""
+  withdrawDate: string; // >= chargeDate, defaults to chargeDate
   title: string;
   amount: number | null;
   note: string;
@@ -22,34 +28,35 @@ export function parseCreditText(text: string): ParsedCreditRow[] {
     .map((l) => l.trim())
     .filter(Boolean)
     .map(parseLine)
-    .filter((r) => r.title || r.amount != null || r.date);
+    .filter((r) => r.title || r.amount != null || r.chargeDate);
 }
 
 function parseLine(line: string): ParsedCreditRow {
   let work = ` ${line} `;
   const totalNums = (work.match(NUM_RE) ?? []).length;
 
-  // 1) date — pick the strongest VALID date candidate. A "." separator without
-  //    a year is weak (it collides with decimal amounts like 45.90), so only
-  //    use it when there is another number left to serve as the amount.
-  let date = "";
-  let bestScore = -1;
-  let bestMatch: RegExpMatchArray | null = null;
+  // 1) collect every VALID date. A "." separator without a year is weak (it
+  //    collides with decimal amounts like 45.90), so only accept it when there
+  //    is another number left to serve as the amount.
+  const found: { date: string; start: number; end: number }[] = [];
   for (const dm of work.matchAll(DATE_RE)) {
-    if (!normalizeDate(dm)) continue;
+    const nd = normalizeDate(dm);
+    if (!nd) continue;
     const hasYear = dm[4] ? 2 : 0;
     const slashSep = dm[2] !== "." ? 1 : 0;
-    const score = hasYear + slashSep;
-    if (score === 0 && totalNums <= 1) continue; // lone decimal → it's the amount
-    if (score > bestScore) {
-      bestScore = score;
-      bestMatch = dm;
-    }
+    if (hasYear + slashSep === 0 && totalNums <= 1) continue; // lone decimal → amount
+    if (dm.index != null) found.push({ date: nd, start: dm.index, end: dm.index + dm[0].length });
   }
-  if (bestMatch && bestMatch.index != null) {
-    date = normalizeDate(bestMatch);
-    work = work.slice(0, bestMatch.index) + "  " + work.slice(bestMatch.index + bestMatch[0].length);
+
+  // strip all detected dates from the text (right-to-left to keep indices valid)
+  for (const s of [...found].sort((a, b) => b.start - a.start)) {
+    work = work.slice(0, s.start) + "  " + work.slice(s.end);
   }
+
+  // earlier date = charge, later = deduction; single date → both the same
+  const dates = [...new Set(found.map((f) => f.date))].sort();
+  const chargeDate = dates[0] ?? "";
+  const withdrawDate = dates.length > 1 ? dates[dates.length - 1] : chargeDate;
 
   // 2) amount — prefer a money-like number (has . or ,), else the last number
   let amount: number | null = null;
@@ -71,7 +78,7 @@ function parseLine(line: string): ParsedCreditRow {
     .filter(Boolean);
   const title = rest.shift() ?? "";
   const note = rest.join(" · ");
-  return { date, title, amount, note };
+  return { chargeDate, withdrawDate, title, amount, note };
 }
 
 function normalizeDate(m: RegExpMatchArray): string {

@@ -62,8 +62,8 @@ export function CreditImportDialog({
       ...prev,
       ...parsed.map((p) =>
         newRow({
-          chargeDate: p.date || today,
-          withdrawDate: p.date || today,
+          chargeDate: p.chargeDate || today,
+          withdrawDate: p.withdrawDate || p.chargeDate || today,
           title: p.title,
           amount: p.amount != null ? String(p.amount) : "",
           note: p.note,

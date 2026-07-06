@@ -20,10 +20,22 @@ export type AccountTxKind =
   | "adjustment"
   | "income";
 
+export interface FinanceBudgetGroup {
+  id: string;
+  organization_id: string;
+  owner_id: string | null;
+  name: string;
+  sort_order: number;
+  is_archived: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface FinanceBudget {
   id: string;
   organization_id: string;
   owner_id: string | null;
+  group_id: string | null;
   name: string;
   color: string;
   icon: string;

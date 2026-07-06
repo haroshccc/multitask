@@ -16,6 +16,7 @@ import {
   Rows3,
   ArrowLeftRight,
   Upload,
+  Layers,
   Wallet,
   Landmark,
   History as HistoryIcon,
@@ -25,6 +26,7 @@ import {
 import { ScreenScaffold } from "@/components/layout/ScreenScaffold";
 import { cn } from "@/lib/utils/cn";
 import {
+  useBudgetGroups,
   useBudgets,
   useBudgetVersions,
   useAccounts,
@@ -48,10 +50,12 @@ import { MonthlyClosingPanel } from "@/components/finance/MonthlyClosingPanel";
 import { AccountCard } from "@/components/finance/AccountCard";
 import { CreateAccountDialog, TransferDialog } from "@/components/finance/AccountDialogs";
 import { CreditImportDialog } from "@/components/finance/CreditImportDialog";
+import { CreateBudgetGroupDialog } from "@/components/finance/CreateBudgetGroupDialog";
 import { ForecastTimeline } from "@/components/finance/ForecastTimeline";
 import { TemplateList } from "@/components/finance/TemplateEditor";
 import type {
   FinanceBudget,
+  FinanceBudgetGroup,
   FinanceBudgetVersion,
   FinanceAccount,
   FinanceAccountTransaction,
@@ -66,6 +70,7 @@ import type {
 
 export interface FinanceContext {
   budgets: FinanceBudget[];
+  groups: FinanceBudgetGroup[];
   versions: FinanceBudgetVersion[];
   accounts: FinanceAccount[];
   transactions: FinanceAccountTransaction[];
@@ -93,6 +98,7 @@ const TABS = [
 ];
 
 export function FinanceShell() {
+  const groupsQ = useBudgetGroups();
   const budgetsQ = useBudgets();
   const versionsQ = useBudgetVersions();
   const accountsQ = useAccounts();
@@ -141,6 +147,7 @@ export function FinanceShell() {
 
   const ctx: FinanceContext = {
     budgets,
+    groups: groupsQ.data ?? [],
     versions,
     accounts: accountsQ.data ?? [],
     transactions: txQ.data ?? [],
@@ -188,6 +195,7 @@ export function FinanceShell() {
 export function FinanceOverviewPage() {
   const ctx = useFinanceContext();
   const { budgets, versionsFor, occurrencesFor, accounts, transactions, occurrences, expenses } = ctx;
+  const [importing, setImporting] = useState(false);
 
   const totals = useMemo(() => {
     let allocated = 0;
@@ -218,6 +226,19 @@ export function FinanceOverviewPage() {
 
   return (
     <div className="space-y-5">
+      <div className="flex justify-end">
+        <button
+          type="button"
+          className="btn-primary flex items-center gap-1.5 text-sm"
+          onClick={() => setImporting(true)}
+          disabled={accounts.length === 0}
+          title={accounts.length === 0 ? "צריך חשבון אחד לפחות" : "הדבקת רשימת חיובים מדף האשראי"}
+        >
+          <Upload className="h-4 w-4" />
+          הוספת הוצאות מאשראי
+        </button>
+      </div>
+
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <KpiCard label="הוקצב החודש" value={totals.allocated} />
         <KpiCard label="חויב" value={totals.charged} />
@@ -268,6 +289,14 @@ export function FinanceOverviewPage() {
           )}
         </section>
       </div>
+
+      {importing && (
+        <CreditImportDialog
+          accounts={accounts}
+          budgets={budgets}
+          onClose={() => setImporting(false)}
+        />
+      )}
     </div>
   );
 }
@@ -319,6 +348,7 @@ export function FinanceBudgetsPage() {
   const [shown, setShown] = useState<Set<string> | null>(null); // null = all
   const [editing, setEditing] = useState<FinanceBudget | "new" | null>(null);
   const [closing, setClosing] = useState<FinanceBudget | null>(null);
+  const [groupCreating, setGroupCreating] = useState(false);
 
   function persistView(v: ViewMode) {
     setViewMode(v);
@@ -346,18 +376,45 @@ export function FinanceBudgetsPage() {
   const expensesFor = (budgetId: string) =>
     expenses.filter((e) => e.budget_id === budgetId);
 
+  const sections = useMemo(() => {
+    const byGroup = new Map<string, FinanceBudget[]>();
+    const ungrouped: FinanceBudget[] = [];
+    for (const b of visible) {
+      if (b.group_id) {
+        const arr = byGroup.get(b.group_id) ?? [];
+        arr.push(b);
+        byGroup.set(b.group_id, arr);
+      } else {
+        ungrouped.push(b);
+      }
+    }
+    const out: { group: FinanceBudgetGroup | null; budgets: FinanceBudget[] }[] = [];
+    for (const g of ctx.groups) {
+      const gb = byGroup.get(g.id);
+      if (gb?.length) out.push({ group: g, budgets: gb });
+    }
+    if (ungrouped.length) out.push({ group: null, budgets: ungrouped });
+    return out;
+  }, [visible, ctx.groups]);
+
   if (ctx.loading) return <LoadingGrid />;
 
   if (budgets.length === 0) {
     return (
-      <EmptyState
-        title="עדיין אין תקציבים"
-        body="צרי את התקציב הראשון — מעטפה לקטגוריית הוצאה, עם סכום חודשי או שנתי."
-        cta="תקציב ראשון"
-        onCta={() => setEditing("new")}
-        dialog={editing}
-        onCloseDialog={() => setEditing(null)}
-      />
+      <>
+        <EmptyState
+          title="עדיין אין תקציבים"
+          body="התחילי מ״תקציב כולל״ — שם אחד עם כמה תתי-תקציבים בבת אחת (אוכל, רכב, וכו׳)."
+          cta="תקציב כולל חדש"
+          onCta={() => setGroupCreating(true)}
+          secondaryCta="תקציב בודד"
+          onSecondaryCta={() => setEditing("new")}
+        />
+        {groupCreating && (
+          <CreateBudgetGroupDialog onClose={() => setGroupCreating(false)} />
+        )}
+        {editing && <BudgetEditDialog onClose={() => setEditing(null)} />}
+      </>
     );
   }
 
@@ -390,10 +447,18 @@ export function FinanceBudgetsPage() {
         <button
           type="button"
           className="btn-primary ms-auto flex items-center gap-1.5 text-sm"
+          onClick={() => setGroupCreating(true)}
+        >
+          <Layers className="h-4 w-4" />
+          תקציב כולל חדש
+        </button>
+        <button
+          type="button"
+          className="btn-outline flex items-center gap-1.5 text-sm"
           onClick={() => setEditing("new")}
         >
           <Plus className="h-4 w-4" />
-          תקציב חדש
+          תקציב בודד
         </button>
       </div>
 
@@ -435,23 +500,46 @@ export function FinanceBudgetsPage() {
         })}
       </div>
 
-      <div className={gridClass}>
-        {visible.map((b) => (
-          <BudgetCard
-            key={b.id}
-            budget={b}
-            versions={ctx.versionsFor(b.id)}
-            occurrences={ctx.occurrencesFor(b.id)}
-            expenses={expensesFor(b.id)}
-            accounts={accounts}
-            templates={templates}
-            carryoverAdjustment={ctx.carryoverAdjustmentFor(b.id)}
-            onEdit={() => setEditing(b)}
-            onOpenClosing={() => setClosing(b)}
-          />
-        ))}
-      </div>
+      {sections.map((section) => {
+        const cards = (
+          <div className={gridClass}>
+            {section.budgets.map((b) => (
+              <BudgetCard
+                key={b.id}
+                budget={b}
+                versions={ctx.versionsFor(b.id)}
+                occurrences={ctx.occurrencesFor(b.id)}
+                expenses={expensesFor(b.id)}
+                accounts={accounts}
+                templates={templates}
+                carryoverAdjustment={ctx.carryoverAdjustmentFor(b.id)}
+                onEdit={() => setEditing(b)}
+                onOpenClosing={() => setClosing(b)}
+              />
+            ))}
+          </div>
+        );
+        if (!section.group) {
+          return sections.length > 1 ? (
+            <section key="__ungrouped__" className="space-y-2">
+              <h3 className="text-sm font-semibold text-ink-500">ללא קבוצה</h3>
+              {cards}
+            </section>
+          ) : (
+            <div key="__ungrouped__">{cards}</div>
+          );
+        }
+        return (
+          <section key={section.group.id} className="space-y-2">
+            <GroupHeader group={section.group} budgets={section.budgets} ctx={ctx} />
+            {cards}
+          </section>
+        );
+      })}
 
+      {groupCreating && (
+        <CreateBudgetGroupDialog onClose={() => setGroupCreating(false)} />
+      )}
       {editing && (
         <BudgetEditDialog
           existing={
@@ -475,6 +563,48 @@ export function FinanceBudgetsPage() {
           onClose={() => setClosing(null)}
         />
       )}
+    </div>
+  );
+}
+
+function GroupHeader({
+  group,
+  budgets,
+  ctx,
+}: {
+  group: FinanceBudgetGroup;
+  budgets: FinanceBudget[];
+  ctx: FinanceContext;
+}) {
+  const { allocation, remaining } = budgets.reduce(
+    (acc, b) => {
+      const snap = budgetMonthSnapshot(
+        activeVersion(ctx.versionsFor(b.id)),
+        ctx.occurrencesFor(b.id),
+        new Date(),
+        ctx.carryoverAdjustmentFor(b.id)
+      );
+      acc.allocation += snap.allocation;
+      acc.remaining += snap.remaining;
+      return acc;
+    },
+    { allocation: 0, remaining: 0 }
+  );
+  return (
+    <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 border-b border-ink-200 pb-1.5">
+      <div className="flex items-baseline gap-2">
+        <Layers className="h-4 w-4 self-center text-primary-500" />
+        <h3 className="font-semibold text-ink-900">{group.name}</h3>
+        <span className="text-xs text-ink-400">{budgets.length} תתי-תקציבים</span>
+      </div>
+      <span className="text-sm text-ink-500">
+        נשאר{" "}
+        <Money
+          value={remaining}
+          className={cn("font-semibold", remaining < 0 ? "text-danger-600" : "text-ink-900")}
+        />{" "}
+        · מתוך <Money value={allocation} />
+      </span>
     </div>
   );
 }
@@ -516,10 +646,9 @@ function ViewModeToggle({
 
 export function FinanceAccountsPage() {
   const ctx = useFinanceContext();
-  const { accounts, transactions, budgets } = ctx;
+  const { accounts, transactions } = ctx;
   const [creating, setCreating] = useState(false);
   const [transferring, setTransferring] = useState(false);
-  const [importing, setImporting] = useState(false);
 
   if (ctx.loading) return <LoadingGrid />;
 
@@ -534,17 +663,6 @@ export function FinanceAccountsPage() {
           <Plus className="h-4 w-4" />
           חשבון חדש
         </button>
-        {accounts.length > 0 && (
-          <button
-            type="button"
-            className="btn-outline flex items-center gap-1.5 text-sm"
-            onClick={() => setImporting(true)}
-            title="הדבקת רשימת חיובים מדף האשראי"
-          >
-            <Upload className="h-4 w-4" />
-            ייבוא הוצאות מאשראי
-          </button>
-        )}
         {accounts.length >= 2 && (
           <button
             type="button"
@@ -572,13 +690,6 @@ export function FinanceAccountsPage() {
       {creating && <CreateAccountDialog onClose={() => setCreating(false)} />}
       {transferring && (
         <TransferDialog accounts={accounts} onClose={() => setTransferring(false)} />
-      )}
-      {importing && (
-        <CreditImportDialog
-          accounts={accounts}
-          budgets={budgets}
-          onClose={() => setImporting(false)}
-        />
       )}
     </div>
   );
@@ -675,15 +786,15 @@ function EmptyState({
   body,
   cta,
   onCta,
-  dialog,
-  onCloseDialog,
+  secondaryCta,
+  onSecondaryCta,
 }: {
   title: string;
   body: string;
   cta: string;
   onCta: () => void;
-  dialog: FinanceBudget | "new" | null;
-  onCloseDialog: () => void;
+  secondaryCta?: string;
+  onSecondaryCta?: () => void;
 }) {
   return (
     <div className="card p-8 text-center sm:p-12">
@@ -692,11 +803,18 @@ function EmptyState({
       </div>
       <h2 className="text-lg font-semibold text-ink-900">{title}</h2>
       <p className="mx-auto mt-1 max-w-sm text-sm text-ink-500">{body}</p>
-      <button type="button" className="btn-primary mx-auto mt-4 flex items-center gap-1.5 text-sm" onClick={onCta}>
-        <Plus className="h-4 w-4" />
-        {cta}
-      </button>
-      {dialog && <BudgetEditDialog onClose={onCloseDialog} />}
+      <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+        <button type="button" className="btn-primary flex items-center gap-1.5 text-sm" onClick={onCta}>
+          <Layers className="h-4 w-4" />
+          {cta}
+        </button>
+        {secondaryCta && onSecondaryCta && (
+          <button type="button" className="btn-outline flex items-center gap-1.5 text-sm" onClick={onSecondaryCta}>
+            <Plus className="h-4 w-4" />
+            {secondaryCta}
+          </button>
+        )}
+      </div>
     </div>
   );
 }

@@ -8,6 +8,7 @@ import { startOfMonth, endOfMonth, addMonths } from "date-fns";
 import { toDateKey } from "@/lib/finance/calc";
 import type {
   FinanceBudget,
+  FinanceBudgetGroup,
   FinanceBudgetVersion,
   FinanceAccount,
   FinanceAccountTransaction,
@@ -31,6 +32,80 @@ import type {
 const db = supabase as any;
 
 const SORT_STEP = 1000;
+
+// ---- Budget groups ("תקציב כולל") -------------------------------------------
+
+export async function listBudgetGroups(
+  orgId: string
+): Promise<FinanceBudgetGroup[]> {
+  const { data, error } = await db
+    .from("finance_budget_groups")
+    .select("*")
+    .eq("organization_id", orgId)
+    .eq("is_archived", false)
+    .order("sort_order", { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as FinanceBudgetGroup[];
+}
+
+export interface GroupSubBudgetInput {
+  name: string;
+  amount: number;
+  period: BudgetPeriod;
+  color?: string;
+  icon?: string;
+  share_level?: BudgetShareLevel;
+  remainder_views?: RemainderUnit[];
+}
+
+/** Create a named umbrella budget + all its sub-budgets in one flow. */
+export async function createBudgetGroupWithBudgets(input: {
+  organization_id: string;
+  owner_id: string;
+  name: string;
+  subs: GroupSubBudgetInput[];
+}): Promise<FinanceBudgetGroup> {
+  const { data: last } = await db
+    .from("finance_budget_groups")
+    .select("sort_order")
+    .eq("organization_id", input.organization_id)
+    .order("sort_order", { ascending: false })
+    .limit(1);
+  const sortOrder = (last?.[0]?.sort_order ?? 0) + SORT_STEP;
+
+  const { data: group, error } = await db
+    .from("finance_budget_groups")
+    .insert({
+      organization_id: input.organization_id,
+      owner_id: input.owner_id,
+      name: input.name,
+      sort_order: sortOrder,
+    })
+    .select()
+    .single();
+  if (error) throw error;
+
+  let step = SORT_STEP;
+  for (const sub of input.subs) {
+    if (!sub.name.trim()) continue;
+    await createBudget({
+      organization_id: input.organization_id,
+      owner_id: input.owner_id,
+      name: sub.name.trim(),
+      color: sub.color,
+      icon: sub.icon,
+      share_level: sub.share_level,
+      remainder_views: sub.remainder_views,
+      group_id: group.id,
+      sort_order: step,
+      title: input.name,
+      amount: sub.amount,
+      period: sub.period,
+    });
+    step += SORT_STEP;
+  }
+  return group as FinanceBudgetGroup;
+}
 
 // ---- Budgets -----------------------------------------------------------------
 
@@ -67,6 +142,8 @@ export interface CreateBudgetInput {
   is_shared?: boolean;
   share_level?: BudgetShareLevel;
   remainder_views?: RemainderUnit[];
+  group_id?: string | null;
+  sort_order?: number;
   // initial version
   title: string;
   amount: number;
@@ -82,13 +159,14 @@ export async function createBudget(
     .eq("organization_id", input.organization_id)
     .order("sort_order", { ascending: false })
     .limit(1);
-  const sortOrder = (last?.[0]?.sort_order ?? 0) + SORT_STEP;
+  const sortOrder = input.sort_order ?? (last?.[0]?.sort_order ?? 0) + SORT_STEP;
 
   const { data: budget, error } = await db
     .from("finance_budgets")
     .insert({
       organization_id: input.organization_id,
       owner_id: input.owner_id,
+      group_id: input.group_id ?? null,
       name: input.name,
       color: input.color ?? "#f59e0b",
       icon: input.icon ?? "wallet",

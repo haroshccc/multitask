@@ -149,6 +149,7 @@ export const queryKeys = {
     ["framework-visibility", userId, orgId] as const,
 
   // Finance (התנהלות כלכלית)
+  financeBudgetGroups: (orgId: string) => ["finance-budget-groups", orgId] as const,
   financeBudgets: (orgId: string) => ["finance-budgets", orgId] as const,
   financeBudgetVersionsAll: (orgId: string) =>
     ["finance-budget-versions", orgId] as const,
@@ -208,6 +209,7 @@ export const queryFamilies = {
   planFamily: (planId: string) => ["plan", planId] as const,
 
   // Finance
+  allFinanceBudgetGroups: (orgId: string) => ["finance-budget-groups", orgId] as const,
   allFinanceBudgets: (orgId: string) => ["finance-budgets", orgId] as const,
   allFinanceBudgetVersions: (orgId: string) =>
     ["finance-budget-versions", orgId] as const,

@@ -487,6 +487,99 @@ export async function setOccurrenceWithdrawn(
   }
 }
 
+// ---- Credit-statement bulk import --------------------------------------------
+
+export interface CreditImportRow {
+  date: string; // yyyy-mm-dd, deduction date (past or future)
+  title: string;
+  amount: number;
+  note: string; // credit-company expense type → occurrence note
+  budget_id: string;
+}
+
+/**
+ * Import a batch of credit-card charges against one source account. Each row →
+ * an onetime expense + an occurrence charged to the chosen budget. Past-dated
+ * rows are marked withdrawn and get an account transaction; future-dated rows
+ * are left pending. Returns the number of rows imported.
+ */
+export async function importCreditRows(input: {
+  organization_id: string;
+  created_by: string;
+  account_id: string;
+  rows: CreditImportRow[];
+}): Promise<number> {
+  const today = toDateKey(new Date());
+  const nowIso = new Date().toISOString();
+  let count = 0;
+
+  for (const row of input.rows) {
+    if (!row.budget_id || !row.amount) continue;
+    const past = row.date !== "" && row.date <= today;
+
+    const { data: exp, error: e1 } = await db
+      .from("finance_expenses")
+      .insert({
+        organization_id: input.organization_id,
+        budget_id: row.budget_id,
+        account_id: input.account_id,
+        payment_method: "credit",
+        kind: "onetime",
+        title: row.title || "הוצאת אשראי",
+        default_amount: row.amount,
+        budget_charge_mode: "auto",
+        withdrawal_timing: past ? "immediate" : "future_date",
+        created_by: input.created_by,
+      })
+      .select()
+      .single();
+    if (e1) throw e1;
+
+    const { data: occ, error: e2 } = await db
+      .from("finance_expense_occurrences")
+      .insert({
+        organization_id: input.organization_id,
+        expense_id: exp.id,
+        budget_id: row.budget_id,
+        account_id: input.account_id,
+        amount: row.amount,
+        due_date: row.date || today,
+        budget_charged: true, // an actual charge → counts against the budget
+        budget_charged_at: nowIso,
+        withdrawal_date: row.date || today,
+        withdrawn: past,
+        withdrawn_at: past ? nowIso : null,
+        note: row.note || null,
+      })
+      .select()
+      .single();
+    if (e2) throw e2;
+
+    if (past) {
+      const { data: tx, error: e3 } = await db
+        .from("finance_account_transactions")
+        .insert({
+          organization_id: input.organization_id,
+          account_id: input.account_id,
+          amount: -Math.abs(row.amount),
+          tx_date: row.date || today,
+          kind: "expense",
+          expense_occurrence_id: occ.id,
+          created_by: input.created_by,
+        })
+        .select()
+        .single();
+      if (e3) throw e3;
+      await db
+        .from("finance_expense_occurrences")
+        .update({ account_transaction_id: tx.id })
+        .eq("id", occ.id);
+    }
+    count++;
+  }
+  return count;
+}
+
 // ---- Templates ---------------------------------------------------------------
 
 export async function listTemplates(

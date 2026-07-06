@@ -7,7 +7,12 @@ import { useState } from "react";
 import { Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { Modal, LabeledField } from "./finance-bits";
-import { useUpdateBudgetGroup, useSetBudgetsArchived } from "@/lib/hooks/useFinance";
+import { SubBudgetRows, type SubRow } from "./SubBudgetRows";
+import {
+  useUpdateBudgetGroup,
+  useSetBudgetsArchived,
+  useCreateBudget,
+} from "@/lib/hooks/useFinance";
 import { pushUndo } from "@/lib/undo/store";
 import { toast } from "@/components/ui/Toast";
 import {
@@ -28,10 +33,14 @@ export function GroupEditDialog({
 }) {
   const updateGroup = useUpdateBudgetGroup();
   const setArchived = useSetBudgetsArchived();
+  const createBudget = useCreateBudget();
 
   const [name, setName] = useState(group.name);
   const [shareLevel, setShareLevel] = useState<BudgetShareLevel>(group.share_level);
+  const [newSubs, setNewSubs] = useState<SubRow[]>([]);
   const [error, setError] = useState<string | null>(null);
+
+  const validNewSubs = newSubs.filter((r) => r.name.trim() && Number(r.amount) > 0);
 
   async function handleSave() {
     setError(null);
@@ -52,6 +61,19 @@ export function GroupEditDialog({
           redo: async () => {
             await updateGroup.mutateAsync({ groupId: group.id, patch: next });
           },
+        });
+      }
+      // create any newly-added sub-budgets into this group
+      for (const r of validNewSubs) {
+        await createBudget.mutateAsync({
+          name: r.name.trim(),
+          color: r.color,
+          icon: r.icon,
+          remainder_views: r.views.length ? r.views : ["month"],
+          group_id: group.id,
+          title: next.name,
+          amount: Number(r.amount),
+          period: r.period,
         });
       }
       onClose();
@@ -83,7 +105,7 @@ export function GroupEditDialog({
     }
   }
 
-  const busy = updateGroup.isPending || setArchived.isPending;
+  const busy = updateGroup.isPending || setArchived.isPending || createBudget.isPending;
 
   return (
     <Modal
@@ -138,6 +160,18 @@ export function GroupEditDialog({
           <span className="mt-1 block text-[11px] text-ink-400">
             {SHARE_LEVEL_META[shareLevel].hint}
           </span>
+        </div>
+
+        <div>
+          <span className="mb-1.5 block text-xs font-medium text-ink-600">
+            הוספת תתי-תקציבים
+          </span>
+          {newSubs.length === 0 && (
+            <p className="mb-1.5 text-[11px] text-ink-400">
+              שכחת משהו? הוסיפי כאן תתי-תקציבים חדשים לתקציב הזה.
+            </p>
+          )}
+          <SubBudgetRows rows={newSubs} setRows={setNewSubs} addLabel="הוסיפי תת-תקציב" />
         </div>
 
         {error && <p className="text-sm text-danger-600">{error}</p>}

@@ -10,6 +10,7 @@ import { SHARE_LEVEL_META } from "@/lib/types/finance";
 import { Money, BudgetIcon, DivisionPill, TEXT_COLOR } from "./finance-bits";
 import { ExpenseRow } from "./ExpenseRow";
 import { QuickAddExpense } from "./QuickAddExpense";
+import { ExpenseEditDialog } from "./ExpenseEditDialog";
 import {
   budgetMonthSnapshot,
   divisionView,
@@ -18,7 +19,6 @@ import {
 import {
   useSetOccurrenceCharged,
   useSetOccurrenceWithdrawn,
-  useArchiveExpense,
 } from "@/lib/hooks/useFinance";
 import type {
   FinanceBudget,
@@ -36,6 +36,7 @@ export function BudgetCard({
   expenses,
   accounts,
   templates,
+  allBudgets,
   carryoverAdjustment = 0,
   shareLevel,
   onEdit,
@@ -48,6 +49,7 @@ export function BudgetCard({
   expenses: FinanceExpense[];
   accounts: FinanceAccount[];
   templates: FinanceExpenseTemplate[];
+  allBudgets: FinanceBudget[];
   carryoverAdjustment?: number;
   /** Effective share level (the group's, for grouped budgets). */
   shareLevel?: FinanceBudget["share_level"];
@@ -57,7 +59,6 @@ export function BudgetCard({
 }) {
   const setCharged = useSetOccurrenceCharged();
   const setWithdrawn = useSetOccurrenceWithdrawn();
-  const archive = useArchiveExpense();
   const { userId } = useOrgScope();
 
   // Capability for the current viewer. A non-owner only ever sees this budget
@@ -68,6 +69,7 @@ export function BudgetCard({
   const canTransact = isOwner || effShare !== "view";
 
   const [adding, setAdding] = useState(false);
+  const [editingOcc, setEditingOcc] = useState<FinanceOccurrence | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -231,9 +233,7 @@ export function BudgetCard({
                 readOnly={!canTransact}
                 onToggleCharged={(c) => setCharged.mutate({ occId: occ.id, charged: c })}
                 onToggleWithdrawn={(w) => setWithdrawn.mutate({ occ, withdrawn: w })}
-                onArchive={
-                  expense ? () => archive.mutate(occ.expense_id) : undefined
-                }
+                onEdit={canTransact ? () => setEditingOcc(occ) : undefined}
               />
             );
           })
@@ -246,6 +246,15 @@ export function BudgetCard({
           accounts={accounts}
           templates={templates}
           onClose={() => setAdding(false)}
+        />
+      )}
+      {editingOcc && (
+        <ExpenseEditDialog
+          occ={editingOcc}
+          expense={expenseById.get(editingOcc.expense_id)}
+          budgets={allBudgets}
+          accounts={accounts}
+          onClose={() => setEditingOcc(null)}
         />
       )}
     </div>

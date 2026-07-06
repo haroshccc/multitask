@@ -15,7 +15,8 @@ import type { FinanceAccount, FinanceBudget } from "@/lib/types/finance";
 
 interface EditRow {
   key: number;
-  date: string;
+  chargeDate: string; // budget charge date
+  withdrawDate: string; // account deduction date
   title: string;
   amount: string;
   note: string;
@@ -43,7 +44,8 @@ export function CreditImportDialog({
 
   const newRow = (r?: Partial<EditRow>): EditRow => ({
     key: keyRef.current++,
-    date: r?.date ?? today,
+    chargeDate: r?.chargeDate ?? today,
+    withdrawDate: r?.withdrawDate ?? today,
     title: r?.title ?? "",
     amount: r?.amount ?? "",
     note: r?.note ?? "",
@@ -60,7 +62,8 @@ export function CreditImportDialog({
       ...prev,
       ...parsed.map((p) =>
         newRow({
-          date: p.date || today,
+          chargeDate: p.date || today,
+          withdrawDate: p.date || today,
           title: p.title,
           amount: p.amount != null ? String(p.amount) : "",
           note: p.note,
@@ -95,7 +98,8 @@ export function CreditImportDialog({
       const n = await importRows.mutateAsync({
         account_id: accountId,
         rows: validRows.map((r) => ({
-          date: r.date,
+          charge_date: r.chargeDate,
+          withdrawal_date: r.withdrawDate,
           title: r.title.trim(),
           amount: Number(r.amount),
           note: r.note.trim(),
@@ -188,9 +192,10 @@ export function CreditImportDialog({
 
         {/* editable table */}
         <div className="overflow-x-auto rounded-lg border border-ink-200">
-          <table className="w-full min-w-[640px] text-sm">
+          <table className="w-full min-w-[760px] text-sm">
             <thead>
               <tr className="bg-ink-50 text-xs text-ink-500">
+                <th className="p-2 text-start font-medium">תאריך חיוב</th>
                 <th className="p-2 text-start font-medium">תאריך הורדה</th>
                 <th className="p-2 text-start font-medium">שם</th>
                 <th className="p-2 text-start font-medium">סכום</th>
@@ -202,16 +207,25 @@ export function CreditImportDialog({
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="p-4 text-center text-xs text-ink-400">
+                  <td colSpan={7} className="p-4 text-center text-xs text-ink-400">
                     הדביקי שורות למעלה או הוסיפי שורה ידנית
                   </td>
                 </tr>
               ) : (
                 rows.map((r) => {
-                  const future = r.date > today;
+                  const future = r.withdrawDate > today;
                   const rowInvalid = Number(r.amount) > 0 && !r.budgetId;
                   return (
                     <tr key={r.key} className="border-t border-ink-100">
+                      <td className="p-1.5">
+                        <input
+                          type="date"
+                          className="field !py-1 !px-1.5 text-xs"
+                          value={r.chargeDate}
+                          onChange={(e) => update(r.key, { chargeDate: e.target.value })}
+                          title="התאריך שבו זה נזקף לתקציב"
+                        />
+                      </td>
                       <td className="p-1.5">
                         <div className="flex items-center gap-1">
                           {future ? (
@@ -222,8 +236,9 @@ export function CreditImportDialog({
                           <input
                             type="date"
                             className="field !py-1 !px-1.5 text-xs"
-                            value={r.date}
-                            onChange={(e) => update(r.key, { date: e.target.value })}
+                            value={r.withdrawDate}
+                            onChange={(e) => update(r.key, { withdrawDate: e.target.value })}
+                            title="התאריך שבו הכסף יורד מהחשבון"
                           />
                         </div>
                       </td>
@@ -308,11 +323,11 @@ export function CreditImportDialog({
 }
 
 function future_hint(rows: EditRow[], today: string) {
-  const future = rows.filter((r) => r.date > today && Number(r.amount) > 0).length;
+  const future = rows.filter((r) => r.withdrawDate > today && Number(r.amount) > 0).length;
   if (!future) return null;
   return (
     <span className="text-xs text-ink-400">
-      {future} שורות עתידיות — יסומנו כטרם ירדו מהחשבון
+      {future} שורות עם הורדה עתידית — יסומנו כטרם ירדו מהחשבון
     </span>
   );
 }

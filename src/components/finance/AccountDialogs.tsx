@@ -19,7 +19,7 @@ export function CreateAccountDialog({ onClose }: { onClose: () => void }) {
   const [name, setName] = useState("");
   const [kind, setKind] = useState<AccountKind>("bank");
   const [color, setColor] = useState(ACCOUNT_COLORS[0]);
-  const [opening, setOpening] = useState<number>(0);
+  const [opening, setOpening] = useState<string>("0");
   const [error, setError] = useState<string | null>(null);
 
   async function save() {
@@ -29,7 +29,12 @@ export function CreateAccountDialog({ onClose }: { onClose: () => void }) {
       return;
     }
     try {
-      await create.mutateAsync({ name: name.trim(), kind, color, opening_balance: opening });
+      await create.mutateAsync({
+        name: name.trim(),
+        kind,
+        color,
+        opening_balance: Number(opening) || 0,
+      });
       onClose();
     } catch (e: any) {
       setError(e?.message ?? "שגיאה");
@@ -65,12 +70,14 @@ export function CreateAccountDialog({ onClose }: { onClose: () => void }) {
               ))}
             </select>
           </LabeledField>
-          <LabeledField label="יתרת פתיחה">
+          <LabeledField label="יתרת פתיחה" hint="אפשר סכום שלילי = חוב / גרעון">
             <input
               type="number"
+              inputMode="numeric"
               className="field"
-              value={Number.isFinite(opening) ? opening : 0}
-              onChange={(e) => setOpening(Number(e.target.value))}
+              value={opening}
+              onChange={(e) => setOpening(e.target.value)}
+              placeholder="0"
             />
           </LabeledField>
         </div>

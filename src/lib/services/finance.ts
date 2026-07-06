@@ -568,7 +568,8 @@ export async function setOccurrenceWithdrawn(
 // ---- Credit-statement bulk import --------------------------------------------
 
 export interface CreditImportRow {
-  date: string; // yyyy-mm-dd, deduction date (past or future)
+  charge_date: string; // yyyy-mm-dd, budget charge date
+  withdrawal_date: string; // yyyy-mm-dd, account deduction date (past or future)
   title: string;
   amount: number;
   note: string; // credit-company expense type → occurrence note
@@ -577,9 +578,10 @@ export interface CreditImportRow {
 
 /**
  * Import a batch of credit-card charges against one source account. Each row →
- * an onetime expense + an occurrence charged to the chosen budget. Past-dated
- * rows are marked withdrawn and get an account transaction; future-dated rows
- * are left pending. Returns the number of rows imported.
+ * an onetime expense + an occurrence with a separate budget-charge date and
+ * account-deduction date (like a regular expense). The budget is charged when
+ * the charge date has passed; a withdrawn occurrence (deduction date passed)
+ * also gets an account transaction. Returns the number of rows imported.
  */
 export async function importCreditRows(input: {
   organization_id: string;
@@ -593,7 +595,10 @@ export async function importCreditRows(input: {
 
   for (const row of input.rows) {
     if (!row.budget_id || !row.amount) continue;
-    const past = row.date !== "" && row.date <= today;
+    const chargeDate = row.charge_date || today;
+    const withdrawalDate = row.withdrawal_date || chargeDate;
+    const charged = chargeDate <= today;
+    const withdrawn = withdrawalDate <= today;
 
     const { data: exp, error: e1 } = await db
       .from("finance_expenses")
@@ -606,7 +611,7 @@ export async function importCreditRows(input: {
         title: row.title || "הוצאת אשראי",
         default_amount: row.amount,
         budget_charge_mode: "auto",
-        withdrawal_timing: past ? "immediate" : "future_date",
+        withdrawal_timing: withdrawn ? "immediate" : "future_date",
         created_by: input.created_by,
       })
       .select()
@@ -621,26 +626,26 @@ export async function importCreditRows(input: {
         budget_id: row.budget_id,
         account_id: input.account_id,
         amount: row.amount,
-        due_date: row.date || today,
-        budget_charged: true, // an actual charge → counts against the budget
-        budget_charged_at: nowIso,
-        withdrawal_date: row.date || today,
-        withdrawn: past,
-        withdrawn_at: past ? nowIso : null,
+        due_date: chargeDate,
+        budget_charged: charged,
+        budget_charged_at: charged ? nowIso : null,
+        withdrawal_date: withdrawalDate,
+        withdrawn,
+        withdrawn_at: withdrawn ? nowIso : null,
         note: row.note || null,
       })
       .select()
       .single();
     if (e2) throw e2;
 
-    if (past) {
+    if (withdrawn) {
       const { data: tx, error: e3 } = await db
         .from("finance_account_transactions")
         .insert({
           organization_id: input.organization_id,
           account_id: input.account_id,
           amount: -Math.abs(row.amount),
-          tx_date: row.date || today,
+          tx_date: withdrawalDate,
           kind: "expense",
           expense_occurrence_id: occ.id,
           created_by: input.created_by,

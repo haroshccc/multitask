@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Multitask · באנר עריכת אירוע</title>
+
+  <!-- Fonts + Tailwind (Play CDN) + Lucide icons. Requires internet in the browser. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    // Design tokens — sourced verbatim from tailwind.config.ts
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ["Fredoka", "system-ui", "sans-serif"],
+            mono: ["SF Mono", "Menlo", "monospace"],
+          },
+          colors: {
+            ink: {
+              0: "#ffffff", 50: "#fafafa", 100: "#f4f4f6", 150: "#f0f0f5",
+              200: "#ededf0", 300: "#e2e2ea", 400: "#a8a8bc", 500: "#6b6b80",
+              700: "#2d2d3a", 900: "#111118",
+            },
+            accent: {
+              yellow: "#facc15", amber: "#f59e0b", orange: "#f97316",
+              pink: "#ec4899", rose: "#e11d48", purple: "#a855f7",
+              500: "#f59e0b",
+            },
+            primary: {
+              50: "#fffbeb", 100: "#fef3c7", 200: "#fde68a", 300: "#fcd34d",
+              400: "#fbbf24", 500: "#f59e0b", 600: "#d97706", 700: "#b45309",
+              800: "#92400e", 900: "#78350f",
+            },
+            list: {
+              red: "#ef4444", green: "#10b981", teal: "#14b8a6", cyan: "#06b6d4",
+              sky: "#0ea5e9", blue: "#3b82f6", indigo: "#6366f1", violet: "#8b5cf6",
+            },
+            success: { DEFAULT: "#10b981", 500: "#10b981", 600: "#059669" },
+            warning: { DEFAULT: "#f59e0b", 500: "#f59e0b", 600: "#d97706" },
+            danger: { DEFAULT: "#ef4444", 500: "#ef4444", 600: "#dc2626" },
+          },
+          backgroundImage: {
+            "brand-gradient": "linear-gradient(135deg, #facc15 0%, #f59e0b 45%, #ec4899 100%)",
+          },
+          borderRadius: {
+            xs: "5px", sm: "7px", DEFAULT: "10px", md: "10px", lg: "14px",
+            xl: "18px", "2xl": "22px", "3xl": "28px",
+          },
+          boxShadow: {
+            soft: "0 1px 3px rgba(0,0,0,0.06)",
+            DEFAULT: "0 4px 16px rgba(0,0,0,0.07)",
+            lift: "0 12px 40px rgba(0,0,0,0.10)",
+            accent: "0 4px 20px rgba(245,158,11,0.25)",
+          },
+          transitionTimingFunction: {
+            smooth: "cubic-bezier(0.25, 0.46, 0.45, 0.94)",
+            bounce: "cubic-bezier(0.34, 1.3, 0.64, 1)",
+          },
+          fontSize: {
+            "2xs": ["10px", { lineHeight: "1.4" }],
+            xs: ["11px", { lineHeight: "1.5" }],
+            sm: ["12px", { lineHeight: "1.55" }],
+            base: ["14px", { lineHeight: "1.55" }],
+            md: ["15px", { lineHeight: "1.5" }],
+            lg: ["17px", { lineHeight: "1.55" }],
+            xl: ["20px", { lineHeight: "1.4" }],
+          },
+        },
+      },
+    };
+  </script>
+
+  <!-- Component layer — sourced verbatim from src/index.css -->
+  <style type="text/tailwindcss">
+    @layer base {
+      html { font-family: "Fredoka", system-ui, sans-serif; -webkit-font-smoothing: antialiased; direction: rtl; }
+      body { @apply bg-ink-50 text-ink-900 text-base; margin: 0; min-height: 100vh; line-height: 1.55; }
+      :focus-visible { outline: 2px solid theme("colors.primary.500"); outline-offset: 2px; border-radius: theme("borderRadius.sm"); }
+      ::selection { @apply bg-primary-500/25 text-ink-900; }
+    }
+    @layer components {
+      .field {
+        @apply w-full rounded-md border border-ink-300 bg-white px-3 py-2.5 text-sm text-ink-900 placeholder:text-ink-400;
+        @apply transition-colors duration-150 ease-smooth hover:border-ink-400;
+        @apply focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20;
+      }
+      .btn {
+        @apply inline-flex items-center justify-center gap-1.5 rounded-sm px-4 py-2.5 text-sm font-medium;
+        @apply transition-all duration-150 ease-smooth disabled:opacity-60 disabled:cursor-not-allowed;
+      }
+      .btn-primary { @apply btn text-white shadow-accent; background: linear-gradient(135deg, #facc15 0%, #f59e0b 45%, #ec4899 100%); background-size: 200% 200%; animation: gradShift 4s ease infinite; }
+      .btn-accent { @apply btn bg-primary-500 text-white shadow-accent hover:bg-primary-600 hover:-translate-y-0.5; }
+      .btn-ghost { @apply btn text-ink-700 hover:bg-ink-100; }
+      .btn-outline { @apply btn border border-ink-300 bg-white text-ink-900 hover:bg-ink-50; }
+      .card { @apply rounded-lg border border-ink-300 bg-white shadow-soft; }
+      .chip { @apply inline-flex items-center gap-1 rounded-xs px-2 py-0.5 text-xs font-medium; @apply bg-ink-150 text-ink-700; }
+      .eyebrow { @apply text-xs font-semibold uppercase tracking-[0.18em] text-ink-400; }
+    }
+    @layer utilities {
+      .scrollbar-thin::-webkit-scrollbar { width: 6px; height: 6px; }
+      .scrollbar-thin::-webkit-scrollbar-thumb { @apply bg-ink-300 rounded-full; }
+    }
+    @keyframes gradShift { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
+  </style>
+
+  <style>
+    body { background:
+      radial-gradient(1200px 600px at 80% -10%, rgba(245,158,11,0.10), transparent),
+      radial-gradient(1000px 500px at 0% 110%, rgba(236,72,153,0.08), transparent),
+      #fafafa; }
+  </style>
+</head>
+
+<body>
+  <!-- ============================================================= -->
+  <!-- Overlay (bg-ink-900/50 backdrop-blur-sm) + centered modal      -->
+  <!-- Mirrors src/components/calendar/EventEditModal.tsx             -->
+  <!-- ============================================================= -->
+  <div class="fixed inset-0 z-50 bg-ink-900/50 backdrop-blur-sm flex items-start md:items-center justify-center p-4 overflow-y-auto">
+    <div class="bg-white rounded-3xl shadow-lift w-full max-w-2xl my-8 overflow-hidden">
+
+      <!-- Header -->
+      <div class="px-5 py-3 border-b border-ink-200 flex items-center justify-between gap-3">
+        <div class="flex-1 min-w-0">
+          <h3 class="text-lg font-semibold text-ink-900">עריכת אירוע</h3>
+        </div>
+        <button class="p-1.5 rounded-lg hover:bg-ink-100"><i data-lucide="x" class="w-4 h-4 text-ink-600"></i></button>
+      </div>
+
+      <!-- Tabs -->
+      <div class="border-b border-ink-200 px-3 flex items-center gap-1 text-sm">
+        <button data-tab="details" class="tab-btn inline-flex items-center gap-1.5 px-3 py-2 border-b-2 -mb-px transition-colors border-primary-500 text-primary-700 font-medium"><i data-lucide="list-todo" class="w-4 h-4"></i>פרטים</button>
+        <button data-tab="participants" class="tab-btn inline-flex items-center gap-1.5 px-3 py-2 border-b-2 -mb-px transition-colors border-transparent text-ink-600 hover:text-ink-900"><i data-lucide="users" class="w-4 h-4"></i>מוזמנים</button>
+        <button data-tab="recurrence" class="tab-btn inline-flex items-center gap-1.5 px-3 py-2 border-b-2 -mb-px transition-colors border-transparent text-ink-600 hover:text-ink-900"><i data-lucide="repeat" class="w-4 h-4"></i>חזרה</button>
+      </div>
+
+      <!-- Body -->
+      <div class="p-5 max-h-[calc(100vh-16rem)] overflow-y-auto scrollbar-thin">
+
+        <!-- ========== TAB: פרטים (details) ========== -->
+        <div data-panel="details" class="space-y-4">
+          <div>
+            <label class="eyebrow mb-1 block">כותרת</label>
+            <input value="פגישת סטטוס שבועית" placeholder="שם האירוע" class="field" />
+          </div>
+
+          <div>
+            <label class="eyebrow mb-1 block">תיאור</label>
+            <textarea class="field min-h-[80px] resize-y" placeholder="פרטים...">סנכרון עם הצוות על ההתקדמות והמשימות לשבוע הבא.</textarea>
+          </div>
+
+          <label class="flex items-center gap-2 text-sm text-ink-700 select-none">
+            <input type="checkbox" class="w-4 h-4" />
+            אירוע של יום שלם
+          </label>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="eyebrow mb-1 block">התחלה</label>
+              <input class="field" value="08/08/2026 · 09:00" />
+            </div>
+            <div>
+              <label class="eyebrow mb-1 block">סיום</label>
+              <input class="field" value="08/08/2026 · 10:00" />
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="eyebrow mb-1 block">יומן</label>
+              <div class="flex items-center gap-1">
+                <select class="field flex-1"><option>עבודה</option><option>אישי</option><option value="">ללא שיוך</option></select>
+                <button class="shrink-0 px-2 py-1 rounded-md border border-ink-200 text-ink-700 hover:bg-ink-50 text-xs" title="צור יומן חדש">+</button>
+              </div>
+            </div>
+            <div>
+              <label class="eyebrow mb-1 block">צבע (דורס את צבע היומן)</label>
+              <div class="flex items-center gap-1.5 flex-wrap">
+                <button class="h-7 px-2 rounded-md border text-[11px] bg-white text-ink-700 border-ink-200 hover:bg-ink-50">ברירת מחדל</button>
+                <button class="w-6 h-6 rounded-full border border-ink-200" style="background:#ef4444"></button>
+                <button class="w-6 h-6 rounded-full border border-ink-200" style="background:#f97316"></button>
+                <button class="w-6 h-6 rounded-full border border-ink-200 ring-2 ring-ink-900 ring-offset-1" style="background:#f59e0b"></button>
+                <button class="w-6 h-6 rounded-full border border-ink-200" style="background:#22c55e"></button>
+                <button class="w-6 h-6 rounded-full border border-ink-200" style="background:#0ea5e9"></button>
+                <button class="w-6 h-6 rounded-full border border-ink-200" style="background:#6366f1"></button>
+                <button class="w-6 h-6 rounded-full border border-ink-200" style="background:#a855f7"></button>
+                <button class="w-6 h-6 rounded-full border border-ink-200" style="background:#ec4899"></button>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <label class="eyebrow mb-1 block">מיקום</label>
+            <div class="relative">
+              <i data-lucide="map-pin" class="w-4 h-4 absolute start-3 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none"></i>
+              <input value="חדר ישיבות ראשי" class="field ps-9" placeholder="כתובת או אולם..." />
+            </div>
+          </div>
+
+          <div>
+            <label class="eyebrow mb-1 block">לינק וידאו</label>
+            <div class="flex items-center gap-2">
+              <div class="relative flex-1">
+                <i data-lucide="video" class="w-4 h-4 absolute start-3 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none"></i>
+                <input type="url" dir="ltr" class="field ps-9" value="https://meet.google.com/abc-defg-hij" placeholder="https://meet.google.com/..." />
+              </div>
+              <button class="btn-outline text-xs opacity-60 cursor-not-allowed" title="בקרוב — יצירת Meet אוטומטית תגיע בפאזה 9b">🎥 צור Meet</button>
+            </div>
+            <p class="text-[11px] text-ink-400 mt-1">הדבק לינק Zoom / Teams / Meet ידנית, או המתן ליצירה אוטומטית (בקרוב).</p>
+          </div>
+
+          <!-- Source thought banner -->
+          <div class="mt-4">
+            <div class="p-2 rounded-md border border-ink-200 bg-ink-50/40 flex items-center gap-2">
+              <i data-lucide="lightbulb" class="w-4 h-4 text-accent-500 shrink-0"></i>
+              <div class="flex-1 min-w-0">
+                <div class="text-[11px] text-ink-500">נוצר מהמחשבה</div>
+                <div class="text-sm text-ink-900 truncate">לקבוע פגישת סטטוס קבועה עם הצוות</div>
+              </div>
+              <button class="inline-flex items-center gap-1 text-xs font-medium text-primary-600 hover:underline"><i data-lucide="external-link" class="w-3.5 h-3.5"></i>פתח</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ========== TAB: מוזמנים (participants) ========== -->
+        <div data-panel="participants" class="space-y-3 hidden">
+          <div class="flex items-center gap-2">
+            <input class="field flex-1" placeholder="הוסף מוזמן לפי אימייל..." dir="ltr" />
+            <button class="btn-accent text-sm">הוסף</button>
+          </div>
+          <ul class="divide-y divide-ink-200">
+            <li class="py-2 flex items-center gap-3 text-sm">
+              <div class="w-7 h-7 rounded-full bg-ink-100 text-ink-600 flex items-center justify-center text-xs font-medium shrink-0">מ</div>
+              <div class="flex-1 min-w-0">
+                <div class="text-ink-900 truncate">מיכל לוי</div>
+                <div class="text-[11px] text-ink-400" dir="ltr">michal@example.com</div>
+              </div>
+              <span class="chip" style="background:rgba(16,185,129,0.1);color:#059669">מגיע/ה</span>
+              <button class="p-1 text-ink-500 hover:text-danger-500"><i data-lucide="x" class="w-3.5 h-3.5"></i></button>
+            </li>
+            <li class="py-2 flex items-center gap-3 text-sm">
+              <div class="w-7 h-7 rounded-full bg-ink-100 text-ink-600 flex items-center justify-center text-xs font-medium shrink-0">ד</div>
+              <div class="flex-1 min-w-0">
+                <div class="text-ink-900 truncate">דני כהן</div>
+                <div class="text-[11px] text-ink-400" dir="ltr">dani@example.com</div>
+              </div>
+              <span class="chip">ממתין</span>
+              <button class="p-1 text-ink-500 hover:text-danger-500"><i data-lucide="x" class="w-3.5 h-3.5"></i></button>
+            </li>
+          </ul>
+        </div>
+
+        <!-- ========== TAB: חזרה (recurrence) ========== -->
+        <div data-panel="recurrence" class="space-y-4 hidden">
+          <label class="eyebrow mb-1 block">תדירות</label>
+          <select class="field text-sm"><option>ללא חזרה</option><option selected>כל שבוע</option><option>כל יום</option><option>כל חודש</option></select>
+          <div class="flex items-center gap-1.5 flex-wrap">
+            <button class="w-9 h-9 rounded-full border border-ink-200 text-sm text-ink-600 hover:bg-ink-50">א</button>
+            <button class="w-9 h-9 rounded-full border border-primary-500 bg-primary-50 text-sm text-primary-700 font-medium">ב</button>
+            <button class="w-9 h-9 rounded-full border border-ink-200 text-sm text-ink-600 hover:bg-ink-50">ג</button>
+            <button class="w-9 h-9 rounded-full border border-ink-200 text-sm text-ink-600 hover:bg-ink-50">ד</button>
+            <button class="w-9 h-9 rounded-full border border-ink-200 text-sm text-ink-600 hover:bg-ink-50">ה</button>
+            <button class="w-9 h-9 rounded-full border border-ink-200 text-sm text-ink-600 hover:bg-ink-50">ו</button>
+            <button class="w-9 h-9 rounded-full border border-ink-200 text-sm text-ink-600 hover:bg-ink-50">ש</button>
+          </div>
+          <div>
+            <label class="eyebrow mb-1 block">מסתיים</label>
+            <select class="field text-sm"><option>לעולם לא</option><option>בתאריך</option><option>אחרי מספר מופעים</option></select>
+          </div>
+          <p class="text-xs text-ink-400">האירוע יופיע ביומן בכל שבוע ביום ב׳.</p>
+        </div>
+
+      </div>
+
+      <!-- Footer -->
+      <div class="px-5 py-3 border-t border-ink-200 flex items-center gap-2">
+        <button class="btn-ghost text-danger-600 text-sm"><i data-lucide="trash-2" class="w-4 h-4"></i>מחק</button>
+        <span class="text-[11px] text-warning-600 me-auto">יש שינויים לא שמורים</span>
+        <div class="flex items-center gap-2">
+          <button class="btn-ghost text-sm">בטל</button>
+          <button class="btn-accent text-sm">שמור</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script>
+    lucide.createIcons();
+    const tabs = document.querySelectorAll('.tab-btn');
+    const panels = document.querySelectorAll('[data-panel]');
+    tabs.forEach((t) => t.addEventListener('click', () => {
+      const key = t.getAttribute('data-tab');
+      tabs.forEach((x) => {
+        const active = x === t;
+        x.classList.toggle('border-primary-500', active);
+        x.classList.toggle('text-primary-700', active);
+        x.classList.toggle('font-medium', active);
+        x.classList.toggle('border-transparent', !active);
+        x.classList.toggle('text-ink-600', !active);
+      });
+      panels.forEach((p) => p.classList.toggle('hidden', p.getAttribute('data-panel') !== key));
+    }));
+  </script>
+</body>
+</html>

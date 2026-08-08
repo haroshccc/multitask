@@ -1,0 +1,472 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Multitask · באנר עריכת משימה</title>
+
+  <!-- Fonts + Tailwind (Play CDN) + Lucide icons. Requires internet in the browser. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    // Design tokens — sourced verbatim from tailwind.config.ts
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ["Fredoka", "system-ui", "sans-serif"],
+            mono: ["SF Mono", "Menlo", "monospace"],
+          },
+          colors: {
+            ink: {
+              0: "#ffffff", 50: "#fafafa", 100: "#f4f4f6", 150: "#f0f0f5",
+              200: "#ededf0", 300: "#e2e2ea", 400: "#a8a8bc", 500: "#6b6b80",
+              700: "#2d2d3a", 900: "#111118",
+            },
+            accent: {
+              yellow: "#facc15", amber: "#f59e0b", orange: "#f97316",
+              pink: "#ec4899", rose: "#e11d48", purple: "#a855f7",
+            },
+            primary: {
+              50: "#fffbeb", 100: "#fef3c7", 200: "#fde68a", 300: "#fcd34d",
+              400: "#fbbf24", 500: "#f59e0b", 600: "#d97706", 700: "#b45309",
+              800: "#92400e", 900: "#78350f",
+            },
+            list: {
+              red: "#ef4444", green: "#10b981", teal: "#14b8a6", cyan: "#06b6d4",
+              sky: "#0ea5e9", blue: "#3b82f6", indigo: "#6366f1", violet: "#8b5cf6",
+            },
+            success: { DEFAULT: "#10b981", 500: "#10b981", 600: "#059669" },
+            warning: { DEFAULT: "#f59e0b", 500: "#f59e0b", 600: "#d97706" },
+            danger: { DEFAULT: "#ef4444", 500: "#ef4444", 600: "#dc2626" },
+          },
+          backgroundImage: {
+            "brand-gradient": "linear-gradient(135deg, #facc15 0%, #f59e0b 45%, #ec4899 100%)",
+            "brand-gradient-soft": "linear-gradient(135deg, rgba(250,204,21,0.08), rgba(236,72,153,0.08))",
+          },
+          borderRadius: {
+            xs: "5px", sm: "7px", DEFAULT: "10px", md: "10px", lg: "14px",
+            xl: "18px", "2xl": "22px", "3xl": "28px",
+          },
+          boxShadow: {
+            soft: "0 1px 3px rgba(0,0,0,0.06)",
+            DEFAULT: "0 4px 16px rgba(0,0,0,0.07)",
+            lift: "0 12px 40px rgba(0,0,0,0.10)",
+            accent: "0 4px 20px rgba(245,158,11,0.25)",
+          },
+          transitionTimingFunction: {
+            smooth: "cubic-bezier(0.25, 0.46, 0.45, 0.94)",
+            bounce: "cubic-bezier(0.34, 1.3, 0.64, 1)",
+          },
+          fontSize: {
+            "2xs": ["10px", { lineHeight: "1.4" }],
+            xs: ["11px", { lineHeight: "1.5" }],
+            sm: ["12px", { lineHeight: "1.55" }],
+            base: ["14px", { lineHeight: "1.55" }],
+            md: ["15px", { lineHeight: "1.5" }],
+            lg: ["17px", { lineHeight: "1.55" }],
+            xl: ["20px", { lineHeight: "1.4" }],
+            "2xl": ["24px", { lineHeight: "1.3" }],
+            "3xl": ["28px", { lineHeight: "1.25", letterSpacing: "-0.3px" }],
+          },
+        },
+      },
+    };
+  </script>
+
+  <!-- Component layer — sourced verbatim from src/index.css -->
+  <style type="text/tailwindcss">
+    @layer base {
+      html { font-family: "Fredoka", system-ui, sans-serif; -webkit-font-smoothing: antialiased; direction: rtl; }
+      body { @apply bg-ink-50 text-ink-900 text-base; margin: 0; min-height: 100vh; line-height: 1.55; }
+      :focus-visible { outline: 2px solid theme("colors.primary.500"); outline-offset: 2px; border-radius: theme("borderRadius.sm"); }
+      ::selection { @apply bg-primary-500/25 text-ink-900; }
+    }
+    @layer components {
+      .field {
+        @apply w-full rounded-md border border-ink-300 bg-white px-3 py-2.5 text-sm text-ink-900 placeholder:text-ink-400;
+        @apply transition-colors duration-150 ease-smooth hover:border-ink-400;
+        @apply focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20;
+      }
+      .btn {
+        @apply inline-flex items-center justify-center gap-1.5 rounded-sm px-4 py-2.5 text-sm font-medium;
+        @apply transition-all duration-150 ease-smooth disabled:opacity-60 disabled:cursor-not-allowed;
+      }
+      .btn-primary { @apply btn text-white shadow-accent; background: linear-gradient(135deg, #facc15 0%, #f59e0b 45%, #ec4899 100%); background-size: 200% 200%; animation: gradShift 4s ease infinite; }
+      .btn-primary:hover { @apply -translate-y-0.5; box-shadow: 0 6px 24px rgba(245, 158, 11, 0.32); }
+      .btn-accent { @apply btn bg-primary-500 text-white shadow-accent hover:bg-primary-600 hover:-translate-y-0.5; }
+      .btn-dark { @apply btn bg-ink-900 text-white hover:bg-ink-700 shadow-soft; }
+      .btn-ghost { @apply btn text-ink-700 hover:bg-ink-100; }
+      .btn-outline { @apply btn border border-ink-300 bg-white text-ink-900 hover:bg-ink-50; }
+      .card { @apply rounded-lg border border-ink-300 bg-white shadow-soft; }
+      .card-lift { @apply card transition-all duration-200 ease-smooth hover:-translate-y-0.5 hover:shadow-lift; }
+      .chip { @apply inline-flex items-center gap-1 rounded-xs px-2 py-0.5 text-xs font-medium; @apply bg-ink-150 text-ink-700; }
+      .chip-accent { @apply chip text-primary-700; background: rgba(245, 158, 11, 0.09); border: 1px solid rgba(245, 158, 11, 0.3); }
+      .eyebrow { @apply text-xs font-semibold uppercase tracking-[0.18em] text-ink-400; }
+    }
+    @layer utilities {
+      .scrollbar-thin::-webkit-scrollbar { width: 6px; height: 6px; }
+      .scrollbar-thin::-webkit-scrollbar-thumb { @apply bg-ink-300 rounded-full; }
+    }
+    @keyframes gradShift { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
+  </style>
+
+  <style>
+    /* Faux app background so the modal overlay reads correctly (design-only). */
+    body { background:
+      radial-gradient(1200px 600px at 80% -10%, rgba(245,158,11,0.10), transparent),
+      radial-gradient(1000px 500px at 0% 110%, rgba(236,72,153,0.08), transparent),
+      #fafafa; }
+  </style>
+</head>
+
+<body>
+  <!-- ============================================================= -->
+  <!-- Overlay (bg-ink-900/50 backdrop-blur-sm) + centered modal      -->
+  <!-- Mirrors src/components/tasks/TaskEditModal.tsx                 -->
+  <!-- ============================================================= -->
+  <div class="fixed inset-0 z-50 bg-ink-900/50 backdrop-blur-sm flex items-start md:items-center justify-center p-4 overflow-y-auto">
+    <div class="bg-white rounded-3xl shadow-lift w-full max-w-3xl my-8 overflow-hidden">
+
+      <!-- Header -->
+      <div class="px-5 py-3 border-b border-ink-200 flex items-center justify-between gap-3">
+        <div class="flex items-center gap-2 min-w-0 flex-1">
+          <button class="w-6 h-6 rounded-md border-2 shrink-0 flex items-center justify-center transition-all border-ink-300 hover:border-ink-500" aria-label="השלם"></button>
+          <input value="עיצוב מסך התמחור" placeholder="שם המשימה" class="text-lg font-semibold text-ink-900 bg-transparent border-0 outline-none flex-1 min-w-0" />
+        </div>
+        <button class="p-1.5 rounded-lg hover:bg-ink-100"><i data-lucide="x" class="w-4 h-4 text-ink-600"></i></button>
+      </div>
+
+      <!-- Tabs -->
+      <div class="border-b border-ink-200 px-3 flex items-center gap-1 text-sm">
+        <button data-tab="overview" class="tab-btn inline-flex items-center gap-1.5 px-3 py-2 border-b-2 -mb-px transition-colors border-primary-500 text-primary-700 font-medium"><i data-lucide="list-todo" class="w-4 h-4"></i>פרטים</button>
+        <button data-tab="schedule" class="tab-btn inline-flex items-center gap-1.5 px-3 py-2 border-b-2 -mb-px transition-colors border-transparent text-ink-600 hover:text-ink-900"><i data-lucide="calendar" class="w-4 h-4"></i>תזמון</button>
+        <button data-tab="history" class="tab-btn inline-flex items-center gap-1.5 px-3 py-2 border-b-2 -mb-px transition-colors border-transparent text-ink-600 hover:text-ink-900"><i data-lucide="history" class="w-4 h-4"></i>זמן</button>
+        <button data-tab="edits" class="tab-btn inline-flex items-center gap-1.5 px-3 py-2 border-b-2 -mb-px transition-colors border-transparent text-ink-600 hover:text-ink-900"><i data-lucide="clipboard-list" class="w-4 h-4"></i>היסטוריה</button>
+        <button data-tab="attachments" class="tab-btn inline-flex items-center gap-1.5 px-3 py-2 border-b-2 -mb-px transition-colors border-transparent text-ink-600 hover:text-ink-900"><i data-lucide="paperclip" class="w-4 h-4"></i>צירופים</button>
+      </div>
+
+      <!-- Body -->
+      <div class="p-5 max-h-[calc(100vh-16rem)] overflow-y-auto scrollbar-thin">
+
+        <!-- ========== TAB: פרטים (overview) ========== -->
+        <div data-panel="overview" class="space-y-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="eyebrow mb-1 block">סטטוס</label>
+              <button class="w-full flex items-center justify-between gap-2 rounded-xl border bg-white px-3 py-2.5 text-sm transition-all border-ink-300 hover:border-ink-400">
+                <span class="inline-flex items-center gap-2">
+                  <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:#f59e0b"></span>
+                  <span class="font-medium text-ink-900">בעבודה</span>
+                </span>
+                <svg viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4 text-ink-500"><path d="M5 7l5 6 5-6H5z"></path></svg>
+              </button>
+            </div>
+            <div>
+              <label class="eyebrow mb-1 block">רשימה</label>
+              <button class="w-full flex items-center justify-between gap-2 rounded-xl border bg-white px-3 py-2.5 text-sm transition-all border-ink-300 hover:border-ink-400">
+                <span class="inline-flex items-center gap-2">
+                  <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:#6366f1"></span>
+                  <span class="font-medium text-ink-900">🎨 עיצוב</span>
+                </span>
+                <svg viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4 text-ink-500"><path d="M5 7l5 6 5-6H5z"></path></svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="eyebrow mb-1 block">דחיפות</label>
+              <div class="flex items-center gap-2">
+                <button class="flex flex-col items-center gap-1 p-2 rounded-lg border transition-colors border-ink-200 bg-white hover:bg-ink-50" title="ללא דירוג">
+                  <span class="h-[16px] flex items-center justify-center text-ink-400 text-sm">∅</span>
+                  <span class="text-[10px] font-mono text-ink-500">0</span>
+                </button>
+                <button class="flex flex-col items-center gap-1 p-2 rounded-lg border transition-colors border-ink-200 bg-white hover:bg-ink-50" title="1/3">
+                  <div class="flex flex-col items-center gap-[3px]"><span class="h-[3px] w-6 rounded-sm bg-ink-200"></span><span class="h-[3px] w-6 rounded-sm bg-ink-200"></span><span class="h-[3px] w-6 rounded-sm bg-ink-900"></span></div>
+                  <span class="text-[10px] font-mono text-ink-500">1</span>
+                </button>
+                <button class="flex flex-col items-center gap-1 p-2 rounded-lg border transition-colors border-primary-500 bg-primary-50" title="2/3">
+                  <div class="flex flex-col items-center gap-[3px]"><span class="h-[3px] w-6 rounded-sm bg-ink-200"></span><span class="h-[3px] w-6 rounded-sm bg-ink-900"></span><span class="h-[3px] w-6 rounded-sm bg-ink-900"></span></div>
+                  <span class="text-[10px] font-mono text-ink-500">2</span>
+                </button>
+                <button class="flex flex-col items-center gap-1 p-2 rounded-lg border transition-colors border-ink-200 bg-white hover:bg-ink-50" title="3/3">
+                  <div class="flex flex-col items-center gap-[3px]"><span class="h-[3px] w-6 rounded-sm bg-ink-900"></span><span class="h-[3px] w-6 rounded-sm bg-ink-900"></span><span class="h-[3px] w-6 rounded-sm bg-ink-900"></span></div>
+                  <span class="text-[10px] font-mono text-ink-500">3</span>
+                </button>
+              </div>
+            </div>
+            <div>
+              <label class="eyebrow mb-1 block">האצלת משימה</label>
+              <div class="flex flex-col gap-1.5">
+                <div class="flex flex-col gap-0.5 max-h-44 overflow-auto rounded-lg border border-ink-200 p-1.5">
+                  <label class="flex items-center gap-2 px-1.5 py-1 rounded-md hover:bg-ink-50 cursor-pointer text-sm select-none">
+                    <input type="checkbox" checked class="w-4 h-4 rounded accent-primary-500" />
+                    <span class="truncate">דני כהן <span class="text-ink-400">(אני)</span></span>
+                  </label>
+                  <label class="flex items-center gap-2 px-1.5 py-1 rounded-md hover:bg-ink-50 cursor-pointer text-sm select-none">
+                    <input type="checkbox" class="w-4 h-4 rounded accent-primary-500" />
+                    <span class="truncate">מיכל לוי</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Task sharing -->
+          <div class="rounded-xl border border-ink-200 p-3 space-y-2.5">
+            <div class="flex items-center gap-2 text-sm font-medium text-ink-700"><i data-lucide="share-2" class="w-4 h-4"></i>שיתוף משימה</div>
+            <p class="text-[11px] text-ink-400 leading-relaxed">שתף עם משתמשים ספציפיים. <strong>עריכה</strong> = תיאור + סטופר בלבד. <strong>צפייה</strong> = קריאה בלבד.</p>
+            <div class="flex items-center gap-2 py-1">
+              <div class="w-6 h-6 rounded-full bg-ink-100 text-ink-600 flex items-center justify-center text-xs font-medium shrink-0">מ</div>
+              <span class="flex-1 text-sm text-ink-800 truncate">מיכל לוי</span>
+              <select class="field text-xs py-1 ps-2 pe-6 w-auto"><option>עריכה</option><option>צפייה</option></select>
+              <button class="shrink-0 p-1 rounded-md text-ink-400 hover:text-danger-600 hover:bg-danger-50"><i data-lucide="x" class="w-3.5 h-3.5"></i></button>
+            </div>
+          </div>
+
+          <!-- Description -->
+          <div>
+            <label class="eyebrow mb-1 block">תיאור</label>
+            <div class="field min-h-[80px]" contenteditable="true">להשלים את מסך התמחור כולל סטופר, לוח שנה ושאלות — לפי ה-SPEC.</div>
+          </div>
+
+          <!-- Tags -->
+          <div>
+            <label class="eyebrow mb-1 block">תגים</label>
+            <div class="field flex flex-wrap items-center gap-1 min-h-[40px] px-2 py-1.5">
+              <span class="inline-flex items-center gap-1 rounded-full bg-ink-100 px-2 py-0.5 text-xs">עיצוב<button class="text-ink-500 hover:text-danger-500"><i data-lucide="x" class="w-3 h-3"></i></button></span>
+              <span class="inline-flex items-center gap-1 rounded-full bg-ink-100 px-2 py-0.5 text-xs">דחוף<button class="text-ink-500 hover:text-danger-500"><i data-lucide="x" class="w-3 h-3"></i></button></span>
+              <input placeholder="" class="flex-1 min-w-[80px] bg-transparent outline-none text-sm" />
+            </div>
+          </div>
+
+          <!-- Notes -->
+          <div>
+            <label class="eyebrow mb-1 block">הערות</label>
+            <textarea class="field min-h-[60px] resize-y">להתייעץ עם מיכל לגבי הצבעים.</textarea>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="eyebrow mb-1 block">מיקום</label>
+              <input value="משרד תל אביב" class="field" />
+            </div>
+            <div>
+              <label class="eyebrow mb-1 block">קישור חיצוני</label>
+              <input type="url" value="https://figma.com/file/..." class="field" dir="ltr" />
+            </div>
+          </div>
+
+          <!-- Color -->
+          <div>
+            <label class="eyebrow mb-1 block">צבע</label>
+            <div class="flex items-center gap-1 flex-wrap">
+              <button class="w-5 h-5 rounded-full border border-ink-200" style="background:#ef4444"></button>
+              <button class="w-5 h-5 rounded-full border border-ink-200" style="background:#f59e0b"></button>
+              <button class="w-5 h-5 rounded-full border-ink-900 border ring-2 ring-offset-1 ring-ink-300" style="background:#10b981"></button>
+              <button class="w-5 h-5 rounded-full border border-ink-200" style="background:#3b82f6"></button>
+              <button class="w-5 h-5 rounded-full border border-ink-200" style="background:#8b5cf6"></button>
+              <label class="w-5 h-5 rounded-full border border-ink-200 overflow-hidden cursor-pointer relative"><span class="absolute inset-0 flex items-center justify-center text-[10px] text-ink-400">+</span></label>
+            </div>
+            <p class="text-[11px] text-ink-500 mt-1">צבע חד-פעמי למשימה זו — גובר על צבע הרשימה/השלב ביומן וב-Gantt.</p>
+          </div>
+
+          <!-- Set as phase -->
+          <div class="flex items-start gap-2 p-2 rounded-md border border-ink-200">
+            <label class="flex items-start gap-2 cursor-pointer select-none flex-1 hover:bg-ink-50 rounded-md -m-1 p-1">
+              <input type="checkbox" class="w-4 h-4 mt-0.5" />
+              <div>
+                <div class="text-sm font-medium text-ink-900">הגדר כשלב</div>
+                <div class="text-[11px] text-ink-500">שלב מקבץ תחתיו תתי-משימות ומופיע כרצועת-זמן רחבה ביומן וב-Gantt כשרואים את הרשימה לבדה.</div>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <!-- ========== TAB: תזמון (schedule) ========== -->
+        <div data-panel="schedule" class="space-y-4 hidden">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="eyebrow mb-1 block">זמן עבודה מתוכנן</label>
+              <input class="field" value="08/08/2026 · 10:00" />
+              <p class="text-[11px] text-ink-400 mt-1">מתי את מתכננת לעבוד עליה</p>
+            </div>
+            <div>
+              <label class="eyebrow mb-1 block">משך</label>
+              <input class="field" value="01:30" dir="ltr" />
+            </div>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="eyebrow mb-1 block">דד-ליין</label>
+              <input class="field" value="10/08/2026 · 18:00" />
+              <p class="text-[11px] text-ink-400 mt-1">הזמן האחרון לביצוע — שונה מהזמן המתוכנן</p>
+            </div>
+          </div>
+          <div class="pt-2 border-t border-ink-200">
+            <label class="eyebrow mb-1 block">חזרה</label>
+            <select class="field text-sm"><option>ללא חזרה</option><option>כל יום</option><option>כל שבוע</option></select>
+            <p class="text-[11px] text-ink-400 mt-1">המשימה תופיע ביומן בכל מופע של הכלל. סימון מופע בודד אינו סוגר את הסדרה.</p>
+          </div>
+          <div class="pt-2 border-t border-ink-200">
+            <label class="eyebrow mb-1 block">מועדים נוספים</label>
+            <div class="space-y-2">
+              <p class="text-xs text-ink-400">אין מועדים נוספים.</p>
+              <button class="btn-ghost text-xs">+ הוסף מועד</button>
+            </div>
+          </div>
+          <!-- Goal section -->
+          <div class="pt-2 border-t border-ink-200">
+            <div class="eyebrow mb-1 flex items-center gap-1.5"><i data-lucide="target" class="w-3.5 h-3.5"></i>יעד</div>
+            <div class="space-y-2.5">
+              <label class="inline-flex items-center gap-2 text-sm cursor-pointer select-none">
+                <input type="checkbox" checked class="w-4 h-4 rounded border-ink-300 text-primary-600" />
+                <span>הגדר כיעד</span>
+              </label>
+              <div class="inline-flex rounded-md border border-ink-200 overflow-hidden text-sm">
+                <button class="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 text-white"><i data-lucide="trophy" class="w-3.5 h-3.5"></i>הישגי</button>
+                <button class="flex items-center gap-1.5 px-3 py-1.5 border-r border-ink-200 bg-white text-ink-600 hover:bg-ink-50"><i data-lucide="repeat" class="w-3.5 h-3.5"></i>הרגלי</button>
+              </div>
+              <div class="space-y-2 ps-6 border-s-2 border-amber-200">
+                <p class="text-xs text-ink-500">יעד חד-פעמי — יסומן כהושג כשהמשימה תסומן כ"הושלמה".</p>
+                <div class="flex items-center gap-2 text-sm flex-wrap">
+                  <span class="text-ink-700">דד-ליין (אופציונלי):</span>
+                  <input class="field w-40" value="15/08/2026" />
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="pt-2 border-t border-ink-200">
+            <label class="eyebrow mb-1 block">תלויות</label>
+            <p class="text-xs text-ink-400">אין תלויות מוגדרות.</p>
+          </div>
+          <p class="text-xs text-ink-400">הערכת שעות בפועל עברה לטאב "זמן" ליד הסטופר.</p>
+        </div>
+
+        <!-- ========== TAB: זמן (history) ========== -->
+        <div data-panel="history" class="space-y-4 hidden">
+          <div>
+            <label class="eyebrow mb-1 block">הערכת שעות (לתכנון)</label>
+            <input class="field" value="02:00" dir="ltr" />
+          </div>
+          <div class="card-lift p-3 space-y-3">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-3">
+                <i data-lucide="clock" class="w-5 h-5 text-ink-500"></i>
+                <div>
+                  <div class="text-xs text-ink-500 flex items-center gap-2">
+                    סה"כ עד כה
+                    <span class="inline-flex items-center rounded-lg bg-ink-100 p-0.5 text-[10px]">
+                      <button class="px-1.5 py-0.5 rounded-md bg-white text-ink-900 shadow-soft">אוטו</button>
+                      <button class="px-1.5 py-0.5 rounded-md text-ink-500 hover:text-ink-900">דקות</button>
+                      <button class="px-1.5 py-0.5 rounded-md text-ink-500 hover:text-ink-900">שעות</button>
+                    </span>
+                  </div>
+                  <div class="font-mono text-lg tabular-nums">1:12:30<span class="text-sm text-ink-500 ms-2">/ 2:00:00</span></div>
+                </div>
+              </div>
+              <button class="btn-accent text-sm"><i data-lucide="play" class="w-4 h-4"></i>התחל</button>
+            </div>
+            <div class="h-2 w-full rounded-full bg-ink-100 overflow-hidden"><div class="h-full rounded-full bg-primary-500" style="width:60%"></div></div>
+          </div>
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <h4 class="font-medium text-sm text-ink-900">סשנים (2)</h4>
+              <button class="btn-ghost text-xs py-1 px-2"><i data-lucide="plus" class="w-3 h-3"></i>הוסף ידנית</button>
+            </div>
+            <ul class="divide-y divide-ink-200">
+              <li class="py-2 flex items-center justify-between gap-2 text-sm">
+                <div class="flex-1 min-w-0">
+                  <div class="text-ink-900">7.8.2026, 09:00<span class="text-ink-500 ms-2">(45:00)</span></div>
+                  <div class="text-xs text-ink-500 truncate">עבודה על הפריסה</div>
+                </div>
+                <div class="flex items-center gap-1">
+                  <button class="text-xs text-ink-600 hover:text-ink-900 px-2">ערוך</button>
+                  <button class="p-1 text-ink-500 hover:text-danger-500"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+                </div>
+              </li>
+              <li class="py-2 flex items-center justify-between gap-2 text-sm">
+                <div class="flex-1 min-w-0">
+                  <div class="text-ink-900">8.8.2026, 10:00<span class="chip-accent ms-2">פעיל</span></div>
+                </div>
+                <div class="flex items-center gap-1">
+                  <button class="text-xs text-ink-600 hover:text-ink-900 px-2">ערוך</button>
+                  <button class="p-1 text-ink-500 hover:text-danger-500"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+                </div>
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- ========== TAB: היסטוריה (edits) ========== -->
+        <div data-panel="edits" class="space-y-3 hidden">
+          <ul class="divide-y divide-ink-200 text-sm">
+            <li class="py-2 flex items-start gap-3">
+              <div class="w-6 h-6 rounded-full bg-ink-100 text-ink-600 flex items-center justify-center text-xs font-medium shrink-0">ד</div>
+              <div class="flex-1 min-w-0">
+                <div class="text-ink-900">דני כהן שינה סטטוס ל<strong>בעבודה</strong></div>
+                <div class="text-[11px] text-ink-400">8.8.2026, 10:02</div>
+              </div>
+            </li>
+            <li class="py-2 flex items-start gap-3">
+              <div class="w-6 h-6 rounded-full bg-ink-100 text-ink-600 flex items-center justify-center text-xs font-medium shrink-0">ד</div>
+              <div class="flex-1 min-w-0">
+                <div class="text-ink-900">דני כהן יצר את המשימה</div>
+                <div class="text-[11px] text-ink-400">7.8.2026, 08:30</div>
+              </div>
+            </li>
+          </ul>
+        </div>
+
+        <!-- ========== TAB: צירופים (attachments) ========== -->
+        <div data-panel="attachments" class="space-y-3 hidden">
+          <div class="flex items-center gap-1 text-sm">
+            <button class="btn-outline text-xs"><i data-lucide="paperclip" class="w-3.5 h-3.5"></i>קובץ</button>
+            <button class="btn-ghost text-xs"><i data-lucide="mic" class="w-3.5 h-3.5"></i>הקלטה</button>
+            <button class="btn-ghost text-xs"><i data-lucide="lightbulb" class="w-3.5 h-3.5"></i>מחשבה</button>
+            <button class="btn-ghost text-xs"><i data-lucide="link" class="w-3.5 h-3.5"></i>קישור</button>
+          </div>
+          <div class="divide-y divide-ink-200">
+            <div class="py-2 flex items-center gap-3 text-sm">
+              <i data-lucide="file-text" class="w-4 h-4 text-ink-500 shrink-0"></i>
+              <span class="flex-1 truncate text-ink-900">מפרט-עיצוב.pdf</span>
+              <button class="p-1 text-ink-500 hover:text-danger-500"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Footer -->
+      <div class="px-5 py-3 border-t border-ink-200 flex items-center justify-end gap-2">
+        <span class="text-xs font-medium text-warning-600 me-auto">יש שינויים לא שמורים</span>
+        <button class="btn-ghost text-sm">סגור</button>
+        <button class="btn-primary text-sm"><i data-lucide="save" class="w-3.5 h-3.5"></i>שמור</button>
+      </div>
+
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script>
+    lucide.createIcons();
+    // Simple tab switching so the designer can click through all tabs.
+    const tabs = document.querySelectorAll('.tab-btn');
+    const panels = document.querySelectorAll('[data-panel]');
+    tabs.forEach((t) => t.addEventListener('click', () => {
+      const key = t.getAttribute('data-tab');
+      tabs.forEach((x) => {
+        const active = x === t;
+        x.classList.toggle('border-primary-500', active);
+        x.classList.toggle('text-primary-700', active);
+        x.classList.toggle('font-medium', active);
+        x.classList.toggle('border-transparent', !active);
+        x.classList.toggle('text-ink-600', !active);
+      });
+      panels.forEach((p) => p.classList.toggle('hidden', p.getAttribute('data-panel') !== key));
+    }));
+  </script>
+</body>
+</html>
